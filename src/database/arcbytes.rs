@@ -1,5 +1,6 @@
 use std::{
     fmt::{self, Display},
+    hash::{Hash, Hasher},
     ops::Deref,
     str::from_utf8,
     sync::Arc,
@@ -85,6 +86,24 @@ impl From<&str> for ArcBytes {
 impl From<Vec<u8>> for ArcBytes {
     fn from(vec: Vec<u8>) -> Self {
         Self::from_vec(vec)
+    }
+}
+
+impl Hash for ArcBytes {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl PartialOrd for ArcBytes {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl Ord for ArcBytes {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
     }
 }
 
