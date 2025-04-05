@@ -27,8 +27,8 @@ impl<T> QuickList<T> {
         self.len == 0
     }
     pub fn get(&self, index: usize) -> Option<&T> {
-        if let Some(seg_idx) = self.index.get(&index) {
-            return self.segments[*seg_idx].get(*seg_idx);
+        if index >= self.len {
+            return None;
         }
         let mut offset = 0;
         self.segments.iter().find_map(|segment| {
@@ -40,21 +40,22 @@ impl<T> QuickList<T> {
             }
         })
     }
+
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len {
             return None;
         }
-
-        let mut remaining = index;
-        for segment in &mut self.segments {
-            if remaining < segment.len() {
-                return segment.get_mut(remaining);
+        let mut offset = 0;
+        self.segments.iter_mut().find_map(|segment| {
+            if index < offset + segment.len() {
+                Some(segment.get_mut(index - offset).unwrap())
             } else {
-                remaining -= segment.len();
+                offset += segment.len();
+                None
             }
-        }
-        None
+        })
     }
+
     pub fn push_front(&mut self, item: T) {
         if self.segments.is_empty() || self.segments[0].len() >= self.max_segment_size {
             self.segments
@@ -201,5 +202,153 @@ impl<T> QuickList<T> {
                 global_index += 1;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_push_front_and_pop_front() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_front(1);
+        list.push_front(2);
+        list.push_front(3);
+
+        assert_eq!(list.len(), 3);
+
+        let item = list.pop_front();
+        assert_eq!(item, Some(3));
+
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn test_push_back_and_pop_back() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+
+        assert_eq!(list.len(), 3);
+
+        let item = list.pop_back();
+        assert_eq!(item, Some(3));
+
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn test_get_and_get_mut() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(10);
+        list.push_back(20);
+        list.push_back(30);
+
+        assert_eq!(list.get(1), Some(&20));
+
+        if let Some(item) = list.get_mut(1) {
+            *item = 25;
+        }
+
+        assert_eq!(list.get(1), Some(&25));
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+
+        list.clear();
+
+        assert!(list.is_empty());
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_validate() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+
+        assert!(list.validate().is_ok());
+
+        list.segments[0].push_back(4);
+        assert!(list.validate().is_err());
+    }
+
+    #[test]
+    fn test_auto_optimize() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+        list.push_back(4);
+        list.push_back(5);
+
+        let before = list.segments.len();
+        list.auto_optimize();
+        let after = list.segments.len();
+
+        assert!(after <= before);
+        assert_eq!(list.len(), 5);
+    }
+
+    #[test]
+    fn test_from_vecdeque() {
+        let items: VecDeque<i32> = VecDeque::from(vec![1, 2, 3]);
+        let list = QuickList::from_vecdeque(items, 3);
+
+        assert_eq!(list.len(), 3);
+        assert_eq!(list.get(0), Some(&1));
+        assert_eq!(list.get(1), Some(&2));
+        assert_eq!(list.get(2), Some(&3));
+    }
+
+    #[test]
+    fn test_into_vecdeque() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+        list.push_back(10);
+        list.push_back(20);
+        list.push_back(30);
+
+        let vecdeque: VecDeque<i32> = list.into_vecdeque();
+        assert_eq!(vecdeque, VecDeque::from(vec![10, 20, 30]));
+    }
+
+    #[test]
+    fn test_shrink_to_fit() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+
+        list.shrink_to_fit();
+        // Ensure the segments are trimmed to fit the data
+        assert!(list.segments.iter().all(|seg| seg.capacity() >= seg.len()));
+    }
+
+    #[test]
+    fn test_memory_usage() {
+        let mut list: QuickList<i32> = QuickList::new(3);
+
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+
+        let memory_usage = list.memory_usage();
+        // Check that memory usage is reasonable (segments size * element size)
+        assert!(memory_usage > 0);
     }
 }
