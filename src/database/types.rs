@@ -13,25 +13,23 @@ pub enum Value {
     Bool(bool),
     Null,
     List(QuickList<ArcBytes>),
+    Hash(HashMap<ArcBytes, ArcBytes>),
     ZSet {
         dict: HashMap<ArcBytes, f64>,
         sorted: BTreeMap<OrderedFloat<f64>, HashSet<ArcBytes>>,
     },
-    Hash(HashMap<ArcBytes, ArcBytes>),
-    Set(HashSet<String>),
-}
-
-/*
-
-pub enum Value {
-    Str(ArcBytes),
-    Int(i64),
-    Float(f64),
-    List(QuickList<Value>),
-    Hash(HashMap<String, Value>),
-    ZSet(BTreeMap<OrderedFloat<f64>, String>),
     Set(HashSet<String>),
     HyperLogLog(HLL),
     SStream(Vec<StreamEntry>),
 }
-*/
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StreamEntry {
+    pub id: u64,
+    pub data: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HLL {
+    pub registers: Vec<u8>,
+}
