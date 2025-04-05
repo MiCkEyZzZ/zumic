@@ -18,3 +18,4 @@ mlua = { version = "0.10", features = [
   "async",
   "serialize",
 ] }
+thiserror = "2.0.12"

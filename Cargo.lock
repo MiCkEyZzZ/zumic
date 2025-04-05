@@ -1005,4 +1005,5 @@ dependencies = [
  "ordered-float 5.0.0",
  "serde",
  "serde_json",
+ "thiserror",
 ]
