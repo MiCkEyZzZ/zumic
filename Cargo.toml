@@ -13,10 +13,13 @@ serde_json = "1.0.140"
 ordered-float = { version = "5.0.0", features = ["serde"] }
 config = "0.15.11"
 mlua = { version = "0.10", features = [
-  "lua54",
-  "vendored",
-  "async",
-  "serialize",
+    "lua54",
+    "vendored",
+    "async",
+    "serialize",
 ] }
 thiserror = "2.0.12"
 bcrypt = "0.17.0"
+rand = "0.8.0"
+argon2 = "0.5.3"
+glob = "0.3"
