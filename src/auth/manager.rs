@@ -112,7 +112,9 @@ impl AuthManager {
 
             if !user_config.nopass {
                 if let Some(pass) = &user_config.password {
-                    rules.push(format!(">{}", pass));
+                    // Хэшируем пароль, как и для пользователя "default"
+                    let hash = hash_password(pass)?;
+                    rules.push(format!(">{}", hash));
                 }
             }
 
@@ -134,5 +136,108 @@ impl AuthManager {
         }
 
         Ok(Self { acl })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::auth::config::UserConfig;
+
+    // Тест создания пользователя и успешной аутентификации
+    #[test]
+    fn test_create_and_authenticate_user() {
+        let auth_manager = AuthManager::new();
+
+        // Создаем пользователя с правами "+get" и "+set"
+        auth_manager
+            .create_user("bob", "s3cr3t", &["+get", "+set"])
+            .expect("User creation should succeed");
+
+        // Успешная аутентификация с корректным паролем
+        assert!(auth_manager.authenticate("bob", "s3cr3t").is_ok());
+
+        // Аутентификация с неправильным паролем должна вернуть ошибку
+        assert!(matches!(
+            auth_manager.authenticate("bob", "wrongpass"),
+            Err(AuthError::AuthenticationFailed)
+        ));
+
+        // Попытка аутентификации несуществующего пользователя
+        assert!(matches!(
+            auth_manager.authenticate("nonexistent", "any"),
+            Err(AuthError::UserNotFound)
+        ));
+    }
+
+    // Тест авторизации команд для пользователя
+    #[test]
+    fn test_authorize_command() {
+        let auth_manager = AuthManager::new();
+
+        // Создаем пользователя с правами "+@admin" и правом на команду "set" в категории "write"
+        auth_manager
+            .create_user("alice", "topsecret", &["+@admin", "+@write|set"])
+            .expect("User creation should succeed");
+
+        // Авторизация существующей команды должна пройти успешно
+        assert!(auth_manager
+            .authorize_command("alice", "write", "set")
+            .is_ok());
+
+        // Попытка авторизации несуществующей команды должна вернуть ошибку
+        assert!(auth_manager
+            .authorize_command("alice", "write", "get")
+            .is_err());
+    }
+
+    // Тест авторизации доступа к ключам
+    #[test]
+    fn test_authorize_key() {
+        let auth_manager = AuthManager::new();
+
+        // Создаем пользователя с доступом к ключам, начинающимся с "data:"
+        auth_manager
+            .create_user("charlie", "pass123", &["~data:*"])
+            .expect("User creation should succeed");
+
+        // Ключ, удовлетворяющий шаблону, должен авторизоваться
+        assert!(auth_manager.authorize_key("charlie", "data:123").is_ok());
+
+        // Ключ, не удовлетворяющий шаблону, должен вернуть ошибку
+        assert!(auth_manager.authorize_key("charlie", "info:123").is_err());
+    }
+
+    // Тест инициализации через конфигурацию (from_config)
+    #[test]
+    fn test_from_config() {
+        // Создаем конфигурацию с requirepass для пользователя "default"
+        // и дополнительного пользователя "dave"
+        let mut config = ServerConfig::default();
+        config.requirepass = Some("foobared".to_string());
+        config.users.push(UserConfig {
+            username: "dave".to_string(),
+            enabled: true,
+            nopass: false,
+            password: Some("davepassword".to_string()),
+            keys: vec!["~davekey".to_string()],
+            permissions: vec!["+@custom".to_string()],
+        });
+
+        let auth_manager = AuthManager::from_config(&config).expect("Config should be parsed");
+
+        // Проверяем, что создан пользователь "default" с requirepass
+        assert!(auth_manager.authenticate("default", "foobared").is_ok());
+        // Для пользователя default, согласно конфигурации, доступ к ключам не ограничен,
+        // поэтому authorize_key всегда должен возвращать Ok.
+        assert!(auth_manager.authorize_key("default", "any_key").is_ok());
+
+        // Проверяем пользователя "dave"
+        assert!(auth_manager.authenticate("dave", "davepassword").is_ok());
+        // Доступ к ключу, удовлетворяющему шаблону "~davekey"
+        assert!(auth_manager.authorize_key("dave", "davekey").is_ok());
+        // Попытка авторизации для ключа, не соответствующего шаблону, должна вернуть ошибку
+        assert!(auth_manager.authorize_key("dave", "otherkey").is_err());
     }
 }
