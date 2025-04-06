@@ -91,3 +91,67 @@ impl ServerConfig {
         Ok(user)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_requirepass() {
+        let content = "requirepass foobared";
+        let config = ServerConfig::parse(content).unwrap();
+        assert_eq!(config.requirepass.unwrap(), "foobared");
+        assert!(config.users.is_empty());
+    }
+
+    #[test]
+    fn test_parse_single_user() {
+        let content = "user default on nopass ~* +@all";
+        let config = ServerConfig::parse(content).unwrap();
+        assert_eq!(config.users.len(), 1);
+        let user = &config.users[0];
+        assert_eq!(user.username, "default");
+        assert!(user.enabled);
+        assert!(user.nopass);
+        // Проверяем, что директива ключей присутствует в виде строки "~*"
+        assert!(user.keys.contains(&"~*".to_string()));
+        // Проверяем, что директива прав присутствует
+        assert!(user.permissions.contains(&"+@all".to_string()));
+    }
+
+    #[test]
+    fn test_parse_multiple_users() {
+        let content = "\
+    requirepass foobared
+    user default on nopass ~* +@all
+    user alice on >supersecret ~data:* +get +set";
+        let config = ServerConfig::parse(content).unwrap();
+        assert_eq!(config.requirepass.unwrap(), "foobared");
+        assert_eq!(config.users.len(), 2);
+
+        let alice = &config.users[1];
+        assert_eq!(alice.username, "alice");
+        assert!(alice.enabled);
+        // Здесь пароль хранится без префикса '>', т.е. просто "supersecret"
+        assert_eq!(alice.password.as_ref().unwrap(), "supersecret");
+        assert!(alice.keys.contains(&"~data:*".to_string()));
+        assert!(alice.permissions.contains(&"+get".to_string()));
+        assert!(alice.permissions.contains(&"+set".to_string()));
+    }
+
+    #[test]
+    fn test_parse_invalid_user_format() {
+        // Должно вернуть ошибку, так как формат пользователя неверный (меньше 3-х частей)
+        let content = "user default";
+        let result = ServerConfig::parse(content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unknown_directive() {
+        // Если встретилась неизвестная директива, должен возникнуть ParseError
+        let content = "user default on unknown_directive";
+        let result = ServerConfig::parse(content);
+        assert!(result.is_err());
+    }
+}
