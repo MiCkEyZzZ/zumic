@@ -92,7 +92,7 @@ fn key_matches(pattern: &str, key: &str) -> bool {
     let mut k_idx = 0;
     let mut backtrack: Option<(usize, usize)> = None;
 
-    while k_idx < key.len() || p_idx < pattern.len() {
+    while k_idx < key.len() {
         if p_idx < pattern.len() {
             match pattern[p_idx] {
                 '*' => {
@@ -101,11 +101,9 @@ fn key_matches(pattern: &str, key: &str) -> bool {
                     continue;
                 }
                 '?' => {
-                    if k_idx < key.len() {
-                        k_idx += 1;
-                        p_idx += 1;
-                        continue;
-                    }
+                    k_idx += 1;
+                    p_idx += 1;
+                    continue;
                 }
                 pc => {
                     if k_idx < key.len() && key[k_idx] == pc {
@@ -129,7 +127,12 @@ fn key_matches(pattern: &str, key: &str) -> bool {
         return false;
     }
 
-    true
+    // Проверяем, что в шаблоне не осталось символов, кроме '*'
+    while p_idx < pattern.len() && pattern[p_idx] == '*' {
+        p_idx += 1;
+    }
+
+    p_idx == pattern.len()
 }
 
 impl Acl {
@@ -157,6 +160,10 @@ impl Acl {
                 user.permissions.insert(rule.to_string());
             }
             _ if rule.starts_with('~') => {
+                // Если присутствует глобальный доступ "*", удаляем его перед установкой конкретного шаблона
+                if user.keys.contains("*") {
+                    user.keys.clear();
+                }
                 user.keys.insert(rule[1..].to_string());
             }
             _ if rule.starts_with('&') => {
