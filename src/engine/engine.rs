@@ -1,4 +1,9 @@
-use super::{memory::InMemoryStore, persistent::PersistentStore};
+use crate::{
+    database::{ArcBytes, Value},
+    error::StoreResult,
+};
+
+use super::{memory::InMemoryStore, storage::Storage};
 
 #[derive(Clone, Debug)]
 pub enum StorageType {
@@ -10,10 +15,18 @@ pub enum StorageType {
 /// Основной движок хранения.
 pub enum StorageEngine {
     InMemory(InMemoryStore),
-    Persistent(PersistentStore),
 }
 
 impl StorageEngine {
-    pub fn initialize() {}
-    pub fn get_store() {}
+    pub fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()> {
+        match self {
+            StorageEngine::InMemory(store) => store.set(key, value),
+        }
+    }
+
+    pub fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
+        match self {
+            StorageEngine::InMemory(store) => store.get(key),
+        }
+    }
 }

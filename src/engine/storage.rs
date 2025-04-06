@@ -1,8 +1,9 @@
-use std::io::Result;
+use crate::{
+    database::{types::Value, ArcBytes},
+    error::StoreResult,
+};
 
-use crate::database::types::Value;
-
-pub trait Storage {
-    fn set(&mut self, key: String, value: Value) -> Result<()>;
-    fn get(&mut self, key: String) -> Option<Value>;
+pub trait Storage: Send + Sync {
+    fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()>;
+    fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>>;
 }
