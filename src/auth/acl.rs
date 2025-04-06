@@ -309,7 +309,7 @@ mod tests {
         assert!(user.check_key("key1"));
     }
 
-    // Проверка отказа в доуступе к ключу.
+    // Проверка отказа в доступе к ключу.
     #[test]
     fn test_check_key_denied() {
         let acl = Acl::default();

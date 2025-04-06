@@ -1,4 +1,3 @@
-// password.rs
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Algorithm, Argon2, Params, Version,
@@ -33,4 +32,39 @@ pub fn verify_password(hash: &str, password: &str) -> Result<bool, PasswordError
     Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_and_verify_success() {
+        let password = "my_secret_password";
+        let hash = hash_password(password).expect("Hashing should succeed");
+        assert!(
+            verify_password(&hash, password).unwrap(),
+            "The correct password should verify"
+        );
+    }
+
+    #[test]
+    fn test_verify_password_failure() {
+        let password = "my_secret_password";
+        let wrong_password = "wrong_password";
+        let hash = hash_password(password).expect("Hashing should succeed");
+        assert!(
+            !verify_password(&hash, wrong_password).unwrap(),
+            "The wrong password should not verify"
+        );
+    }
+
+    #[test]
+    fn test_verify_invalid_hash() {
+        let invalid_hash = "invalid_hash";
+        assert!(
+            verify_password(&invalid_hash, "password").is_err(),
+            "An invalid hash should return an error"
+        );
+    }
 }
