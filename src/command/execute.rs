@@ -2,7 +2,7 @@ use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreE
 
 use super::{GetCommand, SetCommand};
 
-pub trait CommandExecute {
+pub trait CommandExecute: std::fmt::Debug {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError>;
 }
 

@@ -5,6 +5,11 @@ zumic
 ├── doc
 │   └── schema_project.md
 ├── src
+│   ├── auth
+│   │   ├── acl.rs           # Полноценная ACL (пользователи, шаблоны, разрешения)
+│   │   ├── manager.rs       # AuthManager: хранение, проверка, авторизация клиента
+│   │   ├── mod.rs
+│   │   └── password.rs      # Хеширование и проверка паролей (bcrypt / argon2)
 │   ├── command
 │   │   ├── basic.rs
 │   │   ├── command.rs
