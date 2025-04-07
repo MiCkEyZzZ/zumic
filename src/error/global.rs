@@ -60,4 +60,7 @@ pub enum StoreError {
 
     #[error("Invalid key encoding")]
     InvalidKey,
+
+    #[error("Invalid key encoding")]
+    FileError,
 }

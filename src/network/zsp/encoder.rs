@@ -50,6 +50,7 @@ impl ZSPEncoder {
                 Ok(format!("-{}\r\n", s).into_bytes())
             }
             ZSPFrame::Integer(i) => Ok(format!(":{}\r\n", i).into_bytes()),
+            ZSPFrame::Float(f) => Ok(format!(":{}\r\n", f).into_bytes()),
             ZSPFrame::BulkString(Some(b)) => {
                 if b.len() > MAX_BULK_LENGTH {
                     return Err(Error::new(
@@ -224,5 +225,21 @@ mod tests {
         let frame = ZSPFrame::Dictionary(Some(items));
         let result = ZSPEncoder::encode(&frame);
         assert!(result.is_ok()); // Ожидаем, что словарь будет закодирован корректно
+    }
+
+    // Тестируем кодирование Float.
+    #[test]
+    fn test_float_encoding() {
+        let frame = ZSPFrame::Float(42.42);
+        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        assert_eq!(encoded, b":42.42\r\n");
+    }
+
+    // Тестируем кодирование Float с отрицательным значением.
+    #[test]
+    fn test_negative_float_encoding() {
+        let frame = ZSPFrame::Float(-42.42);
+        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        assert_eq!(encoded, b":-42.42\r\n");
     }
 }
