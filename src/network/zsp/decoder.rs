@@ -1,19 +1,12 @@
 use bytes::Buf;
 use std::io::{self, Cursor, Result};
 
+use super::types::ZSPFrame;
+
 // --- Константы для безопасности ---
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024; // 1 MB
 pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024; // 512 MB
 pub const MAX_ARRAY_DEPTH: usize = 32; // Максимальная вложенность массивов
-
-#[derive(Debug, PartialEq)]
-pub enum ZSPFrame {
-    SimpleString(String),
-    Error(String),
-    Integer(i64),
-    BulkString(Option<Vec<u8>>),
-    Array(Option<Vec<ZSPFrame>>),
-}
 
 #[derive(Debug)]
 pub enum ZSPDecodeState {

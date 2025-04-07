@@ -56,7 +56,7 @@ impl ZSPEncoder {
         }
     }
     fn validate_simple_string(s: &str) -> io::Result<()> {
-        if s.contains(|c| c == '\r' || c == '\n') {
+        if s.contains('\r') || s.contains('\n') {
             Err(Error::new(
                 ErrorKind::InvalidData,
                 "Simple string contains CR or LF characters",
@@ -66,7 +66,7 @@ impl ZSPEncoder {
         }
     }
     fn validate_error_string(s: &str) -> io::Result<()> {
-        if s.contains(|c| c == '\r' || c == '\n') {
+        if s.contains('\r') || s.contains('\n') {
             Err(Error::new(
                 io::ErrorKind::InvalidData,
                 "Error message contains CR or LF characters",
