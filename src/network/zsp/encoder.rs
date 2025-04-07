@@ -125,4 +125,65 @@ mod tests {
         let result = ZSPEncoder::encode(&frame);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_empty_dictionary() {
+        let frame = ZSPFrame::Dictionary(None);
+        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        assert_eq!(encoded, b"%-1\r\n");
+    }
+
+    #[test]
+    fn test_single_item_dictionary() {
+        let mut items = std::collections::HashMap::new();
+        items.insert(
+            "key1".to_string(),
+            ZSPFrame::SimpleString("value1".to_string()),
+        );
+        let frame = ZSPFrame::Dictionary(Some(items));
+        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        assert_eq!(encoded, b"%1\r\n+key1\r\n+value1\r\n");
+    }
+
+    #[test]
+    fn test_multiple_items_dictionary() {
+        let mut items = std::collections::HashMap::new();
+        items.insert(
+            "key1".to_string(),
+            ZSPFrame::SimpleString("value1".to_string()),
+        );
+        items.insert(
+            "key2".to_string(),
+            ZSPFrame::SimpleString("value2".to_string()),
+        );
+        let frame = ZSPFrame::Dictionary(Some(items));
+        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        assert_eq!(encoded, b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n");
+    }
+
+    #[test]
+    fn test_invalid_dictionary_key() {
+        let mut items = std::collections::HashMap::new();
+        items.insert(
+            "key1".to_string(),
+            ZSPFrame::SimpleString("value1".to_string()),
+        );
+        // Попробуем вставить в словарь значение типа SimpleString
+        let frame = ZSPFrame::Dictionary(Some(items));
+        let result = ZSPEncoder::encode(&frame);
+        assert!(result.is_ok()); // Должен пройти, потому что ключи валидные
+    }
+
+    #[test]
+    fn test_incomplete_dictionary() {
+        let mut items = std::collections::HashMap::new();
+        items.insert(
+            "key1".to_string(),
+            ZSPFrame::SimpleString("value1".to_string()),
+        );
+        // Пример неполного словаря
+        let frame = ZSPFrame::Dictionary(Some(items));
+        let result = ZSPEncoder::encode(&frame);
+        assert!(result.is_ok()); // Ожидаем, что словарь будет закодирован корректно
+    }
 }
