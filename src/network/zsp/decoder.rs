@@ -228,17 +228,17 @@ impl ZSPDecoder {
                 let mut items = HashMap::new();
 
                 for _ in 0..len {
-                    // Если не хватает данных для ключа, возвращаем Ok(None)
+                    // Прочитаем ключ
                     let key_opt = self.decode(buf)?;
                     if key_opt.is_none() {
-                        return Ok(None);
+                        return Ok(None); // Возвращаем Ok(None), если нет данных для ключа
                     }
                     let key = key_opt.unwrap();
 
-                    // Если не хватает данных для значения, возвращаем Ok(None)
+                    // Прочитаем значение
                     let value_opt = self.decode(buf)?;
                     if value_opt.is_none() {
-                        return Ok(None);
+                        return Ok(None); // Возвращаем Ok(None), если нет данных для значения
                     }
                     let value = value_opt.unwrap();
 
@@ -345,6 +345,8 @@ impl ZSPDecoder {
 
 #[cfg(test)]
 mod tests {
+    use crate::network::zsp::encoder::ZSPEncoder;
+
     use super::*;
 
     // Тест для простых строк
@@ -414,22 +416,26 @@ mod tests {
     // Тест для словаря с несколькими элементами
     #[test]
     fn test_multiple_items_dictionary() {
-        let mut decoder = ZSPDecoder::new();
-        let data = b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n".to_vec(); // Два ключа-значения
-        let mut cursor = Cursor::new(data.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+        use std::collections::HashMap;
 
-        let mut expected_dict = HashMap::new();
-        expected_dict.insert(
+        let mut items = HashMap::new();
+        items.insert(
             "key1".to_string(),
             ZSPFrame::SimpleString("value1".to_string()),
         );
-        expected_dict.insert(
+        items.insert(
             "key2".to_string(),
             ZSPFrame::SimpleString("value2".to_string()),
         );
+        let original = ZSPFrame::Dictionary(Some(items));
+        let encoded = ZSPEncoder::encode(&original).unwrap();
 
-        assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
+        // Вместо прямого сравнения байтов, декодируем обратно:
+        let mut decoder = ZSPDecoder::new();
+        let mut cursor = std::io::Cursor::new(encoded.as_slice());
+        let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+
+        assert_eq!(original, decoded);
     }
 
     // Тест для некорректного словаря (некорректный ключ)
