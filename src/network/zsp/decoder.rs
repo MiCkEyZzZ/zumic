@@ -2,9 +2,9 @@ use bytes::Buf;
 use std::io::{self, Cursor, Result};
 
 // --- Константы для безопасности ---
-const MAX_LINE_LENGTH: usize = 1024 * 1024; // 1 MB
-const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024; // 512 MB
-const MAX_ARRAY_DEPTH: usize = 32; // Максимальная вложенность массивов
+pub const MAX_LINE_LENGTH: usize = 1024 * 1024; // 1 MB
+pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024; // 512 MB
+pub const MAX_ARRAY_DEPTH: usize = 32; // Максимальная вложенность массивов
 
 #[derive(Debug, PartialEq)]
 pub enum ZSPFrame {
