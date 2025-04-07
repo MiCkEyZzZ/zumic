@@ -1,53 +1,42 @@
-use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
+};
 
 pub struct TcpServer {
     listener: TcpListener,
 }
 
 impl TcpServer {
-    pub fn new(address: &str) -> io::Result<Self> {
-        let listener = TcpListener::bind(address)?;
+    pub async fn new(address: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let listener = TcpListener::bind(address).await?;
         Ok(Self { listener })
     }
 
-    pub fn run(&self) -> io::Result<()> {
-        println!("Server is running...");
+    pub async fn run(&self) {
+        loop {
+            let (stream, _) = self.listener.accept().await.unwrap();
+            tokio::spawn(Self::handle_connection(stream));
+        }
+    }
 
-        for stream in self.listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    thread::spawn(move || {
-                        if let Err(e) = handle_client(stream) {
-                            eprintln!("Error handling client: {}", e);
-                        }
-                    });
+    async fn handle_connection(mut stream: TcpStream) {
+        let mut buffer = [0; 1024];
+
+        loop {
+            match stream.read(&mut buffer).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if let Err(e) = stream.write_all(&buffer[..n]).await {
+                        eprintln!("Write error: {}", e);
+                        break;
+                    }
                 }
                 Err(e) => {
-                    eprintln!("Error accepting connection: {}", e)
+                    eprintln!("Read error: {}", e);
+                    break;
                 }
             }
         }
-        Ok(())
     }
-}
-
-fn handle_client(mut stream: TcpStream) -> io::Result<()> {
-    let mut buffer = [0; 1024];
-
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(n) => {
-                stream.write_all(&buffer[0..n])?;
-            }
-            Err(e) => {
-                eprintln!("Error reading from client: {}", e);
-                break;
-            }
-        }
-    }
-    println!("Connection closed.");
-    Ok(())
 }
