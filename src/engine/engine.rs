@@ -12,7 +12,6 @@ pub enum StorageType {
     Clustered,
 }
 
-/// Основной движок хранения.
 pub enum StorageEngine {
     InMemory(InMemoryStore),
 }
@@ -27,6 +26,12 @@ impl StorageEngine {
     pub fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
         match self {
             StorageEngine::InMemory(store) => store.get(key),
+        }
+    }
+
+    pub fn delete(&mut self, key: ArcBytes) -> StoreResult<()> {
+        match self {
+            StorageEngine::InMemory(store) => store.delete(key),
         }
     }
 }
