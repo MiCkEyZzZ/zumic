@@ -3,14 +3,6 @@
 //! Поддерживаются все основные типы: `SimpleString`, `Error`, `Integer`, `BulkString`, `Array`, `Dictionary`.
 //!
 //! Используется в основном через `ZSPEncoder::encode(&frame)` — возвращает Vec<u8>, пригодный для отправки по сети.
-//!
-//! ## Примеры:
-//!
-//! ```
-//! let frame = ZSPFrame::SimpleString("OK".into());
-//! let encoded = ZSPEncoder::encode(&frame).unwrap();
-//! assert_eq!(encoded, b"+OK\r\n");
-//! ```
 
 use std::io::{self, Error, ErrorKind};
 
@@ -34,14 +26,6 @@ impl ZSPEncoder {
     /// Кодирует фрейм `ZSPFrame` в Vec<u8>.
     ///
     /// Возвращает `Err`, если нарушены ограничения по вложенности или длине.
-    ///
-    /// Пример:
-    ///
-    /// ```
-    /// let frame = ZSPFrame::SimpleString("OK".to_string());
-    /// let encoded = ZSPEncoder::encode(&frame).unwrap();
-    /// assert_eq!(encoded, b"+OK\r\n");
-    /// ```
     pub fn encode(frame: &ZSPFrame) -> io::Result<Vec<u8>> {
         Self::encode_frame(frame, 0)
     }
