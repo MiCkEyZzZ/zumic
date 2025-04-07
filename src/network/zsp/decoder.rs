@@ -1,5 +1,8 @@
 use bytes::Buf;
-use std::io::{self, Cursor, Result};
+use std::{
+    collections::HashMap,
+    io::{self, Cursor, Result},
+};
 
 use super::types::ZSPFrame;
 
@@ -48,6 +51,7 @@ impl ZSPDecoder {
                     b':' => self.parse_integer(buf),
                     b'$' => self.parse_bulk_string(buf),
                     b'*' => self.parse_array(buf, 0),
+                    b'%' => self.parse_dictionary(buf),
                     _ => Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("Unknown ZSP type at byte {}", buf.position() - 1),
@@ -209,6 +213,54 @@ impl ZSPDecoder {
         }
     }
 
+    fn parse_dictionary(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+        let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid dictionary length at byte {}", buf.position()),
+            )
+        })?;
+
+        match len {
+            -1 => Ok(Some(ZSPFrame::Dictionary(None))), // Null dictionary
+            len if len >= 0 => {
+                let len = len as usize;
+                let mut items = HashMap::new();
+
+                for _ in 0..len {
+                    // Если не хватает данных для ключа, возвращаем Ok(None)
+                    let key_opt = self.decode(buf)?;
+                    if key_opt.is_none() {
+                        return Ok(None);
+                    }
+                    let key = key_opt.unwrap();
+
+                    // Если не хватает данных для значения, возвращаем Ok(None)
+                    let value_opt = self.decode(buf)?;
+                    if value_opt.is_none() {
+                        return Ok(None);
+                    }
+                    let value = value_opt.unwrap();
+
+                    if let ZSPFrame::SimpleString(key_str) = key {
+                        items.insert(key_str, value);
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Expected SimpleString as key at byte {}", buf.position()),
+                        ));
+                    }
+                }
+
+                Ok(Some(ZSPFrame::Dictionary(Some(items))))
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Negative dictionary length at byte {}", buf.position()),
+            )),
+        }
+    }
+
     fn continue_array(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -295,6 +347,7 @@ impl ZSPDecoder {
 mod tests {
     use super::*;
 
+    // Тест для простых строк
     #[test]
     fn test_simple_string() {
         let mut decoder = ZSPDecoder::new();
@@ -304,6 +357,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::SimpleString("OK".to_string()));
     }
 
+    // Тест для булк-строк
     #[test]
     fn test_bulk_string() {
         let mut decoder = ZSPDecoder::new();
@@ -313,6 +367,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
 
+    // Тест для частичной булк-строки
     #[test]
     fn test_partial_bulk_string() {
         let mut decoder = ZSPDecoder::new();
@@ -327,5 +382,73 @@ mod tests {
         let mut cursor = Cursor::new(data2.as_slice());
         let frame = decoder.decode(&mut cursor).unwrap().unwrap();
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
+    }
+
+    // Тест для пустого словаря
+    #[test]
+    fn test_empty_dictionary() {
+        let mut decoder = ZSPDecoder::new();
+        let data = b"%0\r\n".to_vec();
+        let mut cursor = Cursor::new(data.as_slice());
+        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+        assert_eq!(frame, ZSPFrame::Dictionary(Some(HashMap::new())));
+    }
+
+    // Тест для словаря с одним элементом
+    #[test]
+    fn test_single_item_dictionary() {
+        let mut decoder = ZSPDecoder::new();
+        let data = b"%1\r\n+key\r\n+value\r\n".to_vec(); // Один ключ-значение
+        let mut cursor = Cursor::new(data.as_slice());
+        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+
+        let mut expected_dict = HashMap::new();
+        expected_dict.insert(
+            "key".to_string(),
+            ZSPFrame::SimpleString("value".to_string()),
+        );
+
+        assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
+    }
+
+    // Тест для словаря с несколькими элементами
+    #[test]
+    fn test_multiple_items_dictionary() {
+        let mut decoder = ZSPDecoder::new();
+        let data = b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n".to_vec(); // Два ключа-значения
+        let mut cursor = Cursor::new(data.as_slice());
+        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+
+        let mut expected_dict = HashMap::new();
+        expected_dict.insert(
+            "key1".to_string(),
+            ZSPFrame::SimpleString("value1".to_string()),
+        );
+        expected_dict.insert(
+            "key2".to_string(),
+            ZSPFrame::SimpleString("value2".to_string()),
+        );
+
+        assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
+    }
+
+    // Тест для некорректного словаря (некорректный ключ)
+    #[test]
+    fn test_invalid_dictionary_key() {
+        let mut decoder = ZSPDecoder::new();
+        let data = b"%1\r\n-err\r\n+value\r\n".to_vec(); // Ошибка, ключ должен быть SimpleString
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = decoder.decode(&mut cursor);
+        assert!(result.is_err());
+    }
+
+    // Тест для некорректного словаря (неполный словарь)
+    #[test]
+    fn test_incomplete_dictionary() {
+        let mut decoder = ZSPDecoder::new();
+        let data = b"%2\r\n+key1\r\n+value1\r\n".to_vec(); // Недостаточно данных для второго элемента
+        let mut cursor = Cursor::new(data.as_slice());
+        let result = decoder.decode(&mut cursor);
+        assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
     }
 }

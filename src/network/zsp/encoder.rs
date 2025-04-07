@@ -53,6 +53,20 @@ impl ZSPEncoder {
                 Ok(out)
             }
             ZSPFrame::Array(None) => Ok(b"*-1\r\n".to_vec()),
+            ZSPFrame::Dictionary(Some(items)) => {
+                let mut out = format!("%{}\r\n", items.len()).into_bytes();
+                for (key, value) in items {
+                    // Кодируем ключ
+                    out.extend(Self::encode_frame(
+                        &ZSPFrame::SimpleString(key.clone()),
+                        current_depth + 1,
+                    )?);
+                    // Кодируем значение
+                    out.extend(Self::encode_frame(value, current_depth + 1)?);
+                }
+                Ok(out)
+            }
+            ZSPFrame::Dictionary(None) => Ok(b"%-1\r\n".to_vec()),
         }
     }
     fn validate_simple_string(s: &str) -> io::Result<()> {
