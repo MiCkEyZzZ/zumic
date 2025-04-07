@@ -34,6 +34,22 @@ impl ArcBytes {
     pub fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(&self.0).ok()
     }
+    pub fn into_bytes(self) -> Bytes {
+        Arc::try_unwrap(self.0).unwrap_or_else(|arc| arc.as_ref().clone())
+    }
+    pub fn into_arc(self) -> Arc<Bytes> {
+        self.0
+    }
+    pub fn starts_with(&self, prefix: &[u8]) -> bool {
+        self.as_slice().starts_with(prefix)
+    }
+    pub fn ends_with(&self, suffix: &[u8]) -> bool {
+        self.as_slice().ends_with(suffix)
+    }
+    pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
+        let bytes = self.0.slice(range);
+        Self(Arc::new(bytes))
+    }
 }
 
 impl Serialize for ArcBytes {
@@ -52,6 +68,12 @@ impl<'de> Deserialize<'de> for ArcBytes {
     {
         let bytes = <Vec<u8>>::deserialize(deserializer)?;
         Ok(ArcBytes(Arc::new(Bytes::from(bytes))))
+    }
+}
+
+impl Default for ArcBytes {
+    fn default() -> Self {
+        Self(Arc::new(Bytes::new()))
     }
 }
 
@@ -89,6 +111,24 @@ impl From<Vec<u8>> for ArcBytes {
     }
 }
 
+impl From<&[u8]> for ArcBytes {
+    fn from(slice: &[u8]) -> Self {
+        Self(Arc::new(Bytes::copy_from_slice(slice)))
+    }
+}
+
+impl From<Bytes> for ArcBytes {
+    fn from(bytes: Bytes) -> Self {
+        Self(Arc::new(bytes))
+    }
+}
+
+impl From<String> for ArcBytes {
+    fn from(s: String) -> Self {
+        Self::from_vec(s.into_bytes())
+    }
+}
+
 impl Hash for ArcBytes {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
@@ -104,6 +144,24 @@ impl PartialOrd for ArcBytes {
 impl Ord for ArcBytes {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
+    }
+}
+
+impl PartialEq<[u8]> for ArcBytes {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.as_slice() == other
+    }
+}
+
+impl PartialEq<str> for ArcBytes {
+    fn eq(&self, other: &str) -> bool {
+        self.as_slice() == other.as_bytes()
+    }
+}
+
+impl std::borrow::Borrow<[u8]> for ArcBytes {
+    fn borrow(&self) -> &[u8] {
+        self.as_slice()
     }
 }
 
@@ -171,5 +229,12 @@ mod tests {
         let ab = ArcBytes::from_str("abc");
         let r: &[u8] = ab.as_ref();
         assert_eq!(r, b"abc");
+    }
+
+    #[test]
+    fn test_slice_operations() {
+        let data = ArcBytes::from(b"hello world".as_ref());
+        let slice = data.slice(6..);
+        assert_eq!(slice.as_slice(), b"world");
     }
 }

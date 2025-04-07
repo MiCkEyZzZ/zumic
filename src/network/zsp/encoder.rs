@@ -45,7 +45,7 @@ impl ZSPEncoder {
                 Self::validate_simple_string(s)?;
                 Ok(format!("+{}\r\n", s).into_bytes())
             }
-            ZSPFrame::Error(s) => {
+            ZSPFrame::FrameError(s) => {
                 Self::validate_error_string(s)?;
                 Ok(format!("-{}\r\n", s).into_bytes())
             }
@@ -87,6 +87,18 @@ impl ZSPEncoder {
                 Ok(out)
             }
             ZSPFrame::Dictionary(None) => Ok(b"%-1\r\n".to_vec()),
+            ZSPFrame::ZSet(entries) => {
+                // ^ — префикс для ZSet, за которым идёт число элементов
+                let mut out = format!("^{}\r\n", entries.len()).into_bytes();
+                for (member, score) in entries {
+                    // member как simple string (валидируется на отсутствие CR/LF)
+                    Self::validate_simple_string(member)?;
+                    out.extend(format!("+{}\r\n", member).into_bytes());
+                    // score как float
+                    out.extend(format!(":{}\r\n", score).into_bytes());
+                }
+                Ok(out)
+            }
         }
     }
     /// Проверка: simple string не должен содержать `\r` или `\n`

@@ -122,7 +122,7 @@ impl ZSPDecoder {
     /// Парсит Error-фрейм.
     fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
         let line = self.read_line(buf)?;
-        Ok(Some(ZSPFrame::Error(line)))
+        Ok(Some(ZSPFrame::FrameError(line)))
     }
 
     /// Парсит Integer-фрейм.
