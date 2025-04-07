@@ -4,6 +4,6 @@ pub enum ZSPFrame {
     SimpleString(String),
     Error(String),
     Integer(i64),
-    BulkString(Option<Vec<u8>>),
-    Array(Option<Vec<ZSPFrame>>),
+    BulkString(Option<Vec<u8>>),  // None для Null
+    Array(Option<Vec<ZSPFrame>>), // None для Null
 }
