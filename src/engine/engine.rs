@@ -1,3 +1,5 @@
+use tracing::info;
+
 use crate::{
     database::{ArcBytes, Value},
     error::StoreResult,
@@ -18,18 +20,21 @@ pub enum StorageEngine {
 
 impl StorageEngine {
     pub fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()> {
+        info!("Setting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.set(key, value),
         }
     }
 
     pub fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
+        info!("Getting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.get(key),
         }
     }
 
     pub fn delete(&mut self, key: ArcBytes) -> StoreResult<()> {
+        info!("Deleting key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.delete(key),
         }

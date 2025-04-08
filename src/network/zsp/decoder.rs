@@ -1,5 +1,6 @@
-use bytes::Buf;
 use std::{collections::HashMap, io::Cursor};
+
+use bytes::Buf;
 
 use super::{errors::ZSPError, types::ZSPFrame};
 
