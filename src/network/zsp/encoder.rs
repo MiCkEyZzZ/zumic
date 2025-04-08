@@ -1,3 +1,5 @@
+use tracing::{debug, error, info};
+
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BULK_LENGTH},
     errors::ZSPError,
@@ -8,43 +10,56 @@ pub struct ZSPEncoder;
 
 impl ZSPEncoder {
     pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, ZSPError> {
+        debug!("Encoding frame: {:?}", frame);
         Self::encode_frame(frame, 0)
     }
 
     fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, ZSPError> {
+        debug!("Encoding frame at depth {}: {:?}", current_depth, frame);
+
         if current_depth > MAX_ARRAY_DEPTH {
-            return Err(ZSPError::InvalidData(format!(
-                "Max array depth exceed ({})",
-                MAX_ARRAY_DEPTH
-            )));
+            let err_msg = format!("Max array depth exceed ({})", MAX_ARRAY_DEPTH);
+            error!("{}", err_msg);
+            return Err(ZSPError::InvalidData(err_msg));
         }
 
         match frame {
             ZSPFrame::SimpleString(s) => {
                 Self::validate_simple_string(s)?;
+                info!("Encoding SimpleString: {}", s);
                 Ok(format!("+{}\r\n", s).into_bytes())
             }
             ZSPFrame::FrameError(s) => {
                 Self::validate_error_string(s)?;
+                info!("Encoding FrameError: {}", s);
                 Ok(format!("-{}\r\n", s).into_bytes())
             }
-            ZSPFrame::Integer(i) => Ok(format!(":{}\r\n", i).into_bytes()),
-            ZSPFrame::Float(f) => Ok(format!(":{}\r\n", f).into_bytes()),
+            ZSPFrame::Integer(i) => {
+                info!("Encoding Integer: {}", i);
+                Ok(format!(":{}\r\n", i).into_bytes())
+            }
+            ZSPFrame::Float(f) => {
+                info!("Encoding Float: {}", f);
+                Ok(format!(":{}\r\n", f).into_bytes())
+            }
             ZSPFrame::BulkString(Some(b)) => {
                 if b.len() > MAX_BULK_LENGTH {
-                    return Err(ZSPError::InvalidData(format!(
-                        "Bulk string too long ({} > {})",
-                        b.len(),
-                        MAX_BULK_LENGTH
-                    )));
+                    let err_msg =
+                        format!("Bulk string too long ({} > {})", b.len(), MAX_BULK_LENGTH);
+                    error!("{}", err_msg);
+                    return Err(ZSPError::InvalidData(err_msg));
                 }
 
+                info!("Encoding BulkString of length {}", b.len());
                 let mut out = format!("${}\r\n", b.len()).into_bytes();
                 out.extend(b);
                 out.extend(b"\r\n");
                 Ok(out)
             }
-            ZSPFrame::BulkString(None) => Ok(b"$-1\r\n".to_vec()),
+            ZSPFrame::BulkString(None) => {
+                info!("Encoding empty BulkString");
+                Ok(b"$-1\r\n".to_vec())
+            }
             ZSPFrame::Array(Some(elements)) => {
                 let mut out = format!("*{}\r\n", elements.len()).into_bytes();
                 for e in elements {
@@ -54,6 +69,7 @@ impl ZSPEncoder {
             }
             ZSPFrame::Array(None) => Ok(b"*-1\r\n".to_vec()),
             ZSPFrame::Dictionary(Some(items)) => {
+                info!("Encoding Dictionary with {} items", items.len());
                 let mut out = format!("%{}\r\n", items.len()).into_bytes();
                 for (key, value) in items {
                     // Кодируем ключ
@@ -66,12 +82,15 @@ impl ZSPEncoder {
                 }
                 Ok(out)
             }
-            ZSPFrame::Dictionary(None) => Ok(b"%-1\r\n".to_vec()),
+            ZSPFrame::Dictionary(None) => {
+                info!("Encoding empty Dictionary");
+                Ok(b"%-1\r\n".to_vec())
+            }
             ZSPFrame::ZSet(entries) => {
-                // ^ — префикс для ZSet, за которым идёт число элементов
+                info!("Encoding ZSet with {} entries", entries.len());
                 let mut out = format!("^{}\r\n", entries.len()).into_bytes();
                 for (member, score) in entries {
-                    // member как simple string (валидируется на отсутствие CR/LF)
+                    // member как simple string
                     Self::validate_simple_string(member)?;
                     out.extend(format!("+{}\r\n", member).into_bytes());
                     // score как float
@@ -83,18 +102,19 @@ impl ZSPEncoder {
     }
     fn validate_simple_string(s: &str) -> Result<(), ZSPError> {
         if s.contains('\r') || s.contains('\n') {
-            Err(ZSPError::InvalidData(
-                "Simple string contains CR or LF characters".into(),
-            ))
+            let err_msg = "Simple string contains CR or LF characters";
+            error!("{}", err_msg);
+            Err(ZSPError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }
     }
+
     fn validate_error_string(s: &str) -> Result<(), ZSPError> {
         if s.contains('\r') || s.contains('\n') {
-            Err(ZSPError::InvalidData(
-                "Error message contains CR or LF characters".into(),
-            ))
+            let err_msg = "Error message contains CR or LF characters";
+            error!("{}", err_msg);
+            Err(ZSPError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }

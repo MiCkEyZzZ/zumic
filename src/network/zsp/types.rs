@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
+use tracing::{debug, warn};
+
 use crate::database::{ArcBytes, QuickList, Value};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,35 +21,75 @@ impl TryFrom<Value> for ZSPFrame {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
+        debug!("Attempting to convert Value to ZSPFrame: {:?}", value);
         match value {
-            Value::Str(s) => handle_arcbytes(s),
-            Value::Int(i) => Ok(Self::Integer(i)),
-            Value::Float(f) => Ok(Self::Float(f)),
-            Value::Bool(b) => Ok(Self::SimpleString(b.to_string())),
-            Value::List(list) => convert_quicklist(list),
-            Value::Set(set) => convert_hashset(set),
-            Value::Hash(hash) => convert_hashmap(hash),
-            Value::ZSet { dict, .. } => convert_zset(dict),
-            Value::Null => Ok(Self::BulkString(None)),
+            Value::Str(s) => {
+                debug!("Converting Value::Str to ZSPFrame::SimpleString");
+                handle_arcbytes(s)
+            }
+            Value::Int(i) => {
+                debug!("Converting Value::Int to ZSPFrame::Integer: {}", i);
+                Ok(Self::Integer(i))
+            }
+            Value::Float(f) => {
+                debug!("Converting Value::Float to ZSPFrame::Float: {}", f);
+                Ok(Self::Float(f))
+            }
+            Value::Bool(b) => {
+                debug!("Converting Value::Bool to ZSPFrame::SimpleString: {}", b);
+                Ok(Self::SimpleString(b.to_string()))
+            }
+            Value::List(list) => {
+                debug!("Converting Value::List to ZSPFrame::Array");
+                convert_quicklist(list)
+            }
+            Value::Set(set) => {
+                debug!("Converting Value::Set to ZSPFrame::Array");
+                convert_hashset(set)
+            }
+            Value::Hash(hash) => {
+                debug!("Converting Value::Hash to ZSPFrame::Dictionary");
+                convert_hashmap(hash)
+            }
+            Value::ZSet { dict, .. } => {
+                debug!("Converting Value::ZSet to ZSPFrame::ZSet");
+                convert_zset(dict)
+            }
+            Value::Null => {
+                debug!("Converting Value::Null to ZSPFrame::BulkString(None)");
+                Ok(Self::BulkString(None))
+            }
             // Игнорируем неподдерживаемые типы
-            Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
+            Value::HyperLogLog(_) | Value::SStream(_) => {
+                warn!("Unsupported data type encountered during conversion");
+                Err("Unsupported data type".into())
+            }
         }
     }
 }
 
 impl From<ArcBytes> for ZSPFrame {
     fn from(value: ArcBytes) -> Self {
+        debug!("Converting ArcBytes to ZSPFrame::BulkString");
         ZSPFrame::BulkString(Some(value.to_vec()))
     }
 }
 
 fn handle_arcbytes(bytes: ArcBytes) -> Result<ZSPFrame, String> {
+    debug!("Handling ArcBytes: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
         .map(ZSPFrame::SimpleString)
-        .or_else(|_| Ok(ZSPFrame::BulkString(Some(bytes.to_vec()))))
+        .or_else(|_| {
+            debug!("Non-UTF8 ArcBytes, converting to BulkString");
+            Ok(ZSPFrame::BulkString(Some(bytes.to_vec())))
+        })
 }
 
 fn convert_quicklist(list: QuickList<ArcBytes>) -> Result<ZSPFrame, String> {
+    debug!(
+        "Converting QuickList to ZSPFrame::Array with length: {}",
+        list.len()
+    );
     let mut frames = Vec::with_capacity(list.len());
     for item in list.iter() {
         frames.push(item.clone().into());
@@ -56,12 +98,14 @@ fn convert_quicklist(list: QuickList<ArcBytes>) -> Result<ZSPFrame, String> {
 }
 
 fn convert_hashset(set: HashSet<String>) -> Result<ZSPFrame, String> {
+    debug!("Converting HashSet to ZSPFrame::Array");
     Ok(ZSPFrame::Array(Some(
         set.into_iter().map(ZSPFrame::SimpleString).collect(),
     )))
 }
 
 fn convert_hashmap(hash: HashMap<ArcBytes, ArcBytes>) -> Result<ZSPFrame, String> {
+    debug!("Converting HashMap to ZSPFrame::Dictionary");
     let mut map = HashMap::with_capacity(hash.len());
     for (k, v) in hash {
         // 1) decode the key, mapping its UTF‑8 error into String:
@@ -74,6 +118,7 @@ fn convert_hashmap(hash: HashMap<ArcBytes, ArcBytes>) -> Result<ZSPFrame, String
 }
 
 fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
+    debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
     // Turn each (ArcBytes, f64) into a (String, f64), mapping UTF‑8 errors into String
     let pairs = dict
         .into_iter()
