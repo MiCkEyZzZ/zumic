@@ -1,4 +1,4 @@
-// Позже можно добавить поддержку через crate `syslog` или `tracing-syslog`
+// Support can be added later via crate `syslog` or `tracing syslog`
 pub fn layer() {
-    // Пока ничего не делает
+    // Doesn't do anuthing yet.
 }

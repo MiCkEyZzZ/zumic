@@ -59,7 +59,7 @@ impl TryFrom<Value> for ZSPFrame {
                 debug!("Converting Value::Null to ZSPFrame::BulkString(None)");
                 Ok(Self::BulkString(None))
             }
-            // Игнорируем неподдерживаемые типы
+            // Ignore unsupported types
             Value::HyperLogLog(_) | Value::SStream(_) => {
                 warn!("Unsupported data type encountered during conversion");
                 Err("Unsupported data type".into())

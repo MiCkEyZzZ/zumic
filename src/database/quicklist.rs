@@ -209,6 +209,8 @@ impl<T> QuickList<T> {
 mod tests {
     use super::*;
 
+    // Tests the `push_front` and `pop_front` methods.
+    // It pushes elements to the front of the list and pops them to ensure the correct order and size.
     #[test]
     fn test_push_front_and_pop_front() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -225,6 +227,8 @@ mod tests {
         assert_eq!(list.len(), 2);
     }
 
+    // Tests the `push_back` and `pop_back` methods.
+    // It pushes elements to the back of the list and pops them to ensure the correct order and size.
     #[test]
     fn test_push_back_and_pop_back() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -241,6 +245,8 @@ mod tests {
         assert_eq!(list.len(), 2);
     }
 
+    // Tests the `get` and `get_mut` methods.
+    // It checks if we can correctly access and mutate an element at a specific index.
     #[test]
     fn test_get_and_get_mut() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -258,6 +264,8 @@ mod tests {
         assert_eq!(list.get(1), Some(&25));
     }
 
+    // Tests the `clear` method.
+    // It clears the list and ensures that the list is empty afterward.
     #[test]
     fn test_clear() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -272,6 +280,8 @@ mod tests {
         assert_eq!(list.len(), 0);
     }
 
+    // Tests the `validate` method.
+    // It checks that the list is valid and verifies error cases such as exceeding segment capacity.
     #[test]
     fn test_validate() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -286,6 +296,8 @@ mod tests {
         assert!(list.validate().is_err());
     }
 
+    // Tests the `auto_optimize` method.
+    // It ensures that optimization occurs when necessary (e.g., when there are too many segments).
     #[test]
     fn test_auto_optimize() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -304,6 +316,8 @@ mod tests {
         assert_eq!(list.len(), 5);
     }
 
+    // Tests the `from_vecdeque` method.
+    // It ensures that the list can be created from a `VecDeque` and that elements are correctly inserted.
     #[test]
     fn test_from_vecdeque() {
         let items: VecDeque<i32> = VecDeque::from(vec![1, 2, 3]);
@@ -315,6 +329,8 @@ mod tests {
         assert_eq!(list.get(2), Some(&3));
     }
 
+    // Tests the `into_vecdeque` method.
+    // It checks that the list can be converted into a `VecDeque` with the correct elements.
     #[test]
     fn test_into_vecdeque() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -326,6 +342,8 @@ mod tests {
         assert_eq!(vecdeque, VecDeque::from(vec![10, 20, 30]));
     }
 
+    // Tests the `shrink_to_fit` method.
+    // It ensures that the capacity of the segments is reduced to fit the data.
     #[test]
     fn test_shrink_to_fit() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -339,6 +357,8 @@ mod tests {
         assert!(list.segments.iter().all(|seg| seg.capacity() >= seg.len()));
     }
 
+    // Tests the `memory_usage` method.
+    // It checks that the memory usage of the list is calculated correctly based on the segment capacities.
     #[test]
     fn test_memory_usage() {
         let mut list: QuickList<i32> = QuickList::new(3);

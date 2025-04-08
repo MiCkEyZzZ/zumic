@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Ошибки, возникающие при работе с протоколом ZSP.
+/// Errors that occur when working with the ZSP protocol.
 #[derive(Debug, Error)]
 pub enum ZSPError {
     #[error("Invalid data: {0}")]

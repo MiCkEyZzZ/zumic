@@ -5,11 +5,11 @@ use tracing::{error, info};
 
 use super::{errors::ZSPError, types::ZSPFrame};
 
-/// Максимальная длина строки (1 МБ).
+/// Maximum string length (1mb).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
-/// Максимальный размер BulkString (512 МБ).
+/// Maximum BulkString size (512mb).
 pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024;
-/// Максимальная вложенность массивов (32 уровня).
+/// Maximum nesting of arrays (32 levels).
 pub const MAX_ARRAY_DEPTH: usize = 32;
 
 /// Состояние декодера. Используется для сохранения промежуточного состояния при частичном чтении.

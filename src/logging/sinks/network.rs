@@ -1,4 +1,4 @@
-// Например, можно отправлять логи по TCP/UDP, позже — в Loki, ELK, Fluentbit
+// For example, you can send logs via TCP/UDP, later-to Loki, ELK, Fluentbit.
 pub fn layer() {
-    // Пока ничего не делает
+    // Doesn't do anything yet.
 }

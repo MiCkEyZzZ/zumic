@@ -1,11 +1,12 @@
 use std::io;
+
 use thiserror::Error;
 
 pub type StoreResult<T> = Result<T, StoreError>;
 
 #[derive(Error, Debug)]
 pub enum StoreError {
-    // ==== Системные / внешние ====
+    // ==== System / External ====
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
@@ -18,7 +19,7 @@ pub enum StoreError {
     #[error("Lua VM error: {0}")]
     Lua(#[from] mlua::Error),
 
-    // ==== Командные ошибки ====
+    // ==== Command errors ====
     #[error("Invalid command: {0}")]
     InvalidCommand(String),
 
@@ -37,7 +38,7 @@ pub enum StoreError {
     #[error("Operation not implemented: {0}")]
     NotImplemented(String),
 
-    // ==== Сетевые и кластерные ====
+    // ==== Network and cluster ====
     #[error("Connection error: {0}")]
     Connection(String),
 
@@ -51,7 +52,7 @@ pub enum StoreError {
     #[error("Subscriber error: {0}")]
     Subscriber(String),
 
-    // ==== Общие ====
+    // ==== General ====
     #[error("Internal error: {0}")]
     Internal(String),
 

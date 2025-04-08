@@ -1,3 +1,3 @@
-# Политика безопасности
+# Security Policy
 
-## Поддерживаемые версии
+## Supported Versions
