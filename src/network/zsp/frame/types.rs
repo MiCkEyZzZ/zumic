@@ -15,6 +15,7 @@ pub enum ZSPFrame {
     Array(Option<Vec<ZSPFrame>>),
     Dictionary(Option<HashMap<String, ZSPFrame>>),
     ZSet(Vec<(String, f64)>),
+    Null,
 }
 
 impl TryFrom<Value> for ZSPFrame {
@@ -139,6 +140,7 @@ mod tests {
     use crate::database::{ArcBytes, QuickList};
     use std::collections::{HashMap, HashSet};
 
+    // Tests handling of ArcBytes with both valid UTF-8 and binary data.
     #[test]
     fn handle_arcbytes_utf8_and_binary() {
         let utf8 = ArcBytes::from_str("hello");
@@ -150,6 +152,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(bin.to_vec())));
     }
 
+    // Tests the conversion of QuickList<ArcBytes> into a ZSPFrame::Array of BulkStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -174,6 +177,7 @@ mod tests {
         }
     }
 
+    // Tests the conversion of a HashSet<String> to a ZSPFrame::Array of SimpleStrings.
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
@@ -198,6 +202,7 @@ mod tests {
         }
     }
 
+    // Tests TryFrom<Value> for ZSPFrame with various types like Int and Null.
     #[test]
     fn try_from_value_various() {
         assert_eq!(
@@ -210,6 +215,7 @@ mod tests {
         );
     }
 
+    // Tests conversion of a HashMap<ArcBytes, ArcBytes> into a ZSPFrame::Dictionary.
     #[test]
     fn convert_hashmap_to_dict() {
         let mut hm = HashMap::new();
@@ -231,6 +237,7 @@ mod tests {
         }
     }
 
+    // Tests conversion of a ZSet (HashMap<ArcBytes, f64>) into a ZSPFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = HashMap::new();
@@ -249,6 +256,7 @@ mod tests {
         }
     }
 
+    // Tests TryFrom<Value> for bools and floats.
     #[test]
     fn try_from_value_bool_and_float() {
         assert_eq!(
@@ -261,6 +269,7 @@ mod tests {
         );
     }
 
+    // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 ArcBytes.
     #[test]
     fn try_from_value_str_valid_and_invalid_utf8() {
         let valid = ArcBytes::from_str("abc");

@@ -98,6 +98,10 @@ impl ZSPEncoder {
                 }
                 Ok(out)
             }
+            ZSPFrame::Null => {
+                info!("Encoding Null");
+                Ok(b"$-1\r\n".to_vec())
+            }
         }
     }
     fn validate_simple_string(s: &str) -> Result<(), ZSPError> {

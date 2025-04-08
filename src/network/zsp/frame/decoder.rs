@@ -12,7 +12,6 @@ pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024;
 /// Maximum nesting of arrays (32 levels).
 pub const MAX_ARRAY_DEPTH: usize = 32;
 
-/// Состояние декодера. Используется для сохранения промежуточного состояния при частичном чтении.
 #[derive(Debug)]
 pub enum ZSPDecodeState {
     /// Начальное состояние.
@@ -27,26 +26,18 @@ pub enum ZSPDecodeState {
     },
 }
 
-/// Основной декодер протокола ZSP.
 pub struct ZSPDecoder {
-    /// Текущее состояние декодера.
     state: ZSPDecodeState,
 }
 
 impl ZSPDecoder {
-    /// Создаёт новый экземпляр декодера.
     pub fn new() -> Self {
         Self {
             state: ZSPDecodeState::Initial,
         }
     }
 
-    /// Основной метод декодирования.
-    ///
-    /// Принимает ссылку на `Cursor` с данными и пытается декодировать один полный фрейм ZSP.
-    /// Если данных недостаточно для завершения декодирования, возвращается `Ok(None)`.
     pub fn decode(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
-        // Извлекаем текущее состояние и сбрасываем его на начальное.
         let state = std::mem::replace(&mut self.state, ZSPDecodeState::Initial);
 
         match state {
@@ -127,10 +118,6 @@ impl ZSPDecoder {
         Ok(Some(ZSPFrame::Integer(num)))
     }
 
-    /// Парсит BulkString.
-    ///
-    /// Читает длину строки, затем данные и завершающий CRLF.
-    /// Если данных недостаточно, сохраняет состояние и возвращает Ok(None).
     fn parse_bulk_string(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
             let err_msg = format!("Invalid bulk length at byte {}", buf.position());
@@ -194,10 +181,6 @@ impl ZSPDecoder {
         }
     }
 
-    /// Парсит Array-фрейм.
-    ///
-    /// Читает количество элементов, затем последовательно декодирует каждый элемент.
-    /// Поддерживается рекурсия до MAX_ARRAY_DEPTH.
     fn parse_array(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -247,10 +230,6 @@ impl ZSPDecoder {
         }
     }
 
-    /// Парсит Dictionary-фрейм.
-    ///
-    /// Читает количество пар (ключ-значение). Для каждой пары рекурсивно вызывает `decode` для ключа и значения.
-    /// Если данные для ключа или значения неполные, возвращается `Ok(None)`.
     fn parse_dictionary(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
             let err_msg = format!("Invalid dictionary length at byte {}", buf.position());
@@ -330,9 +309,6 @@ impl ZSPDecoder {
 
     // --- Вспомогательные методы ---
 
-    /// Читает строку до последовательности CRLF.
-    ///
-    /// Если строка не заканчивается CRLF или неполная, возвращает ошибку или Ok(None).
     fn read_line(&mut self, buf: &mut Cursor<&[u8]>) -> Result<String, ZSPError> {
         let start_pos = buf.position();
         let mut line = Vec::new();
@@ -387,9 +363,9 @@ impl ZSPDecoder {
 
 #[cfg(test)]
 mod tests {
-    use crate::network::zsp::encoder::ZSPEncoder;
-
     use super::*;
+
+    use crate::network::zsp::frame::encoder::ZSPEncoder;
 
     // Тест для простых строк
     // Проверяет декодирование строки, начинающейся с '+'
