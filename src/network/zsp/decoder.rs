@@ -1,26 +1,7 @@
-//! # Модуль ZSPDecoder
-//! Этот модуль реализует декодер протокола **ZSP (Zumic Serialization Protocol)**.
-//! Протокол ZSP поддерживает следующие типы данных:
-//! - **SimpleString** – строка, начинающаяся с `+`
-//! - **Error** – сообщение об ошибке, начинающееся с `-`
-//! - **Integer** – целое число, начинающееся с `:`
-//! - **BulkString** – бинарные данные, начинающиеся с `$`
-//! - **Array** – массив элементов, начинающийся с `*`
-//! - **Dictionary** – словарь (Map), начинающийся с `%`
-//!
-//! Декодер поддерживает частичное чтение данных (streaming). Если данных недостаточно для полного фрейма, метод `decode` возвращает `Ok(None)`,
-//! сигнализируя о необходимости получения дополнительных данных.
-//!
-//! Для обеспечения безопасности реализованы ограничения на максимальную длину строки (`MAX_LINE_LENGTH`),
-//! максимальный размер BulkString (`MAX_BULK_LENGTH`) и максимальную вложенность массивов (`MAX_ARRAY_DEPTH`).
-
 use bytes::Buf;
-use std::{
-    collections::HashMap,
-    io::{self, Cursor, Result},
-};
+use std::{collections::HashMap, io::Cursor};
 
-use super::types::ZSPFrame;
+use super::{errors::ZSPError, types::ZSPFrame};
 
 /// Максимальная длина строки (1 МБ).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
@@ -62,7 +43,7 @@ impl ZSPDecoder {
     ///
     /// Принимает ссылку на `Cursor` с данными и пытается декодировать один полный фрейм ZSP.
     /// Если данных недостаточно для завершения декодирования, возвращается `Ok(None)`.
-    pub fn decode(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+    pub fn decode(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         // Извлекаем текущее состояние и сбрасываем его на начальное.
         let state = std::mem::replace(&mut self.state, ZSPDecodeState::Initial);
 
@@ -79,10 +60,10 @@ impl ZSPDecoder {
                     b'$' => self.parse_bulk_string(buf),
                     b'*' => self.parse_array(buf, 0),
                     b'%' => self.parse_dictionary(buf),
-                    _ => Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Unknown ZSP type at byte {}", buf.position() - 1),
-                    )),
+                    _ => Err(ZSPError::InvalidData(format!(
+                        "Unknown ZSP type at byte {}",
+                        buf.position() - 1
+                    ))),
                 }
             }
             ZSPDecodeState::PartialBulkString { len, mut data } => {
@@ -114,25 +95,25 @@ impl ZSPDecoder {
     // --- Методы для парсинга отдельных типов фреймов ---
 
     /// Парсит SimpleString, читаемый до CRLF.
-    fn parse_simple_string(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
-        let line = self.read_line(buf)?;
+    fn parse_simple_string(
+        &mut self,
+        buf: &mut Cursor<&[u8]>,
+    ) -> Result<Option<ZSPFrame>, ZSPError> {
+        let line = self.read_line(buf)?; // read_line уже должен возвращать Result<_, ZSPError>
         Ok(Some(ZSPFrame::SimpleString(line)))
     }
 
     /// Парсит Error-фрейм.
-    fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+    fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let line = self.read_line(buf)?;
         Ok(Some(ZSPFrame::FrameError(line)))
     }
 
     /// Парсит Integer-фрейм.
-    fn parse_integer(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+    fn parse_integer(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let line = self.read_line(buf)?;
-        let num = line.parse().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid integer at byte {}", buf.position()),
-            )
+        let num = line.parse::<i64>().map_err(|_| {
+            ZSPError::InvalidData(format!("Invalid integer at byte {}", buf.position()))
         })?;
         Ok(Some(ZSPFrame::Integer(num)))
     }
@@ -141,12 +122,9 @@ impl ZSPDecoder {
     ///
     /// Читает длину строки, затем данные и завершающий CRLF.
     /// Если данных недостаточно, сохраняет состояние и возвращает Ok(None).
-    fn parse_bulk_string(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+    fn parse_bulk_string(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid bulk length at byte {}", buf.position()),
-            )
+            ZSPError::InvalidData(format!("Invalid bulk length at byte {}", buf.position()))
         })?;
 
         match len {
@@ -154,10 +132,10 @@ impl ZSPDecoder {
             len if len >= 0 => {
                 let len = len as usize;
                 if len > MAX_BULK_LENGTH {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Bulk string too long ({} > {})", len, MAX_BULK_LENGTH),
-                    ));
+                    return Err(ZSPError::InvalidData(format!(
+                        "Bulk string too long ({} > {})",
+                        len, MAX_BULK_LENGTH
+                    )));
                 }
 
                 // Читаем доступное количество байт
@@ -176,10 +154,10 @@ impl ZSPDecoder {
                     Ok(None)
                 }
             }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Negative bulk length at byte {}", buf.position()),
-            )),
+            _ => Err(ZSPError::InvalidData(format!(
+                "Negative bulk length at byte {}",
+                buf.position()
+            ))),
         }
     }
 
@@ -189,7 +167,7 @@ impl ZSPDecoder {
         buf: &mut Cursor<&[u8]>,
         len: usize,
         data: &mut Vec<u8>,
-    ) -> Result<Option<ZSPFrame>> {
+    ) -> Result<Option<ZSPFrame>, ZSPError> {
         let remaining_bytes = len - data.len();
         let available = buf.remaining().min(remaining_bytes);
         data.extend_from_slice(&buf.chunk()[..available]);
@@ -207,19 +185,20 @@ impl ZSPDecoder {
     ///
     /// Читает количество элементов, затем последовательно декодирует каждый элемент.
     /// Поддерживается рекурсия до MAX_ARRAY_DEPTH.
-    fn parse_array(&mut self, buf: &mut Cursor<&[u8]>, depth: usize) -> Result<Option<ZSPFrame>> {
+    fn parse_array(
+        &mut self,
+        buf: &mut Cursor<&[u8]>,
+        depth: usize,
+    ) -> Result<Option<ZSPFrame>, ZSPError> {
         if depth > MAX_ARRAY_DEPTH {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Max array depth exceeded at byte {}", buf.position()),
-            ));
+            return Err(ZSPError::InvalidData(format!(
+                "Max array depth exceeded at byte {}",
+                buf.position()
+            )));
         }
 
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid array length at byte {}", buf.position()),
-            )
+            ZSPError::InvalidData(format!("Invalid array length at byte {}", buf.position()))
         })?;
 
         match len {
@@ -245,10 +224,10 @@ impl ZSPDecoder {
 
                 Ok(Some(ZSPFrame::Array(Some(items))))
             }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Negative array length at byte {}", buf.position()),
-            )),
+            _ => Err(ZSPError::InvalidData(format!(
+                "Negative array length at byte {}",
+                buf.position()
+            ))),
         }
     }
 
@@ -256,12 +235,12 @@ impl ZSPDecoder {
     ///
     /// Читает количество пар (ключ-значение). Для каждой пары рекурсивно вызывает `decode` для ключа и значения.
     /// Если данные для ключа или значения неполные, возвращается `Ok(None)`.
-    fn parse_dictionary(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>> {
+    fn parse_dictionary(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid dictionary length at byte {}", buf.position()),
-            )
+            ZSPError::InvalidData(format!(
+                "Invalid dictionary length at byte {}",
+                buf.position(),
+            ))
         })?;
 
         match len {
@@ -289,19 +268,19 @@ impl ZSPDecoder {
                     if let ZSPFrame::SimpleString(key_str) = key {
                         items.insert(key_str, value);
                     } else {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("Expected SimpleString as key at byte {}", buf.position()),
-                        ));
+                        return Err(ZSPError::InvalidData(format!(
+                            "Expected SimpleString as key at byte {}",
+                            buf.position()
+                        )));
                     }
                 }
 
                 Ok(Some(ZSPFrame::Dictionary(Some(items))))
             }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Negative dictionary length at byte {}", buf.position()),
-            )),
+            _ => Err(ZSPError::InvalidData(format!(
+                "Negative dictionary length at byte {}",
+                buf.position()
+            ))),
         }
     }
 
@@ -312,7 +291,7 @@ impl ZSPDecoder {
         len: usize,
         items: &mut Vec<ZSPFrame>,
         remaining: usize,
-    ) -> Result<Option<ZSPFrame>> {
+    ) -> Result<Option<ZSPFrame>, ZSPError> {
         let mut remaining = remaining;
         while remaining > 0 {
             if let Some(frame) = self.decode(buf)? {
@@ -337,7 +316,7 @@ impl ZSPDecoder {
     /// Читает строку до последовательности CRLF.
     ///
     /// Если строка не заканчивается CRLF или неполная, возвращает ошибку или Ok(None).
-    fn read_line(&mut self, buf: &mut Cursor<&[u8]>) -> Result<String> {
+    fn read_line(&mut self, buf: &mut Cursor<&[u8]>) -> Result<String, ZSPError> {
         let start_pos = buf.position();
         let mut line = Vec::new();
 
@@ -345,48 +324,45 @@ impl ZSPDecoder {
             let b = buf.get_u8();
             if b == b'\r' {
                 if buf.get_u8() == b'\n' {
-                    return String::from_utf8(line).map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("Invalid UTF-8 at byte {}", start_pos),
-                        )
+                    return String::from_utf8(line).map_err(|e| {
+                        ZSPError::Utf8Error(format!("Invalid UTF-8 at byte {}: {}", start_pos, e))
                     });
                 } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Expected \\n after \\r at byte {}", buf.position() - 1),
-                    ));
+                    return Err(ZSPError::InvalidData(format!(
+                        "Expected \\n after \\r at byte {}",
+                        buf.position() - 1
+                    )));
                 }
             }
             line.push(b);
         }
 
         if line.len() >= MAX_LINE_LENGTH {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Line too long (max {} bytes)", MAX_LINE_LENGTH),
-            ))
+            Err(ZSPError::InvalidData(format!(
+                "Line to long (max {} bytes)",
+                MAX_LINE_LENGTH
+            )))
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                format!("Incomplete line at byte {}", start_pos),
-            ))
+            Err(ZSPError::UnexpectedEof(format!(
+                "Incomplete line at byte {}",
+                start_pos
+            )))
         }
     }
 
     /// Проверяет, что следующие два байта представляют собой CRLF.
-    fn expect_crlf(&mut self, buf: &mut Cursor<&[u8]>) -> Result<()> {
+    fn expect_crlf(&mut self, buf: &mut Cursor<&[u8]>) -> Result<(), ZSPError> {
         if buf.remaining() < 2 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                format!("Expected CRLF at byte {}", buf.position()),
-            ));
+            return Err(ZSPError::UnexpectedEof(format!(
+                "Expected CRLF at byte {}",
+                buf.position()
+            )));
         }
         if buf.get_u8() != b'\r' || buf.get_u8() != b'\n' {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Expected CRLF at byte {}", buf.position() - 2),
-            ))
+            Err(ZSPError::UnexpectedEof(format!(
+                "Expected CRLF at byte {}",
+                buf.position() - 2
+            )))
         } else {
             Ok(())
         }

@@ -1,43 +1,22 @@
-//! Модуль кодирует ZSPFrame в байтовый поток по протоколу ZSP.
-//!
-//! Поддерживаются все основные типы: `SimpleString`, `Error`, `Integer`, `BulkString`, `Array`, `Dictionary`.
-//!
-//! Используется в основном через `ZSPEncoder::encode(&frame)` — возвращает Vec<u8>, пригодный для отправки по сети.
-
-use std::io::{self, Error, ErrorKind};
-
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BULK_LENGTH},
+    errors::ZSPError,
     types::ZSPFrame,
 };
 
-/// Кодировщик для фреймов ZSP (Zumic Serialization Protocol).
-///
-/// Используется для преобразования структур `ZSPFrame` в байтовый поток (`Vec<u8>`),
-/// пригодный для передачи по TCP.
-///
-/// Ограничения:
-/// - Максимальная глубина вложенных массивов — `MAX_ARRAY_DEPTH`
-/// - Максимальная длина BulkString — `MAX_BULK_LENGTH`
-/// - SimpleString и Error не могут содержать `\r` или `\n`
 pub struct ZSPEncoder;
 
 impl ZSPEncoder {
-    /// Кодирует фрейм `ZSPFrame` в Vec<u8>.
-    ///
-    /// Возвращает `Err`, если нарушены ограничения по вложенности или длине.
-    pub fn encode(frame: &ZSPFrame) -> io::Result<Vec<u8>> {
+    pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, ZSPError> {
         Self::encode_frame(frame, 0)
     }
-    /// Рекурсивная функция кодирования с отслеживанием глубины вложенности.
-    ///
-    /// Используется для кодирования различных типов фреймов в соответствии с протоколом ZSP.
-    fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> io::Result<Vec<u8>> {
+
+    fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, ZSPError> {
         if current_depth > MAX_ARRAY_DEPTH {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("Max array depth exceeded ({})", MAX_ARRAY_DEPTH),
-            ));
+            return Err(ZSPError::InvalidData(format!(
+                "Max array depth exceed ({})",
+                MAX_ARRAY_DEPTH
+            )));
         }
 
         match frame {
@@ -53,10 +32,11 @@ impl ZSPEncoder {
             ZSPFrame::Float(f) => Ok(format!(":{}\r\n", f).into_bytes()),
             ZSPFrame::BulkString(Some(b)) => {
                 if b.len() > MAX_BULK_LENGTH {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
-                        format!("Bulk string too long ({} > {})", b.len(), MAX_BULK_LENGTH),
-                    ));
+                    return Err(ZSPError::InvalidData(format!(
+                        "Bulk string too long ({} > {})",
+                        b.len(),
+                        MAX_BULK_LENGTH
+                    )));
                 }
 
                 let mut out = format!("${}\r\n", b.len()).into_bytes();
@@ -101,23 +81,19 @@ impl ZSPEncoder {
             }
         }
     }
-    /// Проверка: simple string не должен содержать `\r` или `\n`
-    fn validate_simple_string(s: &str) -> io::Result<()> {
+    fn validate_simple_string(s: &str) -> Result<(), ZSPError> {
         if s.contains('\r') || s.contains('\n') {
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                "Simple string contains CR or LF characters",
+            Err(ZSPError::InvalidData(
+                "Simple string contains CR or LF characters".into(),
             ))
         } else {
             Ok(())
         }
     }
-    /// Проверка: error string не должен содержать `\r` или `\n`
-    fn validate_error_string(s: &str) -> io::Result<()> {
+    fn validate_error_string(s: &str) -> Result<(), ZSPError> {
         if s.contains('\r') || s.contains('\n') {
-            Err(Error::new(
-                io::ErrorKind::InvalidData,
-                "Error message contains CR or LF characters",
+            Err(ZSPError::InvalidData(
+                "Error message contains CR or LF characters".into(),
             ))
         } else {
             Ok(())
