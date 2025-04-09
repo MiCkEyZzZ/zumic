@@ -284,6 +284,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(invalid.to_vec())));
     }
 
+    // Test conversion of an empty Quicklist into an empty Array frame.
     #[test]
     fn test_empty_quicklist() {
         let ql = QuickList::new(16);
@@ -291,6 +292,7 @@ mod tests {
         assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
     }
 
+    // Test conversion of an empty HashSet into an empty Array frame.
     #[test]
     fn convert_empty_hashset() {
         let hs = HashSet::new();
@@ -298,6 +300,7 @@ mod tests {
         assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
     }
 
+    // Test conversion of an empty HashMap into an empty Dictionary frame.
     #[test]
     fn convert_empty_hashmap() {
         let hm: HashMap<ArcBytes, ArcBytes> = HashMap::new();
@@ -305,6 +308,7 @@ mod tests {
         assert_eq!(zsp, ZSPFrame::Dictionary(Some(HashMap::new())));
     }
 
+    // Test that converting a HashMap with an invalid UTF-8 key returns an error.
     #[test]
     fn convert_hashmap_with_invalid_utf8_key() {
         let mut hm = HashMap::new();
@@ -314,6 +318,7 @@ mod tests {
         assert!(err.contains("Invalid hash key"));
     }
 
+    // Test that converting a ZSet with an invalid UTF-8 key returns an error.
     #[test]
     fn convert_zset_with_invalid_utf8_key() {
         let mut zs = HashMap::new();
@@ -323,6 +328,7 @@ mod tests {
         assert!(err.contains("ZSet key error"));
     }
 
+    // Test that ArcBytes is converted into a BulkString using `From` impl.
     #[test]
     fn arcbytes_into_bulkstring() {
         let arc = ArcBytes::from_str("hello");
