@@ -4,12 +4,10 @@ use crate::network::zsp::frame::types::ZSPFrame;
 pub fn parse_command(frame: ZSPFrame) -> Result<Command, String> {
     match frame {
         ZSPFrame::Array(Some(items)) if !items.is_empty() => {
-            // Ветвь для SimpleString
             if let ZSPFrame::SimpleString(cmd) = &items[0] {
                 return parse_from_str_command(cmd, &items);
             }
 
-            // Ветвь для BulkString(Some)
             if let ZSPFrame::BulkString(Some(bytes)) = &items[0] {
                 let cmd_str = String::from_utf8(bytes.clone())
                     .map_err(|_| "Invalid UTF-8 in command".to_string())?;

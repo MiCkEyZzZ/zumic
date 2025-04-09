@@ -283,4 +283,50 @@ mod tests {
         let frame = ZSPFrame::try_from(Value::Str(invalid.clone())).unwrap();
         assert_eq!(frame, ZSPFrame::BulkString(Some(invalid.to_vec())));
     }
+
+    #[test]
+    fn test_empty_quicklist() {
+        let ql = QuickList::new(16);
+        let zsp = convert_quicklist(ql).unwrap();
+        assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
+    }
+
+    #[test]
+    fn convert_empty_hashset() {
+        let hs = HashSet::new();
+        let zsp = convert_hashset(hs).unwrap();
+        assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
+    }
+
+    #[test]
+    fn convert_empty_hashmap() {
+        let hm: HashMap<ArcBytes, ArcBytes> = HashMap::new();
+        let zsp = convert_hashmap(hm).unwrap();
+        assert_eq!(zsp, ZSPFrame::Dictionary(Some(HashMap::new())));
+    }
+
+    #[test]
+    fn convert_hashmap_with_invalid_utf8_key() {
+        let mut hm = HashMap::new();
+        hm.insert(ArcBytes::from(vec![0xFF]), ArcBytes::from_str("val"));
+
+        let err = convert_hashmap(hm).unwrap_err();
+        assert!(err.contains("Invalid hash key"));
+    }
+
+    #[test]
+    fn convert_zset_with_invalid_utf8_key() {
+        let mut zs = HashMap::new();
+        zs.insert(ArcBytes::from(vec![0xFF]), 1.0);
+
+        let err = convert_zset(zs).unwrap_err();
+        assert!(err.contains("ZSet key error"));
+    }
+
+    #[test]
+    fn arcbytes_into_bulkstring() {
+        let arc = ArcBytes::from_str("hello");
+        let frame: ZSPFrame = arc.clone().into();
+        assert_eq!(frame, ZSPFrame::BulkString(Some(arc.to_vec())));
+    }
 }
