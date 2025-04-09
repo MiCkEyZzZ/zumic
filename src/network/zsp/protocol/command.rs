@@ -1,3 +1,5 @@
+use crate::database::Value;
+
 #[derive(Debug, Clone)]
 pub enum Command {
     // --- Простые команды ---//
@@ -5,7 +7,7 @@ pub enum Command {
     Echo(String),
 
     // --- String ---
-    Set { key: String, value: Option<Vec<u8>> },
+    Set { key: String, value: Value },
     Get { key: String },
     Del { key: String },
 }
@@ -13,6 +15,6 @@ pub enum Command {
 #[derive(Debug, Clone)]
 pub enum Response {
     Ok,
-    Value(Option<Vec<u8>>),
+    Value(Value),
     Error(String),
 }

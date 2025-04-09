@@ -44,8 +44,7 @@ impl StorageEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::types::Value;
-    use crate::database::ArcBytes;
+    use crate::database::{ArcBytes, Value};
 
     fn key(data: &str) -> ArcBytes {
         ArcBytes::from(data.as_bytes().to_vec())

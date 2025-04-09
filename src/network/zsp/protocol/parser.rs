@@ -1,5 +1,8 @@
 use super::command::Command;
-use crate::network::zsp::frame::types::ZSPFrame;
+use crate::{
+    database::{ArcBytes, Value},
+    network::zsp::frame::types::ZSPFrame,
+};
 
 pub fn parse_command(frame: ZSPFrame) -> Result<Command, String> {
     match frame {
@@ -36,9 +39,10 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<Command, Stri
             };
 
             let value = match &items[2] {
-                ZSPFrame::BulkString(opt) => opt.clone(),
-                ZSPFrame::SimpleString(s) => Some(s.as_bytes().to_vec()),
-                _ => return Err("SET: invalid value".to_string()),
+                ZSPFrame::SimpleString(s) => Value::Str(ArcBytes::from_str(s)),
+                ZSPFrame::BulkString(Some(bytes)) => Value::Str(ArcBytes::from(bytes.clone())),
+                ZSPFrame::Integer(n) => Value::Int(*n),
+                _ => return Err("SET: unsupported value type".to_string()),
             };
 
             Ok(Command::Set { key, value })

@@ -335,4 +335,12 @@ mod tests {
         let frame: ZSPFrame = arc.clone().into();
         assert_eq!(frame, ZSPFrame::BulkString(Some(arc.to_vec())));
     }
+
+    #[test]
+    fn try_from_value_bool_false() {
+        assert_eq!(
+            ZSPFrame::try_from(Value::Bool(false)).unwrap(),
+            ZSPFrame::SimpleString("false".to_string()),
+        );
+    }
 }
