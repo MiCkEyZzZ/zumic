@@ -3,15 +3,8 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
 };
 use rand::rngs::OsRng;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum PasswordError {
-    #[error("Password hashing failed")]
-    Hash,
-    #[error("Password verification failed")]
-    Verify,
-}
+use super::errors::PasswordError;
 
 pub fn hash_password(password: &str) -> Result<String, PasswordError> {
     let salt = SaltString::generate(&mut OsRng);

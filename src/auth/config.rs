@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
-use thiserror::Error;
+
+use super::errors::ConfigError;
 
 #[derive(Debug, Default)]
 pub struct ServerConfig {
@@ -16,14 +17,6 @@ pub struct UserConfig {
     pub password: Option<String>,
     pub keys: Vec<String>,
     pub permissions: Vec<String>,
-}
-
-#[derive(Debug, Error)]
-pub enum ConfigError {
-    #[error("Config file error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Parse error: {0}")]
-    Parse(String),
 }
 
 impl ServerConfig {

@@ -33,10 +33,10 @@ impl StorageEngine {
         }
     }
 
-    pub fn delete(&mut self, key: ArcBytes) -> StoreResult<()> {
+    pub fn del(&mut self, key: ArcBytes) -> StoreResult<i64> {
         info!("Deleting key: {:?}", key);
         match self {
-            StorageEngine::InMemory(store) => store.delete(key),
+            StorageEngine::InMemory(store) => store.del(key),
         }
     }
 }
@@ -77,7 +77,7 @@ mod tests {
         let v = Value::Str(ArcBytes::from_str("world"));
 
         engine.set(k.clone(), v).unwrap();
-        engine.delete(k.clone()).unwrap();
+        engine.del(k.clone()).unwrap();
 
         let got = engine.get(k.clone()).unwrap();
         assert_eq!(got, None)
@@ -89,7 +89,7 @@ mod tests {
         let k = key("ghost");
 
         // delete should not panic or error
-        let result = engine.delete(k);
+        let result = engine.del(k);
         assert!(result.is_ok());
     }
 }

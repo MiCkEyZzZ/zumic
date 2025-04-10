@@ -6,5 +6,5 @@ use crate::{
 pub trait Storage: Send + Sync {
     fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()>;
     fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>>;
-    fn delete(&self, key: ArcBytes) -> StoreResult<()>;
+    fn del(&self, key: ArcBytes) -> StoreResult<i64>;
 }

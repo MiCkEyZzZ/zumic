@@ -1,20 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum AclError {
-    #[error("User already exists")]
-    UserExists,
-    #[error("User not found")]
-    UserNotFound,
-    #[error("Permission denied")]
-    PermissionDenied,
-    #[error("Authentication failed")]
-    AuthFailed,
-    #[error("Channel access denied")]
-    ChannelDenied,
-}
+use super::errors::AclError;
 
 #[derive(Debug, Clone)]
 pub struct AclUser {

@@ -31,10 +31,22 @@ impl CommandExecute for GetCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct DelCommand {
+    pub key: String,
+}
+
+impl CommandExecute for DelCommand {
+    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+        let deleted = store.del(ArcBytes::from_str(&self.key))?;
+        Ok(Value::Int(deleted))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        command::{CommandExecute, GetCommand},
+        command::{CommandExecute, DelCommand, GetCommand},
         database::{ArcBytes, Value},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
@@ -88,5 +100,62 @@ mod tests {
 
         // Проверка, что возвращается Null для несуществующего ключа
         assert_eq!(result.unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_del_existing_key() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду SetCommand
+        let set_cmd = SetCommand {
+            key: "test_key".to_string(),
+            value: crate::database::Value::Str(ArcBytes::from_str("test_value")),
+        };
+
+        // Выполнение команды set
+        let result = set_cmd.execute(&mut store);
+        assert!(result.is_ok(), "SetCommand failed: {:?}", result);
+
+        // Создаем команду DelCommand
+        let del_cmd = DelCommand {
+            key: "test_key".to_string(),
+        };
+
+        // Выполнение команды del
+        let del_result = del_cmd.execute(&mut store);
+        assert!(del_result.is_ok(), "DelCommand failed: {:?}", del_result);
+
+        // Проверка, что возвращается 1 (удалено 1 значение)
+        assert_eq!(del_result.unwrap(), Value::Int(1));
+
+        // Проверяем, что ключ больше не существует
+        let get_cmd = GetCommand {
+            key: "test_key".to_string(),
+        };
+
+        let result = get_cmd.execute(&mut store);
+        assert!(result.is_ok(), "GetCommand failed: {:?}", result);
+
+        // Проверка, что возвращается Null для удалённого ключа
+        assert_eq!(result.unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_del_non_existent_key() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду DelCommand с несуществующим ключом
+        let del_cmd = DelCommand {
+            key: "non_existent_key".to_string(),
+        };
+
+        // Выполнение команды del
+        let del_result = del_cmd.execute(&mut store);
+        assert!(del_result.is_ok(), "DelCommand failed: {:?}", del_result);
+
+        // Проверка, что возвращается 0 (ничего не удалено)
+        assert_eq!(del_result.unwrap(), Value::Int(0));
     }
 }

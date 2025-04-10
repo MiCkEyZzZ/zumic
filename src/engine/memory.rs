@@ -28,9 +28,12 @@ impl Storage for InMemoryStore {
     fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
         Ok(self.data.get(&key).map(|entry| entry.clone()))
     }
-    fn delete(&self, key: ArcBytes) -> StoreResult<()> {
-        self.data.remove(&key);
-        Ok(())
+    fn del(&self, key: ArcBytes) -> StoreResult<i64> {
+        if self.data.remove(&key).is_some() {
+            Ok(1)
+        } else {
+            Ok(0)
+        }
     }
 }
 
@@ -75,7 +78,7 @@ mod tests {
         let v = Value::Str(ArcBytes::from_str("some_value"));
 
         store.set(k.clone(), v).unwrap();
-        store.delete(k.clone()).unwrap();
+        store.del(k.clone()).unwrap();
 
         let got = store.get(k.clone()).unwrap();
         assert_eq!(got, None);
@@ -92,6 +95,6 @@ mod tests {
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
         // deleting несуществующего ключа не должен вызывать ошибку
-        assert!(store.delete(key("nope")).is_ok());
+        assert!(store.del(key("nope")).is_ok());
     }
 }

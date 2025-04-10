@@ -1,23 +1,11 @@
 use std::sync::Arc;
-use thiserror::Error;
 
 use super::{
-    acl::{Acl, AclError},
+    acl::Acl,
     config::ServerConfig,
-    password::{hash_password, verify_password, PasswordError},
+    errors::{AclError, AuthError},
+    password::{hash_password, verify_password},
 };
-
-#[derive(Debug, Error)]
-pub enum AuthError {
-    #[error("Authentication failed")]
-    AuthenticationFailed,
-    #[error("User not found")]
-    UserNotFound,
-    #[error("Password error: {0}")]
-    Password(#[from] PasswordError),
-    #[error("ACL error: {0}")]
-    Acl(#[from] AclError),
-}
 
 #[derive(Debug, Clone)]
 pub struct AuthManager {
@@ -37,6 +25,10 @@ impl AuthManager {
         password: &str,
         permissions: &[&str],
     ) -> Result<(), AuthError> {
+        if self.acl.acl_getuser(username).is_some() {
+            return Err(AuthError::UserAlreadyExists);
+        }
+
         let hash = hash_password(password)?;
         let mut rules: Vec<String> = vec![format!(">{}", hash), "on".to_string()];
         rules.extend(permissions.iter().map(|s| s.to_string()));
