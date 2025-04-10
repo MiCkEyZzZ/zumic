@@ -55,10 +55,28 @@ impl CommandExecute for ExistsCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct SetNxCommand {
+    pub key: String,
+    pub value: Value,
+}
+
+impl CommandExecute for SetNxCommand {
+    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+        let exists = store.get(ArcBytes::from_str(&self.key))?.is_some();
+        if !exists {
+            store.set(ArcBytes::from_str(&self.key), self.value.clone())?;
+            Ok(Value::Int(1))
+        } else {
+            Ok(Value::Int(0))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        command::{CommandExecute, DelCommand, ExistsCommand, GetCommand},
+        command::{CommandExecute, DelCommand, ExistsCommand, GetCommand, SetNxCommand},
         database::{ArcBytes, Value},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
@@ -197,5 +215,71 @@ mod tests {
         let result = exists_cmd.execute(&mut store);
         assert!(result.is_ok(), "ExistsCommand failed: {:?}", result);
         assert_eq!(result.unwrap(), Value::Int(1)); // Ключ существует
+    }
+
+    #[test]
+    fn test_setnx_key_not_exists() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду SetNxCommand с новым ключом
+        let setnx_cmd = SetNxCommand {
+            key: "new_key".to_string(),
+            value: Value::Str(ArcBytes::from_str("new_value")),
+        };
+
+        // Выполнение команды SETNX
+        let result = setnx_cmd.execute(&mut store);
+
+        // Проверка, что команда вернула 1 (ключ был установлен)
+        assert!(result.is_ok(), "SetNxCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(1));
+
+        // Проверка, что значение действительно установлено
+        let get_cmd = GetCommand {
+            key: "new_key".to_string(),
+        };
+        let get_result = get_cmd.execute(&mut store);
+        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert_eq!(
+            get_result.unwrap(),
+            Value::Str(ArcBytes::from_str("new_value"))
+        );
+    }
+
+    #[test]
+    fn test_setnx_key_exists() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду SetNxCommand с существующим ключом
+        let set_cmd = SetNxCommand {
+            key: "existing_key".to_string(),
+            value: Value::Str(ArcBytes::from_str("value")),
+        };
+
+        // Выполнение команды SETNX для установки значения
+        let _ = set_cmd.execute(&mut store);
+
+        // Теперь пробуем выполнить SETNX для этого же ключа
+        let setnx_cmd = SetNxCommand {
+            key: "existing_key".to_string(),
+            value: Value::Str(ArcBytes::from_str("new_value")),
+        };
+
+        // Выполнение команды SETNX для уже существующего ключа
+        let result = setnx_cmd.execute(&mut store);
+
+        // Проверка, что команда вернула 0 (ключ уже существует)
+        assert!(result.is_ok(), "SetNxCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(0));
+
+        // Проверка, что значение не изменилось
+        let get_cmd = GetCommand {
+            key: "existing_key".to_string(),
+        };
+        let get_result = get_cmd.execute(&mut store);
+        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert_eq!(get_result.unwrap(), Value::Str(ArcBytes::from_str("value")));
     }
 }
