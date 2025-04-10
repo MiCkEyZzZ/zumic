@@ -146,7 +146,106 @@ mod tests {
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
-        // deleting несуществующего ключа не должен вызывать ошибку
+        // deleting a non-existent key should not cause an error
         assert!(store.del(key("nope")).is_ok());
+    }
+
+    #[test]
+    fn test_mset_and_mget() {
+        let mut store = InMemoryStore::new();
+        let entries = vec![
+            (key("key1"), Value::Int(1)),
+            (key("key2"), Value::Int(2)),
+            (key("key3"), Value::Int(3)),
+        ];
+        store.mset(entries.clone()).unwrap();
+
+        let keys = vec![key("key1"), key("key2"), key("key3"), key("missing")];
+        let result = store.mget(&keys).unwrap();
+
+        assert_eq!(
+            result,
+            vec![
+                Some(Value::Int(1)),
+                Some(Value::Int(2)),
+                Some(Value::Int(3)),
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn test_keys_pattern() {
+        let mut store = InMemoryStore::new();
+        store.set(key("a:test"), Value::Int(1)).unwrap();
+        store.set(key("b:test"), Value::Int(2)).unwrap();
+        store.set(key("c:check"), Value::Int(3)).unwrap();
+
+        let keys = store.keys("test").unwrap();
+        let keys_str: Vec<String> = keys
+            .into_iter()
+            .map(|k| String::from_utf8_lossy(&k).to_string())
+            .collect();
+
+        assert!(keys_str.contains(&"a:test".to_string()));
+        assert!(keys_str.contains(&"b:test".to_string()));
+        assert!(!keys_str.contains(&"c:check".to_string()));
+    }
+
+    #[test]
+    fn test_rename() {
+        let mut store = InMemoryStore::new();
+        store.set(key("old"), Value::Int(123)).unwrap();
+
+        store.rename(key("old"), key("new")).unwrap();
+        assert!(store.get(key("old")).unwrap().is_none());
+        assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(123)));
+    }
+
+    #[test]
+    fn test_rename_nonexistent_key() {
+        let mut store = InMemoryStore::new();
+        let result = store.rename(key("does_not_exist"), key("whatever"));
+        assert!(matches!(result, Err(StoreError::KeyNotFound)));
+    }
+
+    #[test]
+    fn test_renamenx_success() {
+        let mut store = InMemoryStore::new();
+        store
+            .set(key("old"), Value::Str(ArcBytes::from_str("val")))
+            .unwrap();
+
+        let ok = store.renamenx(key("old"), key("new")).unwrap();
+        assert!(ok);
+        assert!(store.get(key("old")).unwrap().is_none());
+        assert_eq!(
+            store.get(key("new")).unwrap(),
+            Some(Value::Str(ArcBytes::from_str("val")))
+        );
+    }
+
+    #[test]
+    fn test_renamenx_existing_target() {
+        let mut store = InMemoryStore::new();
+        store.set(key("old"), Value::Int(1)).unwrap();
+        store.set(key("new"), Value::Int(2)).unwrap();
+
+        let ok = store.renamenx(key("old"), key("new")).unwrap();
+        assert!(!ok); // should return false
+        assert_eq!(store.get(key("old")).unwrap(), Some(Value::Int(1)));
+        assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(2)));
+    }
+
+    #[test]
+    fn test_flushdb() {
+        let mut store = InMemoryStore::new();
+        store.set(key("one"), Value::Int(1)).unwrap();
+        store.set(key("two"), Value::Int(2)).unwrap();
+
+        store.flushdb().unwrap();
+
+        assert!(store.get(key("one")).unwrap().is_none());
+        assert!(store.get(key("two")).unwrap().is_none());
     }
 }

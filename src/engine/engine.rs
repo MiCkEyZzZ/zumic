@@ -39,6 +39,48 @@ impl StorageEngine {
             StorageEngine::InMemory(store) => store.del(key),
         }
     }
+
+    pub fn mset(&mut self, entries: Vec<(ArcBytes, Value)>) -> StoreResult<()> {
+        info!("MSET {} leys", entries.len());
+        match self {
+            StorageEngine::InMemory(store) => store.mset(entries),
+        }
+    }
+
+    pub fn mget(&self, keys: &[ArcBytes]) -> StoreResult<Vec<Option<Value>>> {
+        info!("MGET {} keys", keys.len());
+        match self {
+            StorageEngine::InMemory(store) => store.mget(keys),
+        }
+    }
+
+    pub fn keys(&self, pattern: &str) -> StoreResult<Vec<ArcBytes>> {
+        info!("Finding keys with pattern: {:?}", pattern);
+        match self {
+            StorageEngine::InMemory(store) => store.keys(pattern),
+        }
+    }
+
+    pub fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
+        info!("Renaming key: {:?} to {:?}", from, to);
+        match self {
+            StorageEngine::InMemory(store) => store.rename(from, to),
+        }
+    }
+
+    pub fn renamenx(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<bool> {
+        info!("Renaming key (NX): {:?} to {:?}", from, to);
+        match self {
+            StorageEngine::InMemory(store) => store.renamenx(from, to),
+        }
+    }
+
+    pub fn flushdb(&mut self) -> StoreResult<()> {
+        info!("Flushing database");
+        match self {
+            StorageEngine::InMemory(store) => store.flushdb(),
+        }
+    }
 }
 
 #[cfg(test)]
