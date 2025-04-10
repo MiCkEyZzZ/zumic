@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use super::storage::Storage;
 use crate::{
     database::{types::Value, ArcBytes},
-    error::StoreResult,
+    error::{StoreError, StoreResult},
 };
 
 pub struct InMemoryStore {
@@ -34,6 +34,58 @@ impl Storage for InMemoryStore {
         } else {
             Ok(0)
         }
+    }
+    fn mset(&mut self, entries: Vec<(ArcBytes, Value)>) -> StoreResult<()> {
+        for (key, value) in entries {
+            self.data.insert(key, value);
+        }
+        Ok(())
+    }
+    fn mget(&self, keys: &[ArcBytes]) -> StoreResult<Vec<Option<Value>>> {
+        let result = keys
+            .iter()
+            .map(|key| self.data.get(key).map(|entry| entry.clone()))
+            .collect();
+        Ok(result)
+    }
+    fn keys(&self, pattern: &str) -> StoreResult<Vec<ArcBytes>> {
+        let wildcard = pattern == "*";
+        let result = self
+            .data
+            .iter()
+            .filter_map(|entry| {
+                let key_str = String::from_utf8_lossy(&entry.key());
+                if wildcard || key_str.contains(pattern) {
+                    Some(entry.key().clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(result)
+    }
+    fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
+        if let Some((_, value)) = self.data.remove(&from) {
+            self.data.insert(to, value);
+            Ok(())
+        } else {
+            Err(StoreError::KeyNotFound)
+        }
+    }
+    fn renamenx(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<bool> {
+        if self.data.contains_key(&to) {
+            return Ok(false);
+        }
+        if let Some((_, value)) = self.data.remove(&from) {
+            self.data.insert(to, value);
+            Ok(true)
+        } else {
+            Err(StoreError::KeyNotFound)
+        }
+    }
+    fn flushdb(&mut self) -> StoreResult<()> {
+        self.data.clear();
+        Ok(())
     }
 }
 
