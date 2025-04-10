@@ -1,6 +1,6 @@
 use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreError};
 
-use super::{DelCommand, GetCommand, SetCommand};
+use super::{DelCommand, ExistsCommand, GetCommand, SetCommand};
 
 pub trait CommandExecute: std::fmt::Debug {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError>;
@@ -11,6 +11,7 @@ pub enum Command {
     Set(SetCommand),
     Get(GetCommand),
     Del(DelCommand),
+    Exists(ExistsCommand),
 }
 
 impl CommandExecute for Command {
@@ -19,6 +20,7 @@ impl CommandExecute for Command {
             Command::Set(cmd) => cmd.execute(store),
             Command::Get(cmd) => cmd.execute(store),
             Command::Del(cmd) => cmd.execute(store),
+            Command::Exists(cmd) => cmd.execute(store),
         }
     }
 }

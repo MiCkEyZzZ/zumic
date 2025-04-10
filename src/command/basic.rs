@@ -43,10 +43,22 @@ impl CommandExecute for DelCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct ExistsCommand {
+    pub key: String,
+}
+
+impl CommandExecute for ExistsCommand {
+    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+        let exists = store.get(ArcBytes::from_str(&self.key))?.is_some();
+        Ok(Value::Int(if exists { 1 } else { 0 }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        command::{CommandExecute, DelCommand, GetCommand},
+        command::{CommandExecute, DelCommand, ExistsCommand, GetCommand},
         database::{ArcBytes, Value},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
@@ -157,5 +169,33 @@ mod tests {
 
         // Проверка, что возвращается 0 (ничего не удалено)
         assert_eq!(del_result.unwrap(), Value::Int(0));
+    }
+
+    #[test]
+    fn test_exists_key() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду ExistsCommand
+        let exists_cmd = ExistsCommand {
+            key: "test_key".to_string(),
+        };
+
+        // Убедимся, что ключ не существует до его добавления
+        let result = exists_cmd.execute(&mut store);
+        assert!(result.is_ok(), "ExistsCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(0)); // Ключ не существует
+
+        // Добавляем ключ в хранилище
+        let set_cmd = SetCommand {
+            key: "test_key".to_string(),
+            value: Value::Str(ArcBytes::from_str("test_value")),
+        };
+        set_cmd.execute(&mut store).unwrap();
+
+        // Проверяем, что ключ теперь существует
+        let result = exists_cmd.execute(&mut store);
+        assert!(result.is_ok(), "ExistsCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(1)); // Ключ существует
     }
 }
