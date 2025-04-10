@@ -54,13 +54,6 @@ impl StorageEngine {
         }
     }
 
-    pub fn keys(&self, pattern: &str) -> StoreResult<Vec<ArcBytes>> {
-        info!("Finding keys with pattern: {:?}", pattern);
-        match self {
-            StorageEngine::InMemory(store) => store.keys(pattern),
-        }
-    }
-
     pub fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
         info!("Renaming key: {:?} to {:?}", from, to);
         match self {
@@ -167,23 +160,6 @@ mod tests {
     }
 
     #[test]
-    fn test_engine_keys() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
-        engine
-            .set(key("kin1"), Value::Str(ArcBytes::from_str("dza1")))
-            .unwrap();
-        engine
-            .set(key("kin2"), Value::Str(ArcBytes::from_str("dza2")))
-            .unwrap();
-        engine
-            .set(key("dza3"), Value::Str(ArcBytes::from_str("dza3")))
-            .unwrap();
-
-        let got = engine.keys("kin").unwrap();
-        assert_eq!(got.len(), 2);
-    }
-
-    #[test]
     fn test_engine_rename() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
@@ -226,22 +202,5 @@ mod tests {
         // Trying to rename again should fail (key already exists)
         let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
         assert!(!result);
-    }
-
-    #[test]
-    fn test_engine_flushdb() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
-        engine
-            .set(key("kin1"), Value::Str(ArcBytes::from_str("dza1")))
-            .unwrap();
-        engine
-            .set(key("kin2"), Value::Str(ArcBytes::from_str("dza2")))
-            .unwrap();
-
-        engine.flushdb().unwrap();
-
-        // Ensure all keys are removed
-        let got = engine.keys("*").unwrap();
-        assert!(got.is_empty());
     }
 }

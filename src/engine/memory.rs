@@ -48,22 +48,6 @@ impl Storage for InMemoryStore {
             .collect();
         Ok(result)
     }
-    fn keys(&self, pattern: &str) -> StoreResult<Vec<ArcBytes>> {
-        let wildcard = pattern == "*";
-        let result = self
-            .data
-            .iter()
-            .filter_map(|entry| {
-                let key_str = String::from_utf8_lossy(&entry.key());
-                if wildcard || key_str.contains(pattern) {
-                    Some(entry.key().clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        Ok(result)
-    }
     fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
         if let Some((_, value)) = self.data.remove(&from) {
             self.data.insert(to, value);
@@ -172,24 +156,6 @@ mod tests {
                 None
             ]
         );
-    }
-
-    #[test]
-    fn test_keys_pattern() {
-        let mut store = InMemoryStore::new();
-        store.set(key("a:test"), Value::Int(1)).unwrap();
-        store.set(key("b:test"), Value::Int(2)).unwrap();
-        store.set(key("c:check"), Value::Int(3)).unwrap();
-
-        let keys = store.keys("test").unwrap();
-        let keys_str: Vec<String> = keys
-            .into_iter()
-            .map(|k| String::from_utf8_lossy(&k).to_string())
-            .collect();
-
-        assert!(keys_str.contains(&"a:test".to_string()));
-        assert!(keys_str.contains(&"b:test".to_string()));
-        assert!(!keys_str.contains(&"c:check".to_string()));
     }
 
     #[test]

@@ -205,6 +205,19 @@ impl<T> QuickList<T> {
     }
 }
 
+impl<T> IntoIterator for QuickList<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.segments
+            .into_iter()
+            .flat_map(|seg| seg.into_iter())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
