@@ -18,6 +18,31 @@ impl IntoExecutable for ZSPCommand {
             }
             ZSPCommand::Get { key } => Ok(StoreCommand::Get(crate::command::GetCommand { key })),
             ZSPCommand::Del { key } => Ok(StoreCommand::Del(crate::command::DelCommand { key })),
+            ZSPCommand::MSet { entries } => {
+                Ok(StoreCommand::MSet(crate::command::MSetCommand { entries }))
+            }
+            ZSPCommand::MGet { keys } => {
+                Ok(StoreCommand::MGet(crate::command::MGetCommand { keys }))
+            }
+            ZSPCommand::SetNX { key, value } => {
+                Ok(StoreCommand::Setnx(crate::command::SetNxCommand {
+                    key,
+                    value,
+                }))
+            }
+            ZSPCommand::Rename { from, to } => {
+                Ok(StoreCommand::Rename(crate::command::RenameCommand {
+                    from,
+                    to,
+                }))
+            }
+            ZSPCommand::RenameNX { from, to } => {
+                Ok(StoreCommand::Renamenx(crate::command::RenameNxCommand {
+                    from,
+                    to,
+                }))
+            }
+
             ZSPCommand::Ping => Err("Ping is not implemented yet in executable layer".to_string()),
             ZSPCommand::Echo(_) => {
                 Err("ECHO is not implemented yet in executable layer".to_string())
@@ -80,6 +105,57 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
 
             let key = parse_key(&items[1], "DEL")?;
             Ok(ZSPCommand::Del { key })
+        }
+        "mset" => {
+            if items.len() < 3 || items.len() % 2 == 0 {
+                return Err("MSET requires even number of arguments after command".to_string());
+            }
+
+            let mut parsed = Vec::new();
+            for pair in items[1..].chunks(2) {
+                let key = parse_key(&pair[1], "MSET")?;
+                let value = parse_value(&pair[1], "MSET")?;
+                parsed.push((key, value));
+            }
+            Ok(ZSPCommand::MSet { entries: parsed })
+        }
+        "mget" => {
+            if items.len() < 2 {
+                return Err("MGET requires at least one key".to_string());
+            }
+
+            let keys = items[1..]
+                .iter()
+                .map(|f| parse_key(f, "MGET"))
+                .collect::<Result<_, _>>()?;
+            Ok(ZSPCommand::MGet { keys })
+        }
+        "setnx" => {
+            if items.len() != 3 {
+                return Err("SETNX requires 2 arguments".to_string());
+            }
+
+            let key = parse_key(&items[1], "SETNX")?;
+            let value = parse_value(&items[2], "SETNX")?;
+            Ok(ZSPCommand::SetNX { key, value })
+        }
+        "rename" => {
+            if items.len() != 3 {
+                return Err("RENAME requires 2 arguments".to_string());
+            }
+
+            let from = parse_key(&items[1], "RENAME")?;
+            let to = parse_key(&items[2], "RENAME")?;
+            Ok(ZSPCommand::Rename { from, to })
+        }
+        "renamenx" => {
+            if items.len() != 3 {
+                return Err("RENAMENX requires 2 arguments".to_string());
+            }
+
+            let from = parse_key(&items[1], "RENAMENX")?;
+            let to = parse_key(&items[2], "RENAMENX")?;
+            Ok(ZSPCommand::RenameNX { from, to })
         }
         _ => Err("Unknown command".to_string()),
     }

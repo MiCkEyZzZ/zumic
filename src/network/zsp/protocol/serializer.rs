@@ -8,6 +8,10 @@ pub fn serialize_response(response: Response) -> ZSPFrame {
         Response::Ok => ZSPFrame::SimpleString("OK".into()),
         Response::Value(value) => value_to_frame(value), // Всё перенаправляется в helper
         Response::Error(msg) => ZSPFrame::FrameError(msg),
+        Response::NotFound => ZSPFrame::Null,
+        Response::Integer(n) => ZSPFrame::Integer(n),
+        Response::Float(f) => ZSPFrame::Float(f),
+        Response::String(s) => ZSPFrame::SimpleString(s),
     }
 }
 
