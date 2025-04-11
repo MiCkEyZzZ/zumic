@@ -1,10 +1,39 @@
-use super::command::Command;
+use super::command::Command as RawCommand;
 use crate::{
+    command::Command as ExeCommand,
     database::{ArcBytes, Value},
     network::zsp::frame::types::ZSPFrame,
 };
 
-pub fn parse_command(frame: ZSPFrame) -> Result<Command, String> {
+/// RawCommand → ExeCommand
+trait IntoExecutable {
+    fn into_executable(self) -> Result<ExeCommand, String>;
+}
+
+impl IntoExecutable for RawCommand {
+    fn into_executable(self) -> Result<ExeCommand, String> {
+        match self {
+            RawCommand::Set { key, value } => {
+                Ok(ExeCommand::Set(crate::command::SetCommand { key, value }))
+            }
+            RawCommand::Get { key } => Ok(ExeCommand::Get(crate::command::GetCommand { key })),
+            RawCommand::Del { key } => Ok(ExeCommand::Del(crate::command::DelCommand { key })),
+            RawCommand::Ping => Err("Ping is not implemented yet in executable layer".to_string()),
+            RawCommand::Echo(_) => {
+                Err("ECHO is not implemented yet in executable layer".to_string())
+            }
+        }
+    }
+}
+
+/// Основная точка входа: парсинг фрейма и преобразование в исполняемую команду.
+pub fn parse_command(frame: ZSPFrame) -> Result<ExeCommand, String> {
+    let raw_cmd = parse_raw_command(frame)?;
+    raw_cmd.into_executable()
+}
+
+/// Промежуточный шаг: ZSPFrame → RawCommand
+fn parse_raw_command(frame: ZSPFrame) -> Result<RawCommand, String> {
     match frame {
         ZSPFrame::Array(Some(items)) if !items.is_empty() => {
             if let ZSPFrame::SimpleString(cmd) = &items[0] {
@@ -23,58 +52,54 @@ pub fn parse_command(frame: ZSPFrame) -> Result<Command, String> {
     }
 }
 
-fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<Command, String> {
+/// Парсинг строки команды и аргументов из массива ZSPFrame → RawCommand
+fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<RawCommand, String> {
     match cmd.to_ascii_lowercase().as_str() {
-        "ping" => Ok(Command::Ping),
+        "ping" => Ok(RawCommand::Ping),
         "set" => {
             if items.len() != 3 {
                 return Err("SET requires 2 arguments".to_string());
             }
 
-            let key = match &items[1] {
-                ZSPFrame::SimpleString(s) => s.clone(),
-                ZSPFrame::BulkString(Some(bytes)) => String::from_utf8(bytes.clone())
-                    .map_err(|_| "SET: key must be valid UTF-8".to_string())?,
-                _ => return Err("SET: invalid key".to_string()),
-            };
-
-            let value = match &items[2] {
-                ZSPFrame::SimpleString(s) => Value::Str(ArcBytes::from_str(s)),
-                ZSPFrame::BulkString(Some(bytes)) => Value::Str(ArcBytes::from(bytes.clone())),
-                ZSPFrame::Integer(n) => Value::Int(*n),
-                _ => return Err("SET: unsupported value type".to_string()),
-            };
-
-            Ok(Command::Set { key, value })
+            let key = parse_key(&items[1], "SET")?;
+            let value = parse_value(&items[2], "SET")?;
+            Ok(RawCommand::Set { key, value })
         }
         "get" => {
             if items.len() != 2 {
                 return Err("GET requires 1 argument".to_string());
             }
 
-            let key = match &items[1] {
-                ZSPFrame::SimpleString(s) => s.clone(),
-                ZSPFrame::BulkString(Some(bytes)) => String::from_utf8(bytes.clone())
-                    .map_err(|_| "GET: key must be valid UTF-8".to_string())?,
-                _ => return Err("GET: invalid key".to_string()),
-            };
-
-            Ok(Command::Get { key })
+            let key = parse_key(&items[1], "GET")?;
+            Ok(RawCommand::Get { key })
         }
         "del" => {
             if items.len() != 2 {
                 return Err("DEL requires 1 argument".to_string());
             }
 
-            let key = match &items[1] {
-                ZSPFrame::SimpleString(s) => s.clone(),
-                ZSPFrame::BulkString(Some(bytes)) => String::from_utf8(bytes.clone())
-                    .map_err(|_| "DEL: key must be valid UTF-8".to_string())?,
-                _ => return Err("DEL: invalid key".to_string()),
-            };
-
-            Ok(Command::Del { key })
+            let key = parse_key(&items[1], "DEL")?;
+            Ok(RawCommand::Del { key })
         }
         _ => Err("Unknown command".to_string()),
+    }
+}
+
+fn parse_key(frame: &ZSPFrame, cmd: &str) -> Result<String, String> {
+    match frame {
+        ZSPFrame::SimpleString(s) => Ok(s.clone()),
+        ZSPFrame::BulkString(Some(bytes)) => {
+            String::from_utf8(bytes.clone()).map_err(|_| format!("{cmd}: key must be valid UTF-8"))
+        }
+        _ => Err(format!("{cmd}: invalid key")),
+    }
+}
+
+fn parse_value(frame: &ZSPFrame, cmd: &str) -> Result<Value, String> {
+    match frame {
+        ZSPFrame::SimpleString(s) => Ok(Value::Str(ArcBytes::from_str(s))),
+        ZSPFrame::BulkString(Some(bytes)) => Ok(Value::Str(ArcBytes::from(bytes.clone()))),
+        ZSPFrame::Integer(n) => Ok(Value::Int(*n)),
+        _ => Err(format!("{cmd}: unsupported value type")),
     }
 }
