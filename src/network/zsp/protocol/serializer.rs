@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::command::Response;
-use crate::{database::Value, network::zsp::frame::types::ZSPFrame};
+use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
 
 pub fn serialize_response(response: Response) -> ZSPFrame {
     match response {

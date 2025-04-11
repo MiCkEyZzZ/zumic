@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Cursor};
 use bytes::Buf;
 use tracing::{error, info};
 
-use super::{errors::ZSPError, types::ZSPFrame};
+use super::{errors::ZSPError, zsp_types::ZSPFrame};
 
 /// Maximum string length (1mb).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;

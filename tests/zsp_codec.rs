@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use zumic::network::zsp::frame::{decoder::ZSPDecoder, encoder::ZSPEncoder, types::ZSPFrame};
+use zumic::network::zsp::frame::{decoder::ZSPDecoder, encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
 #[test]
 fn test_roundtrip_simple_string() {

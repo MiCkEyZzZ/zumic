@@ -3,7 +3,7 @@ use tracing::{debug, error, info};
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BULK_LENGTH},
     errors::ZSPError,
-    types::ZSPFrame,
+    zsp_types::ZSPFrame,
 };
 
 pub struct ZSPEncoder;
