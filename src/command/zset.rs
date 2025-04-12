@@ -231,3 +231,289 @@ impl CommandExecute for ZRevRangeCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::memory::InMemoryStore;
+
+    use super::*;
+
+    fn create_store() -> StorageEngine {
+        StorageEngine::InMemory(InMemoryStore::new())
+    }
+
+    #[test]
+    fn test_zadd_new_and_score_and_card() {
+        let mut store = create_store();
+
+        // Добавляем нового members
+        let add = ZAddCommand {
+            key: "anton".to_string(),
+            member: "a".to_string(),
+            score: 1.5,
+        };
+        assert_eq!(add.execute(&mut store).unwrap(), Value::Int(1));
+
+        // ZSCORE должен вернуть 1.5
+        let score = ZScoreCommand {
+            key: "anton".to_string(),
+            member: "a".to_string(),
+        };
+        assert_eq!(score.execute(&mut store).unwrap(), Value::Float(1.5));
+
+        // ZCARD должен быть 1
+        let card = ZCardCommand {
+            key: "anton".to_string(),
+        };
+        assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
+    }
+
+    #[test]
+    fn test_zadd_update_existing() {
+        let mut store = create_store();
+        let add1 = ZAddCommand {
+            key: "anton".into(),
+            member: "a".into(),
+            score: 1.0,
+        };
+        add1.execute(&mut store).unwrap();
+
+        // Обновляем score у "a"
+        let add2 = ZAddCommand {
+            key: "anton".into(),
+            member: "a".into(),
+            score: 2.0,
+        };
+        // должен вернуть 0 — элемент не новый
+        assert_eq!(add2.execute(&mut store).unwrap(), Value::Int(0));
+
+        // ZSCORE теперь 2.0
+        let score = ZScoreCommand {
+            key: "anton".into(),
+            member: "a".into(),
+        };
+        assert_eq!(score.execute(&mut store).unwrap(), Value::Float(2.0));
+
+        // ZCARD по‑прежнему 1
+        let card = ZCardCommand {
+            key: "anton".into(),
+        };
+        assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
+    }
+
+    #[test]
+    fn test_zrem_and_score_and_card() {
+        let mut store = create_store();
+        // подготовка
+        ZAddCommand {
+            key: "anton".into(),
+            member: "a".into(),
+            score: 1.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+        ZAddCommand {
+            key: "anton".into(),
+            member: "b".into(),
+            score: 2.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        // удаляем "a"
+        let rem = ZRemCommand {
+            key: "anton".into(),
+            member: "a".into(),
+        };
+        assert_eq!(rem.execute(&mut store).unwrap(), Value::Int(1));
+
+        // "a" больше нет
+        let score_a = ZScoreCommand {
+            key: "anton".into(),
+            member: "a".into(),
+        };
+        assert_eq!(score_a.execute(&mut store).unwrap(), Value::Null);
+
+        // ZCARD теперь 1
+        let card = ZCardCommand {
+            key: "anton".into(),
+        };
+        assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
+
+        // удаление несуществующего
+        let rem2 = ZRemCommand {
+            key: "anton".into(),
+            member: "c".into(),
+        };
+        assert_eq!(rem2.execute(&mut store).unwrap(), Value::Int(0));
+    }
+
+    #[test]
+    fn test_zrange_basic_and_negative() {
+        let mut store = create_store();
+        // a:1, b:2, c:3
+        ZAddCommand {
+            key: "anton".into(),
+            member: "a".into(),
+            score: 1.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+        ZAddCommand {
+            key: "anton".into(),
+            member: "b".into(),
+            score: 2.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+        ZAddCommand {
+            key: "anton".into(),
+            member: "c".into(),
+            score: 3.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        // полный диапазон
+        let zr = ZRangeCommand {
+            key: "anton".into(),
+            start: 0,
+            stop: -1,
+        };
+        let list = match zr.execute(&mut store).unwrap() {
+            Value::List(l) => l.into_iter().collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        assert_eq!(
+            list,
+            vec![
+                ArcBytes::from_str("a"),
+                ArcBytes::from_str("b"),
+                ArcBytes::from_str("c"),
+            ]
+        );
+
+        // частичный
+        let zr2 = ZRangeCommand {
+            key: "anton".into(),
+            start: 1,
+            stop: 2,
+        };
+        let list2 = match zr2.execute(&mut store).unwrap() {
+            Value::List(l) => l.into_iter().collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        assert_eq!(
+            list2,
+            vec![ArcBytes::from_str("b"), ArcBytes::from_str("c"),]
+        );
+
+        // отрицательные индексы: последние два
+        let zr3 = ZRangeCommand {
+            key: "anton".into(),
+            start: -2,
+            stop: -1,
+        };
+        let list3 = match zr3.execute(&mut store).unwrap() {
+            Value::List(l) => l.into_iter().collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        assert_eq!(
+            list3,
+            vec![ArcBytes::from_str("b"), ArcBytes::from_str("c"),]
+        );
+    }
+
+    #[test]
+    fn test_zrevrange_basic_and_negative() {
+        let mut store = create_store();
+        // a:1, b:2, c:3
+        ZAddCommand {
+            key: "anton".into(),
+            member: "a".into(),
+            score: 1.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+        ZAddCommand {
+            key: "anton".into(),
+            member: "b".into(),
+            score: 2.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+        ZAddCommand {
+            key: "anton".into(),
+            member: "c".into(),
+            score: 3.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        // полный диапазон
+        let zr = ZRevRangeCommand {
+            key: "anton".into(),
+            start: 0,
+            stop: -1,
+        };
+        let list = match zr.execute(&mut store).unwrap() {
+            Value::List(l) => l.into_iter().collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        assert_eq!(
+            list,
+            vec![
+                ArcBytes::from_str("c"),
+                ArcBytes::from_str("b"),
+                ArcBytes::from_str("a"),
+            ]
+        );
+
+        // отрицательные индексы: первые два в реверсе
+        let zr2 = ZRevRangeCommand {
+            key: "anton".into(),
+            start: 0,
+            stop: 1,
+        };
+        let list2 = match zr2.execute(&mut store).unwrap() {
+            Value::List(l) => l.into_iter().collect::<Vec<_>>(),
+            _ => panic!(),
+        };
+        assert_eq!(
+            list2,
+            vec![ArcBytes::from_str("c"), ArcBytes::from_str("b"),]
+        );
+    }
+
+    #[test]
+    fn test_zcommands_on_nonexistent_key() {
+        let mut store = create_store();
+        // на несуществующем ключе ZRANGE и ZREVRANGE возвращают Null
+        let zr = ZRangeCommand {
+            key: "no".into(),
+            start: 0,
+            stop: -1,
+        };
+        assert_eq!(zr.execute(&mut store).unwrap(), Value::Null);
+
+        let zr2 = ZRevRangeCommand {
+            key: "no".into(),
+            start: 0,
+            stop: -1,
+        };
+        assert_eq!(zr2.execute(&mut store).unwrap(), Value::Null);
+
+        // ZSCORE и ZREM на несуществующем — Null и Int(0)
+        let zs = ZScoreCommand {
+            key: "no".into(),
+            member: "m".into(),
+        };
+        assert_eq!(zs.execute(&mut store).unwrap(), Value::Null);
+
+        let zr = ZRemCommand {
+            key: "no".into(),
+            member: "m".into(),
+        };
+        assert_eq!(zr.execute(&mut store).unwrap(), Value::Int(0));
+    }
+}
