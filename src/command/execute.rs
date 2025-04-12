@@ -1,6 +1,7 @@
 use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreError};
 
 use super::{
+    set::{SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
     AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
     GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand,
     IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand, MSetCommand, RenameCommand,
@@ -37,6 +38,11 @@ pub enum Command {
     HGet(HGetCommand),
     HDel(HDelCommand),
     HGetall(HGetAllCommand),
+    SAdd(SAddCommand),
+    SRem(SRemCommand),
+    SIsmember(SIsMemberCommand),
+    SMembers(SMembersCommand),
+    SCard(SCardCommand),
 }
 
 impl CommandExecute for Command {
@@ -66,6 +72,11 @@ impl CommandExecute for Command {
             Command::HGet(cmd) => cmd.execute(store),
             Command::HDel(cmd) => cmd.execute(store),
             Command::HGetall(cmd) => cmd.execute(store),
+            Command::SAdd(cmd) => cmd.execute(store),
+            Command::SRem(cmd) => cmd.execute(store),
+            Command::SIsmember(cmd) => cmd.execute(store),
+            Command::SMembers(cmd) => cmd.execute(store),
+            Command::SCard(cmd) => cmd.execute(store),
         }
     }
 }
