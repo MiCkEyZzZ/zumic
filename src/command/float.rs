@@ -69,3 +69,52 @@ impl CommandExecute for SetFloatCommand {
         Ok(Value::Float(self.value))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::memory::InMemoryStore;
+
+    use super::*;
+
+    #[test]
+    fn test_incr_by_float() {
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        store
+            .set(ArcBytes::from_str("key1"), Value::Float(10.0))
+            .unwrap();
+
+        let cmd = IncrByFloatCommand {
+            key: "key1".to_string(),
+            increment: 5.5,
+        };
+        let result = cmd.execute(&mut store);
+        assert_eq!(result.unwrap(), Value::Float(15.5));
+    }
+
+    #[test]
+    fn test_decr_by_float() {
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        store
+            .set(ArcBytes::from_str("key1"), Value::Float(10.0))
+            .unwrap();
+
+        let cmd = DecrByFloatCommand {
+            key: "key1".to_string(),
+            decrement: 3.5,
+        };
+        let result = cmd.execute(&mut store);
+        assert_eq!(result.unwrap(), Value::Float(6.5));
+    }
+
+    #[test]
+    fn test_set_float() {
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        let cmd = SetFloatCommand {
+            key: "key1".to_string(),
+            value: 20.5,
+        };
+        let result = cmd.execute(&mut store);
+        assert_eq!(result.unwrap(), Value::Float(20.5));
+    }
+}
