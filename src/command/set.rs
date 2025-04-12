@@ -107,3 +107,156 @@ impl CommandExecute for SCardCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::memory::InMemoryStore;
+
+    use super::*;
+
+    fn create_store() -> StorageEngine {
+        StorageEngine::InMemory(InMemoryStore::new())
+    }
+
+    #[test]
+    fn test_sadd_command() {
+        let mut store = create_store();
+
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "one".to_string(),
+        };
+
+        // Первый раз — добавит элемент.
+        let result = sadd.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(1));
+
+        // Повторная вставка — не добавит.
+        let result = sadd.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(0));
+    }
+
+    #[test]
+    fn test_scard_command() {
+        let mut store = create_store();
+
+        let sadd1 = SAddCommand {
+            key: "numbers".to_string(),
+            member: "one".to_string(),
+        };
+        let sadd2 = SAddCommand {
+            key: "numbers".to_string(),
+            member: "two".to_string(),
+        };
+
+        sadd1.execute(&mut store).unwrap();
+        sadd2.execute(&mut store).unwrap();
+
+        let scard = SCardCommand {
+            key: "numbers".to_string(),
+        };
+        let result = scard.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(2));
+    }
+
+    #[test]
+    fn test_scard_nonexistent_key() {
+        let mut store = create_store();
+
+        let scard = SCardCommand {
+            key: "empty".to_string(),
+        };
+        let result = scard.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(0));
+    }
+
+    #[test]
+    fn test_srem_command() {
+        let mut store = create_store();
+
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "one".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+
+        let srem = SRemCommand {
+            key: "myset".to_string(),
+            member: "one".to_string(),
+        };
+        let result = srem.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(1));
+
+        let srem_again = SRemCommand {
+            key: "myset".to_string(),
+            member: "one".to_string(),
+        };
+        let result = srem_again.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(0));
+    }
+
+    #[test]
+    fn test_sismember_command() {
+        let mut store = create_store();
+
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "alpha".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+
+        let sismember = SIsMemberCommand {
+            key: "myset".to_string(),
+            member: "alpha".to_string(),
+        };
+        let result = sismember.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(1));
+
+        let not_member = SIsMemberCommand {
+            key: "myset".to_string(),
+            member: "beta".to_string(),
+        };
+        let result = not_member.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(0));
+    }
+
+    #[test]
+    fn test_smembers_command() {
+        let mut store = create_store();
+
+        let sadd1 = SAddCommand {
+            key: "tags".to_string(),
+            member: "a".to_string(),
+        };
+        let sadd2 = SAddCommand {
+            key: "tags".to_string(),
+            member: "b".to_string(),
+        };
+        sadd1.execute(&mut store).unwrap();
+        sadd2.execute(&mut store).unwrap();
+
+        let smembers = SMembersCommand {
+            key: "tags".to_string(),
+        };
+        let result = smembers.execute(&mut store).unwrap();
+        match result {
+            Value::List(list) => {
+                let mut values = list.iter().map(|v| v.to_string()).collect::<Vec<_>>();
+                values.sort();
+                assert_eq!(values, vec!["a", "b"]);
+            }
+            _ => panic!("Expected Value::List"),
+        }
+    }
+
+    #[test]
+    fn test_smembers_nonexistent_key() {
+        let mut store = create_store();
+
+        let smembers = SMembersCommand {
+            key: "missing".to_string(),
+        };
+        let result = smembers.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Null);
+    }
+}

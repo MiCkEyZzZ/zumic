@@ -7,6 +7,8 @@
   - Добавил тесты для методов: `INCRBYFLOAT`, `DECRBYFLOAT`, `SETFLOAT`.
   - Реализованы базовые команды для hash: `HSET`, `HGET`, `HDEL`, `HGETALL`.
   - Добавил тесты для методов: `HSET`, `HGET`, `HDEL`, `HGETALL`.
+  - Реализованы базовые команды для чисел: `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`.
+  - Добавил тесты для методов: `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`.
 
 ## [0.9.2] - 2025-04-12
 
