@@ -35,6 +35,9 @@ pub enum StoreError {
     #[error("Parse error: {0}")]
     Parse(String),
 
+    #[error("Invalid type")]
+    InvalidType,
+
     #[error("Operation not implemented: {0}")]
     NotImplemented(String),
 
