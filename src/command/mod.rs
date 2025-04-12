@@ -3,6 +3,7 @@ pub mod execute;
 pub mod float;
 pub mod hash;
 pub mod int;
+pub mod set;
 pub mod string;
 
 pub use basic::*;

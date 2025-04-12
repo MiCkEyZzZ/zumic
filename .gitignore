@@ -1,6 +1,11 @@
+.DS_Store
+.idea
+.zed
+.vscode
 /target
 doc**/*
 logs/
-
+**/cargo-target
+*.wasm
 .env
 zumic.conf
