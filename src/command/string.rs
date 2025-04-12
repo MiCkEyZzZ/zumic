@@ -69,8 +69,9 @@ impl CommandExecute for GetRangeCommand {
         let key = ArcBytes::from_str(&self.key);
         if let Some(value) = store.get(key)? {
             if let Value::Str(ref s) = value {
-                let start = self.start as usize;
-                let end = self.end as usize;
+                let start = self.start.max(0) as usize;
+                let end = self.end.min(s.len() as i64) as usize;
+                let start = start.min(end); // Гарантируем start <= end
                 let sliced = s.slice(start..end);
                 return Ok(Value::Str(sliced));
             } else {
@@ -107,6 +108,31 @@ mod tests {
         };
         let result = strlen_cmd.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(5));
+    }
+
+    #[test]
+    fn test_append_command_invalid_type() {
+        let mut store = create_store();
+        store
+            .set(ArcBytes::from_str("test"), Value::Int(42))
+            .unwrap();
+
+        let cmd = AppendCommand {
+            key: "test".to_string(),
+            value: "oops".to_string(),
+        };
+        let result = cmd.execute(&mut store);
+        assert!(matches!(result, Err(StoreError::InvalidType)));
+    }
+
+    #[test]
+    fn test_append_empty_string() {
+        let mut store = create_store();
+        let cmd = AppendCommand {
+            key: "empty".to_string(),
+            value: "".to_string(),
+        };
+        assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
     }
 
     #[test]
