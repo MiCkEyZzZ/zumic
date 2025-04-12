@@ -39,21 +39,21 @@ impl CommandExecute for AppendCommand {
 
         if let Some(mut existing_value) = store.get(key.clone())? {
             if let Value::Str(ref mut s) = existing_value {
-                // Клонируем s для работы с данными и добавляем новые байты
+                // Clone `s` to work with data and add new bytes
                 let mut updated_value = s.to_vec();
-                updated_value.extend_from_slice(&append_value.to_vec()); // Добавляем новые байты
+                updated_value.extend_from_slice(&append_value.to_vec()); // Add new bytes
 
-                // Сохраняем обновленное значение
+                // Save the updated value
                 store.set(key, Value::Str(ArcBytes::from_vec(updated_value.clone())))?;
-                return Ok(Value::Int(updated_value.len() as i64)); // Возвращаем длину обновленной строки
+                return Ok(Value::Int(updated_value.len() as i64)); // Return the length of the updated string
             } else {
-                return Err(StoreError::InvalidType); // Ошибка, если значение не строка
+                return Err(StoreError::InvalidType); // Error if value is not a string
             }
         }
 
-        // Если строки не было, создаем новую строку
+        // If there was no line create a new line
         store.set(key, Value::Str(append_value.clone()))?;
-        Ok(Value::Int(append_value.len() as i64)) // Возвращаем длину новой строки
+        Ok(Value::Int(append_value.len() as i64)) // Return the length of the new string
     }
 }
 
@@ -71,7 +71,7 @@ impl CommandExecute for GetRangeCommand {
             if let Value::Str(ref s) = value {
                 let start = self.start.max(0) as usize;
                 let end = self.end.min(s.len() as i64) as usize;
-                let start = start.min(end); // Гарантируем start <= end
+                let start = start.min(end); // Guarantee start <= end
                 let sliced = s.slice(start..end);
                 return Ok(Value::Str(sliced));
             } else {
@@ -218,7 +218,7 @@ mod tests {
     fn test_get_range_command_invalid_type() {
         let mut store = create_store();
 
-        // Добавляем в хранилище строку с числовым значением
+        // Add a string with a numeric value to the storage
         store
             .set(ArcBytes::from_str("anton"), Value::Int(42))
             .unwrap();
@@ -230,12 +230,12 @@ mod tests {
         };
         let result = command.execute(&mut store);
 
-        // Проверяем, что результат является ошибкой
+        // Check if the result is an error
         assert!(result.is_err(), "Expected error but got Ok");
 
-        // Проверяем, что ошибка соответствует InvalidType
+        // Check that the error matches InvalidType
         if let Err(StoreError::InvalidType) = result {
-            // Ожидаем ошибку InvalidType, так как значение для ключа "anton" не является строкой
+            // Expecting an InvalidType error because the value for key `anton` is not a string
         } else {
             panic!("Expected InvalidType error, but got a different error");
         }

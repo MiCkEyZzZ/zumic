@@ -183,29 +183,29 @@ mod tests {
 
     #[test]
     fn test_set_and_get() {
-        // Инициализация хранилища
+        // Initialize store
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
-        // Создаем команду SetCommand
+        // Create a SetCommand
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
             value: crate::database::Value::Str(ArcBytes::from_str("test_value")),
         };
 
-        // Выполнение команды set
+        // Execute the set command
         let result = set_cmd.execute(&mut store);
         assert!(result.is_ok(), "SetCommand failed: {:?}", result);
 
-        // Создаем команду GetCommand
+        // Create a GetCommand
         let get_cmd = GetCommand {
             key: "test_key".to_string(),
         };
 
-        // Выполнение команды get
+        // Execute the get command
         let result = get_cmd.execute(&mut store);
         assert!(result.is_ok(), "GetCommand failed: {:?}", result);
 
-        // Проверка, что значение совпадает
+        // Check that the value matches
         assert_eq!(
             result.unwrap(),
             Value::Str(ArcBytes::from_str("test_value"))
@@ -214,15 +214,15 @@ mod tests {
 
     #[test]
     fn test_get_non_existent_key() {
-        // Инициализация хранилища
+        // Initialize store
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
-        // Создаем команду GetCommand с несуществующим ключом
+        // Create a GetCommand with non-existent key
         let get_command = GetCommand {
             key: "non_existent_key".to_string(),
         };
 
-        // Выполнение команды get
+        // Execute the get command
         let result = get_command.execute(&mut store);
         assert!(result.is_ok(), "GetCommand failed: {:?}", result);
 

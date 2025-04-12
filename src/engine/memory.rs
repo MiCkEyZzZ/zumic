@@ -82,6 +82,7 @@ mod tests {
         ArcBytes::from(data.as_bytes().to_vec())
     }
 
+    /// Basic test to verify that a value can be set and then retrieved.
     #[test]
     fn test_set_and_get() {
         let mut store = InMemoryStore::new();
@@ -93,6 +94,7 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
+    /// Ensures that setting a value twice for the same key overwrites the old one.
     #[test]
     fn test_overwrite_value() {
         let mut store = InMemoryStore::new();
@@ -107,6 +109,7 @@ mod tests {
         assert_eq!(got, Some(v2));
     }
 
+    /// Ensures that a key can be deleted and is no longer accessible.
     #[test]
     fn test_delete() {
         let mut store = InMemoryStore::new();
@@ -120,6 +123,7 @@ mod tests {
         assert_eq!(got, None);
     }
 
+    /// Ensures that querying a non-existent key returns None.
     #[test]
     fn test_get_nonexistent_key() {
         let mut store = InMemoryStore::new();
@@ -127,6 +131,7 @@ mod tests {
         assert_eq!(got, None);
     }
 
+    /// Ensures that deleting a non-existent key does not result in an error.
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -134,6 +139,8 @@ mod tests {
         assert!(store.del(key("nope")).is_ok());
     }
 
+    /// Tests bulk set and bulk get functionality.
+    /// Verifies that existing and non-existing keys behave as expected.
     #[test]
     fn test_mset_and_mget() {
         let mut store = InMemoryStore::new();
@@ -158,6 +165,7 @@ mod tests {
         );
     }
 
+    /// Tests renaming an existing key to a new key.
     #[test]
     fn test_rename() {
         let mut store = InMemoryStore::new();
@@ -168,6 +176,7 @@ mod tests {
         assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(123)));
     }
 
+    /// Ensures that renaming a non-existent key fails with KeyNotFound.
     #[test]
     fn test_rename_nonexistent_key() {
         let mut store = InMemoryStore::new();
@@ -175,6 +184,7 @@ mod tests {
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
+    /// Tests renaming a key only if the target does not already exist (`renamenx`).
     #[test]
     fn test_renamenx_success() {
         let mut store = InMemoryStore::new();
@@ -191,6 +201,7 @@ mod tests {
         );
     }
 
+    /// Verifies that `renamenx` fails if the destination key already exists.
     #[test]
     fn test_renamenx_existing_target() {
         let mut store = InMemoryStore::new();
@@ -203,6 +214,7 @@ mod tests {
         assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(2)));
     }
 
+    /// Ensures that `flushdb` removes all keys and values from the store.
     #[test]
     fn test_flushdb() {
         let mut store = InMemoryStore::new();
