@@ -2,8 +2,9 @@ use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreE
 
 use super::{
     AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
-    GetCommand, GetRangeCommand, IncrByCommand, IncrCommand, MGetCommand, MSetCommand,
-    RenameCommand, RenameNxCommand, SetCommand, SetNxCommand, StrLenCommand,
+    GetCommand, GetRangeCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand,
+    MSetCommand, RenameCommand, RenameNxCommand, SetCommand, SetFloatCommand, SetNxCommand,
+    StrLenCommand,
 };
 
 pub trait CommandExecute: std::fmt::Debug {
@@ -29,6 +30,9 @@ pub enum Command {
     Incrby(IncrByCommand),
     Decr(DecrCommand),
     Decrby(DecrByCommand),
+    Incrbyfloat(IncrByFloatCommand),
+    Decrbyfloat(DecrByCommand),
+    Setfloat(SetFloatCommand),
 }
 
 impl CommandExecute for Command {
@@ -51,6 +55,9 @@ impl CommandExecute for Command {
             Command::Incrby(cmd) => cmd.execute(store),
             Command::Decr(cmd) => cmd.execute(store),
             Command::Decrby(cmd) => cmd.execute(store),
+            Command::Incrbyfloat(cmd) => cmd.execute(store),
+            Command::Decrbyfloat(cmd) => cmd.execute(store),
+            Command::Setfloat(cmd) => cmd.execute(store),
         }
     }
 }
