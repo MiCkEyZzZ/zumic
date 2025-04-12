@@ -1,66 +1,63 @@
 # Changelog
 
-[0.9.0] - 2025-04-12
-### Added
-- **Base Commands**:
-  - Implemented basic commands for **strings**: `SET`, `GET`, `DEL`, `EXISTS`, etc.
-  - Implemented basic commands for **integers**: `INCR`, `DECR`, `INCRBY`, `DECRBY`.
-- **Custom Types**:
-  - Introduced custom types like `ArcBytes` and `QuickList`.
-  - Added serialization protocol **ZSP** (Zumic Serialization Protocol) with support for custom types and basic operations.
+## [0.9.0] - 2025-04-12
 
-### Changed
-- Significant updates to **ZSP** implementation, improving compatibility with various data types like strings, sets, hashes, and more.
+### Добавлено
+- **Основные команды**:
+  - Реализованы базовые команды для строк: `SET`, `GET`, `DEL`, `EXISTS`, и т.д.
+  - Реализованы базовые команды для чисел: `INCR`, `DECR`, `INCRBY`, `DECRBY`.
+- **Кастомные типы**:
+  - Реализованы кастомные типы, такие как `ArcBytes` и `QuickList`.
+  - Добавлен протокол сериализации ZSP (Zumic Serialization Protocol) с поддержкой кастомных типов и базовых операций.
 
-## [v0.9.0] - 2025-04-12
-### Added
-- **Basic Commands**:
-  - Implemented `SetCommand`, `GetCommand`, `DelCommand`, `RenameCommand`, `MsetCommand`, `MgetCommand`.
-- **In-Memory Store**:
-  - Created `InMemoryStore` using `DashMap` for key-value storage.
-  - Implemented methods like `set`, `get`, `del`, `mset`, and `mget`.
+### Изменено
+- Существенные обновления реализации ZSP для улучшения совместимости с различными типами данных, такими как строки, множества, хеши и другие.
 
-### Fixed
-- Fixed handling of missing keys in `get` and `del` commands.
+## [0.8.0] - 2025-04-10
 
-## [v0.8.0] - 2025-04-10
-### Added
-- **ACL Module**:
-  - Implemented user management, permissions, and channel handling.
-  - Support for loading user configuration from `zumic.conf` with user templates.
-- **Password Hashing**:
-  - Added password hashing using `argon2` in the `password.rs` module.
+### Добавлено
+- **Модуль ACL**:
+  - Реализовано управление пользователями, разрешениями и обработка каналов.
+  - Поддержка загрузки конфигурации пользователей из `zumic.conf` с шаблонами пользователей.
+- **Хеширование паролей**:
+  - Реализовано хеширование паролей с использованием библиотеки `argon2` в модуле `password.rs`.
 
-## [v0.7.0] - 2025-04-07
-### Added
+## [0.7.0] - 2025-04-07
+
+### Добавлено
 - **ZSP (Zumic Serialization Protocol)**:
-  - Implemented `decoder`, `encoder`, `types` for handling different data types (`Int`, `Str`, `List`, `Set`, `Hash`, `ZSet`).
-  - Added partial reading support for bulk strings and arrays.
+  - Реализованы декодер, энкодер, типы для обработки различных типов данных (`Int`, `Str`, `List`, `Set`, `Hash`, `ZSet`).
+  - Добавлена поддержка частичного чтения для строк и массивов.
 
-### Fixed
-- Fixed compatibility issues with different ZSP data types during serialization and deserialization.
+### Исправлено
+- Исправлены проблемы с совместимостью различных типов данных ZSP при сериализации и десериализации.
 
-## [v0.6.0] - 2025-04-06
-### Added
-- **Authentication Module**:
-  - Implemented the `auth` module with user authentication and ACL support.
+## [0.6.0] - 2025-04-06
 
-## [v0.5.0] - 2025-04-05
-### Added
-- **Command Module**:
-  - Implemented basic command structure with `SetCommand`, `GetCommand`, `DelCommand`, and `MsetCommand`.
+### Добавлено
+- **Модуль аутентификации**:
+  - Реализован модуль `auth` с поддержкой аутентификации пользователей и ACL.
 
-## [v0.4.0] - 2025-04-04
-### Added
-- **Network Module**:
-  - Started implementation of the basic TCP server for networking.
+## [0.5.0] - 2025-04-05
 
-## [v0.3.0] - 2025-04-03
-### Added
-- **Types and Utilities**:
-  - Defined `Value` enum with types like `Int`, `Str`, `List`, `Set`, etc.
-  - Introduced helper structs like `ArcBytes` for efficient byte manipulation.
+### Добавлено
+- **Модуль команд**:
+  - Реализована базовая структура команд с командами: `SetCommand`, `GetCommand`, `DelCommand`, `MsetCommand`.
 
-## [v0.2.0] - 2025-04-02
-### Added
-- Initial setup of the **project structure** and **basic utilities**.
+## [0.4.0] - 2025-04-04
+
+### Добавлено
+- **Модуль сети**:
+  - Начата реализация базового TCP-сервера для сетевого взаимодействия.
+
+## [0.3.0] - 2025-04-03
+
+### Добавлено
+- **Типы и утилиты**:
+  - Определен enum `Value` с типами данных, такими как `Int`, `Str`, `List`, `Set` и другие.
+  - Введены вспомогательные структуры, такие как `ArcBytes`, для эффективной работы с байтами.
+
+## [0.2.0] - 2025-04-02
+
+### Добавлено
+- **Изначальная настройка структуры проекта и базовых утилит**.
