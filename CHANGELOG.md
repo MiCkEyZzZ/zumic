@@ -9,6 +9,9 @@
   - Добавил тесты для методов: `HSET`, `HGET`, `HDEL`, `HGETALL`.
   - Реализованы базовые команды для чисел: `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`.
   - Добавил тесты для методов: `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`.
+  - Реализованы базовые команды для чисел: `ZADD`, `ZSCORE`, `ZCARD`, `ZREM`, `ZRANGE`, `ZREVRANGE`.
+  - Добавил тесты для методов: `ZADD`, `ZSCORE`, `ZCARD`, `ZREM`, `ZRANGE`, `ZREVRANGE`.
+  - Реализованы базовые команды для чисел: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LRANGE`.
 
 ## [0.9.2] - 2025-04-12
 

@@ -1,11 +1,12 @@
 use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreError};
 
 use super::{
-    set::{SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
     AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
     GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand,
     IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand, MSetCommand, RenameCommand,
-    RenameNxCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand,
+    RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand,
+    SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand,
+    ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 
 pub trait CommandExecute: std::fmt::Debug {
@@ -43,6 +44,12 @@ pub enum Command {
     SIsmember(SIsMemberCommand),
     SMembers(SMembersCommand),
     SCard(SCardCommand),
+    ZAdd(ZAddCommand),
+    ZScore(ZScoreCommand),
+    ZCard(ZCardCommand),
+    ZRem(ZRemCommand),
+    ZRange(ZRangeCommand),
+    ZRevrange(ZRevRangeCommand),
 }
 
 impl CommandExecute for Command {
@@ -77,6 +84,12 @@ impl CommandExecute for Command {
             Command::SIsmember(cmd) => cmd.execute(store),
             Command::SMembers(cmd) => cmd.execute(store),
             Command::SCard(cmd) => cmd.execute(store),
+            Command::ZAdd(cmd) => cmd.execute(store),
+            Command::ZScore(cmd) => cmd.execute(store),
+            Command::ZCard(cmd) => cmd.execute(store),
+            Command::ZRem(cmd) => cmd.execute(store),
+            Command::ZRange(cmd) => cmd.execute(store),
+            Command::ZRevrange(cmd) => cmd.execute(store),
         }
     }
 }
