@@ -3,7 +3,8 @@ use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreE
 use super::{
     AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
     GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand,
-    IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand, MSetCommand, RenameCommand,
+    IncrByCommand, IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand, LPushCommand,
+    LRangeCommand, MGetCommand, MSetCommand, RPopCommand, RPushCommand, RenameCommand,
     RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand,
     SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand,
     ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
@@ -50,6 +51,12 @@ pub enum Command {
     ZRem(ZRemCommand),
     ZRange(ZRangeCommand),
     ZRevrange(ZRevRangeCommand),
+    LPush(LPushCommand),
+    RPush(RPushCommand),
+    LPop(LPopCommand),
+    RPop(RPopCommand),
+    LLen(LLenCommand),
+    LRange(LRangeCommand),
 }
 
 impl CommandExecute for Command {
@@ -90,6 +97,12 @@ impl CommandExecute for Command {
             Command::ZRem(cmd) => cmd.execute(store),
             Command::ZRange(cmd) => cmd.execute(store),
             Command::ZRevrange(cmd) => cmd.execute(store),
+            Command::LPush(cmd) => cmd.execute(store),
+            Command::RPush(cmd) => cmd.execute(store),
+            Command::LPop(cmd) => cmd.execute(store),
+            Command::RPop(cmd) => cmd.execute(store),
+            Command::LLen(cmd) => cmd.execute(store),
+            Command::LRange(cmd) => cmd.execute(store),
         }
     }
 }
