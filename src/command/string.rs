@@ -80,3 +80,138 @@ impl CommandExecute for GetRangeCommand {
         Ok(Value::Null)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::engine::memory::InMemoryStore;
+
+    use super::*;
+
+    fn create_store() -> StorageEngine {
+        StorageEngine::InMemory(InMemoryStore::new())
+    }
+
+    #[test]
+    fn test_str_len_command_existing_key() {
+        let mut store = create_store();
+
+        store
+            .set(
+                ArcBytes::from_str("anton"),
+                Value::Str(ArcBytes::from_str("hello")),
+            )
+            .unwrap();
+
+        let strlen_cmd = StrLenCommand {
+            key: "anton".to_string(),
+        };
+        let result = strlen_cmd.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(5));
+    }
+
+    #[test]
+    fn test_str_len_command_non_existing_key() {
+        let mut store = create_store();
+
+        let strlen_cmd = StrLenCommand {
+            key: "none_existing_key".to_string(),
+        };
+        let result = strlen_cmd.execute(&mut store).unwrap();
+        assert_eq!(result, Value::Int(0));
+    }
+
+    #[test]
+    fn test_append_command_existing_key() {
+        let mut store = create_store();
+
+        store
+            .set(
+                ArcBytes::from_str("anton"),
+                Value::Str(ArcBytes::from_str("hello")),
+            )
+            .unwrap();
+
+        let command = AppendCommand {
+            key: "anton".to_string(),
+            value: " world".to_string(),
+        };
+        let result = command.execute(&mut store).unwrap();
+
+        assert_eq!(result, Value::Int(11));
+    }
+
+    #[test]
+    fn test_append_command_non_existing_key() {
+        let mut store = create_store();
+
+        let command = AppendCommand {
+            key: "non_existing_key".to_string(),
+            value: "hello".to_string(),
+        };
+        let result = command.execute(&mut store).unwrap();
+
+        assert_eq!(result, Value::Int(5));
+    }
+
+    #[test]
+    fn test_get_range_command_existing_key() {
+        let mut store = create_store();
+
+        store
+            .set(
+                ArcBytes::from_str("anton"),
+                Value::Str(ArcBytes::from_str("hello world")),
+            )
+            .unwrap();
+
+        let command = GetRangeCommand {
+            key: "anton".to_string(),
+            start: 0,
+            end: 5,
+        };
+        let result = command.execute(&mut store).unwrap();
+
+        assert_eq!(result, Value::Str(ArcBytes::from_str("hello")));
+    }
+
+    #[test]
+    fn test_get_range_command_non_existing_key() {
+        let mut store = create_store();
+
+        let command = GetRangeCommand {
+            key: "non_existing_key".to_string(),
+            start: 0,
+            end: 5,
+        };
+        let result = command.execute(&mut store).unwrap();
+
+        assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_get_range_command_invalid_type() {
+        let mut store = create_store();
+
+        // Добавляем в хранилище строку с числовым значением
+        store
+            .set(ArcBytes::from_str("anton"), Value::Int(42))
+            .unwrap();
+
+        let command = GetRangeCommand {
+            key: "anton".to_string(),
+            start: 0,
+            end: 5,
+        };
+        let result = command.execute(&mut store);
+
+        // Проверяем, что результат является ошибкой
+        assert!(result.is_err(), "Expected error but got Ok");
+
+        // Проверяем, что ошибка соответствует InvalidType
+        if let Err(StoreError::InvalidType) = result {
+            // Ожидаем ошибку InvalidType, так как значение для ключа "anton" не является строкой
+        } else {
+            panic!("Expected InvalidType error, but got a different error");
+        }
+    }
+}
