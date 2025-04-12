@@ -20,7 +20,6 @@ fn value_to_frame(value: Value) -> ZSPFrame {
         Value::Str(s) => ZSPFrame::BulkString(Some(s.to_vec())),
         Value::Int(i) => ZSPFrame::Integer(i),
         Value::Float(f) => ZSPFrame::Float(f),
-        Value::Bool(b) => ZSPFrame::SimpleString(b.to_string()),
         Value::Null => ZSPFrame::Null,
         Value::List(list) => {
             let frames = list
@@ -108,14 +107,6 @@ mod tests {
         let value = Value::Float(3.14);
         let frame = serialize_response(Response::Value(value));
         assert_eq!(frame, ZSPFrame::Float(3.14));
-    }
-
-    // Проверяем сериализацию булевого true
-    #[test]
-    fn test_serialize_bool_true() {
-        let value = Value::Bool(true);
-        let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::SimpleString("true".into()));
     }
 
     // Проверяем сериализацию null

@@ -26,8 +26,12 @@ pub struct GetCommand {
 
 impl CommandExecute for GetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let result = store.get(ArcBytes::from_str(self.key.as_str()))?;
-        Ok(result.unwrap_or(Value::Null))
+        let result = store.get(ArcBytes::from_str(self.key.as_str()));
+        match result {
+            Ok(Some(value)) => Ok(value),
+            Ok(None) => Ok(Value::Null),
+            Err(e) => Err(StoreError::from(e)),
+        }
     }
 }
 
@@ -45,13 +49,20 @@ impl CommandExecute for DelCommand {
 
 #[derive(Debug)]
 pub struct ExistsCommand {
-    pub key: String,
+    pub keys: Vec<String>,
 }
 
 impl CommandExecute for ExistsCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let exists = store.get(ArcBytes::from_str(&self.key))?.is_some();
-        Ok(Value::Int(if exists { 1 } else { 0 }))
+        let count = self
+            .keys
+            .iter()
+            .map(|key| ArcBytes::from_str(key))
+            .filter_map(|key| store.get(key).ok())
+            .filter(|value| value.is_some())
+            .count();
+
+        Ok(Value::Int(count as i64))
     }
 }
 
@@ -153,7 +164,7 @@ pub struct FlushDbCommand;
 impl CommandExecute for FlushDbCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         store.flushdb()?;
-        Ok(Value::Str(ArcBytes::from_str("")))
+        Ok(Value::Str(ArcBytes::from_str("OK")))
     }
 }
 
@@ -277,31 +288,48 @@ mod tests {
     }
 
     #[test]
-    fn test_exists_key() {
-        // Инициализация хранилища
+    fn test_exists_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
-        // Создаем команду ExistsCommand
+        // Проверяем существование до добавления ключей
         let exists_cmd = ExistsCommand {
-            key: "test_key".to_string(),
+            keys: vec!["test_key1".to_string(), "test_key2".to_string()],
         };
-
-        // Убедимся, что ключ не существует до его добавления
         let result = exists_cmd.execute(&mut store);
-        assert!(result.is_ok(), "ExistsCommand failed: {:?}", result);
-        assert_eq!(result.unwrap(), Value::Int(0)); // Ключ не существует
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Value::Int(0)); // Оба ключа отсутствуют
 
-        // Добавляем ключ в хранилище
+        // Добавляем один из ключей
         let set_cmd = SetCommand {
-            key: "test_key".to_string(),
-            value: Value::Str(ArcBytes::from_str("test_value")),
+            key: "test_key1".to_string(),
+            value: Value::Str(ArcBytes::from_str("value")),
         };
         set_cmd.execute(&mut store).unwrap();
 
-        // Проверяем, что ключ теперь существует
+        // Проверяем снова — один ключ существует
         let result = exists_cmd.execute(&mut store);
-        assert!(result.is_ok(), "ExistsCommand failed: {:?}", result);
-        assert_eq!(result.unwrap(), Value::Int(1)); // Ключ существует
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Value::Int(1)); // Только один существует
+
+        // Добавляем второй ключ
+        let set_cmd2 = SetCommand {
+            key: "test_key2".to_string(),
+            value: Value::Str(ArcBytes::from_str("another")),
+        };
+        set_cmd2.execute(&mut store).unwrap();
+
+        // Теперь оба должны существовать
+        let result = exists_cmd.execute(&mut store);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Value::Int(2)); // Оба существуют
+    }
+
+    #[test]
+    fn test_exists_empty_keys() {
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let exists_cmd = ExistsCommand { keys: vec![] };
+        let result = exists_cmd.execute(&mut store);
+        assert_eq!(result.unwrap(), Value::Int(0)); // Пустой список — ноль
     }
 
     #[test]
@@ -542,6 +570,53 @@ mod tests {
     }
 
     #[test]
+    fn test_rename_nx_key_not_exists() {
+        // Инициализация хранилища
+        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+
+        // Создаем команду SetCommand
+        let set_cmd = SetCommand {
+            key: "key1".to_string(),
+            value: Value::Str(ArcBytes::from_str("value1")),
+        };
+        set_cmd.execute(&mut store).unwrap();
+
+        // Создаем команду RenameNxCommand
+        let rename_nx_cmd = RenameNxCommand {
+            from: "key1".to_string(),
+            to: "key2".to_string(),
+        };
+
+        // Выполнение команды rename (ключа "key2" еще нет)
+        let result = rename_nx_cmd.execute(&mut store);
+        assert!(result.is_ok(), "RenameNxCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Int(1)); // Переименование прошло успешно
+
+        // Проверка, что старый ключ больше не существует
+        let get_cmd = GetCommand {
+            key: "key1".to_string(),
+        };
+        let get_result = get_cmd.execute(&mut store);
+        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert_eq!(get_result.unwrap(), Value::Null); // Ключ удален
+
+        // Проверка, что новый ключ существует
+        let get_cmd_new = GetCommand {
+            key: "key2".to_string(),
+        };
+        let get_result_new = get_cmd_new.execute(&mut store);
+        assert!(
+            get_result_new.is_ok(),
+            "GetCommand failed: {:?}",
+            get_result_new
+        );
+        assert_eq!(
+            get_result_new.unwrap(),
+            Value::Str(ArcBytes::from_str("value1"))
+        );
+    }
+
+    #[test]
     fn test_flushdb() {
         // Инициализация хранилища
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -560,25 +635,26 @@ mod tests {
         set_cmd2.execute(&mut store).unwrap();
 
         // Создаем команду FlushDbCommand
-        let flushdb_cmd = FlushDbCommand;
+        let flush_cmd = FlushDbCommand;
 
         // Выполнение команды flushdb
-        let result = flushdb_cmd.execute(&mut store);
+        let result = flush_cmd.execute(&mut store);
         assert!(result.is_ok(), "FlushDbCommand failed: {:?}", result);
+        assert_eq!(result.unwrap(), Value::Str(ArcBytes::from_str("OK")));
 
-        // Проверка, что данные были удалены
-        let get_cmd1 = GetCommand {
+        // Проверка, что все ключи были удалены
+        let get_cmd = GetCommand {
             key: "key1".to_string(),
         };
-        let get_result1 = get_cmd1.execute(&mut store);
-        assert!(get_result1.is_ok(), "GetCommand failed: {:?}", get_result1);
-        assert_eq!(get_result1.unwrap(), Value::Null);
+        let get_result = get_cmd.execute(&mut store);
+        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert_eq!(get_result.unwrap(), Value::Null); // Ключ "key1" удален
 
         let get_cmd2 = GetCommand {
             key: "key2".to_string(),
         };
         let get_result2 = get_cmd2.execute(&mut store);
         assert!(get_result2.is_ok(), "GetCommand failed: {:?}", get_result2);
-        assert_eq!(get_result2.unwrap(), Value::Null);
+        assert_eq!(get_result2.unwrap(), Value::Null); // Ключ "key2" удален
     }
 }

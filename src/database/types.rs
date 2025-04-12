@@ -10,7 +10,6 @@ pub enum Value {
     Str(ArcBytes),
     Int(i64),
     Float(f64),
-    Bool(bool),
     Null,
     List(QuickList<ArcBytes>),
     Hash(HashMap<ArcBytes, ArcBytes>),

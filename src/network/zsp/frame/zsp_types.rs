@@ -26,7 +26,7 @@ impl TryFrom<Value> for ZSPFrame {
         match value {
             Value::Str(s) => {
                 debug!("Converting Value::Str to ZSPFrame::SimpleString");
-                handle_arcbytes(s)
+                convert_arcbytes_to_frame(s)
             }
             Value::Int(i) => {
                 debug!("Converting Value::Int to ZSPFrame::Integer: {}", i);
@@ -35,10 +35,6 @@ impl TryFrom<Value> for ZSPFrame {
             Value::Float(f) => {
                 debug!("Converting Value::Float to ZSPFrame::Float: {}", f);
                 Ok(Self::Float(f))
-            }
-            Value::Bool(b) => {
-                debug!("Converting Value::Bool to ZSPFrame::SimpleString: {}", b);
-                Ok(Self::SimpleString(b.to_string()))
             }
             Value::List(list) => {
                 debug!("Converting Value::List to ZSPFrame::Array");
@@ -58,7 +54,7 @@ impl TryFrom<Value> for ZSPFrame {
             }
             Value::Null => {
                 debug!("Converting Value::Null to ZSPFrame::BulkString(None)");
-                Ok(Self::BulkString(None))
+                Ok(ZSPFrame::Null)
             }
             // Ignore unsupported types
             Value::HyperLogLog(_) | Value::SStream(_) => {
@@ -76,7 +72,7 @@ impl From<ArcBytes> for ZSPFrame {
     }
 }
 
-fn handle_arcbytes(bytes: ArcBytes) -> Result<ZSPFrame, String> {
+fn convert_arcbytes_to_frame(bytes: ArcBytes) -> Result<ZSPFrame, String> {
     debug!("Handling ArcBytes: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
         .map(ZSPFrame::SimpleString)
@@ -144,11 +140,11 @@ mod tests {
     #[test]
     fn handle_arcbytes_utf8_and_binary() {
         let utf8 = ArcBytes::from_str("hello");
-        let frame = handle_arcbytes(utf8).unwrap();
+        let frame = convert_arcbytes_to_frame(utf8).unwrap();
         assert_eq!(frame, ZSPFrame::SimpleString("hello".into()));
 
         let bin = ArcBytes::from(vec![0xFF, 0xFE]);
-        let frame = handle_arcbytes(bin.clone()).unwrap();
+        let frame = convert_arcbytes_to_frame(bin.clone()).unwrap();
         assert_eq!(frame, ZSPFrame::BulkString(Some(bin.to_vec())));
     }
 
@@ -211,7 +207,7 @@ mod tests {
         );
         assert_eq!(
             ZSPFrame::try_from(Value::Null).unwrap(),
-            ZSPFrame::BulkString(None)
+            ZSPFrame::Null // <-- вот тут ключевой момент
         );
     }
 
@@ -254,19 +250,6 @@ mod tests {
         } else {
             panic!("Expected ZSet frame");
         }
-    }
-
-    // Tests TryFrom<Value> for bools and floats.
-    #[test]
-    fn try_from_value_bool_and_float() {
-        assert_eq!(
-            ZSPFrame::try_from(Value::Bool(true)).unwrap(),
-            ZSPFrame::SimpleString("true".to_string())
-        );
-        assert_eq!(
-            ZSPFrame::try_from(Value::Float(3.14)).unwrap(),
-            ZSPFrame::Float(3.14)
-        );
     }
 
     // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 ArcBytes.
@@ -334,13 +317,5 @@ mod tests {
         let arc = ArcBytes::from_str("hello");
         let frame: ZSPFrame = arc.clone().into();
         assert_eq!(frame, ZSPFrame::BulkString(Some(arc.to_vec())));
-    }
-
-    #[test]
-    fn try_from_value_bool_false() {
-        assert_eq!(
-            ZSPFrame::try_from(Value::Bool(false)).unwrap(),
-            ZSPFrame::SimpleString("false".to_string()),
-        );
     }
 }
