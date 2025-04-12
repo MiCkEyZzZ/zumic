@@ -2,9 +2,9 @@ use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreE
 
 use super::{
     AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
-    GetCommand, GetRangeCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand,
-    MSetCommand, RenameCommand, RenameNxCommand, SetCommand, SetFloatCommand, SetNxCommand,
-    StrLenCommand,
+    GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand,
+    IncrByCommand, IncrByFloatCommand, IncrCommand, MGetCommand, MSetCommand, RenameCommand,
+    RenameNxCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand,
 };
 
 pub trait CommandExecute: std::fmt::Debug {
@@ -33,6 +33,10 @@ pub enum Command {
     Incrbyfloat(IncrByFloatCommand),
     Decrbyfloat(DecrByCommand),
     Setfloat(SetFloatCommand),
+    HSet(HSetCommand),
+    HGet(HGetCommand),
+    HDel(HDelCommand),
+    HGetall(HGetAllCommand),
 }
 
 impl CommandExecute for Command {
@@ -58,6 +62,10 @@ impl CommandExecute for Command {
             Command::Incrbyfloat(cmd) => cmd.execute(store),
             Command::Decrbyfloat(cmd) => cmd.execute(store),
             Command::Setfloat(cmd) => cmd.execute(store),
+            Command::HSet(cmd) => cmd.execute(store),
+            Command::HGet(cmd) => cmd.execute(store),
+            Command::HDel(cmd) => cmd.execute(store),
+            Command::HGetall(cmd) => cmd.execute(store),
         }
     }
 }

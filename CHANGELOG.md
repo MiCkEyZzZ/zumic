@@ -5,6 +5,8 @@
 - **Основные команды**:
   - Реализованы базовые команды для чисел: `INCRBYFLOAT`, `DECRBYFLOAT`, `SETFLOAT`.
   - Добавил тесты для методов: `INCRBYFLOAT`, `DECRBYFLOAT`, `SETFLOAT`.
+  - Реализованы базовые команды для hash: `HSET`, `HGET`, `HDEL`, `HGETALL`.
+  - Добавил тесты для методов: `HSET`, `HGET`, `HDEL`, `HGETALL`.
 
 ## [0.9.2] - 2025-04-12
 
