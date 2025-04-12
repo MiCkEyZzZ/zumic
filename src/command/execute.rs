@@ -1,9 +1,9 @@
 use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreError};
 
 use super::{
-    AppendCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, GetRangeCommand,
-    MGetCommand, MSetCommand, RenameCommand, RenameNxCommand, SetCommand, SetNxCommand,
-    StrLenCommand,
+    AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
+    GetCommand, GetRangeCommand, IncrByCommand, IncrCommand, MGetCommand, MSetCommand,
+    RenameCommand, RenameNxCommand, SetCommand, SetNxCommand, StrLenCommand,
 };
 
 pub trait CommandExecute: std::fmt::Debug {
@@ -25,6 +25,10 @@ pub enum Command {
     Strlen(StrLenCommand),
     Append(AppendCommand),
     Getrange(GetRangeCommand),
+    Incr(IncrCommand),
+    Incrby(IncrByCommand),
+    Decr(DecrCommand),
+    Decrby(DecrByCommand),
 }
 
 impl CommandExecute for Command {
@@ -43,6 +47,10 @@ impl CommandExecute for Command {
             Command::Strlen(cmd) => cmd.execute(store),
             Command::Append(cmd) => cmd.execute(store),
             Command::Getrange(cmd) => cmd.execute(store),
+            Command::Incr(cmd) => cmd.execute(store),
+            Command::Incrby(cmd) => cmd.execute(store),
+            Command::Decr(cmd) => cmd.execute(store),
+            Command::Decrby(cmd) => cmd.execute(store),
         }
     }
 }
