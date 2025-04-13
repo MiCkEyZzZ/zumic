@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn test_serialize_hll() {
         // Пока сериализация HLL не реализована, используем заглушку
-        let hll = crate::database::HLL {
+        let hll = crate::database::types::HLL {
             registers: vec![0; 128],
         };
         let value = Value::HyperLogLog(hll);

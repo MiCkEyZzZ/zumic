@@ -133,7 +133,6 @@ fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
 mod tests {
     use super::*;
 
-    use crate::database::{ArcBytes, QuickList};
     use std::collections::{HashMap, HashSet};
 
     // Tests handling of ArcBytes with both valid UTF-8 and binary data.

@@ -1,7 +1,7 @@
 use tracing::info;
 
 use crate::{
-    database::{ArcBytes, Value},
+    database::{arcbytes::ArcBytes, types::Value},
     error::StoreResult,
 };
 
@@ -79,7 +79,6 @@ impl StorageEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{ArcBytes, Value};
 
     fn key(data: &str) -> ArcBytes {
         ArcBytes::from(data.as_bytes().to_vec())

@@ -1,42 +1,61 @@
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
+use std::io::Cursor;
 
-pub struct TcpServer {
-    listener: TcpListener,
+use bytes::{Buf, BytesMut};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+
+use super::zsp::frame::decoder::ZSPDecoder;
+use crate::network::zsp::frame::zsp_types::ZSPFrame;
+
+const BUFFER_CAPACITY: usize = 4096;
+
+pub async fn run_tcp_server(addr: &str) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    println!("Listening on {}", addr);
+
+    loop {
+        let (socket, addr) = listener.accept().await?;
+        println!("Accepted connection from {}", addr);
+
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(socket).await {
+                eprintln!("Error handling connection: {}", e);
+            }
+        });
+    }
 }
 
-impl TcpServer {
-    pub async fn new(address: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let listener = TcpListener::bind(address).await?;
-        Ok(Self { listener })
-    }
+async fn handle_connection(mut socket: TcpStream) -> anyhow::Result<()> {
+    let mut decoder = ZSPDecoder::new();
+    let mut buffer = BytesMut::with_capacity(BUFFER_CAPACITY);
 
-    pub async fn run(&self) {
-        loop {
-            let (stream, _) = self.listener.accept().await.unwrap();
-            tokio::spawn(Self::handle_connection(stream));
+    loop {
+        let mut temp_buf = [0u8; BUFFER_CAPACITY];
+        let n = socket.read(&mut temp_buf).await?;
+
+        if n == 0 {
+            println!("Connection closed");
+            return Ok(());
         }
-    }
 
-    async fn handle_connection(mut stream: TcpStream) {
-        let mut buffer = [0; 1024];
+        buffer.extend_from_slice(&temp_buf[..n]);
 
-        loop {
-            match stream.read(&mut buffer).await {
-                Ok(0) => break,
-                Ok(n) => {
-                    if let Err(e) = stream.write_all(&buffer[..n]).await {
-                        eprintln!("Write error: {}", e);
-                        break;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Read error: {}", e);
-                    break;
-                }
-            }
+        let mut cursor = Cursor::new(&buffer[..]);
+
+        while let Ok(Some(frame)) = decoder.decode(&mut cursor) {
+            println!("Received frame: {:?}", frame);
+
+            let response = match &frame {
+                ZSPFrame::SimpleString(s) => format!("+{}\r\n", s),
+                ZSPFrame::Integer(i) => format!(":{}\r\n", i),
+                ZSPFrame::FrameError(e) => format!("-{}\r\n", e),
+                _ => "+OK\r\n".to_string(),
+            };
+
+            socket.write_all(response.as_bytes()).await?;
         }
+
+        let pos = cursor.position() as usize;
+        buffer.advance(pos);
     }
 }

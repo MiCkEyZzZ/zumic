@@ -2,7 +2,7 @@ use std::{
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ops::Deref,
-    str::from_utf8,
+    str::{from_utf8, Utf8Error},
     sync::Arc,
 };
 
@@ -49,6 +49,15 @@ impl ArcBytes {
     pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
         let bytes = self.0.slice(range);
         Self(Arc::new(bytes))
+    }
+    pub fn expect_utf8(&self) -> Result<&str, Utf8Error> {
+        std::str::from_utf8(&self.0)
+    }
+    pub fn make_mut(&mut self) -> &mut Bytes {
+        Arc::make_mut(&mut self.0)
+    }
+    pub fn try_unwrap(self) -> Result<Bytes, Arc<Bytes>> {
+        Arc::try_unwrap(self.0)
     }
 }
 

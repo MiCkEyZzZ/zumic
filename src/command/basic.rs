@@ -1,5 +1,5 @@
 use crate::{
-    database::{types::Value, ArcBytes, QuickList},
+    database::{arcbytes::ArcBytes, quicklist::QuickList, types::Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -175,7 +175,7 @@ mod tests {
             CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, RenameCommand,
             RenameNxCommand, SetNxCommand,
         },
-        database::{ArcBytes, Value},
+        database::{arcbytes::ArcBytes, types::Value},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
 
@@ -189,7 +189,7 @@ mod tests {
         // Create a SetCommand
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
-            value: crate::database::Value::Str(ArcBytes::from_str("test_value")),
+            value: crate::database::types::Value::Str(ArcBytes::from_str("test_value")),
         };
 
         // Execute the set command
@@ -238,7 +238,7 @@ mod tests {
         // Создаем команду SetCommand
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
-            value: crate::database::Value::Str(ArcBytes::from_str("test_value")),
+            value: crate::database::types::Value::Str(ArcBytes::from_str("test_value")),
         };
 
         // Выполнение команды set

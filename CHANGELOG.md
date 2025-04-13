@@ -16,6 +16,9 @@
   - Добавлены тесты для методов: `ZADD`, `ZSCORE`, `ZCARD`, `ZREM`, `ZRANGE`, `ZREVRANGE`.
   - Реализованы базовые команды для списков: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LRANGE`.
   - Добавлены тесты для методов: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LRANGE`.
+  - Добавлены бренчмарки для следующих комманд: `basic`, `float`, `int`, `string`.
+  - Улучшена производительность для команды `AppendCommand`.
+  - Добавлены три новых метода для типа `ArcBytes` следующие: `expect_utf8`, `make_mut`, `try_unwrap`
 
 - **Кастомные типы**:
   - Реализованы кастомные типы, такие как `ArcBytes` и `QuickList`.

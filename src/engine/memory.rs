@@ -4,7 +4,7 @@ use dashmap::DashMap;
 
 use super::storage::Storage;
 use crate::{
-    database::{types::Value, ArcBytes},
+    database::{arcbytes::ArcBytes, types::Value},
     error::{StoreError, StoreResult},
 };
 

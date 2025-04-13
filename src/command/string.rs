@@ -1,5 +1,5 @@
 use crate::{
-    database::{ArcBytes, Value},
+    database::{arcbytes::ArcBytes, types::Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -35,25 +35,26 @@ pub struct AppendCommand {
 impl CommandExecute for AppendCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let append_value = ArcBytes::from_str(&self.value);
+        let append_data = self.value.as_bytes();
 
-        if let Some(mut existing_value) = store.get(key.clone())? {
-            if let Value::Str(ref mut s) = existing_value {
-                // Clone `s` to work with data and add new bytes
-                let mut updated_value = s.to_vec();
-                updated_value.extend_from_slice(&append_value.to_vec()); // Add new bytes
+        match store.get(key.clone())? {
+            Some(Value::Str(ref s)) => {
+                let mut result = Vec::with_capacity(s.len() + append_data.len());
+                result.extend_from_slice(s); // копируем оригинал
+                result.extend_from_slice(append_data); // добавляем новое
 
-                // Save the updated value
-                store.set(key, Value::Str(ArcBytes::from_vec(updated_value.clone())))?;
-                return Ok(Value::Int(updated_value.len() as i64)); // Return the length of the updated string
-            } else {
-                return Err(StoreError::InvalidType); // Error if value is not a string
+                let result = ArcBytes::from_vec(result);
+                store.set(key, Value::Str(result.clone()))?;
+
+                Ok(Value::Int(result.len() as i64))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => {
+                let new_value = ArcBytes::from_vec(append_data.to_vec()); // единственная аллокация
+                store.set(key, Value::Str(new_value.clone()))?;
+                Ok(Value::Int(new_value.len() as i64))
             }
         }
-
-        // If there was no line create a new line
-        store.set(key, Value::Str(append_value.clone()))?;
-        Ok(Value::Int(append_value.len() as i64)) // Return the length of the new string
     }
 }
 
