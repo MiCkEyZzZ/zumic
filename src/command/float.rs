@@ -76,6 +76,9 @@ mod tests {
 
     use super::*;
 
+    /// This test verifies that the `IncrByFloatCommand` works as expected.
+    /// It initializes the store with a float value (10.0), then increments it by 5.5.
+    /// The result should be 15.5, and the test asserts that the value in the store matches the expected value.
     #[test]
     fn test_incr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -91,6 +94,9 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Float(15.5));
     }
 
+    /// This test verifies that the `DecrByFloatCommand` works as expected.
+    /// It initializes the store with a float value (10.0), then decrements it by 3.5.
+    /// The result should be 6.5, and the test asserts that the value in the store matches the expected value.
     #[test]
     fn test_decr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -106,6 +112,9 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Float(6.5));
     }
 
+    /// This test verifies that the `SetFloatCommand` works as expected.
+    /// It sets a float value (20.5) in the store under the key "key1".
+    /// The test asserts that the value in the store matches the expected float value.
     #[test]
     fn test_set_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());

@@ -9,53 +9,111 @@ use std::{
 use bytes::Bytes;
 use serde::{Deserialize, Deserializer, Serialize};
 
+/// A wrapper for `Arc<Bytes>` that provides functionality for
+/// handling byte slices (`[u8]`).
+/// This type is designed to be used for immutable byte data that
+/// can be shared efficiently across threads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArcBytes(Arc<Bytes>);
 
 impl ArcBytes {
+    /// Returns the length of the byte slice.
+    ///
+    /// # Examples
+    /// ```
+    /// let ab = ArcBytes::from_str("hello");
+    /// assert_eq!(ab.len(), 5);
+    /// ```
     pub fn len(&self) -> usize {
         self.0.len()
     }
+    /// Returns `true` if the byte slice is empty.
+    ///
+    /// # Examples
+    /// ```
+    /// let ab = ArcBytes::from_str("");
+    /// assert!(ab.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+    /// Creates a new `ArcBytes` instance from a `Vec<u8>`.
+    ///
+    /// # Examples
+    /// ```
+    /// let v = b"hello".to_vec();
+    /// let ab = ArcBytes::from_vec(v);
+    /// assert_eq!(ab.as_slice(), b"hello");
+    /// ```
     pub fn from_vec(vec: Vec<u8>) -> Self {
         Self(Arc::new(Bytes::from(vec)))
     }
+    /// Creates a new `ArcBytes` instance from a `&str`.
+    ///
+    /// # Examples
+    /// ```
+    /// let ab = ArcBytes::from_str("hello");
+    /// assert_eq!(ab.as_str(), Some("hello"));
+    /// ```
     pub fn from_str(s: &str) -> Self {
         Self(Arc::new(Bytes::copy_from_slice(s.as_bytes())))
     }
+    /// Returns a slice of the stored byte data.
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
+    /// Converts the stored byte data into a `Vec<u8>`.
+    ///
+    /// # Examples
+    /// ```
+    /// let ab = ArcBytes::from_str("hello");
+    /// assert_eq!(ab.to_vec(), b"hello".to_vec());
+    /// ```
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
+    /// Attempts to convert the byte data into a string slice, returning
+    /// `None` if the data is not valid UTF-8.
+    ///
+    /// # Examples
+    /// ```
+    /// let ab = ArcBytes::from_str("hello");
+    /// assert_eq!(ab.as_str(), Some("hello"));
+    /// ```
     pub fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(&self.0).ok()
     }
+    /// Consumes the `ArcBytes` and returns the inner `Bytes` data.
     pub fn into_bytes(self) -> Bytes {
         Arc::try_unwrap(self.0).unwrap_or_else(|arc| arc.as_ref().clone())
     }
+    /// Consumes the `ArcBytes` and returns the inner `Arc<Bytes>` reference.
     pub fn into_arc(self) -> Arc<Bytes> {
         self.0
     }
+    /// Checks if the stored data starts with the specified prefix.
     pub fn starts_with(&self, prefix: &[u8]) -> bool {
         self.as_slice().starts_with(prefix)
     }
+    /// Checks if the stored data ends with the specified suffix.
     pub fn ends_with(&self, suffix: &[u8]) -> bool {
         self.as_slice().ends_with(suffix)
     }
+    /// Returns a slice of the `ArcBytes` object based on the given range.
     pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
         let bytes = self.0.slice(range);
         Self(Arc::new(bytes))
     }
+    /// Attempts to convert the byte data into a valid UTF-8 string.
+    /// Returns a `Utf8Error` if the data is not valid UTF-8.
     pub fn expect_utf8(&self) -> Result<&str, Utf8Error> {
         std::str::from_utf8(&self.0)
     }
+    /// Returns a mutable reference to the inner `Bytes` data.
     pub fn make_mut(&mut self) -> &mut Bytes {
         Arc::make_mut(&mut self.0)
     }
+    /// Attempts to unwrap the `ArcBytes` to retrieve the inner `Bytes`.
     pub fn try_unwrap(self) -> Result<Bytes, Arc<Bytes>> {
         Arc::try_unwrap(self.0)
     }

@@ -2,16 +2,29 @@ use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
+/// A segmented list with efficient front and back operations.
+///
+/// `QuickList` stores items in a vector of `VecDeque` segments,
+/// allowing for efficient insertions/removals at both ends and
+/// moderate random access.
+///
+/// The list automatically optimizes its segments when needed,
+/// balancing between performance and memory usage.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct QuickList<T> {
+    /// Segments of the list; each is a `VecDeque` with limited size.
     pub segments: Vec<VecDeque<T>>,
+    /// Maximum number of elements per segment.
     pub max_segment_size: usize,
+    /// Total number of elements across all segments.
     pub len: usize,
+    /// Optional index map from logical index to segment index.
     #[serde(skip)]
     pub index: HashMap<usize, usize>,
 }
 
 impl<T> QuickList<T> {
+    /// Creates a new empty `QuickList` with the specified segment size.
     pub fn new(max_segment_size: usize) -> Self {
         Self {
             segments: Vec::new(),
@@ -20,12 +33,15 @@ impl<T> QuickList<T> {
             index: HashMap::new(),
         }
     }
+    /// Returns the total number of elements in the list.
     pub fn len(&self) -> usize {
         self.len
     }
+    /// Returns `true` if the list contains no elements.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    /// Returns a reference to the element at the given index, if it exists.
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len {
             return None;
@@ -40,7 +56,7 @@ impl<T> QuickList<T> {
             }
         })
     }
-
+    /// Returns a mutable reference to the element at the given index, if it exists.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len {
             return None;
@@ -55,7 +71,7 @@ impl<T> QuickList<T> {
             }
         })
     }
-
+    /// Inserts an element at the front of the list.
     pub fn push_front(&mut self, item: T) {
         if self.segments.is_empty() || self.segments[0].len() >= self.max_segment_size {
             self.segments
@@ -66,6 +82,7 @@ impl<T> QuickList<T> {
         self.auto_optimize();
         self.rebuild_index();
     }
+    /// Inserts an element at the back of the list.
     pub fn push_back(&mut self, item: T) {
         if self.segments.is_empty() || self.segments.last().unwrap().len() >= self.max_segment_size
         {
@@ -77,6 +94,7 @@ impl<T> QuickList<T> {
         self.auto_optimize();
         self.rebuild_index();
     }
+    /// Removes and returns the front element of the list, if any.
     pub fn pop_front(&mut self) -> Option<T> {
         if self.segments.is_empty() {
             return None;
@@ -92,6 +110,7 @@ impl<T> QuickList<T> {
         }
         item
     }
+    /// Removes and returns the back element of the list, if any.
     pub fn pop_back(&mut self) -> Option<T> {
         if self.segments.is_empty() {
             return None;
@@ -108,14 +127,20 @@ impl<T> QuickList<T> {
         }
         item
     }
+    /// Returns an iterator over all elements in the list.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.segments.iter().flat_map(|seg| seg.iter())
     }
+    /// Clears the list, removing all elements.
     pub fn clear(&mut self) {
         self.segments.clear();
         self.index.clear();
         self.len = 0;
     }
+    /// Validates the internal consistency of the list.
+    ///
+    /// Returns `Err` if any segment exceeds allowed capacity
+    /// or if the internal length counter is inconsistent.
     pub fn validate(&self) -> Result<(), &'static str> {
         let mut total_len = 0;
 
@@ -131,6 +156,9 @@ impl<T> QuickList<T> {
         }
         Ok(())
     }
+    /// Compacts and reorganizes the segments to maintain balance.
+    ///
+    /// Merges underfilled segments and removes empty ones.
     pub fn optimize(&mut self) {
         let mut new_segments = Vec::new();
         let mut current_segment = VecDeque::with_capacity(self.max_segment_size);
@@ -151,6 +179,7 @@ impl<T> QuickList<T> {
 
         self.segments = new_segments;
     }
+    /// Constructs a `QuickList` from a single `VecDeque`.
     pub fn from_vecdeque(items: VecDeque<T>, max_segment_size: usize) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in items {
@@ -158,6 +187,7 @@ impl<T> QuickList<T> {
         }
         qlist
     }
+    /// Converts the `QuickList` into a single `VecDeque` of elements.
     pub fn into_vecdeque(self) -> VecDeque<T> {
         let mut result = VecDeque::with_capacity(self.len);
         for mut segment in self.segments {
@@ -165,6 +195,7 @@ impl<T> QuickList<T> {
         }
         result
     }
+    /// Constructs a `QuickList` from any iterable.
     pub fn from_iter<I: IntoIterator<Item = T>>(iter: I, max_segment_size: usize) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in iter {
@@ -172,6 +203,10 @@ impl<T> QuickList<T> {
         }
         qlist
     }
+    /// Automatically optimizes the list if certain conditions are met.
+    ///
+    /// Optimization is triggered if there are too many segments
+    /// or if segments are significantly underfilled.
     pub fn auto_optimize(&mut self) {
         if self.segments.len() > 5
             || self
@@ -182,17 +217,24 @@ impl<T> QuickList<T> {
             self.optimize();
         }
     }
+    /// Reduces the capacity of each segment to match its length.
     pub fn shrink_to_fit(&mut self) {
         for segment in &mut self.segments {
             segment.shrink_to_fit();
         }
     }
+    /// Estimates the memory usage of the list in bytes.
+    ///
+    /// This is based on segment capacities and the size of `T`.
     pub fn memory_usage(&self) -> usize {
         self.segments
             .iter()
             .map(|s| s.capacity() * std::mem::size_of::<T>())
             .sum()
     }
+    /// Rebuilds the internal index mapping logical indices to segment indices.
+    ///
+    /// This is used for faster indexed access or debugging.
     pub fn rebuild_index(&mut self) {
         self.index.clear();
         let mut global_index = 0;
