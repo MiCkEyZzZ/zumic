@@ -10,15 +10,22 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct AuthManager {
     acl: Arc<Acl>,
+    pepper: Option<String>,
 }
 
 impl AuthManager {
     pub fn new() -> Self {
         Self {
             acl: Arc::new(Acl::default()),
+            pepper: None,
         }
     }
-
+    pub fn with_pepper(pepper: impl Into<String>) -> Self {
+        Self {
+            acl: Arc::new(Acl::default()),
+            pepper: Some(pepper.into()),
+        }
+    }
     pub fn create_user(
         &self,
         username: &str,
@@ -29,7 +36,7 @@ impl AuthManager {
             return Err(AuthError::UserAlreadyExists);
         }
 
-        let hash = hash_password(password)?;
+        let hash = hash_password(password, self.pepper.as_deref())?;
         let mut rules: Vec<String> = vec![format!(">{}", hash), "on".to_string()];
         rules.extend(permissions.iter().map(|s| s.to_string()));
 
@@ -44,7 +51,11 @@ impl AuthManager {
             .acl_getuser(username)
             .ok_or(AuthError::UserNotFound)?;
 
-        if verify_password(&user.password_hash.unwrap_or_default(), password)? {
+        if verify_password(
+            &user.password_hash.unwrap_or_default(),
+            password,
+            self.pepper.as_deref(),
+        )? {
             Ok(())
         } else {
             Err(AuthError::AuthenticationFailed)
@@ -83,11 +94,12 @@ impl AuthManager {
     }
 
     pub fn from_config(config: &ServerConfig) -> Result<Self, AuthError> {
+        let pepper = config.auth_pepper.clone();
         let acl = Arc::new(Acl::default());
 
         // requirepass → пользователь "default"
         if let Some(pass) = &config.requirepass {
-            let hash = hash_password(pass)?;
+            let hash = hash_password(pass, pepper.as_deref())?;
             let rules: Vec<String> = vec![
                 format!(">{}", hash),
                 "on".into(),
@@ -104,8 +116,7 @@ impl AuthManager {
 
             if !user_config.nopass {
                 if let Some(pass) = &user_config.password {
-                    // Хэшируем пароль, как и для пользователя "default"
-                    let hash = hash_password(pass)?;
+                    let hash = hash_password(pass, pepper.as_deref())?;
                     rules.push(format!(">{}", hash));
                 }
             }
@@ -127,7 +138,7 @@ impl AuthManager {
             acl.acl_setuser(&user_config.username, &rule_refs)?;
         }
 
-        Ok(Self { acl })
+        Ok(Self { acl, pepper })
     }
 }
 

@@ -6,6 +6,7 @@ use super::errors::ConfigError;
 #[derive(Debug, Default)]
 pub struct ServerConfig {
     pub requirepass: Option<String>,
+    pub auth_pepper: Option<String>,
     pub users: Vec<UserConfig>,
 }
 
@@ -36,6 +37,8 @@ impl ServerConfig {
 
             if let Some(pass) = line.strip_prefix("requirepass ") {
                 config.requirepass = Some(pass.trim().to_string());
+            } else if let Some(pepper) = line.strip_prefix("auth-pepper ") {
+                config.auth_pepper = Some(pepper.trim().to_string());
             } else if let Some(user_line) = line.strip_prefix("user ") {
                 let user = Self::parse_user(user_line)?;
                 config.users.push(user);

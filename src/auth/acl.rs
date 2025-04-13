@@ -10,7 +10,7 @@ pub struct AclUser {
     pub enabled: bool,
     pub permissions: HashSet<String>,
     pub channels: HashSet<String>,
-    pub keys: HashSet<String>, // Шаблоны ключей, к которым есть доступ
+    pub keys: HashSet<String>,
 }
 
 #[derive(Debug, Default)]

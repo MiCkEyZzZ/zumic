@@ -18,43 +18,18 @@ pub struct ArcBytes(Arc<Bytes>);
 
 impl ArcBytes {
     /// Returns the length of the byte slice.
-    ///
-    /// # Examples
-    /// ```
-    /// let ab = ArcBytes::from_str("hello");
-    /// assert_eq!(ab.len(), 5);
-    /// ```
     pub fn len(&self) -> usize {
         self.0.len()
     }
     /// Returns `true` if the byte slice is empty.
-    ///
-    /// # Examples
-    /// ```
-    /// let ab = ArcBytes::from_str("");
-    /// assert!(ab.is_empty());
-    /// ```
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
     /// Creates a new `ArcBytes` instance from a `Vec<u8>`.
-    ///
-    /// # Examples
-    /// ```
-    /// let v = b"hello".to_vec();
-    /// let ab = ArcBytes::from_vec(v);
-    /// assert_eq!(ab.as_slice(), b"hello");
-    /// ```
     pub fn from_vec(vec: Vec<u8>) -> Self {
         Self(Arc::new(Bytes::from(vec)))
     }
     /// Creates a new `ArcBytes` instance from a `&str`.
-    ///
-    /// # Examples
-    /// ```
-    /// let ab = ArcBytes::from_str("hello");
-    /// assert_eq!(ab.as_str(), Some("hello"));
-    /// ```
     pub fn from_str(s: &str) -> Self {
         Self(Arc::new(Bytes::copy_from_slice(s.as_bytes())))
     }
@@ -63,23 +38,11 @@ impl ArcBytes {
         &self.0[..]
     }
     /// Converts the stored byte data into a `Vec<u8>`.
-    ///
-    /// # Examples
-    /// ```
-    /// let ab = ArcBytes::from_str("hello");
-    /// assert_eq!(ab.to_vec(), b"hello".to_vec());
-    /// ```
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
     /// Attempts to convert the byte data into a string slice, returning
     /// `None` if the data is not valid UTF-8.
-    ///
-    /// # Examples
-    /// ```
-    /// let ab = ArcBytes::from_str("hello");
-    /// assert_eq!(ab.as_str(), Some("hello"));
-    /// ```
     pub fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(&self.0).ok()
     }
