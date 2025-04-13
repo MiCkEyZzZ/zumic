@@ -161,10 +161,13 @@ mod tests {
     use super::*;
     use crate::engine::memory::InMemoryStore;
 
+    // Helper func to create a new in-memory storage engine.
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
+    /// Test that LPushCommand correctly pushes an element onto the of the list,
+    /// updates the list length, and that LPopCommand removes the correct element.
     #[test]
     fn test_lpush_and_llen_and_lpop() {
         let mut store = create_store();
@@ -195,6 +198,8 @@ mod tests {
         );
     }
 
+    /// Test that RPushCommand correctly pushes elements to the right,
+    /// and RPopCommand correctly pops the last element.
     #[test]
     fn test_rpush_and_rpop() {
         let mut store = create_store();
@@ -221,6 +226,8 @@ mod tests {
         );
     }
 
+    /// Test that LRangeCommand retrieves elements correctly when using
+    /// both positive and negative indexes.
     #[test]
     fn test_lrange_positive_and_negative() {
         let mut store = create_store();
@@ -233,7 +240,7 @@ mod tests {
             .unwrap();
         }
 
-        // полный диапазон
+        // Retrieve the full range using start=0 and stop=-1.
         let range = LRangeCommand {
             key: "lr".into(),
             start: 0,
@@ -252,7 +259,7 @@ mod tests {
             ]
         );
 
-        // частичный
+        // Retrieve only the element at index 1.
         let range2 = LRangeCommand {
             key: "lr".into(),
             start: 1,
@@ -265,11 +272,14 @@ mod tests {
         assert_eq!(list2, vec![ArcBytes::from_str("y")]);
     }
 
+    /// Test that LLenCommand returns 0 and LPopCommand returns Null when
+    /// the list does not exist, and that a type error is produced if the
+    /// key exists but its type is not a list.
     #[test]
     fn test_len_and_pop_nonexistent_and_type_error() {
         let mut store = create_store();
 
-        // пустой список
+        // For a non-existing key, LLen should return 0 and LPop should return Null.
         assert_eq!(
             LLenCommand { key: "no".into() }
                 .execute(&mut store)
@@ -283,7 +293,7 @@ mod tests {
             Value::Null
         );
 
-        // несоответствующий тип
+        // If the key exists but is not a list, LPush should return an InvalidType error.
         store.set(ArcBytes::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {

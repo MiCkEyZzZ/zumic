@@ -114,10 +114,14 @@ mod tests {
 
     use super::*;
 
+    // Helper function to create a new in-memory storage engine.
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
+    /// Test that SAddCommand adds a new member to the set.
+    /// The first insertion should return 1 (member added) and the
+    /// second insertion of the same member should return 0.
     #[test]
     fn test_sadd_command() {
         let mut store = create_store();
@@ -127,15 +131,16 @@ mod tests {
             member: "one".to_string(),
         };
 
-        // Первый раз — добавит элемент.
+        // First insertion adds the member.
         let result = sadd.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(1));
 
-        // Повторная вставка — не добавит.
+        // Second insertion does not add the duplicate.
         let result = sadd.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(0));
     }
 
+    /// Test that SCardCommand returns the correct cardinality of the set.
     #[test]
     fn test_scard_command() {
         let mut store = create_store();
@@ -159,6 +164,7 @@ mod tests {
         assert_eq!(result, Value::Int(2));
     }
 
+    /// Test that SCardCommand returns zero when the key does not exist.
     #[test]
     fn test_scard_nonexistent_key() {
         let mut store = create_store();
@@ -170,6 +176,10 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
+    /// Test that SRemCommand successfully removes an existing member from
+    ///  a set.
+    /// It should return 1 when the member is removed, and 0 when trying to
+    /// remove the same member again.
     #[test]
     fn test_srem_command() {
         let mut store = create_store();
@@ -195,6 +205,9 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
+    /// Test that SIsMemberCommand correctly determines membership of a value
+    /// in a set.
+    /// It should return 1 if the member exists and 0 if it does not.
     #[test]
     fn test_sismember_command() {
         let mut store = create_store();
@@ -220,6 +233,8 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
+    /// Test that SMembersCommand returns all members of a set.
+    /// It should return a QuickList containing all members as ArcBytes.
     #[test]
     fn test_smembers_command() {
         let mut store = create_store();
@@ -249,6 +264,7 @@ mod tests {
         }
     }
 
+    /// Test that SMembersCommand returns Null when the key does not exist.
     #[test]
     fn test_smembers_nonexistent_key() {
         let mut store = create_store();

@@ -110,6 +110,9 @@ mod tests {
 
     use super::*;
 
+    /// Test the `INCR` command:
+    /// - If the key does not exist, it should be set to 1.
+    /// - If the key exists with an integer value, it should be incremented by 1.
     #[test]
     fn test_incr_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -118,15 +121,18 @@ mod tests {
             key: "counter".to_string(),
         };
 
-        // Test when key doesn't exist
+        // Test when key doesn't exist (should create and set to 1).
         let result = incr_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(1)); // Should create and set to 1
+        assert_eq!(result.unwrap(), Value::Int(1));
 
-        // Test when key exists
+        // Test when key exists (should increment to 2).
         let result = incr_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(2)); // Should increment to 2
+        assert_eq!(result.unwrap(), Value::Int(2));
     }
 
+    /// Test the `INCRBY` command:
+    /// - If the key does not exist, it should be created with the given increment value.
+    /// - If the key exists with an integer value, it should be incremented by the specified amount.
     #[test]
     fn test_incrby_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -136,15 +142,18 @@ mod tests {
             increment: 5,
         };
 
-        // Test when key doesn't exist
+        // Test when key doesn't exist (should set to 5).
         let result = incr_by_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(5)); // Should set to 5
+        assert_eq!(result.unwrap(), Value::Int(5));
 
-        // Test when key exists
+        // Test when key exists (should increment by 5, total becomes 10).
         let result = incr_by_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(10)); // Should increment by 5, total = 10
+        assert_eq!(result.unwrap(), Value::Int(10));
     }
 
+    /// Test the `DECR` command:
+    /// - If the key does not exist, it should be created with the value -1.
+    /// - If the key exists with an integer value, it should be decremented by 1.
     #[test]
     fn test_decr_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -153,15 +162,18 @@ mod tests {
             key: "counter".to_string(),
         };
 
-        // Test when key doesn't exist
+        // Test when key doesn't exist (should set to -3).
         let result = decr_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(-1)); // Should set to -1
+        assert_eq!(result.unwrap(), Value::Int(-1));
 
-        // Test when key exists
+        // Test when key exists (should decrement to -2).
         let result = decr_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(-2)); // Should decrement to -2
+        assert_eq!(result.unwrap(), Value::Int(-2));
     }
 
+    /// Test the `DECRBY` command:
+    /// - If the key does not exist, it should be created with the negative value of the decrement.
+    /// - If the key exists with an integer value, it should be decremented by the specified amount.
     #[test]
     fn test_decrby_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -171,15 +183,17 @@ mod tests {
             decrement: 3,
         };
 
-        // Test when key doesn't exist
+        // Test when key doesn't exist (should set to -3).
         let result = decr_by_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(-3)); // Should set to -3
+        assert_eq!(result.unwrap(), Value::Int(-3));
 
-        // Test when key exists
+        // Test when key exists (should decrement by 3, total becomes -6).
         let result = decr_by_command.execute(&mut store);
-        assert_eq!(result.unwrap(), Value::Int(-6)); // Should decrement by 3, total = -6
+        assert_eq!(result.unwrap(), Value::Int(-6));
     }
 
+    /// Test invalid type for `INCR` command:
+    /// - If the key exists but the value is not an integer, the command should return an error.
     #[test]
     fn test_invalid_type_for_incr() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -198,6 +212,8 @@ mod tests {
         assert!(result.is_err()); // Should return an InvalidType error
     }
 
+    /// Test invalid type for `DECR` command:
+    /// - If the key exists but the value is not an integer, the command should return an error.
     #[test]
     fn test_invalid_type_for_decr() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
