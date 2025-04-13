@@ -5,6 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{arcbytes::ArcBytes, quicklist::QuickList};
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SmartHash {
+    Zip(Vec<(ArcBytes, ArcBytes)>),   // for small hashes.
+    Map(HashMap<ArcBytes, ArcBytes>), // for large hashes.
+}
+
 /// Represents a generic value in the storage engine.
 ///
 /// This enum is used as the primary data container for various types
@@ -25,6 +31,7 @@ pub enum Value {
     List(QuickList<ArcBytes>),
     /// Hash map (dictionary) from binary keys to binary values.
     Hash(HashMap<ArcBytes, ArcBytes>),
+    // Hash(SmartHash),
     /// Sorted set implementation with score-based ordering.
     ///
     /// `dict` maps each member to its score,

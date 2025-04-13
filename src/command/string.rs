@@ -40,8 +40,8 @@ impl CommandExecute for AppendCommand {
         match store.get(key.clone())? {
             Some(Value::Str(ref s)) => {
                 let mut result = Vec::with_capacity(s.len() + append_data.len());
-                result.extend_from_slice(s); // копируем оригинал
-                result.extend_from_slice(append_data); // добавляем новое
+                result.extend_from_slice(s); // copy the original
+                result.extend_from_slice(append_data); // add new
 
                 let result = ArcBytes::from_vec(result);
                 store.set(key, Value::Str(result.clone()))?;
@@ -50,7 +50,7 @@ impl CommandExecute for AppendCommand {
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                let new_value = ArcBytes::from_vec(append_data.to_vec()); // единственная аллокация
+                let new_value = ArcBytes::from_vec(append_data.to_vec()); // single allocation
                 store.set(key, Value::Str(new_value.clone()))?;
                 Ok(Value::Int(new_value.len() as i64))
             }
