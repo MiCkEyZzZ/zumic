@@ -14,11 +14,11 @@ pub const MAX_ARRAY_DEPTH: usize = 32;
 
 #[derive(Debug)]
 pub enum ZSPDecodeState {
-    /// Начальное состояние.
+    /// Initial state.
     Initial,
-    /// Состояние, когда BulkString прочитан не полностью.
+    /// State when BulkString is not fully read.
     PartialBulkString { len: usize, data: Vec<u8> },
-    /// Состояние, когда Array читается не полностью.
+    /// State when Array is not read completely.
     PartialArray {
         len: usize,
         items: Vec<ZSPFrame>,
@@ -46,7 +46,7 @@ impl ZSPDecoder {
                     info!("No data left to decode.");
                     return Ok(None);
                 }
-                // В зависимости от первого байта вызываем соответствующий метод парсинга.
+                // Depending on the first byte, we call the corresponding parsing method.
                 match buf.get_u8() {
                     b'+' => self.parse_simple_string(buf),
                     b'-' => self.parse_error(buf),
@@ -63,7 +63,7 @@ impl ZSPDecoder {
             }
             ZSPDecodeState::PartialBulkString { len, mut data } => {
                 let result = self.continue_bulk_string(buf, len, &mut data);
-                // Если данные всё ещё неполные, сохраняем состояние.
+                // If the data is still incomplete, save the state.
                 if let Ok(None) = result {
                     self.state = ZSPDecodeState::PartialBulkString { len, data };
                 }
@@ -87,9 +87,9 @@ impl ZSPDecoder {
         }
     }
 
-    // --- Методы для парсинга отдельных типов фреймов ---
+    // --- Methods for parsing individual frame types ---
 
-    /// Парсит SimpleString, читаемый до CRLF.
+    /// Parses SimpleString, readable up to CRLF.
     fn parse_simple_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -99,14 +99,14 @@ impl ZSPDecoder {
         Ok(Some(ZSPFrame::SimpleString(line)))
     }
 
-    /// Парсит Error-фрейм.
+    /// Parses the Error frame.
     fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let line = self.read_line(buf)?;
         info!("Parsed error: {}", line);
         Ok(Some(ZSPFrame::FrameError(line)))
     }
 
-    /// Парсит Integer-фрейм.
+    /// Parses Integer frame.
     fn parse_integer(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let line = self.read_line(buf)?;
         let num = line.parse::<i64>().map_err(|_| {
@@ -135,19 +135,19 @@ impl ZSPDecoder {
                     return Err(ZSPError::InvalidData(err_msg));
                 }
 
-                // Читаем доступное количество байт
+                // Read the available number of bytes
                 let available = buf.remaining().min(len);
                 let mut data = Vec::with_capacity(len);
                 data.extend_from_slice(&buf.chunk()[..available]);
                 buf.advance(available);
 
                 if data.len() == len {
-                    // Если данные полные, проверяем завершающий CRLF
+                    // If the data is complete, check the trailing CRLF
                     self.expect_crlf(buf)?;
                     info!("Parsed bulk string of length {}", len);
                     Ok(Some(ZSPFrame::BulkString(Some(data))))
                 } else {
-                    // Если данных недостаточно, сохраняем состояние
+                    // If there is not enough data, save the state
                     self.state = ZSPDecodeState::PartialBulkString { len, data };
                     Ok(None)
                 }
@@ -160,7 +160,7 @@ impl ZSPDecoder {
         }
     }
 
-    /// Продолжает чтение BulkString, если данные были неполными.
+    /// Continues reading the BulkString if the data was incomplete.
     fn continue_bulk_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -244,21 +244,21 @@ impl ZSPDecoder {
                 let mut items = HashMap::new();
 
                 for _ in 0..len {
-                    // Читаем ключ
+                    // Read the key
                     let key_opt = self.decode(buf)?;
                     if key_opt.is_none() {
-                        return Ok(None); // Возвращаем Ok(None), если нет данных для ключа
+                        return Ok(None); // Return Ok(None) if there is no data for the key
                     }
                     let key = key_opt.unwrap();
 
-                    // Читаем значение
+                    // Read the value
                     let value_opt = self.decode(buf)?;
                     if value_opt.is_none() {
-                        return Ok(None); // Возвращаем Ok(None), если нет данных для значения
+                        return Ok(None); // Return Ok(None) if there is no data for the value
                     }
                     let value = value_opt.unwrap();
 
-                    // Ключ должен быть SimpleString
+                    // Key must be SimpleString
                     if let ZSPFrame::SimpleString(key_str) = key {
                         items.insert(key_str, value);
                     } else {
@@ -280,7 +280,7 @@ impl ZSPDecoder {
         }
     }
 
-    /// Продолжает чтение Array-фрейма, если данные были неполными.
+    /// Continues reading the Array frame if the data was incomplete.
     fn continue_array(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -307,7 +307,7 @@ impl ZSPDecoder {
         Ok(Some(ZSPFrame::Array(Some(std::mem::take(items)))))
     }
 
-    // --- Вспомогательные методы ---
+    // --- Helper methods ---
 
     fn read_line(&mut self, buf: &mut Cursor<&[u8]>) -> Result<String, ZSPError> {
         let start_pos = buf.position();
@@ -344,7 +344,7 @@ impl ZSPDecoder {
         }
     }
 
-    /// Проверяет, что следующие два байта представляют собой CRLF.
+    /// Checks that the next two bytes are CRLF.
     fn expect_crlf(&mut self, buf: &mut Cursor<&[u8]>) -> Result<(), ZSPError> {
         if buf.remaining() < 2 {
             let err_msg = format!("Expected CRLF at byte {}", buf.position());
@@ -367,8 +367,8 @@ mod tests {
 
     use crate::network::zsp::frame::encoder::ZSPEncoder;
 
-    // Тест для простых строк
-    // Проверяет декодирование строки, начинающейся с '+'
+    // Test for simple strings
+    // Tests decoding of a string starting with '+'
     #[test]
     fn test_simple_string() {
         let mut decoder = ZSPDecoder::new();
@@ -378,8 +378,8 @@ mod tests {
         assert_eq!(frame, ZSPFrame::SimpleString("OK".to_string()));
     }
 
-    // Тест для булк-строк
-    // Проверяет декодирование строки, начинающейся с '$'
+    // Test for bulk strings
+    // Tests decoding of a string starting with '$'
     #[test]
     fn test_bulk_string() {
         let mut decoder = ZSPDecoder::new();
@@ -389,8 +389,8 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
 
-    // Тест для частичной булк-строки
-    // Проверяет декодирование булк-строки в два этапа
+    // Test for partial bulk string
+    // Tests the decoding of a bulk string in two steps
     #[test]
     fn test_partial_bulk_string() {
         let mut decoder = ZSPDecoder::new();
@@ -407,8 +407,8 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
 
-    // Тест для пустого словаря
-    // Проверяет декодирование словаря без элементов
+    // Test for empty dictionary
+    // Tests decoding of dictionary with no elements
     #[test]
     fn test_empty_dictionary() {
         let mut decoder = ZSPDecoder::new();
@@ -418,8 +418,8 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Dictionary(Some(HashMap::new())));
     }
 
-    // Тест для словаря с одним элементом
-    // Проверяет декодирование словаря с одним ключом и значением
+    // Test for a dictionary with one element
+    // Tests decoding of a dictionary with one key and value
     #[test]
     fn test_single_item_dictionary() {
         let mut decoder = ZSPDecoder::new();
@@ -436,8 +436,8 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
     }
 
-    // Тест для словаря с несколькими элементами
-    // Проверяет декодирование словаря с несколькими парами ключ-значение
+    // Test for a dictionary with multiple elements
+    // Tests decoding of a dictionary with multiple key-value pairs
     #[test]
     fn test_multiple_items_dictionary() {
         use std::collections::HashMap;
@@ -454,7 +454,7 @@ mod tests {
         let original = ZSPFrame::Dictionary(Some(items));
         let encoded = ZSPEncoder::encode(&original).unwrap();
 
-        // Вместо прямого сравнения байтов, декодируем обратно:
+        // Instead of directly comparing bytes, we decode them back:
         let mut decoder = ZSPDecoder::new();
         let mut cursor = std::io::Cursor::new(encoded.as_slice());
         let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
@@ -462,25 +462,25 @@ mod tests {
         assert_eq!(original, decoded);
     }
 
-    // Тест для некорректного словаря (некорректный ключ)
-    // Проверяет, что происходит ошибка при попытке использовать некорректный ключ в словаре
+    // Test for invalid dictionary (invalid key)
+    // Checks that an error occurs when trying to use an invalid key in a dictionary
     #[test]
     fn test_invalid_dictionary_key() {
         let mut decoder = ZSPDecoder::new();
-        let data = b"%1\r\n-err\r\n+value\r\n".to_vec(); // Ошибка, ключ должен быть SimpleString
+        let data = b"%1\r\n-err\r\n+value\r\n".to_vec(); // Error, key must be SimpleString
         let mut cursor = Cursor::new(data.as_slice());
         let result = decoder.decode(&mut cursor);
         assert!(result.is_err());
     }
 
-    // Тест для некорректного словаря (неполный словарь)
-    // Проверяет поведение при недостаточности данных для декодирования всего словаря
+    // Test for invalid dictionary (incomplete dictionary)
+    // Tests behavior when there is not enough data to decode the entire dictionary
     #[test]
     fn test_incomplete_dictionary() {
         let mut decoder = ZSPDecoder::new();
-        let data = b"%2\r\n+key1\r\n+value1\r\n".to_vec(); // Недостаточно данных для второго элемента
+        let data = b"%2\r\n+key1\r\n+value1\r\n".to_vec(); // Not enough data for the second element
         let mut cursor = Cursor::new(data.as_slice());
         let result = decoder.decode(&mut cursor);
-        assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
+        assert!(matches!(result, Ok(None))); // Wait for Ok(None)
     }
 }

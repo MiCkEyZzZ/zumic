@@ -206,7 +206,7 @@ mod tests {
         );
         assert_eq!(
             ZSPFrame::try_from(Value::Null).unwrap(),
-            ZSPFrame::Null // <-- вот тут ключевой момент
+            ZSPFrame::Null // <-- here is the key point
         );
     }
 

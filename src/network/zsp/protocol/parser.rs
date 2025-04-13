@@ -51,13 +51,13 @@ impl IntoExecutable for ZSPCommand {
     }
 }
 
-/// Основная точка входа: парсинг фрейма и преобразование в исполняемую команду.
+/// Main entry point: parsing a frame and converting it into an executable command.
 pub fn parse_command(frame: ZSPFrame) -> Result<StoreCommand, String> {
     let raw_cmd = parse_raw_command(frame)?;
     raw_cmd.into_executable()
 }
 
-/// Промежуточный шаг: ZSPFrame → RawCommand
+/// Intermediate step: ZSPFrame → RawCommand
 fn parse_raw_command(frame: ZSPFrame) -> Result<ZSPCommand, String> {
     match frame {
         ZSPFrame::Array(Some(items)) if !items.is_empty() => {
@@ -77,7 +77,7 @@ fn parse_raw_command(frame: ZSPFrame) -> Result<ZSPCommand, String> {
     }
 }
 
-/// Парсинг строки команды и аргументов из массива ZSPFrame → RawCommand
+/// Parsing command string and arguments from ZSPFrame array → RawCommand
 fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, String> {
     match cmd.to_ascii_lowercase().as_str() {
         "ping" => Ok(ZSPCommand::Ping),

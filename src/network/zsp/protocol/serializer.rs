@@ -6,7 +6,7 @@ use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
 pub fn serialize_response(response: Response) -> ZSPFrame {
     match response {
         Response::Ok => ZSPFrame::SimpleString("OK".into()),
-        Response::Value(value) => value_to_frame(value), // Всё перенаправляется в helper
+        Response::Value(value) => value_to_frame(value), // Everything is redirected to helper
         Response::Error(msg) => ZSPFrame::FrameError(msg),
         Response::NotFound => ZSPFrame::Null,
         Response::Integer(n) => ZSPFrame::Integer(n),
@@ -71,21 +71,21 @@ mod tests {
 
     use super::*;
 
-    // Проверяем сериализацию OK-ответа
+    // Check serialization of OK response
     #[test]
     fn test_serialize_ok() {
         let frame = serialize_response(Response::Ok);
         assert_eq!(frame, ZSPFrame::SimpleString("OK".into()));
     }
 
-    // Проверяем сериализацию ошибки
+    // Check the serialization of the error
     #[test]
     fn test_serialize_error() {
         let frame = serialize_response(Response::Error("fail".into()));
         assert_eq!(frame, ZSPFrame::FrameError("fail".into()));
     }
 
-    // Проверяем сериализацию строки
+    // Check the serialization of the string
     #[test]
     fn test_serialize_str() {
         let value = Value::Str(ArcBytes::from_str("hello"));
@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
 
-    // Проверяем сериализацию целого числа
+    // Check serialization of integer
     #[test]
     fn test_serialize_int() {
         let value = Value::Int(123);
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Integer(123));
     }
 
-    // Проверяем сериализацию числа с плавающей точкой
+    // Check serialization of a floating point number
     #[test]
     fn test_serialize_float() {
         let value = Value::Float(3.14);
@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Float(3.14));
     }
 
-    // Проверяем сериализацию null
+    // Check for null serialization
     #[test]
     fn test_serialize_null() {
         let value = Value::Null;
@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Null);
     }
 
-    // Проверяем сериализацию списка
+    // Check the serialization of the list
     #[test]
     fn test_serialize_list() {
         let mut list = QuickList::new(4);
@@ -136,7 +136,7 @@ mod tests {
         );
     }
 
-    // Проверяем сериализацию множества (set)
+    // Check serialization of set
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
@@ -161,7 +161,7 @@ mod tests {
         }
     }
 
-    // Проверяем сериализацию хэша
+    // Checking hash serialization
     #[test]
     fn test_serialize_hash() {
         let mut map = HashMap::new();
@@ -180,7 +180,7 @@ mod tests {
         }
     }
 
-    // Проверяем сериализацию отсортированного множества (zset)
+    // Check serialization of sorted set (zset)
     #[test]
     fn test_serialize_zset() {
         let mut dict = HashMap::new();
@@ -208,10 +208,10 @@ mod tests {
         }
     }
 
-    // Проверяем сериализацию HLL (заглушка)
+    // Check HLL serialization (stub)
     #[test]
     fn test_serialize_hll() {
-        // Пока сериализация HLL не реализована, используем заглушку
+        // Until HLL serialization is implemented, we use a stub
         let hll = crate::database::types::HLL {
             registers: vec![0; 128],
         };
@@ -221,10 +221,10 @@ mod tests {
         assert_eq!(frame, ZSPFrame::SimpleString("HLL(NotImplemented)".into()));
     }
 
-    // Проверяем сериализацию SStream (заглушка)
+    // Check SStream serialization (stub)
     #[test]
     fn test_serialize_sstream() {
-        // Заглушка, т.к. сериализация SStream не реализована
+        // Stub, since SStream serialization is not implemented
         let value = Value::SStream(vec![]);
         let frame = serialize_response(Response::Value(value));
         assert_eq!(
