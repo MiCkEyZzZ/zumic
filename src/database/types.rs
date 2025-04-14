@@ -23,9 +23,7 @@ pub enum Value {
     Null,
     /// List of binary strings using a quicklist representation.
     List(QuickList<ArcBytes>),
-    /// Hash map (dictionary) from binary keys to binary values.
-    // Hash(HashMap<ArcBytes, ArcBytes>),
-    /// Hash map (dictionary) from binary keys to binary values.
+    /// Hash map (dictionary) stored as SmartHash.
     Hash(SmartHash),
     /// Sorted set implementation with score-based ordering.
     ///
