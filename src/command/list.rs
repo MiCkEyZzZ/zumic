@@ -147,7 +147,7 @@ impl CommandExecute for LRangeCommand {
                         vec.push(elem.clone());
                     }
                 }
-                let ql = QuickList::from_iter(vec.into_iter(), 64);
+                let ql = QuickList::from_iter(vec, 64);
                 Ok(Value::List(ql))
             }
             Some(_) => Err(StoreError::InvalidType),

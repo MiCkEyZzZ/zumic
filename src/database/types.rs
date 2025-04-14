@@ -5,12 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{arcbytes::ArcBytes, quicklist::QuickList};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SmartHash {
-    Zip(Vec<(ArcBytes, ArcBytes)>),   // for small hashes.
-    Map(HashMap<ArcBytes, ArcBytes>), // for large hashes.
-}
-
 /// Represents a generic value in the storage engine.
 ///
 /// This enum is used as the primary data container for various types

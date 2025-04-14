@@ -104,9 +104,9 @@ mod tests {
     // Check serialization of a floating point number
     #[test]
     fn test_serialize_float() {
-        let value = Value::Float(3.14);
+        let value = Value::Float(2.14);
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::Float(3.14));
+        assert_eq!(frame, ZSPFrame::Float(2.14));
     }
 
     // Check for null serialization

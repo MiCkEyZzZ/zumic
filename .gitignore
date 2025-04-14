@@ -2,10 +2,15 @@
 .idea
 .zed
 .vscode
+
 /target
+
 doc**/*
 logs/
+
 **/cargo-target
+
 *.wasm
 .env
+
 zumic.conf

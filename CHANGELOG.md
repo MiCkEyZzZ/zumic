@@ -16,12 +16,15 @@
   - Добавлены тесты для методов: `ZADD`, `ZSCORE`, `ZCARD`, `ZREM`, `ZRANGE`, `ZREVRANGE`.
   - Реализованы базовые команды для списков: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LRANGE`.
   - Добавлены тесты для методов: `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LRANGE`.
-  - Добавлены три новых метода для типа `ArcBytes` следующие: `expect_utf8`, `make_mut`, `try_unwrap`
+  - Добавлены три новых метода для типа `ArcBytes` следующие: `expect_utf8`, `make_mut`, `try_unwrap`.
+  - Добавлены три новых метода для типа `SmartHash` следующие: `new`, `hset`, `hget`, `hdel`.
+  - Добавлены тесты для типа `SmartHash` его методов: `new`, `hset`, `hget`, `hdel`.
 - **Бренчмарки**:
   - Добавлены бренчмарки для следующих комманд: `basic`, `float`, `int`, `string`, `hash`, `set`, `list`, `zset`.
 
 - **Кастомные типы**:
   - Реализованы кастомные типы, такие как `ArcBytes` и `QuickList`.
+  - Реализован кастомный типы, такие как `Zip` и `Map` в перечислении `SmartHash`.
 
 - **ZSP (Zumic Serialization Protocol)**:
   - Реализованы декодер, энкодер, типы для обработки различных типов данных (`Int`, `Str`, `List`, `Set`, `Hash`, `ZSet`).

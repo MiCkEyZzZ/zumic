@@ -167,7 +167,7 @@ impl Hash for ArcBytes {
 
 impl PartialOrd for ArcBytes {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
     }
 }
 
@@ -242,7 +242,7 @@ mod tests {
     }
 
     // Checks that the `Display` method correctly handles the situation when the
-    // `ArcBytes` data contains invalid UTF-8, by outputing `<invalid utf-8>`.
+    // `ArcBytes` data contains invalid UTF-8, by outputting `<invalid utf-8>`.
     #[test]
     fn test_display_invalid_utf8() {
         let invalid = ArcBytes::from_vec(vec![0xff, 0xfe, 0xfd]);

@@ -20,6 +20,12 @@ impl InMemoryStore {
     }
 }
 
+impl Default for InMemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Storage for InMemoryStore {
     fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()> {
         self.data.insert(key, value);
