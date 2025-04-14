@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use tracing::{debug, warn};
 
-use crate::database::{ArcBytes, QuickList, Value};
+use crate::database::{ArcBytes, QuickList, SmartHash, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZSPFrame {
@@ -17,7 +17,6 @@ pub enum ZSPFrame {
     ZSet(Vec<(String, f64)>),
     Null,
 }
-
 impl TryFrom<Value> for ZSPFrame {
     type Error = String;
 
@@ -44,16 +43,17 @@ impl TryFrom<Value> for ZSPFrame {
                 debug!("Converting Value::Set to ZSPFrame::Array");
                 convert_hashset(set)
             }
-            Value::Hash(hash) => {
-                debug!("Converting Value::Hash to ZSPFrame::Dictionary");
-                convert_hashmap(hash)
+            // Теперь Value::Hash хранит SmartHash, поэтому вызываем новую конвертацию.
+            Value::Hash(smart_hash) => {
+                debug!("Converting Value::Hash (SmartHash) to ZSPFrame::Dictionary");
+                convert_smart_hash(smart_hash)
             }
             Value::ZSet { dict, .. } => {
                 debug!("Converting Value::ZSet to ZSPFrame::ZSet");
                 convert_zset(dict)
             }
             Value::Null => {
-                debug!("Converting Value::Null to ZSPFrame::BulkString(None)");
+                debug!("Converting Value::Null to ZSPFrame::Null");
                 Ok(ZSPFrame::Null)
             }
             // Ignore unsupported types
@@ -101,14 +101,14 @@ fn convert_hashset(set: HashSet<String>) -> Result<ZSPFrame, String> {
     )))
 }
 
-fn convert_hashmap(hash: HashMap<ArcBytes, ArcBytes>) -> Result<ZSPFrame, String> {
-    debug!("Converting HashMap to ZSPFrame::Dictionary");
-    let mut map = HashMap::with_capacity(hash.len());
-    for (k, v) in hash {
-        // 1) decode the key, mapping its UTF‑8 error into String:
+/// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
+fn convert_smart_hash(smart: SmartHash) -> Result<ZSPFrame, String> {
+    debug!("Converting SmartHash to ZSPFrame::Dictionary");
+    let mut map = HashMap::with_capacity(smart.len());
+    // Используем итератор, предоставляемый SmartHash
+    for (k, v) in smart.iter() {
         let key = String::from_utf8(k.to_vec()).map_err(|e| format!("Invalid hash key: {}", e))?;
-        // 2) infallibly convert the value:
-        let frame = v.into();
+        let frame = v.clone().into();
         map.insert(key, frame);
     }
     Ok(ZSPFrame::Dictionary(Some(map)))
@@ -116,7 +116,6 @@ fn convert_hashmap(hash: HashMap<ArcBytes, ArcBytes>) -> Result<ZSPFrame, String
 
 fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
     debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
-    // Turn each (ArcBytes, f64) into a (String, f64), mapping UTF‑8 errors into String
     let pairs = dict
         .into_iter()
         .map(|(k, score)| {
@@ -125,7 +124,6 @@ fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
             Ok((key, score))
         })
         .collect::<Result<Vec<(String, f64)>, String>>()?;
-
     Ok(ZSPFrame::ZSet(pairs))
 }
 
@@ -134,6 +132,29 @@ mod tests {
     use super::*;
 
     use std::collections::{HashMap, HashSet};
+
+    // Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
+    #[test]
+    fn test_convert_smart_hash() {
+        // Создаем SmartHash с несколькими записями.
+        let mut sh = SmartHash::new();
+        sh.hset(ArcBytes::from_str("key1"), ArcBytes::from_str("val1"));
+        sh.hset(ArcBytes::from_str("key2"), ArcBytes::from_str("val2"));
+
+        let frame = convert_smart_hash(sh).unwrap();
+        if let ZSPFrame::Dictionary(Some(dict)) = frame {
+            assert_eq!(
+                dict.get("key1"),
+                Some(&ZSPFrame::BulkString(Some(b"val1".to_vec())))
+            );
+            assert_eq!(
+                dict.get("key2"),
+                Some(&ZSPFrame::BulkString(Some(b"val2".to_vec())))
+            );
+        } else {
+            panic!("Expected Dictionary frame");
+        }
+    }
 
     // Tests handling of ArcBytes with both valid UTF-8 and binary data.
     #[test]
@@ -193,7 +214,7 @@ mod tests {
             got.sort();
             assert_eq!(got, vec!["x".to_string(), "y".to_string()]);
         } else {
-            panic!()
+            panic!("Expected Array frame");
         }
     }
 
@@ -204,32 +225,7 @@ mod tests {
             ZSPFrame::try_from(Value::Int(10)).unwrap(),
             ZSPFrame::Integer(10)
         );
-        assert_eq!(
-            ZSPFrame::try_from(Value::Null).unwrap(),
-            ZSPFrame::Null // <-- here is the key point
-        );
-    }
-
-    // Tests conversion of a HashMap<ArcBytes, ArcBytes> into a ZSPFrame::Dictionary.
-    #[test]
-    fn convert_hashmap_to_dict() {
-        let mut hm = HashMap::new();
-        hm.insert(ArcBytes::from_str("key1"), ArcBytes::from_str("val1"));
-        hm.insert(ArcBytes::from_str("key2"), ArcBytes::from_str("val2"));
-
-        let zsp = convert_hashmap(hm).unwrap();
-        if let ZSPFrame::Dictionary(Some(map)) = zsp {
-            assert_eq!(
-                map.get("key1"),
-                Some(&ZSPFrame::BulkString(Some(b"val1".to_vec())))
-            );
-            assert_eq!(
-                map.get("key2"),
-                Some(&ZSPFrame::BulkString(Some(b"val2".to_vec())))
-            );
-        } else {
-            panic!("Expected Dictionary frame");
-        }
+        assert_eq!(ZSPFrame::try_from(Value::Null).unwrap(), ZSPFrame::Null);
     }
 
     // Tests conversion of a ZSet (HashMap<ArcBytes, f64>) into a ZSPFrame::ZSet.
@@ -286,7 +282,7 @@ mod tests {
     #[test]
     fn convert_empty_hashmap() {
         let hm: HashMap<ArcBytes, ArcBytes> = HashMap::new();
-        let zsp = convert_hashmap(hm).unwrap();
+        let zsp = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap();
         assert_eq!(zsp, ZSPFrame::Dictionary(Some(HashMap::new())));
     }
 
@@ -296,7 +292,7 @@ mod tests {
         let mut hm = HashMap::new();
         hm.insert(ArcBytes::from(vec![0xFF]), ArcBytes::from_str("val"));
 
-        let err = convert_hashmap(hm).unwrap_err();
+        let err = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap_err();
         assert!(err.contains("Invalid hash key"));
     }
 

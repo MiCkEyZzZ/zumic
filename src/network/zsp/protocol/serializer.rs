@@ -6,7 +6,7 @@ use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
 pub fn serialize_response(response: Response) -> ZSPFrame {
     match response {
         Response::Ok => ZSPFrame::SimpleString("OK".into()),
-        Response::Value(value) => value_to_frame(value), // Everything is redirected to helper
+        Response::Value(value) => value_to_frame(value), // Всё перенаправлено в helper-функцию
         Response::Error(msg) => ZSPFrame::FrameError(msg),
         Response::NotFound => ZSPFrame::Null,
         Response::Integer(n) => ZSPFrame::Integer(n),
@@ -28,12 +28,15 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .collect();
             ZSPFrame::Array(Some(frames))
         }
-        Value::Hash(map) => {
-            let dict: HashMap<String, ZSPFrame> = map
-                .into_iter()
+        // Здесь Value::Hash теперь содержит SmartHash; используем его итератор для построения словаря.
+        Value::Hash(smart) => {
+            let dict: HashMap<String, ZSPFrame> = smart
+                .iter()
                 .map(|(k, v)| {
+                    // Ключ преобразуем в строку, в случае ошибки подставляем "<invalid utf8>"
                     let key =
                         String::from_utf8(k.to_vec()).unwrap_or_else(|_| "<invalid utf8>".into());
+                    // Значение представляем как BulkString
                     let val = ZSPFrame::BulkString(Some(v.to_vec()));
                     (key, val)
                 })
@@ -164,9 +167,9 @@ mod tests {
     // Checking hash serialization
     #[test]
     fn test_serialize_hash() {
-        let mut map = HashMap::new();
-        map.insert(ArcBytes::from_str("k1"), ArcBytes::from_str("v1"));
-        let value = Value::Hash(map);
+        let mut sh = crate::database::smart_hash::SmartHash::new();
+        sh.hset(ArcBytes::from_str("k1"), ArcBytes::from_str("v1"));
+        let value = Value::Hash(sh);
         let frame = serialize_response(Response::Value(value));
 
         match frame {
