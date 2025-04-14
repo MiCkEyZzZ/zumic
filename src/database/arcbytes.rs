@@ -1,3 +1,9 @@
+//! `ArcBytes` is a wrapper around `Arc<Bytes>` designed for efficient,
+//! immutable byte data sharing across threads.
+//!
+//! It provides convenient methods for working with byte slices (`[u8]`),
+//! string conversion, slicing, serialization, and comparison operations.
+
 use std::{
     fmt::{self, Display},
     hash::{Hash, Hasher},
@@ -9,10 +15,11 @@ use std::{
 use bytes::Bytes;
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// A wrapper for `Arc<Bytes>` that provides functionality for
-/// handling byte slices (`[u8]`).
-/// This type is designed to be used for immutable byte data that
-/// can be shared efficiently across threads.
+/// A reference-counted, immutable byte buffer wrapper.
+///
+/// `ArcBytes` encapsulates `Arc<Bytes>`, allowing efficient cloning and
+/// sharing of binary data without unnecessary copying. It supports
+/// convenient conversions, UTF-8 interpretation, and basic slice operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArcBytes(Arc<Bytes>);
 

@@ -1,15 +1,21 @@
+//! QuickList is a segmented list structure optimized for front/back operations
+//! and adaptive memory layout.
+//!
+//! It maintains a vector of `VecDeque<T>` segments to allow efficient
+//! `push_front`, `push_back`, `pop_front`, and `pop_back` operations.
+//!
+//! Each segment has a maximum size (`max_segment_size`) to reduce reallocation
+//! overhead and fragmentation. When segments grow too large or too sparse,
+//! the list can be rebalanced via `optimize()` or `auto_optimize()`.
+//!
+//! QuickList is well-suited for workloads with frequent additions/removals
+//! on both ends and occasional random access.
+
 use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-/// A segmented list with efficient front and back operations.
-///
-/// `QuickList` stores items in a vector of `VecDeque` segments,
-/// allowing for efficient insertions/removals at both ends and
-/// moderate random access.
-///
-/// The list automatically optimizes its segments when needed,
-/// balancing between performance and memory usage.
+/// A segmented list structure with bounded segments and optimized access.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct QuickList<T> {
     /// Segments of the list; each is a `VecDeque` with limited size.
