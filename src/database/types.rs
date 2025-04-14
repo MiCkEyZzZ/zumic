@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{arcbytes::ArcBytes, quicklist::QuickList};
+use super::{arcbytes::ArcBytes, quicklist::QuickList, SmartHash};
 
 /// Represents a generic value in the storage engine.
 ///
@@ -24,8 +24,9 @@ pub enum Value {
     /// List of binary strings using a quicklist representation.
     List(QuickList<ArcBytes>),
     /// Hash map (dictionary) from binary keys to binary values.
-    Hash(HashMap<ArcBytes, ArcBytes>),
-    // Hash(SmartHash),
+    // Hash(HashMap<ArcBytes, ArcBytes>),
+    /// Hash map (dictionary) from binary keys to binary values.
+    Hash(SmartHash),
     /// Sorted set implementation with score-based ordering.
     ///
     /// `dict` maps each member to its score,

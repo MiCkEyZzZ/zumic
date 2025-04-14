@@ -6,5 +6,5 @@ pub mod types;
 
 pub use arcbytes::ArcBytes;
 pub use quicklist::QuickList;
-pub use smart_hash::*;
+pub use smart_hash::SmartHash;
 pub use types::Value;

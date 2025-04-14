@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use crate::{
-    database::{arcbytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arcbytes::ArcBytes, quicklist::QuickList, types::Value, SmartHash},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -22,16 +20,16 @@ impl CommandExecute for HSetCommand {
         let value = ArcBytes::from_str(&self.value);
 
         match store.get(key.clone())? {
-            Some(Value::Hash(mut hash)) => {
-                hash.insert(field.clone(), value.clone());
-                store.set(key, Value::Hash(hash))?;
+            Some(Value::Hash(mut smart_hash)) => {
+                smart_hash.hset(field.clone(), value.clone());
+                store.set(key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                let mut hash = HashMap::new();
-                hash.insert(field.clone(), value.clone());
-                store.set(key, Value::Hash(hash))?;
+                let mut smart_hash = SmartHash::new();
+                smart_hash.hset(field.clone(), value.clone());
+                store.set(key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
         }
@@ -49,10 +47,8 @@ impl CommandExecute for HGetCommand {
         let key = ArcBytes::from_str(&self.key);
         let field = ArcBytes::from_str(&self.field);
 
-        if let Some(Value::Hash(ref hash)) = store.get(key.clone())? {
-            if let Some(value) = hash.get(&field) {
-                // Directly return a clone of the ArcBytes stored in the hash.
-                // This avoids converting the bytes to a String and then back to ArcBytes.
+        if let Some(Value::Hash(ref smart_hash)) = store.get(key.clone())? {
+            if let Some(value) = smart_hash.hget(&field) {
                 return Ok(Value::Str(value.clone()));
             } else {
                 return Ok(Value::Null);
@@ -73,10 +69,10 @@ impl CommandExecute for HDelCommand {
         let key = ArcBytes::from_str(&self.key);
         let field = ArcBytes::from_str(&self.field);
 
-        if let Some(Value::Hash(mut hash)) = store.get(key.clone())? {
-            let removed = hash.remove(&field);
-            if removed.is_some() {
-                store.set(key, Value::Hash(hash))?;
+        if let Some(Value::Hash(mut smart_hash)) = store.get(key.clone())? {
+            let removed = smart_hash.hdel(&field);
+            if removed {
+                store.set(key, Value::Hash(smart_hash))?;
                 return Ok(Value::Int(1));
             }
             return Ok(Value::Int(0));
@@ -94,12 +90,9 @@ impl CommandExecute for HGetAllCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
 
-        if let Some(Value::Hash(ref hash)) = store.get(key)? {
-            // Create a QuickList from the hash entries.
-            // Each element is an ArcBytes wrapping a string formatted as "field: value".
+        if let Some(Value::Hash(ref smart_hash)) = store.get(key)? {
             let result: QuickList<ArcBytes> = QuickList::from_iter(
-                hash.iter().map(|(k, v)| {
-                    // Format the field and value using from_utf8_lossy (which handles any invalid UTF-8 gracefully)
+                smart_hash.iter().map(|(k, v)| {
                     ArcBytes::from(format!(
                         "{}: {}",
                         String::from_utf8_lossy(k),
