@@ -20,6 +20,7 @@
   - Добавлены три новых метода для типа `SmartHash` следующие: `new`, `hset`, `hget`, `hdel`.
   - Добавлены тесты для типа `SmartHash` его методов: `new`, `hset`, `hget`, `hdel`.
   - Добавил дополнительные методы для типа `SkipList`: `contains`, `is_empty`, `clear`, `front`, `back`.
+  - Добавл тксты для всех методов `SkipList`.
 - **Бренчмарки**:
   - Добавлены бренчмарки для следующих комманд: `basic`, `float`, `int`, `string`, `hash`, `set`, `list`, `zset`.
 

@@ -247,6 +247,7 @@ where
     }
     pub fn front(&self) -> Option<(&K, &V)> {
         unsafe {
+            // Если список пуст, сразу возвращаем None
             self.head.forward[0].map(|node_ptr| {
                 let node = node_ptr.as_ref();
                 (&node.key, &node.value)
@@ -256,16 +257,19 @@ where
     pub fn back(&self) -> Option<(&K, &V)> {
         unsafe {
             let mut current = &*self.head;
-            for i in (0..self.level).rev() {
-                while let Some(next) = current.forward[i] {
-                    let next_ref = next.as_ref();
-                    if next_ref.forward[i].is_none() {
-                        return Some((&next_ref.key, &next_ref.value));
+            loop {
+                match current.forward[0] {
+                    Some(next_ptr) => {
+                        current = next_ptr.as_ref();
                     }
-                    current = next_ref;
+                    None => break,
                 }
             }
-            None
+            if std::ptr::eq(current, &*self.head) {
+                None
+            } else {
+                Some((&current.key, &current.value))
+            }
         }
     }
 }
@@ -327,5 +331,103 @@ impl<K, V> Drop for SkipList<K, V> {
         unsafe {
             self.clear_raw();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_insert_and_search() {
+        let mut list = SkipList::new();
+        list.insert(1, "a");
+        list.insert(3, "c");
+        list.insert(2, "b");
+
+        assert_eq!(list.search(&1), Some(&"a"));
+        assert_eq!(list.search(&2), Some(&"b"));
+        assert_eq!(list.search(&3), Some(&"c"));
+        assert_eq!(list.search(&4), None);
+    }
+
+    #[test]
+    fn test_insert_overwrite() {
+        let mut list = SkipList::new();
+        list.insert(42, "first");
+        assert_eq!(list.search(&42), Some(&"first"));
+        list.insert(42, "second");
+        assert_eq!(list.search(&42), Some(&"second"));
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut list = SkipList::new();
+        list.insert(10, "x");
+        list.insert(20, "y");
+        assert_eq!(list.remove(&10), Some("x"));
+        assert_eq!(list.search(&10), None);
+        assert_eq!(list.remove(&10), None);
+        assert_eq!(list.remove(&20), Some("y"));
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_len_and_is_empty() {
+        let mut list = SkipList::new();
+        assert!(list.is_empty());
+        list.insert(1, "a");
+        list.insert(2, "b");
+        assert_eq!(list.len(), 2);
+        list.remove(&1);
+        assert_eq!(list.len(), 1);
+        list.clear();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_iter_order() {
+        let mut list = SkipList::new();
+        list.insert(3, "c");
+        list.insert(1, "a");
+        list.insert(2, "b");
+
+        let items: Vec<_> = list.iter().map(|(k, v)| (*k, *v)).collect();
+        assert_eq!(items, vec![(1, "a"), (2, "b"), (3, "c")]);
+    }
+
+    #[test]
+    fn test_front_and_back() {
+        let mut list = SkipList::new();
+        assert_eq!(list.front(), None);
+        assert_eq!(list.back(), None);
+
+        list.insert(10, "x");
+        list.insert(5, "y");
+        list.insert(30, "z");
+
+        assert_eq!(list.front(), Some((&5, &"y")));
+        assert_eq!(list.back(), Some((&30, &"z")));
+    }
+
+    #[test]
+    fn test_search_mut() {
+        let mut list = SkipList::new();
+        list.insert(7, "a");
+        if let Some(v) = list.search_mut(&7) {
+            *v = "b";
+        }
+        assert_eq!(list.search(&7), Some(&"b"));
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut list = SkipList::new();
+        list.insert(1, "one");
+        list.insert(2, "two");
+        list.clear();
+        assert!(list.is_empty());
+        assert_eq!(list.search(&1), None);
+        assert_eq!(list.search(&2), None);
     }
 }
