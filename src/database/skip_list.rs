@@ -354,6 +354,25 @@ where
     }
 }
 
+impl<K, V> Drop for SkipList<K, V> {
+    fn drop(&mut self) {
+        // Безопасно обходим, начиная с первого элемента.
+        unsafe {
+            let mut current = self.head.forward[0];
+            while let Some(node_ptr) = current {
+                // Переходим к следующему узлу до освобождения текущего
+                current = node_ptr.as_ref().forward[0];
+                // Восстанавливать владение над узлом и освобождаем его память
+                drop(Box::from_raw(node_ptr.as_ptr()));
+            }
+            // В качестве меры на всякий случай очищаем все ссылки в head.
+            for slot in self.head.forward.iter_mut() {
+                *slot = None;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
