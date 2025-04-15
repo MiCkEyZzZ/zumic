@@ -19,6 +19,7 @@
   - Добавлены три новых метода для типа `ArcBytes` следующие: `expect_utf8`, `make_mut`, `try_unwrap`.
   - Добавлены три новых метода для типа `SmartHash` следующие: `new`, `hset`, `hget`, `hdel`.
   - Добавлены тесты для типа `SmartHash` его методов: `new`, `hset`, `hget`, `hdel`.
+  - Добавил дополнительные методы для типа `SkipList`: `contains`, `is_empty`, `clear`, `front`, `back`.
 - **Бренчмарки**:
   - Добавлены бренчмарки для следующих комманд: `basic`, `float`, `int`, `string`, `hash`, `set`, `list`, `zset`.
 

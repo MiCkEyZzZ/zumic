@@ -222,6 +222,52 @@ where
             _marker: std::marker::PhantomData,
         }
     }
+    /// Проверяет, содержится ли ключ в списке.
+    pub fn contains(&self, key: &K) -> bool {
+        self.search(key).is_some()
+    }
+    /// Проверяет на пустоту.
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+    /// Удаляет все элементы из списка
+    pub fn clear(&mut self) {
+        unsafe {
+            let mut current = self.head.forward[0];
+            while let Some(node_ptr) = current {
+                current = node_ptr.as_ref().forward[0];
+                drop(Box::from_raw(node_ptr.as_ptr()));
+            }
+            for slot in &mut self.head.forward {
+                *slot = None;
+            }
+            self.level = 1;
+            self.length = 0;
+        }
+    }
+    pub fn front(&self) -> Option<(&K, &V)> {
+        unsafe {
+            self.head.forward[0].map(|node_ptr| {
+                let node = node_ptr.as_ref();
+                (&node.key, &node.value)
+            })
+        }
+    }
+    pub fn back(&self) -> Option<(&K, &V)> {
+        unsafe {
+            let mut current = &*self.head;
+            for i in (0..self.level).rev() {
+                while let Some(next) = current.forward[i] {
+                    let next_ref = next.as_ref();
+                    if next_ref.forward[i].is_none() {
+                        return Some((&next_ref.key, &next_ref.value));
+                    }
+                    current = next_ref;
+                }
+            }
+            None
+        }
+    }
 }
 
 impl<K, V> Default for SkipList<K, V>
@@ -261,20 +307,25 @@ impl<'a, K, V> Iterator for SkipListIter<'a, K, V> {
     }
 }
 
-impl<K, V> Drop for SkipList<K, V> {
-    fn drop(&mut self) {
-        unsafe {
-            let mut current = self.head.forward[0];
-            while let Some(node_ptr) = current {
-                current = node_ptr.as_ref().forward[0];
-                drop(Box::from_raw(node_ptr.as_ptr()));
-            }
+impl<K, V> SkipList<K, V> {
+    unsafe fn clear_raw(&mut self) {
+        let mut current = self.head.forward[0];
+        while let Some(node_ptr) = current {
+            current = node_ptr.as_ref().forward[0];
+            drop(Box::from_raw(node_ptr.as_ptr()));
         }
-        // Сбрасываем указатели head
         for slot in &mut self.head.forward {
             *slot = None;
         }
         self.level = 1;
         self.length = 0;
+    }
+}
+
+impl<K, V> Drop for SkipList<K, V> {
+    fn drop(&mut self) {
+        unsafe {
+            self.clear_raw();
+        }
     }
 }
