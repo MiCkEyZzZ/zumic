@@ -93,6 +93,7 @@ mod tests {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
+    /// Tests that `StrLenCommand` returns the correct length for an existing string key.
     #[test]
     fn test_str_len_command_existing_key() {
         let mut store = create_store();
@@ -111,6 +112,7 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
+    /// Tests that `AppendCommand` returns an error when attempting to append to a key of an invalid type.
     #[test]
     fn test_append_command_invalid_type() {
         let mut store = create_store();
@@ -126,6 +128,7 @@ mod tests {
         assert!(matches!(result, Err(StoreError::InvalidType)));
     }
 
+    /// Tests that `AppendCommand` correctly handles appending an empty string, resulting in length 0.
     #[test]
     fn test_append_empty_string() {
         let mut store = create_store();
@@ -136,6 +139,7 @@ mod tests {
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
     }
 
+    /// Tests that `StrLenCommand` returns 0 for a non-existing key.
     #[test]
     fn test_str_len_command_non_existing_key() {
         let mut store = create_store();
@@ -147,6 +151,7 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
+    /// Tests that `AppendCommand` correctly appends data to an existing string key.
     #[test]
     fn test_append_command_existing_key() {
         let mut store = create_store();
@@ -167,6 +172,7 @@ mod tests {
         assert_eq!(result, Value::Int(11));
     }
 
+    /// Tests that `AppendCommand` correctly creates a new key when appending to a non-existing key.
     #[test]
     fn test_append_command_non_existing_key() {
         let mut store = create_store();
@@ -180,6 +186,7 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
+    /// Tests that `GetRangeCommand` correctly returns a substring of the stored value.
     #[test]
     fn test_get_range_command_existing_key() {
         let mut store = create_store();
@@ -201,6 +208,7 @@ mod tests {
         assert_eq!(result, Value::Str(ArcBytes::from_str("hello")));
     }
 
+    /// Tests that `GetRangeCommand` returns `Null` when the key does not exist.
     #[test]
     fn test_get_range_command_non_existing_key() {
         let mut store = create_store();
@@ -215,6 +223,7 @@ mod tests {
         assert_eq!(result, Value::Null);
     }
 
+    /// Tests that `GetRangeCommand` returns an error when the key's value is of an invalid type.
     #[test]
     fn test_get_range_command_invalid_type() {
         let mut store = create_store();

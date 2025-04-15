@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{arcbytes::ArcBytes, quicklist::QuickList, SmartHash};
+use super::{ArcBytes, QuickList, SmartHash};
 
 /// Represents a generic value in the storage engine.
 ///

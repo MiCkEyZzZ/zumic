@@ -1,5 +1,5 @@
 use crate::{
-    database::{arcbytes::ArcBytes, types::Value},
+    database::{ArcBytes, Value},
     error::StoreResult,
 };
 

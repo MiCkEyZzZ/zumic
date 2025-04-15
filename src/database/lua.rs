@@ -1,6 +1,6 @@
 use mlua::{UserData, UserDataMethods};
 
-use super::arcbytes::ArcBytes;
+use super::ArcBytes;
 
 impl UserData for ArcBytes {
     fn add_methods<T: UserDataMethods<Self>>(methods: &mut T) {
