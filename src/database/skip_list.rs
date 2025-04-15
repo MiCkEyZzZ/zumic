@@ -1,4 +1,5 @@
 use rand::Rng;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt::Debug, ptr::NonNull};
 
 /// Максимальный уровень пропускного списка.
@@ -8,9 +9,10 @@ const MAX_LEVEL: usize = 16; // В дальнейшем этот парамет�
 const P: f64 = 0.5;
 
 /// Узел пропускного списка.
-/// Каждый узел хранит ключ, занчение и вектор указателей на следующие узлы
+/// Каждый узел хранит ключ, значение и вектор указателей на следующие узлы
 /// на каждом уровне. Поле forward указывает на следующий узел (или None,если
 /// нет дальнейших узлов).
+#[derive(Debug, PartialEq, Clone)]
 pub struct Node<K, V> {
     pub key: K,
     pub value: V,
@@ -18,6 +20,7 @@ pub struct Node<K, V> {
 }
 
 /// SkipList - структура, содержащая Head-узла и текущий уровень.
+#[derive(Debug, PartialEq, Clone)]
 pub struct SkipList<K, V> {
     /// Head пропускного списка. Head не содержит полезных данных, служит только для связей.
     head: Box<Node<K, V>>,
@@ -222,6 +225,14 @@ where
             _marker: std::marker::PhantomData,
         }
     }
+    // Новый метод, позволяющий получить итератор в обратном порядке
+    pub fn iter_rev(&self) -> impl DoubleEndedIterator<Item = (&K, &V)> {
+        // Собираем все элементы в вектор
+        let mut items: Vec<(&K, &V)> = self.iter().collect();
+        // Возвращаем итератор по вектору в обратном порядке
+        items.reverse();
+        items.into_iter()
+    }
     /// Проверяет, содержится ли ключ в списке.
     pub fn contains(&self, key: &K) -> bool {
         self.search(key).is_some()
@@ -311,26 +322,35 @@ impl<'a, K, V> Iterator for SkipListIter<'a, K, V> {
     }
 }
 
-impl<K, V> SkipList<K, V> {
-    unsafe fn clear_raw(&mut self) {
-        let mut current = self.head.forward[0];
-        while let Some(node_ptr) = current {
-            current = node_ptr.as_ref().forward[0];
-            drop(Box::from_raw(node_ptr.as_ptr()));
-        }
-        for slot in &mut self.head.forward {
-            *slot = None;
-        }
-        self.level = 1;
-        self.length = 0;
+impl<K, V> Serialize for SkipList<K, V>
+where
+    K: Serialize + Ord + Clone + Default + std::fmt::Debug,
+    V: Serialize + Clone + Default + std::fmt::Debug,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let vec: Vec<(K, V)> = self.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        vec.serialize(serializer)
     }
 }
 
-impl<K, V> Drop for SkipList<K, V> {
-    fn drop(&mut self) {
-        unsafe {
-            self.clear_raw();
+impl<'de, K, V> Deserialize<'de> for SkipList<K, V>
+where
+    K: Deserialize<'de> + Ord + Clone + Default + Debug,
+    V: Deserialize<'de> + Clone + Default + Debug,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec: Vec<(K, V)> = Vec::deserialize(deserializer)?;
+        let mut list = SkipList::new();
+        for (k, v) in vec {
+            list.insert(k, v);
         }
+        Ok(list)
     }
 }
 

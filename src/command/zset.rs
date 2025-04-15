@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 
 use ordered_float::OrderedFloat;
 
 use crate::{
-    database::{arcbytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arcbytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -26,35 +26,22 @@ impl CommandExecute for ZAddCommand {
         let (mut dict, mut sorted) = match store.get(key.clone())? {
             Some(Value::ZSet { dict, sorted }) => (dict, sorted),
             Some(_) => return Err(StoreError::InvalidType),
-            None => (HashMap::new(), BTreeMap::new()),
+            None => (HashMap::new(), SkipList::new()),
         };
 
-        // Проверяем, был ли новый элемент
-        let is_new = dict.insert(member.clone(), self.score).is_none();
+        // Вставляем новый score, возвращая старое значение, если оно было
+        let previous = dict.insert(member.clone(), self.score);
+        let is_new = previous.is_none();
 
-        // Если элемент уже был, удаляем его из старого бина
-        if !is_new {
-            let old = OrderedFloat(self.score);
-            // По идее старый score мы должны взять до вставки, но здесь для простоты
-            // удаляем всё, что попало под тот же f64. Сначала реализуем для простоты
-            // чтобы запустить и было более или мнее надёжно, а после когда будем делать
-            // оптимизацию то будем смотреть где узкие места и скорее всего будем что-то
-            // менять.
-            if let Some(bucket) = sorted.get_mut(&old) {
-                bucket.remove(&member);
-                if bucket.is_empty() {
-                    sorted.remove(&old);
-                }
-            }
+        // Если член уже присутствовал, удаляем старую запись в skiplist с его старым score.
+        if let Some(old_score) = previous {
+            sorted.remove(&OrderedFloat(old_score));
         }
 
-        // Вставляем в новый bucket
-        sorted
-            .entry(OrderedFloat(self.score))
-            .or_insert_with(HashSet::new)
-            .insert(member.clone());
+        // Вставляем новую запись: ключом является OrderedFloat(score), а значением — member.
+        sorted.insert(OrderedFloat(self.score), member.clone());
 
-        // Сохраняем обратно
+        // Сохраняем обратно обновлённый ZSet
         store.set(key, Value::ZSet { dict, sorted })?;
         Ok(Value::Int(if is_new { 1 } else { 0 }))
     }
@@ -71,31 +58,19 @@ impl CommandExecute for ZRemCommand {
         let key = ArcBytes::from_str(&self.key);
         let member = ArcBytes::from_str(&self.member);
 
-        // Извлекаем существующий ZSet
         if let Some(Value::ZSet { dict, sorted }) = store.get(key.clone())? {
             let mut dict = dict;
             let mut sorted = sorted;
-            let removed = dict.remove(&member).is_some();
-            if removed {
-                // Удаляем из sorted
-                // Ищем тот bucket, где member мог быть
-                let mut to_remove = None;
-                for (score, bucket) in &mut sorted {
-                    if bucket.remove(&member) {
-                        if bucket.is_empty() {
-                            to_remove = Some(*score);
-                        }
-                        break;
-                    }
-                }
-                if let Some(score) = to_remove {
-                    sorted.remove(&score);
-                }
+            if let Some(old_score) = dict.remove(&member) {
+                // Удаляем из skiplist по score
+                sorted.remove(&OrderedFloat(old_score));
                 store.set(key, Value::ZSet { dict, sorted })?;
+                return Ok(Value::Int(1));
             }
-            return Ok(Value::Int(removed as i64));
+            // Элемент не найден
+            return Ok(Value::Int(0));
         }
-        // Нет такого ключа или не ZSet
+        // Нет такого ключа или тип не соответствует
         Ok(Value::Int(0))
     }
 }
@@ -154,14 +129,8 @@ impl CommandExecute for ZRangeCommand {
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
-                // Собираем все members в порядке возрастания
-                let mut all: Vec<ArcBytes> = Vec::new();
-                for bucket in sorted.values() {
-                    for member in bucket {
-                        all.push(member.clone());
-                    }
-                }
-                // Переводим start/stop в индексы
+                // Собираем членов в порядке возрастания score
+                let all: Vec<ArcBytes> = sorted.iter().map(|(_, member)| member.clone()).collect();
                 let len = all.len() as i64;
                 let s = if self.start < 0 {
                     (len + self.start).max(0)
@@ -200,13 +169,11 @@ impl CommandExecute for ZRevRangeCommand {
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
-                // Собираем в обратном порядке
-                let mut all: Vec<ArcBytes> = Vec::new();
-                for bucket in sorted.values().rev() {
-                    for member in bucket {
-                        all.push(member.clone());
-                    }
-                }
+                // Собираем членов в обратном порядке по score
+                let all: Vec<ArcBytes> = sorted
+                    .iter_rev()
+                    .map(|(_, member)| member.clone())
+                    .collect();
                 let len = all.len() as i64;
                 let s = if self.start < 0 {
                     (len + self.start).max(0)

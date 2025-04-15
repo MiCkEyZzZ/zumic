@@ -69,9 +69,9 @@ fn value_to_frame(value: Value) -> ZSPFrame {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::HashSet;
 
-    use crate::database::{ArcBytes, QuickList};
+    use crate::database::{skip_list::SkipList, ArcBytes, QuickList};
 
     use super::*;
 
@@ -177,16 +177,12 @@ mod tests {
     #[test]
     fn test_serialize_zset() {
         let mut dict = HashMap::new();
-        let mut sorted = BTreeMap::new();
+        let mut sorted = SkipList::new();
 
         let key = ArcBytes::from_str("one");
         let score = 1.0;
         dict.insert(key.clone(), score);
-        sorted.insert(ordered_float::OrderedFloat(score), {
-            let mut set = HashSet::new();
-            set.insert(key.clone());
-            set
-        });
+        sorted.insert(ordered_float::OrderedFloat(score), ArcBytes::from(key));
 
         let value = Value::ZSet { dict, sorted };
         let frame = serialize_response(Response::Value(value));

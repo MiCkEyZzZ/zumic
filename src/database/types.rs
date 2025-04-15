@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{ArcBytes, QuickList, SmartHash};
+use super::{skip_list::SkipList, ArcBytes, QuickList, SmartHash};
 
 /// Represents a generic value in the storage engine.
 ///
@@ -32,7 +32,7 @@ pub enum Value {
     /// members.
     ZSet {
         dict: HashMap<ArcBytes, f64>,
-        sorted: BTreeMap<OrderedFloat<f64>, HashSet<ArcBytes>>,
+        sorted: SkipList<OrderedFloat<f64>, ArcBytes>,
     },
     /// Set of unique string elements.
     Set(HashSet<String>),

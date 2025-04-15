@@ -5,7 +5,7 @@ use crate::{
 
 /// The `Storage` trait defines the interface for key-value storage backends.
 /// All methods are fallible and return a `StoreResult`.
-pub trait Storage: Send + Sync {
+pub trait Storage {
     /// Sets the value for the given key. Overwrites existing values.
     fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()>;
 

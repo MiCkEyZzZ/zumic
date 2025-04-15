@@ -31,6 +31,7 @@ impl Storage for InMemoryStore {
         self.data.insert(key, value);
         Ok(())
     }
+
     fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
         Ok(self.data.get(&key).map(|entry| entry.clone()))
     }
