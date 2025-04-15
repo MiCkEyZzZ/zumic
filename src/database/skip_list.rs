@@ -338,6 +338,7 @@ impl<K, V> Drop for SkipList<K, V> {
 mod tests {
     use super::*;
 
+    // Test that inserting and searching work correctly for various keys and values.
     #[test]
     fn test_insert_and_search() {
         let mut list = SkipList::new();
@@ -351,6 +352,7 @@ mod tests {
         assert_eq!(list.search(&4), None);
     }
 
+    // Test that inserting the same key twice updates the value.
     #[test]
     fn test_insert_overwrite() {
         let mut list = SkipList::new();
@@ -360,6 +362,7 @@ mod tests {
         assert_eq!(list.search(&42), Some(&"second"));
     }
 
+    // Test that removing a key works and updates the list correctly.
     #[test]
     fn test_remove() {
         let mut list = SkipList::new();
@@ -372,6 +375,7 @@ mod tests {
         assert!(list.is_empty());
     }
 
+    // Test that the length and empty checks are correct.
     #[test]
     fn test_len_and_is_empty() {
         let mut list = SkipList::new();
@@ -385,6 +389,7 @@ mod tests {
         assert!(list.is_empty());
     }
 
+    // Test that iterating over the list returns elements in ascending key order.
     #[test]
     fn test_iter_order() {
         let mut list = SkipList::new();
@@ -396,6 +401,7 @@ mod tests {
         assert_eq!(items, vec![(1, "a"), (2, "b"), (3, "c")]);
     }
 
+    // Test that front and back methods return the first and last elements correctly.
     #[test]
     fn test_front_and_back() {
         let mut list = SkipList::new();
@@ -410,6 +416,7 @@ mod tests {
         assert_eq!(list.back(), Some((&30, &"z")));
     }
 
+    // Test that search_mut allows updating values correctly.
     #[test]
     fn test_search_mut() {
         let mut list = SkipList::new();
@@ -420,6 +427,7 @@ mod tests {
         assert_eq!(list.search(&7), Some(&"b"));
     }
 
+    // Test that the clear method removes all elements from the list.
     #[test]
     fn test_clear() {
         let mut list = SkipList::new();
