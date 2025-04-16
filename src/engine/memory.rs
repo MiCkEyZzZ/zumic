@@ -8,6 +8,8 @@ use crate::{
     error::{StoreError, StoreResult},
 };
 
+/// `InMemoryStore` — потокобезопасное хранилище ключей и значений
+/// с использованием `DashMap` и `Arc`.
 pub struct InMemoryStore {
     pub data: Arc<DashMap<ArcBytes, Value>>,
 }
@@ -17,12 +19,6 @@ impl InMemoryStore {
         Self {
             data: Arc::new(DashMap::new()),
         }
-    }
-}
-
-impl Default for InMemoryStore {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -77,6 +73,12 @@ impl Storage for InMemoryStore {
     fn flushdb(&mut self) -> StoreResult<()> {
         self.data.clear();
         Ok(())
+    }
+}
+
+impl Default for InMemoryStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

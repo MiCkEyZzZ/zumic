@@ -5,16 +5,14 @@ use config::{Config, ConfigError, Environment};
 #[derive(Debug, Clone)]
 pub enum StorageType {
     Memory,
-    Persistent,
-    Clustered,
 }
 
 /// Storage Configuration.
 pub struct StorageConfig {
     pub storage_type: StorageType,
-    pub storage_path: Option<String>,       // For file storage
-    pub cache_size: Option<usize>,          // LRU cache size
-    pub balancing_strategy: Option<String>, // Balancing strategy
+    // pub storage_path: Option<String>,       // For file storage
+    // pub cache_size: Option<usize>,          // LRU cache size
+    // pub balancing_strategy: Option<String>, // Balancing strategy
 }
 
 #[derive(Debug, Serialize, Deserialize)]

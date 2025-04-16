@@ -16,7 +16,8 @@ const P: f64 = 0.5;
 pub struct Node<K, V> {
     pub key: K,
     pub value: V,
-    pub forward: Vec<Option<NonNull<Node<K, V>>>>, // Для каждого уровня хранится указатель на следующий узел.
+    /// Вектор указателей на следующий узел на каждом уровне.
+    pub forward: Vec<Option<NonNull<Node<K, V>>>>,
 }
 
 /// SkipList - структура, содержащая Head-узла и текущий уровень.
@@ -33,6 +34,13 @@ pub struct SkipList<K, V> {
 /// Итератор для SkipList по нижнему уровню.
 pub struct SkipListIter<'a, K, V> {
     current: Option<NonNull<Node<K, V>>>,
+    _marker: std::marker::PhantomData<&'a Node<K, V>>,
+}
+
+/// Итератор по диапазону в SkipList.
+pub struct RangeIter<'a, K, V> {
+    current: Option<NonNull<Node<K, V>>>,
+    end: Option<K>, // Логический конец диапазона
     _marker: std::marker::PhantomData<&'a Node<K, V>>,
 }
 
@@ -71,65 +79,60 @@ where
         }
         lvl
     }
+
+    /// Поиск узлов, после которых нужно вставить новый узел, для каждого уровня.
+    /// Инкапсулирует unsafe-логику обхода по уровню.
+    unsafe fn find_update(&self, key: &K) -> Vec<*mut Node<K, V>> {
+        let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
+        let mut current = self.head.as_ref() as *const Node<K, V> as *mut Node<K, V>;
+        for i in (0..self.level).rev() {
+            while let Some(next) = (*current).forward[i] {
+                if (*next.as_ptr()).key < *key {
+                    current = next.as_ptr();
+                } else {
+                    break;
+                }
+            }
+            update[i] = current;
+            debug_assert!(!update[i].is_null(), "update[{}] must not be null", i);
+        }
+        update
+    }
+
     /// Вставляет ключ и значение в пропускной список.
     /// Если ключ уже существует, обновляет значение.
     pub fn insert(&mut self, key: K, value: V) {
-        let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
-        let mut current = &mut *self.head as *mut Node<K, V>;
-
         unsafe {
-            // Поиск места вставки – идём по уровням начиная с наивысшего.
-            for i in (0..self.level).rev() {
-                while let Some(next) = (*current).forward[i] {
-                    if next.as_ref().key < key {
-                        current = next.as_ptr();
-                    } else {
-                        break;
-                    }
-                }
-                update[i] = current;
-                debug_assert!(!update[i].is_null(), "update[{}] must not be null", i);
-            }
-
-            // Проверяем существует ли ключ на уровне 0
-            if let Some(node_ptr) = (*current).forward[0] {
-                let node = node_ptr.as_ref();
-                if node.key == key {
-                    // Обновляем существуещее значение.
-                    (node_ptr.as_ptr() as *mut Node<K, V>)
-                        .as_mut()
-                        .unwrap()
-                        .value = value;
+            let mut update = self.find_update(&key);
+            // Проверяем, существует ли ключ в первом уровне.
+            if let Some(node_ptr) = (*update[0]).forward[0] {
+                if (*node_ptr.as_ptr()).key == key {
+                    // Обновляем значение и выходим.
+                    (*node_ptr.as_ptr()).value = value;
                     return;
                 }
             }
-
-            // Иначе создаём новый узел
             let new_level = Self::random_level();
             if new_level > self.level {
                 for i in self.level..new_level {
-                    update[i] = &mut *self.head;
+                    update[i] = self.head.as_mut();
                 }
                 self.level = new_level;
             }
-
-            // Создаем новый узел.
             let new_node = Node::new(key, value, new_level);
             let new_node_ptr = NonNull::new(Box::into_raw(new_node)).unwrap();
-
-            // Обновляем forward-ссылки.
             for i in 0..new_level {
                 let prev = update[i];
-                let prev_ref = &mut *prev;
-                (*new_node_ptr.as_ptr()).forward[i] = prev_ref.forward[i];
-                prev_ref.forward[i] = Some(new_node_ptr);
+                (*new_node_ptr.as_ptr()).forward[i] = (*prev).forward[i];
+                (*prev).forward[i] = Some(new_node_ptr);
             }
             self.length += 1;
         }
     }
+
     /// Ищет узел с заданным ключом и возвращает ссылку на значение, если найден.
     pub fn search(&self, key: &K) -> Option<&V> {
-        let mut current = &*self.head;
+        let mut current = self.head.as_ref();
         unsafe {
             for i in (0..self.level).rev() {
                 while let Some(next) = current.forward[i] {
@@ -150,20 +153,12 @@ where
         }
         None
     }
+
     /// Ищет ключ и возвращает изменяемую ссылку на его значение, если он найден.
     pub fn search_mut(&mut self, key: &K) -> Option<&mut V> {
-        let mut current = &mut *self.head as *mut Node<K, V>;
         unsafe {
-            for i in (0..self.level).rev() {
-                while let Some(next) = (*current).forward[i] {
-                    if next.as_ref().key < *key {
-                        current = next.as_ptr();
-                    } else {
-                        break;
-                    }
-                }
-            }
-            if let Some(node_ptr) = (*current).forward[0] {
+            let update = self.find_update(key);
+            if let Some(node_ptr) = (*update[0]).forward[0] {
                 let node_ref = node_ptr.as_ptr();
                 if (*node_ref).key == *key {
                     return Some(&mut (*node_ref).value);
@@ -172,25 +167,14 @@ where
         }
         None
     }
+
     /// Удаляет узел с заданным ключом.
     /// Возвращает значение удаленного узла, если он был найден.
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
-        let mut current = &mut *self.head as *mut Node<K, V>;
-
         unsafe {
-            for i in (0..self.level).rev() {
-                while let Some(next) = (*current).forward[i] {
-                    if next.as_ref().key < *key {
-                        current = next.as_ptr();
-                    } else {
-                        break;
-                    }
-                }
-                update[i] = current;
-            }
+            let mut update = self.find_update(key);
 
-            if let Some(node_ptr) = (*current).forward[0] {
+            if let Some(node_ptr) = (*update[0]).forward[0] {
                 let node_ref = node_ptr.as_ref();
                 if &node_ref.key == key {
                     // Сохраняем значение для возврата.
@@ -214,10 +198,12 @@ where
         }
         None
     }
+
     /// Возвращает текущее число элементов в списке.
     pub fn len(&self) -> usize {
         self.length
     }
+
     /// Возвращает итератор по (&K, &V) в порядке возрастания ключа.
     pub fn iter(&self) -> SkipListIter<K, V> {
         SkipListIter {
@@ -225,7 +211,32 @@ where
             _marker: std::marker::PhantomData,
         }
     }
-    // Новый метод, позволяющий получить итератор в обратном порядке
+
+    /// Создаёт итератор по диапазону: от ключа `start` до ключа `end` (не включая end).
+    pub fn range(&self, start: &K, end: &K) -> RangeIter<K, V> {
+        unsafe {
+            let mut current = self.head.as_ref();
+            // Найдём первый узел с ключом >= start.
+            for i in (0..self.level).rev() {
+                while let Some(next) = current.forward[i] {
+                    let next_ref = next.as_ref();
+                    if &next_ref.key < start {
+                        current = next_ref;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            let start_ptr = current.forward[0]; // Первый узел, который может быть >= start
+            RangeIter {
+                current: start_ptr,
+                end: Some(end.clone()),
+                _marker: std::marker::PhantomData,
+            }
+        }
+    }
+
+    /// Новый метод, позволяющий получить итератор в обратном порядке
     pub fn iter_rev(&self) -> impl DoubleEndedIterator<Item = (&K, &V)> {
         // Собираем все элементы в вектор
         let mut items: Vec<(&K, &V)> = self.iter().collect();
@@ -233,14 +244,17 @@ where
         items.reverse();
         items.into_iter()
     }
+
     /// Проверяет, содержится ли ключ в списке.
     pub fn contains(&self, key: &K) -> bool {
         self.search(key).is_some()
     }
+
     /// Проверяет на пустоту.
     pub fn is_empty(&self) -> bool {
         self.length == 0
     }
+
     /// Удаляет все элементы из списка
     pub fn clear(&mut self) {
         unsafe {
@@ -256,7 +270,9 @@ where
             self.length = 0;
         }
     }
-    pub fn front(&self) -> Option<(&K, &V)> {
+
+    /// Возвращает первый элемент (минимальный ключ) списка.
+    pub fn first(&self) -> Option<(&K, &V)> {
         unsafe {
             // Если список пуст, сразу возвращаем None
             self.head.forward[0].map(|node_ptr| {
@@ -265,7 +281,9 @@ where
             })
         }
     }
-    pub fn back(&self) -> Option<(&K, &V)> {
+
+    /// Возвращает последний элемент (максимальный ключ) списка.
+    pub fn last(&self) -> Option<(&K, &V)> {
         unsafe {
             let mut current = &*self.head;
             loop {
@@ -318,6 +336,31 @@ impl<'a, K, V> Iterator for SkipListIter<'a, K, V> {
                 self.current = node.forward[0];
                 (&node.key, &node.value)
             })
+        }
+    }
+}
+
+impl<'a, K, V> Iterator for RangeIter<'a, K, V>
+where
+    K: Ord + Clone,
+    V: Clone,
+{
+    type Item = (&'a K, &'a V);
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            if let Some(node_ptr) = self.current {
+                let node = node_ptr.as_ref();
+                // Если установлен предел, прекращаем, когда ключ достигает его.
+                if let Some(ref end_key) = self.end {
+                    if &node.key >= end_key {
+                        return None;
+                    }
+                }
+                self.current = node.forward[0];
+                Some((&node.key, &node.value))
+            } else {
+                None
+            }
         }
     }
 }
@@ -442,17 +485,17 @@ mod tests {
 
     // Test that front and back methods return the first and last elements correctly.
     #[test]
-    fn test_front_and_back() {
+    fn test_first_and_last() {
         let mut list = SkipList::new();
-        assert_eq!(list.front(), None);
-        assert_eq!(list.back(), None);
+        assert_eq!(list.first(), None);
+        assert_eq!(list.last(), None);
 
         list.insert(10, "x");
         list.insert(5, "y");
         list.insert(30, "z");
 
-        assert_eq!(list.front(), Some((&5, &"y")));
-        assert_eq!(list.back(), Some((&30, &"z")));
+        assert_eq!(list.first(), Some((&5, &"y")));
+        assert_eq!(list.last(), Some((&30, &"z")));
     }
 
     // Test that search_mut allows updating values correctly.

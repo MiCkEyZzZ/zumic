@@ -17,6 +17,7 @@ pub enum ZSPFrame {
     ZSet(Vec<(String, f64)>),
     Null,
 }
+
 impl TryFrom<Value> for ZSPFrame {
     type Error = String;
 

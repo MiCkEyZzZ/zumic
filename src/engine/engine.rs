@@ -1,18 +1,14 @@
+use std::io::{self};
+
 use tracing::info;
 
 use crate::{
+    config::settings::{StorageConfig, StorageType},
     database::{arcbytes::ArcBytes, types::Value},
     error::StoreResult,
 };
 
 use super::{memory::InMemoryStore, storage::Storage};
-
-#[derive(Clone, Debug)]
-pub enum StorageType {
-    Memory,
-    Persistent,
-    Clustered,
-}
 
 pub enum StorageEngine {
     InMemory(InMemoryStore),
@@ -72,6 +68,24 @@ impl StorageEngine {
         info!("Flushing database");
         match self {
             StorageEngine::InMemory(store) => store.flushdb(),
+        }
+    }
+    /// Инициализирует движок хранения на основе переданной конфигурации.
+    pub fn initialize(config: &StorageConfig) -> io::Result<Self> {
+        match &config.storage_type {
+            StorageType::Memory => Ok(Self::InMemory(InMemoryStore::new())),
+        }
+    }
+
+    /// Получает ссылку на конкретное хранилище через общий трейт `Storage`
+    pub fn get_store(&self) -> &dyn Storage {
+        match self {
+            Self::InMemory(store) => store,
+        }
+    }
+    pub fn get_store_mut(&mut self) -> &mut dyn Storage {
+        match self {
+            Self::InMemory(store) => store,
         }
     }
 }
@@ -210,5 +224,54 @@ mod tests {
         // Trying to rename again should fail (key already exists)
         let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
         assert!(!result);
+    }
+
+    /// Tests that flushdb clears all data from storage.
+    #[test]
+    fn test_engine_flushdb() {
+        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        engine
+            .set(ArcBytes::from_str("a"), Value::Str(ArcBytes::from_str("x")))
+            .unwrap();
+        engine
+            .set(ArcBytes::from_str("b"), Value::Str(ArcBytes::from_str("y")))
+            .unwrap();
+
+        engine.flushdb().unwrap();
+
+        let a = engine.get(key("a")).unwrap();
+        let b = engine.get(key("b")).unwrap();
+        assert_eq!(a, None);
+        assert_eq!(b, None);
+    }
+
+    /// Tests initialization of engine from memory config.
+    #[test]
+    fn test_engine_initialize_memory() {
+        let config = StorageConfig {
+            storage_type: StorageType::Memory,
+        };
+
+        let engine = StorageEngine::initialize(&config);
+        assert!(engine.is_ok());
+    }
+
+    /// Tests that get_store returns a trait object we can use.
+    #[test]
+    fn test_engine_get_store() {
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let store = engine.get_store();
+        assert!(store.mget(&[]).is_ok());
+    }
+
+    /// Tests that get_store_mut returns mutable trait object we can use.
+    #[test]
+    fn test_engine_get_store_mut() {
+        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let store_mut = engine.get_store_mut();
+        assert!(store_mut.set(key("x"), Value::Int(42)).is_ok());
+
+        let got = store_mut.get(key("x")).unwrap();
+        assert_eq!(got, Some(Value::Int(42)));
     }
 }
