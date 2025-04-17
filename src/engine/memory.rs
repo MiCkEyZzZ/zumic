@@ -91,7 +91,7 @@ mod tests {
         ArcBytes::from(data.as_bytes().to_vec())
     }
 
-    /// Basic test to verify that a value can be set and then retrieved.
+    /// Основной тест для проверки установки и последующего получения значения.
     #[test]
     fn test_set_and_get() {
         let mut store = InMemoryStore::new();
@@ -103,7 +103,8 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Ensures that setting a value twice for the same key overwrites the old one.
+    /// Проверяет, что повторная установка значения для одного и того же ключа
+    /// перезаписывает старое значение.
     #[test]
     fn test_overwrite_value() {
         let mut store = InMemoryStore::new();
@@ -118,7 +119,7 @@ mod tests {
         assert_eq!(got, Some(v2));
     }
 
-    /// Ensures that a key can be deleted and is no longer accessible.
+    /// Проверяет, что ключ можно удалить, и после этого он недоступен для получения.
     #[test]
     fn test_delete() {
         let mut store = InMemoryStore::new();
@@ -132,7 +133,7 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Ensures that querying a non-existent key returns None.
+    /// Проверяет, что получение значения по несуществующему ключу возвращает None.
     #[test]
     fn test_get_nonexistent_key() {
         let mut store = InMemoryStore::new();
@@ -140,16 +141,16 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Ensures that deleting a non-existent key does not result in an error.
+    /// Проверяет, что удаление несуществующего ключа не приводит к ошибке.
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
-        // deleting a non-existent key should not cause an error
+        // Удаление несуществующего ключа не должно вызывать ошибку.
         assert!(store.del(key("nope")).is_ok());
     }
 
-    /// Tests bulk set and bulk get functionality.
-    /// Verifies that existing and non-existing keys behave as expected.
+    /// Тестирует функциональность массовой установки и массового получения значений.
+    /// Проверяет корректность получения существующих и несуществующих ключей.
     #[test]
     fn test_mset_and_mget() {
         let mut store = InMemoryStore::new();
@@ -174,7 +175,7 @@ mod tests {
         );
     }
 
-    /// Tests renaming an existing key to a new key.
+    /// Проверяет, что переименование существующего ключа происходит корректно.
     #[test]
     fn test_rename() {
         let mut store = InMemoryStore::new();
@@ -185,7 +186,8 @@ mod tests {
         assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(123)));
     }
 
-    /// Ensures that renaming a non-existent key fails with KeyNotFound.
+    /// Проверяет, что попытка переименования несуществующего ключа приводит к ошибке
+    /// с кодом KeyNotFound.
     #[test]
     fn test_rename_nonexistent_key() {
         let mut store = InMemoryStore::new();
@@ -193,7 +195,8 @@ mod tests {
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
-    /// Tests renaming a key only if the target does not already exist (`renamenx`).
+    /// Тестирует работу метода renamenx: переименование происходит только
+    /// если целевой ключ отсутствует.
     #[test]
     fn test_renamenx_success() {
         let mut store = InMemoryStore::new();
@@ -210,7 +213,7 @@ mod tests {
         );
     }
 
-    /// Verifies that `renamenx` fails if the destination key already exists.
+    /// Проверяет, что renamenx не выполняется, если целевой ключ уже существует.
     #[test]
     fn test_renamenx_existing_target() {
         let mut store = InMemoryStore::new();
@@ -218,12 +221,12 @@ mod tests {
         store.set(key("new"), Value::Int(2)).unwrap();
 
         let ok = store.renamenx(key("old"), key("new")).unwrap();
-        assert!(!ok); // should return false
+        assert!(!ok); // Ожидается false, так как целевой ключ уже существует.
         assert_eq!(store.get(key("old")).unwrap(), Some(Value::Int(1)));
         assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(2)));
     }
 
-    /// Ensures that `flushdb` removes all keys and values from the store.
+    /// Проверяет, что метод flushdb очищает хранилище от всех ключей и значений.
     #[test]
     fn test_flushdb() {
         let mut store = InMemoryStore::new();

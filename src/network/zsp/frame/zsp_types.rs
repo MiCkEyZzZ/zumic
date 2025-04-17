@@ -44,7 +44,7 @@ impl TryFrom<Value> for ZSPFrame {
                 debug!("Converting Value::Set to ZSPFrame::Array");
                 convert_hashset(set)
             }
-            // Теперь Value::Hash хранит SmartHash, поэтому вызываем новую конвертацию.
+            // Теперь Value::Hash сохраняет SmartHash, поэтому вызываем новую конвертацию.
             Value::Hash(smart_hash) => {
                 debug!("Converting Value::Hash (SmartHash) to ZSPFrame::Dictionary");
                 convert_smart_hash(smart_hash)
@@ -57,7 +57,7 @@ impl TryFrom<Value> for ZSPFrame {
                 debug!("Converting Value::Null to ZSPFrame::Null");
                 Ok(ZSPFrame::Null)
             }
-            // Ignore unsupported types
+            // Игнорировать неподдерживаемые типы
             Value::HyperLogLog(_) | Value::SStream(_) => {
                 warn!("Unsupported data type encountered during conversion");
                 Err("Unsupported data type".into())

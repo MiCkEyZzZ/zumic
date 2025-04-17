@@ -2,11 +2,11 @@ use crate::database::types::Value;
 
 #[derive(Debug, Clone)]
 pub enum Command {
-    // --- Simple commands ---//
+    // --- Простые команды ---//
     Ping,
     Echo(String),
 
-    // --- Basic ---
+    // --- Базовые ---
     Set { key: String, value: Value },
     Get { key: String },
     Del { key: String },

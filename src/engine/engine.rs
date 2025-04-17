@@ -98,7 +98,7 @@ mod tests {
         ArcBytes::from(data.as_bytes().to_vec())
     }
 
-    /// Tests that setting a value and then getting it returns the same value.
+    /// Тестирует, что установка значения, а затем его получение возвращают то же значение.
     #[test]
     fn test_engine_set_and_get() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -110,7 +110,7 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Ensures that getting a value for a non-existent key returns None.
+    /// Проверяет, что получение значения по несуществующему ключу возвращает None.
     #[test]
     fn test_engine_get_nonexistent_key() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Verifies that deleting an existing key removes it from storage.
+    /// Проверяет, что удаление существующего ключа удаляет его из хранилища.
     #[test]
     fn test_engine_delete() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -134,18 +134,18 @@ mod tests {
         assert_eq!(got, None)
     }
 
-    /// Checks that deleting a non-existent key does not result in an error.
+    /// Проверяет, что удаление несуществующего ключа не приводит к ошибке.
     #[test]
     fn test_engine_delete_nonexistent_key() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("ghost");
 
-        // delete should not panic or error
+        // Удаление не должно вызывать панику или ошибку.
         let result = engine.del(k);
         assert!(result.is_ok());
     }
 
-    /// Tests setting multiple key-value pairs at once using mset.
+    /// Тестирует установку нескольких пар ключ-значение с помощью mset.
     #[test]
     fn test_engine_mset() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -162,7 +162,7 @@ mod tests {
         }
     }
 
-    /// Verifies that mget returns values in correct order for multiple keys.
+    /// Проверяет, что mget возвращает значения в корректном порядке для нескольких ключей.
     #[test]
     fn test_engine_mget() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(got, vec![Some(v1), Some(v2)]);
     }
 
-    /// Checks that a key can be renamed successfully.
+    /// Проверяет, что ключ успешно переименовывается.
     #[test]
     fn test_engine_rename() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -193,19 +193,20 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Ensures renaming a non-existent key results in an error.
+    /// Проверяет, что переименование несуществующего ключа приводит к ошибке.
     #[test]
     fn test_engine_rename_nonexistent_key() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
 
-        // should return error when renaming non-existent key
+        // Должна возвращаться ошибка при попытке переименовать несуществующий ключ.
         let result = engine.rename(k1.clone(), k2.clone());
         assert!(result.is_err());
     }
 
-    /// Tests renamenx behavior: rename only if new key doesn't exist.
+    /// Тестирует поведение метода renamenx: переименование выполняется, только если новый
+    /// ключ отсутствует.
     #[test]
     fn test_engine_renamenx() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -217,16 +218,16 @@ mod tests {
         let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
         assert!(result);
 
-        // Ensure the old key is gone and new key exists
+        // Проверяем, что старый ключ удалён, а новый присутствует.
         let got = engine.get(k2.clone()).unwrap();
         assert_eq!(got, Some(v));
 
-        // Trying to rename again should fail (key already exists)
+        // Повторная попытка переименования должна не выполниться, так как новый ключ уже существует.
         let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
         assert!(!result);
     }
 
-    /// Tests that flushdb clears all data from storage.
+    /// Тестирует, что flushdb очищает все данные из хранилища.
     #[test]
     fn test_engine_flushdb() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -245,7 +246,7 @@ mod tests {
         assert_eq!(b, None);
     }
 
-    /// Tests initialization of engine from memory config.
+    /// Тестирует инициализацию движка с конфигурацией памяти.
     #[test]
     fn test_engine_initialize_memory() {
         let config = StorageConfig {
@@ -256,7 +257,8 @@ mod tests {
         assert!(engine.is_ok());
     }
 
-    /// Tests that get_store returns a trait object we can use.
+    /// Тестирует, что метод get_store возвращает объект-трейт,
+    /// с которым можно работать.
     #[test]
     fn test_engine_get_store() {
         let engine = StorageEngine::InMemory(InMemoryStore::new());
@@ -264,7 +266,8 @@ mod tests {
         assert!(store.mget(&[]).is_ok());
     }
 
-    /// Tests that get_store_mut returns mutable trait object we can use.
+    /// Тестирует, что get_store_mut возвращает изменяемый объект-трейт,
+    /// с которым можно работать.
     #[test]
     fn test_engine_get_store_mut() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());

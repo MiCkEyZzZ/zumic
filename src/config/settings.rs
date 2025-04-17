@@ -10,9 +10,9 @@ pub enum StorageType {
 /// Storage Configuration.
 pub struct StorageConfig {
     pub storage_type: StorageType,
-    // pub storage_path: Option<String>,       // For file storage
-    // pub cache_size: Option<usize>,          // LRU cache size
-    // pub balancing_strategy: Option<String>, // Balancing strategy
+    // pub storage_path: Option<String>,       // Для хранения файлов
+    // pub cache_size: Option<usize>,          // Размер кэша LRU
+    // pub balancing_strategy: Option<String>, // Балансирующая стратегия
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,14 +25,14 @@ pub struct Settings {
 impl Settings {
     pub fn load() -> Result<Self, ConfigError> {
         let cfg = Config::builder()
-            // Adding default values
+            // Добавление значений по умолчанию
             .set_default("listen_address", "127.0.0.1:6379")?
             .set_default("max_connections", 100)?
-            // Add enviroment variables with the ZUMIC_
+            // Добавьте переменные окружения с помощью ZUMIC_
             .add_source(Environment::with_prefix("ZUMIC"))
             .build()?;
 
-        // Seserialize the configuration into our structure.
+        // Сериализуем конфигурацию в нашу структуру.
         cfg.try_deserialize()
     }
 }

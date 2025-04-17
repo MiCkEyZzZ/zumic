@@ -8,16 +8,19 @@ const MAX_LEVEL: usize = 16; // В дальнейшем этот парамет�
 /// Вероятностный коэффициент для определения уровня нового узла.
 const P: f64 = 0.5;
 
-/// Узел двусвязного пропускного списка.
-/// Помимо вектора указателей на следующий узел, каждый узел хранит backward-указатель для уровня 0.
+/// Узел пропускного списка.
+///
+/// Поля:
+/// - key: Ключ узла.
+/// - value: Значение, ассоциированное с узлом.
+/// - forward: Вектор указателей на следующий узел на каждом уровне.
+/// - backward: Указатель на предыдущий узел (используется для обратной итерации).
 #[derive(Debug, PartialEq, Clone)]
 pub struct Node<K, V> {
-    pub key: K,
-    pub value: V,
-    /// Указатели на следующий узел для каждого уровня.
-    pub forward: Vec<Option<NonNull<Node<K, V>>>>,
-    /// Указатель на предыдущий узел (только для уровня 0).
-    pub backward: Option<NonNull<Node<K, V>>>,
+    key: K,
+    value: V,
+    forward: Vec<Option<NonNull<Node<K, V>>>>,
+    backward: Option<NonNull<Node<K, V>>>,
 }
 
 /// SkipList — структура с головным узлом, текущим уровнем и количеством элементов.
@@ -60,6 +63,16 @@ impl<K, V> Node<K, V> {
             forward: vec![None; level],
             backward: None,
         })
+    }
+
+    /// Возвращает ссылку на ключ.
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+
+    /// Возвращает ссылку на значение.
+    pub fn value(&self) -> &V {
+        &self.value
     }
 }
 
@@ -468,7 +481,7 @@ impl<K, V> Drop for SkipList<K, V> {
 mod tests {
     use super::*;
 
-    // Test that inserting and searching work correctly for various keys and values.
+    /// Проверяет корректность вставки и поиска по ключу.
     #[test]
     fn test_insert_and_search() {
         let mut list = SkipList::new();
@@ -482,7 +495,7 @@ mod tests {
         assert_eq!(list.search(&4), None);
     }
 
-    // Test that inserting the same key twice updates the value.
+    /// Проверяет, что повторная вставка по ключу перезаписывает значение.
     #[test]
     fn test_insert_overwrite() {
         let mut list = SkipList::new();
@@ -492,7 +505,7 @@ mod tests {
         assert_eq!(list.search(&42), Some(&"second"));
     }
 
-    // Test that removing a key works and updates the list correctly.
+    /// Проверяет удаление ключей и корректное обновление состояния списка.
     #[test]
     fn test_remove() {
         let mut list = SkipList::new();
@@ -505,7 +518,7 @@ mod tests {
         assert!(list.is_empty());
     }
 
-    // Test that the length and empty checks are correct.
+    /// Проверяет методы получения длины и проверки на пустоту.
     #[test]
     fn test_len_and_is_empty() {
         let mut list = SkipList::new();
@@ -519,7 +532,7 @@ mod tests {
         assert!(list.is_empty());
     }
 
-    // Test that iterating over the list returns elements in ascending key order.
+    /// Проверяет, что итерация возвращает элементы в порядке возрастания ключей.
     #[test]
     fn test_iter_order() {
         let mut list = SkipList::new();
@@ -531,6 +544,7 @@ mod tests {
         assert_eq!(items, vec![(1, "a"), (2, "b"), (3, "c")]);
     }
 
+    /// Проверяет, что обратная итерация возвращает элементы в порядке убывания ключей.
     #[test]
     fn test_iter_rev() {
         let mut list = SkipList::new();
@@ -543,6 +557,7 @@ mod tests {
         assert_eq!(items, vec![(3, "c"), (2, "b"), (1, "a")]);
     }
 
+    /// Проверяет итерацию по диапазону ключей.
     #[test]
     fn test_range_iter() {
         let mut list = SkipList::new();
@@ -562,7 +577,7 @@ mod tests {
         );
     }
 
-    // Test that front and back methods return the first and last elements correctly.
+    /// Проверяет получение первого и последнего элементов.
     #[test]
     fn test_first_and_last() {
         let mut list = SkipList::new();
@@ -577,7 +592,7 @@ mod tests {
         assert_eq!(list.last(), Some((&30, &"z")));
     }
 
-    // Test that search_mut allows updating values correctly.
+    /// Проверяет, что `search_mut` позволяет изменять значения.
     #[test]
     fn test_search_mut() {
         let mut list = SkipList::new();
@@ -588,7 +603,7 @@ mod tests {
         assert_eq!(list.search(&7), Some(&"b"));
     }
 
-    // Test that the clear method removes all elements from the list.
+    /// Проверяет, что `clear` очищает список полностью.
     #[test]
     fn test_clear() {
         let mut list = SkipList::new();

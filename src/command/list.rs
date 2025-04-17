@@ -161,13 +161,13 @@ mod tests {
     use super::*;
     use crate::engine::memory::InMemoryStore;
 
-    // Helper func to create a new in-memory storage engine.
+    // Вспомогательная функция для создания нового хранилища в памяти.
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
-    /// Test that LPushCommand correctly pushes an element onto the of the list,
-    /// updates the list length, and that LPopCommand removes the correct element.
+    /// Тест, что LPushCommand правильно добавляет элемент в начало списка,
+    /// обновляет длину списка, а LPopCommand удаляет правильный элемент.
     #[test]
     fn test_lpush_and_llen_and_lpop() {
         let mut store = create_store();
@@ -198,8 +198,8 @@ mod tests {
         );
     }
 
-    /// Test that RPushCommand correctly pushes elements to the right,
-    /// and RPopCommand correctly pops the last element.
+    /// Тест, что RPushCommand правильно добавляет элементы в конец списка,
+    /// а RPopCommand правильно удаляет последний элемент.
     #[test]
     fn test_rpush_and_rpop() {
         let mut store = create_store();
@@ -226,8 +226,8 @@ mod tests {
         );
     }
 
-    /// Test that LRangeCommand retrieves elements correctly when using
-    /// both positive and negative indexes.
+    /// Тест, что LRangeCommand корректно извлекает элементы при использовании
+    /// как положительных, так и отрицательных индексов.
     #[test]
     fn test_lrange_positive_and_negative() {
         let mut store = create_store();
@@ -240,7 +240,7 @@ mod tests {
             .unwrap();
         }
 
-        // Retrieve the full range using start=0 and stop=-1.
+        // Извлечение полного диапазона с start=0 и stop=-1.
         let range = LRangeCommand {
             key: "lr".into(),
             start: 0,
@@ -259,7 +259,7 @@ mod tests {
             ]
         );
 
-        // Retrieve only the element at index 1.
+        // Извлечение только элемента с индексом 1.
         let range2 = LRangeCommand {
             key: "lr".into(),
             start: 1,
@@ -272,14 +272,13 @@ mod tests {
         assert_eq!(list2, vec![ArcBytes::from_str("y")]);
     }
 
-    /// Test that LLenCommand returns 0 and LPopCommand returns Null when
-    /// the list does not exist, and that a type error is produced if the
-    /// key exists but its type is not a list.
+    /// Тест, что LLenCommand возвращает 0 и LPopCommand возвращает Null, когда
+    /// список не существует, и что возникает ошибка типа, если ключ существует, но его тип не список.
     #[test]
     fn test_len_and_pop_nonexistent_and_type_error() {
         let mut store = create_store();
 
-        // For a non-existing key, LLen should return 0 and LPop should return Null.
+        // Для несуществующего ключа, LLen должен вернуть 0, а LPop вернуть Null.
         assert_eq!(
             LLenCommand { key: "no".into() }
                 .execute(&mut store)
@@ -293,7 +292,7 @@ mod tests {
             Value::Null
         );
 
-        // If the key exists but is not a list, LPush should return an InvalidType error.
+        // Если ключ существует, но это не список, то LPush должен вернуть ошибку InvalidType.
         store.set(ArcBytes::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {

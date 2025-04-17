@@ -75,18 +75,21 @@ mod tests {
 
     use super::*;
 
+    /// Проверяет сериализацию `Response::Ok` в `ZSPFrame::SimpleString("OK")`
     #[test]
     fn test_serialize_ok() {
         let frame = serialize_response(Response::Ok);
         assert_eq!(frame, ZSPFrame::SimpleString("OK".into()));
     }
 
+    /// Проверяет сериализацию `Response::Error("fail")` в `ZSPFrame::FrameError("fail")`
     #[test]
     fn test_serialize_error() {
         let frame = serialize_response(Response::Error("fail".into()));
         assert_eq!(frame, ZSPFrame::FrameError("fail".into()));
     }
 
+    /// Проверяет сериализацию `Value::Str` в `ZSPFrame::BulkString`
     #[test]
     fn test_serialize_str() {
         let value = Value::Str(ArcBytes::from_str("hello"));
@@ -94,6 +97,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
 
+    /// Проверяет сериализацию `Value::Int` в `ZSPFrame::Integer`
     #[test]
     fn test_serialize_int() {
         let value = Value::Int(123);
@@ -101,6 +105,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Integer(123));
     }
 
+    /// Проверяет сериализацию `Value::Float` в `ZSPFrame::Float`
     #[test]
     fn test_serialize_float() {
         let value = Value::Float(2.14);
@@ -108,6 +113,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Float(2.14));
     }
 
+    /// Проверяет сериализацию `Value::Null` в `ZSPFrame::Null`
     #[test]
     fn test_serialize_null() {
         let value = Value::Null;
@@ -115,6 +121,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::Null);
     }
 
+    /// Проверяет сериализацию `Value::List` (QuickList) в `ZSPFrame::Array`
     #[test]
     fn test_serialize_list() {
         let mut list = QuickList::new(4);
@@ -132,6 +139,7 @@ mod tests {
         );
     }
 
+    /// Проверяет сериализацию `Value::Set` (HashSet) в `ZSPFrame::Array` со строками
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
@@ -156,6 +164,7 @@ mod tests {
         }
     }
 
+    /// Проверяет сериализацию `Value::Hash` (SmartHash) в `ZSPFrame::Dictionary`
     #[test]
     fn test_serialize_hash() {
         let mut sh = crate::database::smart_hash::SmartHash::new();
@@ -174,6 +183,7 @@ mod tests {
         }
     }
 
+    /// Проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZSPFrame::ZSet`
     #[test]
     fn test_serialize_zset() {
         let mut dict = HashMap::new();
@@ -196,6 +206,7 @@ mod tests {
         }
     }
 
+    /// Проверяет сериализацию `Value::HyperLogLog` в `ZSPFrame::SimpleString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
         let hll = crate::database::types::HLL {
@@ -206,6 +217,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::SimpleString("HLL(NotImplemented)".into()));
     }
 
+    /// Проверяет сериализацию `Value::SStream` в `ZSPFrame::SimpleString("SStream(NotImplemented)")`
     #[test]
     fn test_serialize_sstream() {
         let value = Value::SStream(vec![]);

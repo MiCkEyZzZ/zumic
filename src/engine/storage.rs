@@ -3,34 +3,35 @@ use crate::{
     error::StoreResult,
 };
 
-/// The `Storage` trait defines the interface for key-value storage backends.
-/// All methods are fallible and return a `StoreResult`.
+/// Трейт `Storage` задаёт интерфейс для бэкендов хранилищ "ключ-значение".
+/// Все методы могут завершиться с ошибкой и возвращают результат типа `StoreResult`.
 pub trait Storage {
-    /// Sets the value for the given key. Overwrites existing values.
+    /// Устанавливает значение для заданного ключа.
+    /// При этом перезаписываются все существующие значения.
     fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()>;
 
-    /// Retrieves the value for the given key, or `None` if the key doesn't exist.
+    /// Возвращает значение для заданного ключа, или `None`, если ключ отсутствует.
     fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>>;
 
-    /// Deletes a key from the store.
-    /// Returns `1` if the key was removed, `0` if it didn't exist.
+    /// Удаляет ключ из хранилища.
+    /// Возвращает `1`, если ключ был удалён, или `0`, если его не существовало.
     fn del(&self, key: ArcBytes) -> StoreResult<i64>;
 
-    /// Sets multiple key-value pairs in a batch operation.
+    /// Устанавливает несколько пар "ключ-значение" в рамках единой операции.
     fn mset(&mut self, entries: Vec<(ArcBytes, Value)>) -> StoreResult<()>;
 
-    /// Gets values for a list of keys.
-    /// If a key is missing, `None` is returned in its place.
+    /// Возвращает значения для списка ключей.
+    /// Если значение для какого-либо ключа отсутствует, возвращается `None`.
     fn mget(&self, keys: &[ArcBytes]) -> StoreResult<Vec<Option<Value>>>;
 
-    /// Renames a key to a new key name.
-    /// Returns an error if the source key does not exist.
+    /// Переименовывает ключ в новое имя.
+    /// Если исходный ключ отсутствует, возвращается ошибка.
     fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()>;
 
-    /// Renames a key to a new name only if the new key doesn't already exist.
-    /// Returns `true` if renamed, `false` if the destination exists.
+    /// Переименовывает ключ в новое имя только в том случае, если новый ключ ещё не существует.
+    /// Возвращает `true`, если переименование произошло, и `false`, если целевой ключ уже существует.
     fn renamenx(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<bool>;
 
-    /// Clears all keys from the database.
+    /// Очищает базу данных, удаляя все ключи.
     fn flushdb(&mut self) -> StoreResult<()>;
 }

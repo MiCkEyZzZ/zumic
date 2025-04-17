@@ -6,7 +6,7 @@ pub fn init_logging() {
 
     let formatter_layer = formatter::build_formatter().boxed();
     let console_sink = sinks::console::layer().boxed();
-    let (file_sink, _guard) = sinks::file::layer(); // guard save if needed.
+    let (file_sink, _guard) = sinks::file::layer();
     let file_sink = file_sink.boxed();
 
     tracing_subscriber::registry()

@@ -129,8 +129,8 @@ impl ZSPEncoder {
 mod tests {
     use super::*;
 
-    // Test encoding of SimpleString into a byte stream.
-    // Checks that the string "OK" is correctly encoded into the format "+OK\r\n".
+    /// Тестирование кодирования SimpleString в байтовый поток.
+    /// Проверяет, что строка "OK" правильно кодируется в формат "+OK\r\n".
     #[test]
     fn test_simple_string() {
         let frame = ZSPFrame::SimpleString("OK".to_string());
@@ -138,8 +138,8 @@ mod tests {
         assert_eq!(encoded, b"+OK\r\n");
     }
 
-    // Test encoding of BulkString into a byte stream.
-    // Checks that the string "hello" is correctly encoded with length and content.
+    /// Тестирование кодирования BulkString в байтовый поток.
+    /// Проверяет, что строка "hello" правильно кодируется с длиной и содержимым.
     #[test]
     fn test_builk_string() {
         let frame = ZSPFrame::BulkString(Some(b"hello".to_vec()));
@@ -147,8 +147,8 @@ mod tests {
         assert_eq!(encoded, b"$5\r\nhello\r\n");
     }
 
-    // Test the encoding of a nested array.
-    // Checks that an array of two elements (a string and a number) is correctly encoded.
+    /// Тестирование кодирования вложенного массива.
+    /// Проверяет, что массив из двух элементов (строка и число) правильно кодируется.
     #[test]
     fn test_nested_array() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -159,8 +159,8 @@ mod tests {
         assert_eq!(encoded, b"*2\r\n+test\r\n:42\r\n");
     }
 
-    // Test encoding of an invalid SimpleString.
-    // Checks that a string with \r\n characters causes an error.
+    /// Тестирование кодирования неверного SimpleString.
+    /// Проверяет, что строка с символами \r\n вызывает ошибку.
     #[test]
     fn test_invalid_simple_string() {
         let frame = ZSPFrame::SimpleString("bad\r\nstring".to_string());
@@ -168,8 +168,8 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // Test encoding of an empty dictionary.
-    // Checks that an empty dictionary is encoded as "%-1\r\n".
+    /// Тестирование кодирования пустого словаря.
+    /// Проверяет, что пустой словарь кодируется как "%-1\r\n".
     #[test]
     fn test_empty_dictionary() {
         let frame = ZSPFrame::Dictionary(None);
@@ -177,8 +177,8 @@ mod tests {
         assert_eq!(encoded, b"%-1\r\n");
     }
 
-    // Test encoding of a dictionary with one element.
-    // Checks that a dictionary with one element is encoded correctly.
+    /// Тестирование кодирования словаря с одним элементом.
+    /// Проверяет, что словарь с одним элементом кодируется корректно.
     #[test]
     fn test_single_item_dictionary() {
         let mut items = std::collections::HashMap::new();
@@ -191,8 +191,8 @@ mod tests {
         assert_eq!(encoded, b"%1\r\n+key1\r\n+value1\r\n");
     }
 
-    // Test encoding of a dictionary with multiple elements.
-    // Checks that a dictionary with two elements is encoded correctly.
+    /// Тестирование кодирования словаря с несколькими элементами.
+    /// Проверяет, что словарь с двумя элементами кодируется корректно.
     #[test]
     fn test_multiple_items_dictionary() {
         let mut items = std::collections::HashMap::new();
@@ -209,8 +209,8 @@ mod tests {
         assert_eq!(encoded, b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n");
     }
 
-    // Testing the encoding of a dictionary with an invalid value.
-    // Checking that only valid strings can be added to the dictionary.
+    /// Тестирование кодирования словаря с некорректным значением.
+    /// Проверяет, что в словарь могут быть добавлены только валидные строки.
     #[test]
     fn test_invalid_dictionary_key() {
         let mut items = std::collections::HashMap::new();
@@ -218,14 +218,14 @@ mod tests {
             "key1".to_string(),
             ZSPFrame::SimpleString("value1".to_string()),
         );
-        // Let's try to insert a SimpleString type value into the dictionary
+        // Пытаемся вставить значение типа SimpleString в словарь
         let frame = ZSPFrame::Dictionary(Some(items));
         let result = ZSPEncoder::encode(&frame);
-        assert!(result.is_ok()); // Должен пройти, потому что ключи валидные
+        assert!(result.is_ok()); // Должно пройти, потому что ключи валидные
     }
 
-    // Testing encoding of an incomplete dictionary.
-    // Checking that even an incomplete dictionary with one element is correctly encoded.
+    /// Тестирование кодирования неполного словаря.
+    /// Проверяет, что даже неполный словарь с одним элементом корректно кодируется.
     #[test]
     fn test_incomplete_dictionary() {
         let mut items = std::collections::HashMap::new();
@@ -233,13 +233,13 @@ mod tests {
             "key1".to_string(),
             ZSPFrame::SimpleString("value1".to_string()),
         );
-        // Example of an incomplete dictionary
+        // Пример неполного словаря
         let frame = ZSPFrame::Dictionary(Some(items));
         let result = ZSPEncoder::encode(&frame);
-        assert!(result.is_ok()); // Expect the dictionary to be encoded correctly
+        assert!(result.is_ok()); // Ожидается, что словарь будет закодирован корректно
     }
 
-    // Testing Float encoding.
+    /// Тестирование кодирования числа с плавающей запятой.
     #[test]
     fn test_float_encoding() {
         let frame = ZSPFrame::Float(42.42);
@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(encoded, b":42.42\r\n");
     }
 
-    // Test encoding of Float with negative value.
+    /// Тестирование кодирования отрицательного числа с плавающей запятой.
     #[test]
     fn test_negative_float_encoding() {
         let frame = ZSPFrame::Float(-42.42);

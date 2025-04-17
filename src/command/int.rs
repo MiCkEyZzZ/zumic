@@ -73,7 +73,7 @@ impl CommandExecute for DecrCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => {
                 store.set(key_bytes, Value::Int(-1))?;
-                Ok(Value::Int(-1)) // If key doesn't exist, set it to -1
+                Ok(Value::Int(-1)) // Если ключ не существует, установите его равным -1
             }
         }
     }
@@ -110,9 +110,9 @@ mod tests {
 
     use super::*;
 
-    /// Test the `INCR` command:
-    /// - If the key does not exist, it should be set to 1.
-    /// - If the key exists with an integer value, it should be incremented by 1.
+    /// Тест команды `INCR`:
+    /// - Если ключ не существует, он должен быть установлен в 1.
+    /// - Если ключ существует и его значение — целое число, оно должно быть увеличено на 1.
     #[test]
     fn test_incr_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -121,18 +121,18 @@ mod tests {
             key: "counter".to_string(),
         };
 
-        // Test when key doesn't exist (should create and set to 1).
+        // Тест, когда ключ не существует (должен быть установлен в 1).
         let result = incr_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(1));
 
-        // Test when key exists (should increment to 2).
+        // Тест, когда ключ существует (должен быть увеличен до 2).
         let result = incr_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(2));
     }
 
-    /// Test the `INCRBY` command:
-    /// - If the key does not exist, it should be created with the given increment value.
-    /// - If the key exists with an integer value, it should be incremented by the specified amount.
+    /// Тест команды `INCRBY`:
+    /// - Если ключ не существует, он должен быть создан с заданным значением увеличения.
+    /// - Если ключ существует и его значение — целое число, оно должно быть увеличено на указанную величину.
     #[test]
     fn test_incrby_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -142,18 +142,18 @@ mod tests {
             increment: 5,
         };
 
-        // Test when key doesn't exist (should set to 5).
+        // Тест, когда ключ не существует (должен быть установлен в 5).
         let result = incr_by_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(5));
 
-        // Test when key exists (should increment by 5, total becomes 10).
+        // Тест, когда ключ существует (должен быть увеличен на 5, итоговое значение — 10).
         let result = incr_by_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(10));
     }
 
-    /// Test the `DECR` command:
-    /// - If the key does not exist, it should be created with the value -1.
-    /// - If the key exists with an integer value, it should be decremented by 1.
+    /// Тест команды `DECR`:
+    /// - Если ключ не существует, он должен быть создан со значением -1.
+    /// - Если ключ существует и его значение — целое число, оно должно быть уменьшено на 1.
     #[test]
     fn test_decr_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -162,18 +162,18 @@ mod tests {
             key: "counter".to_string(),
         };
 
-        // Test when key doesn't exist (should set to -3).
+        // Тест, когда ключ не существует (должен быть установлен в -1).
         let result = decr_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(-1));
 
-        // Test when key exists (should decrement to -2).
+        // Тест, когда ключ существует (должен быть уменьшен до -2).
         let result = decr_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(-2));
     }
 
-    /// Test the `DECRBY` command:
-    /// - If the key does not exist, it should be created with the negative value of the decrement.
-    /// - If the key exists with an integer value, it should be decremented by the specified amount.
+    /// Тест команды `DECRBY`:
+    /// - Если ключ не существует, он должен быть создан с отрицательным значением уменьшения.
+    /// - Если ключ существует и его значение — целое число, оно должно быть уменьшено на указанную величину.
     #[test]
     fn test_decrby_command() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -183,17 +183,17 @@ mod tests {
             decrement: 3,
         };
 
-        // Test when key doesn't exist (should set to -3).
+        // Тест, когда ключ не существует (должен быть установлен в -3).
         let result = decr_by_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(-3));
 
-        // Test when key exists (should decrement by 3, total becomes -6).
+        // Тест, когда ключ существует (должен быть уменьшен на 3, итоговое значение — -6).
         let result = decr_by_command.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(-6));
     }
 
-    /// Test invalid type for `INCR` command:
-    /// - If the key exists but the value is not an integer, the command should return an error.
+    /// Тест на неверный тип для команды `INCR`:
+    /// - Если ключ существует, но его значение не является целым числом, команда должна вернуть ошибку.
     #[test]
     fn test_invalid_type_for_incr() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -209,11 +209,11 @@ mod tests {
         };
 
         let result = incr_command.execute(&mut store);
-        assert!(result.is_err()); // Should return an InvalidType error
+        assert!(result.is_err()); // Должна быть ошибка InvalidType
     }
 
-    /// Test invalid type for `DECR` command:
-    /// - If the key exists but the value is not an integer, the command should return an error.
+    /// Тест на неверный тип для команды `DECR`:
+    /// - Если ключ существует, но его значение не является целым числом, команда должна вернуть ошибку.
     #[test]
     fn test_invalid_type_for_decr() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -229,6 +229,6 @@ mod tests {
         };
 
         let result = decr_command.execute(&mut store);
-        assert!(result.is_err()); // Should return an InvalidType error
+        assert!(result.is_err()); // Должна быть ошибка InvalidType
     }
 }

@@ -184,6 +184,7 @@ fn parse_value(frame: &ZSPFrame, cmd: &str) -> Result<Value, String> {
 mod tests {
     use super::*;
 
+    /// Проверяет корректный парсинг команды SET с двумя строковыми аргументами (ключ и значение)
     #[test]
     fn test_parse_set_command() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -203,6 +204,7 @@ mod tests {
         }
     }
 
+    /// Проверяет парсинг команды GET с аргументом в виде BulkString
     #[test]
     fn test_parse_get_command_with_bulk_key() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -220,6 +222,7 @@ mod tests {
         }
     }
 
+    /// Проверяет парсинг команды DEL с ключом в виде SimpleString
     #[test]
     fn test_parse_del_command_with_simple_key() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -237,6 +240,7 @@ mod tests {
         }
     }
 
+    /// Проверяет парсинг SET с числовым значением
     #[test]
     fn test_parse_set_command_with_int_value() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -256,6 +260,7 @@ mod tests {
         }
     }
 
+    /// Проверяет поведение при неизвестной команде
     #[test]
     fn test_unknown_command() {
         let frame = ZSPFrame::Array(Some(vec![ZSPFrame::SimpleString("KIN".to_string())]));
@@ -264,6 +269,7 @@ mod tests {
         assert_eq!(err, "Unknown command");
     }
 
+    /// Проверяет ошибку при слишком большом числе аргументов в GET
     #[test]
     fn test_get_command_with_too_many_args() {
         let frame = ZSPFrame::Array(Some(vec![
@@ -276,11 +282,12 @@ mod tests {
         assert_eq!(err, "GET requires 1 argument");
     }
 
+    /// Проверяет ошибку, если ключ передан некорректного типа (Integer)
     #[test]
     fn test_set_command_with_invalid_key_type() {
         let frame = ZSPFrame::Array(Some(vec![
             ZSPFrame::SimpleString("SET".to_string()),
-            ZSPFrame::Integer(123), // invalid key
+            ZSPFrame::Integer(123),
             ZSPFrame::SimpleString("value".to_string()),
         ]));
 
@@ -288,6 +295,7 @@ mod tests {
         assert_eq!(err, "SET: invalid key");
     }
 
+    /// Проверяет ошибку, если команда не представлена массивом
     #[test]
     fn test_command_not_array() {
         let frame = ZSPFrame::SimpleString("SET".to_string());
@@ -295,6 +303,7 @@ mod tests {
         assert_eq!(err, "Expected array for command");
     }
 
+    /// Проверяет ошибку при пустом массиве команды
     #[test]
     fn test_command_array_empty() {
         let frame = ZSPFrame::Array(Some(vec![]));

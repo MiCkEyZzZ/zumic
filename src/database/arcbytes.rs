@@ -1,8 +1,8 @@
-//! `ArcBytes` is a wrapper around `Arc<Bytes>` designed for efficient,
-//! immutable byte data sharing across threads.
+//! `ArcBytes` — это обёртка вокруг `Arc<Bytes>`, предназначенная для эффективного,
+//! неизменяемого совместного использования данных байтов между потоками.
 //!
-//! It provides convenient methods for working with byte slices (`[u8]`),
-//! string conversion, slicing, serialization, and comparison operations.
+//! Она предоставляет удобные методы для работы с срезами байтов (`[u8]`),
+//! преобразования строк, нарезки, сериализации и операций сравнения.
 
 use std::{
     fmt::{self, Display},
@@ -15,77 +15,85 @@ use std::{
 use bytes::Bytes;
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// A reference-counted, immutable byte buffer wrapper.
+/// Объект-обёртка для неизменяемого буфера байтов с подсчётом ссылок.
 ///
-/// `ArcBytes` encapsulates `Arc<Bytes>`, allowing efficient cloning and
-/// sharing of binary data without unnecessary copying. It supports
-/// convenient conversions, UTF-8 interpretation, and basic slice operations.
+/// `ArcBytes` инкапсулирует `Arc<Bytes>`, что позволяет эффективно клонировать и
+/// разделять бинарные данные без лишнего копирования. Поддерживает удобные преобразования,
+/// интерпретацию в UTF‑8 и базовые операции над срезами.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArcBytes(Arc<Bytes>);
 
 impl ArcBytes {
-    /// Returns the length of the byte slice.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-    /// Returns `true` if the byte slice is empty.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-    /// Creates a new `ArcBytes` instance from a `Vec<u8>`.
+    /// Создаёт новый экземпляр `ArcBytes` из `Vec<u8>`.
     pub fn from_vec(vec: Vec<u8>) -> Self {
         Self(Arc::new(Bytes::from(vec)))
     }
-    /// Creates a new `ArcBytes` instance from a `&str`.
+
+    /// Создаёт новый `ArcBytes` из строки (UTF‑8).
     pub fn from_str(s: &str) -> Self {
         Self(Arc::new(Bytes::copy_from_slice(s.as_bytes())))
     }
-    /// Returns a slice of the stored byte data.
+
+    /// Создаёт новый `ArcBytes` из статического (константного) среза байтов без копирования.
+    pub fn from_static(slice: &'static [u8]) -> Self {
+        Self(Arc::new(Bytes::from_static(slice)))
+    }
+
+    /// Возвращает длину среза байтов.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Возвращает `true`, если срез байтов пуст.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Возвращает срез сохранённых байтов.
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
-    /// Converts the stored byte data into a `Vec<u8>`.
+
+    /// Преобразует сохранённые байты в `Vec<u8>`.
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
-    /// Attempts to convert the byte data into a string slice, returning
-    /// `None` if the data is not valid UTF-8.
+
+    /// Пытается интерпретировать внутренние байты как строку UTF‑8.
     pub fn as_str(&self) -> Option<&str> {
-        std::str::from_utf8(&self.0).ok()
+        from_utf8(self.as_slice()).ok()
     }
-    /// Consumes the `ArcBytes` and returns the inner `Bytes` data.
-    pub fn into_bytes(self) -> Bytes {
-        Arc::try_unwrap(self.0).unwrap_or_else(|arc| arc.as_ref().clone())
-    }
-    /// Consumes the `ArcBytes` and returns the inner `Arc<Bytes>` reference.
-    pub fn into_arc(self) -> Arc<Bytes> {
-        self.0
-    }
-    /// Checks if the stored data starts with the specified prefix.
-    pub fn starts_with(&self, prefix: &[u8]) -> bool {
-        self.as_slice().starts_with(prefix)
-    }
-    /// Checks if the stored data ends with the specified suffix.
-    pub fn ends_with(&self, suffix: &[u8]) -> bool {
-        self.as_slice().ends_with(suffix)
-    }
-    /// Returns a slice of the `ArcBytes` object based on the given range.
-    pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
-        let bytes = self.0.slice(range);
-        Self(Arc::new(bytes))
-    }
-    /// Attempts to convert the byte data into a valid UTF-8 string.
-    /// Returns a `Utf8Error` if the data is not valid UTF-8.
+
+    /// Преобразует данные в строку, возвращая ошибку, если данные не являются корректным UTF‑8.
     pub fn expect_utf8(&self) -> Result<&str, Utf8Error> {
-        std::str::from_utf8(&self.0)
+        from_utf8(self.as_slice())
     }
-    /// Returns a mutable reference to the inner `Bytes` data.
+
+    /// Возвращает изменяемую ссылку на внутренние данные, если владеете единственной копией.
     pub fn make_mut(&mut self) -> &mut Bytes {
         Arc::make_mut(&mut self.0)
     }
-    /// Attempts to unwrap the `ArcBytes` to retrieve the inner `Bytes`.
+
+    /// Пытается извлечь внутренний `Bytes` без копирования, если `Arc` имеет единственнное владение.
     pub fn try_unwrap(self) -> Result<Bytes, Arc<Bytes>> {
         Arc::try_unwrap(self.0)
+    }
+
+    /// Проверяет, начинается ли хранимые данные с указанного префикса.
+    pub fn starts_with(&self, prefix: &[u8]) -> bool {
+        self.as_slice().starts_with(prefix)
+    }
+
+    /// Проверяет, заканчиваются ли хранимые данные указанным суффиксом.
+    pub fn ends_with(&self, suffix: &[u8]) -> bool {
+        self.as_slice().ends_with(suffix)
+    }
+
+    /// Возвращает новый `ArcBytes`, являющийся срезом исходного по заданному диапазону.
+    pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
+        // Bytes::slice возвращает новый Bytes, который ссылается на ту же память.
+        let bytes = self.0.slice(range);
+        Self(Arc::new(bytes))
     }
 }
 
@@ -94,7 +102,8 @@ impl Serialize for ArcBytes {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_bytes(&self.0[..])
+        // Сериализуем как массив байтов.
+        serializer.serialize_bytes(self.as_slice())
     }
 }
 
@@ -103,8 +112,9 @@ impl<'de> Deserialize<'de> for ArcBytes {
     where
         D: Deserializer<'de>,
     {
-        let bytes = <Vec<u8>>::deserialize(deserializer)?;
-        Ok(ArcBytes(Arc::new(Bytes::from(bytes))))
+        // Десериализуем в Vec<u8> и сразу создаем ArcBytes.
+        let vec = <Vec<u8>>::deserialize(deserializer)?;
+        Ok(ArcBytes(Arc::new(Bytes::from(vec))))
     }
 }
 
@@ -117,19 +127,19 @@ impl Default for ArcBytes {
 impl Deref for ArcBytes {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        &self.0[..]
+        self.as_slice()
     }
 }
 
 impl AsRef<[u8]> for ArcBytes {
     fn as_ref(&self) -> &[u8] {
-        &self.0[..]
+        self.as_slice()
     }
 }
 
 impl Display for ArcBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match from_utf8(&self.0) {
+        match from_utf8(self.as_slice()) {
             Ok(s) => write!(f, "{}", s),
             Err(_) => write!(f, "<invalid utf-8>"),
         }
@@ -168,7 +178,7 @@ impl From<String> for ArcBytes {
 
 impl Hash for ArcBytes {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
+        self.as_slice().hash(state);
     }
 }
 
@@ -180,7 +190,7 @@ impl PartialOrd for ArcBytes {
 
 impl Ord for ArcBytes {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
+        self.as_slice().cmp(&other.as_slice())
     }
 }
 
@@ -206,9 +216,8 @@ impl std::borrow::Borrow<[u8]> for ArcBytes {
 mod tests {
     use super::ArcBytes;
 
-    // Checks that the `from_str` method correctly creates an `ArcBytes`
-    // object from a string and that the `as_str` method returns a string
-    // that matches the original value.
+    /// Проверяет, что метод `from_str` корректно создаёт объект `ArcBytes` из строки,
+    /// а метод `as_str` возвращает строку, совпадающую с исходным значением.
     #[test]
     fn test_from_str_and_as_str() {
         let s = "hello world";
@@ -216,9 +225,8 @@ mod tests {
         assert_eq!(ab.as_str(), Some(s));
     }
 
-    // Checks that the `from_vec` method creates an `ArcBytes` object from
-    // a vector of bytes, and that the `to_vec` method converts it back to
-    // the original vector of bytes.
+    /// Проверяет, что метод `from_vec` создаёт объект `ArcBytes` из вектора байтов,
+    /// а метод `to_vec` возвращает исходный вектор байтов.
     #[test]
     fn test_from_vec_and_to_vec() {
         let v = b"hello".to_vec();
@@ -226,9 +234,9 @@ mod tests {
         assert_eq!(ab.to_vec(), v);
     }
 
-    // Checks that the `len` and `is_empty` methods work correctly. The `len`
-    // method should return the correct data length, and `is_empty` should
-    // correctly determine whether the object is empty.
+    /// Проверяет корректность работы методов `len` и `is_empty`.
+    /// Метод `len` должен возвращать правильную длину данных,
+    /// а `is_empty` – корректно определять, пуст ли объект.
     #[test]
     fn test_len_and_is_empty() {
         let ab = ArcBytes::from_str("hello");
@@ -240,47 +248,45 @@ mod tests {
         assert!(empty.is_empty());
     }
 
-    // Checks that the `Display` method correctly displays the string representation
-    // of the `ArcBytes` object, if the data can be interpreted as valid UTF-8.
+    /// Проверяет, что реализация `Display` корректно выводит строковое представление
+    /// объекта `ArcBytes`, если данные являются валидными UTF-8.
     #[test]
     fn test_display_valid_utf8() {
         let ab = ArcBytes::from_str("test");
         assert_eq!(format!("{}", ab), "test");
     }
 
-    // Checks that the `Display` method correctly handles the situation when the
-    // `ArcBytes` data contains invalid UTF-8, by outputting `<invalid utf-8>`.
+    /// Проверяет, что реализация `Display` корректно обрабатывает ситуацию,
+    /// когда данные `ArcBytes` содержат невалидный UTF-8, выводя `<invalid utf-8>`.
     #[test]
     fn test_display_invalid_utf8() {
-        let invalid = ArcBytes::from_vec(vec![0xff, 0xfe, 0xfd]);
-        assert_eq!(format!("{}", invalid), "<invalid utf-8>");
+        let ab = ArcBytes::from_vec(vec![0xff, 0xfe, 0xfd]);
+        assert_eq!(format!("{}", ab), "<invalid utf-8>");
     }
 
-    // Checks whether the `ArcBytes` object is serialized and deserialized correctly
-    // using `serde`. The method must convert the object to a JSON string and back,
-    // and the original and deserialized objects must be equal.
+    /// Проверяет, что объект `ArcBytes` корректно сериализуется и десериализуется
+    /// с помощью `serde`. После преобразования в JSON-строку и обратно,
+    /// исходный и полученный объекты должны совпадать.
     #[test]
     fn test_serde_serialize_deserialize() {
         use serde_json;
-
         let ab = ArcBytes::from_str("serde test");
         let json = serde_json::to_string(&ab).unwrap();
         let deserialized: ArcBytes = serde_json::from_str(&json).unwrap();
-
         assert_eq!(ab, deserialized);
         assert_eq!(deserialized.as_str(), Some("serde test"));
     }
 
-    // Checks that the `ArcBytes` object correctly implements the `Deref` trait and can
-    // be used as a byte slice (`&[u8]`).
+    /// Проверяет, что объект `ArcBytes` корректно реализует трейты `Deref`
+    /// и может использоваться как срез байтов (`&[u8]`).
     #[test]
     fn test_deref_trait() {
         let ab = ArcBytes::from_str("abc");
         assert_eq!(&ab[..], b"abc");
     }
 
-    // Checks that the `ArcBytes` object correctly implements the `AsRes` trait and can be
-    // converted to a byte slice reference.
+    /// Проверяет, что объект `ArcBytes` корректно реализует трейд `AsRef`
+    /// и может быть преобразован в ссылку на срез байтов.
     #[test]
     fn test_as_ref_trait() {
         let ab = ArcBytes::from_str("abc");
@@ -288,7 +294,7 @@ mod tests {
         assert_eq!(r, b"abc");
     }
 
-    // Checks that the `slice` method correctly operation on an `ArcBytes` object.
+    /// Проверяет корректность работы метода `slice` для объекта `ArcBytes`.
     #[test]
     fn test_slice_operations() {
         let data = ArcBytes::from(b"hello world".as_ref());

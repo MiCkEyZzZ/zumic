@@ -40,8 +40,8 @@ impl CommandExecute for AppendCommand {
         match store.get(key.clone())? {
             Some(Value::Str(ref s)) => {
                 let mut result = Vec::with_capacity(s.len() + append_data.len());
-                result.extend_from_slice(s); // copy the original
-                result.extend_from_slice(append_data); // add new
+                result.extend_from_slice(s); // копирование исходных данных
+                result.extend_from_slice(append_data); // добавление новых данных
 
                 let result = ArcBytes::from_vec(result);
                 store.set(key, Value::Str(result.clone()))?;
@@ -50,7 +50,7 @@ impl CommandExecute for AppendCommand {
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                let new_value = ArcBytes::from_vec(append_data.to_vec()); // single allocation
+                let new_value = ArcBytes::from_vec(append_data.to_vec()); // одиночное выделение памяти
                 store.set(key, Value::Str(new_value.clone()))?;
                 Ok(Value::Int(new_value.len() as i64))
             }
@@ -72,7 +72,7 @@ impl CommandExecute for GetRangeCommand {
             if let Value::Str(ref s) = value {
                 let start = self.start.max(0) as usize;
                 let end = self.end.min(s.len() as i64) as usize;
-                let start = start.min(end); // Guarantee start <= end
+                let start = start.min(end); // гарантируем, что start <= end
                 let sliced = s.slice(start..end);
                 return Ok(Value::Str(sliced));
             } else {
@@ -89,11 +89,12 @@ mod tests {
 
     use super::*;
 
+    // Вспомогательная функция для создания нового хранилища в памяти.
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
-    /// Tests that `StrLenCommand` returns the correct length for an existing string key.
+    /// Тестирует, что команда `StrLenCommand` правильно возвращает длину существующей строки.
     #[test]
     fn test_str_len_command_existing_key() {
         let mut store = create_store();
@@ -112,7 +113,8 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
-    /// Tests that `AppendCommand` returns an error when attempting to append to a key of an invalid type.
+    /// Тестирует, что команда `AppendCommand` возвращает ошибку при попытке добавления данных
+    /// к ключу неверного типа.
     #[test]
     fn test_append_command_invalid_type() {
         let mut store = create_store();
@@ -128,7 +130,8 @@ mod tests {
         assert!(matches!(result, Err(StoreError::InvalidType)));
     }
 
-    /// Tests that `AppendCommand` correctly handles appending an empty string, resulting in length 0.
+    /// Тестирует, что команда `AppendCommand` корректно обрабатывает добавление пустой строки,
+    /// результатом чего будет длина 0.
     #[test]
     fn test_append_empty_string() {
         let mut store = create_store();
@@ -139,7 +142,7 @@ mod tests {
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
     }
 
-    /// Tests that `StrLenCommand` returns 0 for a non-existing key.
+    /// Тестирует, что команда `StrLenCommand` возвращает 0 для несуществующего ключа.
     #[test]
     fn test_str_len_command_non_existing_key() {
         let mut store = create_store();
@@ -151,7 +154,8 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
-    /// Tests that `AppendCommand` correctly appends data to an existing string key.
+    /// Тестирует, что команда `AppendCommand` правильно добавляет данные к существующему
+    /// строковому ключу.
     #[test]
     fn test_append_command_existing_key() {
         let mut store = create_store();
@@ -172,7 +176,8 @@ mod tests {
         assert_eq!(result, Value::Int(11));
     }
 
-    /// Tests that `AppendCommand` correctly creates a new key when appending to a non-existing key.
+    /// Тестирует, что команда `AppendCommand` корректно создаёт новый ключ при добавлении данных
+    /// к несуществующему ключу.
     #[test]
     fn test_append_command_non_existing_key() {
         let mut store = create_store();
@@ -186,7 +191,8 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
-    /// Tests that `GetRangeCommand` correctly returns a substring of the stored value.
+    /// Тестирует, что команда `GetRangeCommand` корректно возвращает подстроку из сохранённого
+    /// значения.
     #[test]
     fn test_get_range_command_existing_key() {
         let mut store = create_store();
@@ -208,7 +214,7 @@ mod tests {
         assert_eq!(result, Value::Str(ArcBytes::from_str("hello")));
     }
 
-    /// Tests that `GetRangeCommand` returns `Null` when the key does not exist.
+    /// Тестирует, что команда `GetRangeCommand` возвращает `Null`, если ключ не существует.
     #[test]
     fn test_get_range_command_non_existing_key() {
         let mut store = create_store();
@@ -223,12 +229,13 @@ mod tests {
         assert_eq!(result, Value::Null);
     }
 
-    /// Tests that `GetRangeCommand` returns an error when the key's value is of an invalid type.
+    /// Тестирует, что команда `GetRangeCommand` возвращает ошибку, если значение ключа имеет
+    /// неверный тип.
     #[test]
     fn test_get_range_command_invalid_type() {
         let mut store = create_store();
 
-        // Add a string with a numeric value to the storage
+        // Добавляем строку с числовым значением в хранилище
         store
             .set(ArcBytes::from_str("anton"), Value::Int(42))
             .unwrap();
@@ -240,12 +247,12 @@ mod tests {
         };
         let result = command.execute(&mut store);
 
-        // Check if the result is an error
+        // Проверяем, что результат - ошибка
         assert!(result.is_err(), "Expected error but got Ok");
 
-        // Check that the error matches InvalidType
+        // Проверяем, что ошибка соответствует InvalidType
         if let Err(StoreError::InvalidType) = result {
-            // Expecting an InvalidType error because the value for key `anton` is not a string
+            // Ожидаем ошибку InvalidType, так как значение для ключа `anton` не является строкой
         } else {
             panic!("Expected InvalidType error, but got a different error");
         }

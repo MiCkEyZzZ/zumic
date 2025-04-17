@@ -4,7 +4,7 @@ use super::Storage;
 
 #[derive(Clone)]
 pub struct ClusterStore {
-    pub shards: Vec<Arc<dyn Storage>>, // List of shards
+    pub shards: Vec<Arc<dyn Storage>>, // Список shards
 }
 
 impl ClusterStore {

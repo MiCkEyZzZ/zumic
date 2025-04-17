@@ -22,26 +22,26 @@ impl CommandExecute for ZAddCommand {
         let key = ArcBytes::from_str(&self.key);
         let member = ArcBytes::from_str(&self.member);
 
-        // Get an existing ZSet or create a new one
+        // Получить существующий ZSet или создать новый
         let (mut dict, mut sorted) = match store.get(key.clone())? {
             Some(Value::ZSet { dict, sorted }) => (dict, sorted),
             Some(_) => return Err(StoreError::InvalidType),
             None => (HashMap::new(), SkipList::new()),
         };
 
-        // Insert a new score, returning the old value if there was one.
+        // Вставить новый балл, возвращая старое значение, если оно было.
         let previous = dict.insert(member.clone(), self.score);
         let is_new = previous.is_none();
 
-        // If the member was already present, remove the old entry in the skiplist with its old score
+        // Если элемент уже был, удалить старую запись в skiplist с его старым баллом
         if let Some(old_score) = previous {
             sorted.remove(&OrderedFloat(old_score));
         }
 
-        // Insert a new record: the key is OrderedFloat(score) and the value is member.
+        // Вставить новую запись: ключ — это OrderedFloat(балл), а значение — член.
         sorted.insert(OrderedFloat(self.score), member.clone());
 
-        // Save back the updated ZSet.
+        // Сохранить обновленный ZSet.
         store.set(key, Value::ZSet { dict, sorted })?;
         Ok(Value::Int(if is_new { 1 } else { 0 }))
     }
@@ -62,15 +62,15 @@ impl CommandExecute for ZRemCommand {
             let mut dict = dict;
             let mut sorted = sorted;
             if let Some(old_score) = dict.remove(&member) {
-                // Remove from skiplist by score.
+                // Удалить из skiplist по баллу.
                 sorted.remove(&OrderedFloat(old_score));
                 store.set(key, Value::ZSet { dict, sorted })?;
                 return Ok(Value::Int(1));
             }
-            // Element not found.
+            // Элемент не найден.
             return Ok(Value::Int(0));
         }
-        // No such key or type does not match.
+        // Нет такого ключа или тип не совпадает.
         Ok(Value::Int(0))
     }
 }
@@ -129,7 +129,7 @@ impl CommandExecute for ZRangeCommand {
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
-                // Collect members in ascending order of score.
+                // Собрать члены в порядке возрастания балла.
                 let all: Vec<ArcBytes> = sorted.iter().map(|(_, member)| member.clone()).collect();
                 let len = all.len() as i64;
                 let s = if self.start < 0 {
@@ -169,7 +169,7 @@ impl CommandExecute for ZRevRangeCommand {
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
-                // Collect members in reverse order by score.
+                // Собрать члены в обратном порядке по баллу.
                 let all: Vec<ArcBytes> = sorted
                     .iter_rev()
                     .map(|(_, member)| member.clone())
@@ -209,11 +209,13 @@ mod tests {
         StorageEngine::InMemory(InMemoryStore::new())
     }
 
+    /// Проверяет, что добавление нового элемента в ZSet, его получение
+    /// (ZSCORE) и подсчёт количества элементов (ZCARD) работают корректно.
     #[test]
     fn test_zadd_new_and_score_and_card() {
         let mut store = create_store();
 
-        // Add new member.
+        // Добавляем нового участника.
         let add = ZAddCommand {
             key: "anton".to_string(),
             member: "a".to_string(),
@@ -221,20 +223,23 @@ mod tests {
         };
         assert_eq!(add.execute(&mut store).unwrap(), Value::Int(1));
 
-        // ZSCORE should return 1.5
+        // ZSCORE должен вернуть 1.5.
         let score = ZScoreCommand {
             key: "anton".to_string(),
             member: "a".to_string(),
         };
         assert_eq!(score.execute(&mut store).unwrap(), Value::Float(1.5));
 
-        // ZCARD must be 1
+        // ZCARD должен вернуть 1.
         let card = ZCardCommand {
             key: "anton".to_string(),
         };
         assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
     }
 
+    /// Проверяет, что обновление значения в ZSet работает:
+    /// при повторном добавлении участника с тем же именем возвращается 0,
+    /// а значение обновляется.
     #[test]
     fn test_zadd_update_existing() {
         let mut store = create_store();
@@ -245,29 +250,31 @@ mod tests {
         };
         add1.execute(&mut store).unwrap();
 
-        // Update score of "a"
+        // Обновляем score для "a".
         let add2 = ZAddCommand {
             key: "anton".into(),
             member: "a".into(),
             score: 2.0,
         };
-        // Should return 0 - the element is not new.
+        // Ожидаем возврат 0, так как элемент уже присутствует.
         assert_eq!(add2.execute(&mut store).unwrap(), Value::Int(0));
 
-        // ZSCORE is now 2.0
+        // ZSCORE теперь должен вернуть 2.0.
         let score = ZScoreCommand {
             key: "anton".into(),
             member: "a".into(),
         };
         assert_eq!(score.execute(&mut store).unwrap(), Value::Float(2.0));
 
-        // ZCARD is still 1
+        // ZCARD остаётся равным 1.
         let card = ZCardCommand {
             key: "anton".into(),
         };
         assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
     }
 
+    /// Проверяет удаление элемента из ZSet:
+    /// после удаления (ZREM) элемент больше не доступен, а ZCARD уменьшается.
     #[test]
     fn test_zrem_and_score_and_card() {
         let mut store = create_store();
@@ -310,10 +317,12 @@ mod tests {
         assert_eq!(rem2.execute(&mut store).unwrap(), Value::Int(0));
     }
 
+    /// Проверяет работу команды ZRANGE с положительными и отрицательными
+    /// индексами: выбирает элементы в полном диапазоне, а также с заданным диапазоном.
     #[test]
     fn test_zrange_basic_and_negative() {
         let mut store = create_store();
-        // a:1, b:2, c:3
+        // Добавляем элементы: a:1, b:2, c:3.
         ZAddCommand {
             key: "anton".into(),
             member: "a".into(),
@@ -385,6 +394,9 @@ mod tests {
         );
     }
 
+    /// Проверяет работу команды ZREVRANGE (обратный порядок):
+    /// выбирает элементы в обратном порядке как для полного диапазона,
+    /// так и для заданного диапазона индексов.
     #[test]
     fn test_zrevrange_basic_and_negative() {
         let mut store = create_store();
@@ -446,6 +458,8 @@ mod tests {
         );
     }
 
+    /// Проверяет команды ZRANGE, ZREVRANGE, ZSCORE и ZREM на несуществующем ключе:
+    /// в данном случае должны возвращаться Value::Null и Value::Int(0).
     #[test]
     fn test_zcommands_on_nonexistent_key() {
         let mut store = create_store();

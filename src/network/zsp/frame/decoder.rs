@@ -5,11 +5,11 @@ use tracing::{error, info};
 
 use super::{errors::ZSPError, zsp_types::ZSPFrame};
 
-/// Maximum string length (1mb).
+/// Максимальная длина строки (1 МБ).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
-/// Maximum BulkString size (512mb).
+/// Максимальный размер BulkString (512 МБ).
 pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024;
-/// Maximum nesting of arrays (32 levels).
+/// Максимальная вложенность массивов (32 уровня).
 pub const MAX_ARRAY_DEPTH: usize = 32;
 
 #[derive(Debug)]
@@ -87,7 +87,7 @@ impl ZSPDecoder {
         }
     }
 
-    // --- Methods for parsing individual frame types ---
+    // --- Методы анализа отдельных типов фреймов ---
 
     /// Parses SimpleString, readable up to CRLF.
     fn parse_simple_string(
