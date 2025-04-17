@@ -22,10 +22,13 @@ use serde::{Deserialize, Serialize};
 pub struct QuickList<T> {
     /// Сегменты списка; каждый сегмент — это `VecDeque` с ограниченным размером.
     segments: Vec<VecDeque<T>>,
+
     /// Максимальное количество элементов в одном сегменте.
     max_segment_size: usize,
+
     /// Общее количество элементов во всех сегментах.
     len: usize,
+
     /// Опциональная карта индексов от логического индекса до индекса сегмента.
     #[serde(skip)]
     index: HashMap<usize, usize>,

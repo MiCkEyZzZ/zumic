@@ -21,26 +21,38 @@ use super::ArcBytes;
 /// Порог, при достижении которого `SmartHash` переключается с `Zip` на `Map`.
 const THRESHOLD: usize = 32;
 
-/// Адаптивная структура ключ-значение с автоматическим переключением представления.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SmartHash {
+enum Repr {
     /// Компактное представление с использованием вектора пар ключ-значение.
     Zip(Vec<(ArcBytes, ArcBytes)>),
-    /// Представление на основе HashMap для быстрого доступа при больших объёмах данных.
+
+    /// Хеш‑таблица для больших объёмов.
     Map(HashMap<ArcBytes, ArcBytes>),
 }
 
+/// Адаптивная структура «хеш‑таблица» с автоматическим переключением внутреннего представления.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SmartHash {
+    repr: Repr,
+
+    #[serde(skip)]
+    pending_downgrade: bool,
+}
+
 impl SmartHash {
-    /// Создаёт новый пустой `SmartHash` с использованием представления `Zip`.
+    /// Создаёт пустой SmartHash (начинаем в Zip‑режиме).
     pub fn new() -> Self {
-        SmartHash::Zip(Vec::new())
+        SmartHash {
+            repr: Repr::Zip(Vec::new()),
+            pending_downgrade: false,
+        }
     }
 
     /// Возвращает количество элементов в структуре.
     pub fn len(&self) -> usize {
-        match self {
-            SmartHash::Zip(v) => v.len(),
-            SmartHash::Map(v) => v.len(),
+        match &self.repr {
+            Repr::Zip(v) => v.len(),
+            Repr::Map(v) => v.len(),
         }
     }
 
@@ -49,14 +61,26 @@ impl SmartHash {
         self.len() == 0
     }
 
-    /// Вставляет или обновляет значение по заданному ключу.
+    /// Проверяет наличие ключа.
+    pub fn contains(&self, key: &ArcBytes) -> bool {
+        match &self.repr {
+            Repr::Zip(v) => v.iter().any(|(k, _)| k == key),
+            Repr::Map(m) => m.contains_key(key),
+        }
+    }
+
+    /// Вставляем или обновляем пару (key, value).
     ///
     /// При превышении количества элементов порогового значения происходит автоматическое
     /// переключение представления с `Zip` на `Map`.
     pub fn hset(&mut self, key: ArcBytes, value: ArcBytes) {
-        match self {
-            SmartHash::Zip(vec) => {
-                if let Some((_, v)) = vec.iter_mut().find(|(k, _)| k == &key) {
+        if self.pending_downgrade {
+            self.do_downgrade();
+        }
+
+        match &mut self.repr {
+            Repr::Zip(vec) => {
+                if let Some((_, v)) = vec.iter_mut().find(|(k, _)| *k == key) {
                     *v = value;
                     return;
                 }
@@ -66,27 +90,25 @@ impl SmartHash {
                     for (k, v) in vec.drain(..) {
                         map.insert(k, v);
                     }
-                    *self = SmartHash::Map(map);
+                    self.repr = Repr::Map(map);
                 }
             }
-            SmartHash::Map(map) => {
+            Repr::Map(map) => {
                 map.insert(key, value);
-                if map.len() < THRESHOLD / 2 {
-                    let mut vec = Vec::with_capacity(map.len());
-                    for (k, v) in map.drain() {
-                        vec.push((k, v));
-                    }
-                    *self = SmartHash::Zip(vec);
-                }
+                // map‑режим без даунгрейда на hset
             }
         }
     }
 
     /// Возвращает ссылку на значение, соответствующее заданному ключу, если оно существует.
-    pub fn hget(&self, key: &ArcBytes) -> Option<&ArcBytes> {
-        match self {
-            SmartHash::Zip(vec) => vec.iter().find(|(k, _)| k == key).map(|(_, v)| v),
-            SmartHash::Map(map) => map.get(key),
+    pub fn hget(&mut self, key: &ArcBytes) -> Option<&ArcBytes> {
+        if self.pending_downgrade {
+            self.do_downgrade()
+        }
+
+        match &self.repr {
+            Repr::Zip(vec) => vec.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            Repr::Map(map) => map.get(key),
         }
     }
 
@@ -96,8 +118,8 @@ impl SmartHash {
     /// структуры ниже половины порогового значения происходит downgrade до представления
     /// `Zip`.
     pub fn hdel(&mut self, key: &ArcBytes) -> bool {
-        let removed = match self {
-            SmartHash::Zip(vec) => {
+        let removed = match &mut self.repr {
+            Repr::Zip(vec) => {
                 if let Some(pos) = vec.iter().position(|(k, _)| k == key) {
                     vec.remove(pos);
                     true
@@ -105,38 +127,86 @@ impl SmartHash {
                     false
                 }
             }
-            SmartHash::Map(map) => map.remove(key).is_some(),
+            Repr::Map(map) => map.remove(key).is_some(),
         };
         // Отложенный downgrade: вместо немедленного drain, сохраняем флаг,
         // который будет проверяться при следующей вставке (или GET) для обновления представления.
         if removed {
-            if let SmartHash::Map(map) = self {
+            if let Repr::Map(map) = &self.repr {
                 // Если размер сильно упал, и, скажем, мы ещё не проводили downgrade,
                 // пометим, что он должен быть выполнен при следующей операции.
                 if map.len() < THRESHOLD / 2 {
-                    // Пробуем напрямую выполнить downgrade сейчас, или установить флаг для
-                    // следующей операции.
-                    // Например, если отложить, можно не выполнять drain прямо здесь.
-                    // Для простоты оставим drain здесь, но это место можно оптимизировать в будущем.
-                    // Либо использовать какую то структуру в которой данные будут сжаты. Пока оставил так,
-                    // обдумваем, пробуем различные варианты. На данный момент бенчмарки проходят удовлетворительно,
-                    // но можно улучшить.
-                    let mut vec = Vec::with_capacity(map.len());
-                    for (k, v) in map.drain() {
-                        vec.push((k, v));
-                    }
-                    *self = SmartHash::Zip(vec);
+                    self.pending_downgrade = true;
                 }
             }
         }
         removed
     }
 
+    /// HGETALL: в виде Vec<(String, String)>
+    pub fn hget_all(&self) -> Vec<(String, String)> {
+        self.entries()
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    String::from_utf8_lossy(k.as_slice()).into_owned(),
+                    String::from_utf8_lossy(v.as_slice()).into_owned(),
+                )
+            })
+            .collect()
+    }
+
+    /// Проводит реальный даунгрейд из Map в Zip (вызывается лениво).
+    fn do_downgrade(&mut self) {
+        if let Repr::Map(mut map) = std::mem::replace(&mut self.repr, Repr::Zip(Vec::new())) {
+            let mut vec = Vec::with_capacity(map.len());
+            for (k, v) in map.drain() {
+                vec.push((k, v));
+            }
+            self.repr = Repr::Zip(vec);
+        }
+        self.pending_downgrade = false;
+    }
+
+    /// Очищает все записи.
+    pub fn clear(&mut self) {
+        self.repr = Repr::Zip(Vec::new());
+        self.pending_downgrade = false;
+    }
+
+    /// Список всех ключей (ненумерованный порядок).
+    pub fn keys(&self) -> Vec<ArcBytes> {
+        match &self.repr {
+            Repr::Zip(v) => v.iter().map(|(k, _)| k.clone()).collect(),
+            Repr::Map(m) => m.keys().cloned().collect(),
+        }
+    }
+
+    /// Список всех значений.
+    pub fn values(&self) -> Vec<ArcBytes> {
+        match &self.repr {
+            Repr::Zip(v) => v.iter().map(|(_, v)| v.clone()).collect(),
+            Repr::Map(m) => m.values().cloned().collect(),
+        }
+    }
+
+    /// Список всех пар (key, value).
+    pub fn entries(&self) -> Vec<(ArcBytes, ArcBytes)> {
+        match &self.repr {
+            Repr::Zip(v) => v.clone(),
+            Repr::Map(m) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }
+    }
+
     /// Возвращает итератор по парам ключ-значение.
-    pub fn iter(&self) -> SmartHashIter<'_> {
-        match self {
-            SmartHash::Zip(vec) => SmartHashIter::Zip(vec.iter()),
-            SmartHash::Map(map) => SmartHashIter::Map(map.iter()),
+    pub fn iter(&mut self) -> SmartHashIter<'_> {
+        if self.pending_downgrade {
+            self.do_downgrade();
+        }
+
+        match &self.repr {
+            Repr::Zip(vec) => SmartHashIter::Zip(vec.iter()),
+            Repr::Map(map) => SmartHashIter::Map(map.iter()),
         }
     }
 }
@@ -169,6 +239,7 @@ impl Extend<(ArcBytes, ArcBytes)> for SmartHash {
 pub enum SmartHashIter<'a> {
     /// Итератор по компактному представлению `Zip`.
     Zip(slice::Iter<'a, (ArcBytes, ArcBytes)>),
+
     /// Итератор по представлению `Map`.
     Map(hash_map::Iter<'a, ArcBytes, ArcBytes>),
 }
@@ -187,108 +258,92 @@ impl<'a> Iterator for SmartHashIter<'a> {
 mod tests {
     use super::*;
 
-    /// Проверяет, что значение, вставленное с помощью `hset`, может быть получено через
-    /// `hget`.
     #[test]
     fn test_hset_hget() {
+        let mut smart_hash = SmartHash::new();
         let key = ArcBytes::from_str("key1");
         let value = ArcBytes::from_str("value1");
 
-        let mut smart_hash = SmartHash::new();
         smart_hash.hset(key.clone(), value.clone());
         assert_eq!(smart_hash.hget(&key), Some(&value));
     }
 
-    /// Проверяет, что ключ можно удалить с помощью `hdel`, после чего он становится
-    /// недоступным.
     #[test]
-    fn test_hdel() {
-        let key = ArcBytes::from_str("key1");
-        let value = ArcBytes::from_str("value1");
-
-        let mut smart_hash = SmartHash::new();
-        smart_hash.hset(key.clone(), value.clone());
-        let removed = smart_hash.hdel(&key);
-        assert!(removed);
-        assert!(smart_hash.hget(&key).is_none());
+    fn test_hdel_and_empty() {
+        let mut sh = SmartHash::new();
+        let k = ArcBytes::from_str("kin");
+        let v = ArcBytes::from_str("za");
+        sh.hset(k.clone(), v);
+        assert!(sh.hdel(&k));
+        assert!(!sh.contains(&k));
+        assert!(sh.is_empty());
     }
 
-    /// Проверяет, что внутреннее представление автоматически переключается на `Map` после
-    /// вставки большего количества элементов, чем задано порогом.
     #[test]
-    fn test_auto_convert_to_map() {
-        let mut smart_hash = SmartHash::new();
-        // Вставьте больше элементов, чем порог THRESHOLD, чтобы вызвать преобразование.
+    fn test_auto_convert_to_map_and_lazy_downgrade() {
+        let mut sh = SmartHash::new();
+        // переполним Zip → Map
         for i in 0..(THRESHOLD + 1) {
-            let key = ArcBytes::from_str(&format!("key{}", i));
-            let value = ArcBytes::from_str(&format!("value{}", i));
-            smart_hash.hset(key, value);
+            let k = ArcBytes::from_str(&i.to_string());
+            sh.hset(k, ArcBytes::from_str("v"));
         }
+        assert!(matches!(sh.repr, Repr::Map(_)));
 
-        // Проверяем, что внутреннее представление теперь является картой.
-        match smart_hash {
-            SmartHash::Map(_) => {}
-            _ => panic!(
-                "Ожидалось, что внутреннее представление будет Map после превышения THRESHOLD"
-            ),
+        // удалим всё
+        for i in 0..(THRESHOLD + 1) {
+            let k = ArcBytes::from_str(&i.to_string());
+            assert!(sh.hdel(&k));
         }
+        // ещё не downgraded
+        assert!(sh.pending_downgrade);
+
+        // на первой же hset произойдёт downgrade
+        sh.hset(ArcBytes::from_str("x"), ArcBytes::from_str("y"));
+        assert!(!sh.pending_downgrade);
+        assert!(matches!(sh.repr, Repr::Zip(_)));
     }
 
-    /// Проверяет, что итерация по записям возвращает все пары ключ-значение.
     #[test]
-    fn test_iter() {
-        let mut smart_hash = SmartHash::new();
+    fn test_iter_and_entries_order_independent() {
+        let mut sh = SmartHash::new();
         let pairs = vec![
             (ArcBytes::from_str("a"), ArcBytes::from_str("1")),
             (ArcBytes::from_str("b"), ArcBytes::from_str("2")),
+            (ArcBytes::from_str("c"), ArcBytes::from_str("3")),
         ];
-        for (k, v) in pairs.clone() {
-            smart_hash.hset(k, v);
-        }
-        let collected: Vec<(&ArcBytes, &ArcBytes)> = smart_hash.iter().collect();
-        // Проверяем наличие обоих элементов (порядок не гарантируется)
-        assert_eq!(collected.len(), 2);
+        sh.extend(pairs.clone());
+        let mut got: Vec<_> = sh.iter().collect();
+        let mut expected: Vec<_> = pairs.iter().map(|(k, v)| (k, v)).collect();
+        got.sort_by(|(a, _), (b, _)| a.cmp(b));
+        expected.sort_by(|(a, _), (b, _)| a.cmp(b));
+        assert_eq!(got, expected);
     }
 
-    /// Проверяет корректность работы методов `len` и `is_empty`
-    /// при вставке элементов.
     #[test]
-    fn test_len_and_empty() {
+    fn test_len_and_clear() {
         let mut sh = SmartHash::new();
-        assert!(sh.is_empty());
         assert_eq!(sh.len(), 0);
         sh.hset(ArcBytes::from_str("a"), ArcBytes::from_str("1"));
-        assert!(!sh.is_empty());
         assert_eq!(sh.len(), 1);
+        sh.clear();
+        assert_eq!(sh.len(), 0);
     }
 
-    /// Проверяет работу методов `hset`, `hget`, `hdel` и понижение
-    /// представления с Map на Zip, если размер структуры падает ниже порога.
     #[test]
-    fn test_hset_hget_hdel_and_downgrade() {
+    fn test_keys_values_entries_hget_all() {
         let mut sh = SmartHash::new();
-        // Добавьте THRESHOLD+1 для перехода к карте
-        for i in 0..(THRESHOLD + 1) {
-            let k = ArcBytes::from_str(&format!("k{i}"));
-            let v = ArcBytes::from_str(&format!("v{i}"));
-            sh.hset(k.clone(), v.clone());
-            assert_eq!(sh.hget(&k), Some(&v));
-        }
-        // Мы убедились, что внутри Map
-        matches!(sh, SmartHash::Map(_));
-
-        // Удалить все, кроме одного, чтобы map.len() == 1 < THRESHOLD/2
-        for i in 0..THRESHOLD {
-            let k = ArcBytes::from_str(&format!("k{i}"));
-            assert!(sh.hdel(&k));
-        }
-        // Нужно вернуться к Zip
-        matches!(sh, SmartHash::Zip(_));
-        assert_eq!(sh.len(), 1);
+        sh.hset(ArcBytes::from_str("x"), ArcBytes::from_str("10"));
+        sh.hset(ArcBytes::from_str("y"), ArcBytes::from_str("20"));
+        let keys = sh.keys();
+        assert!(keys.contains(&ArcBytes::from_str("x")));
+        let values = sh.values();
+        assert!(values.contains(&ArcBytes::from_str("20")));
+        let entries = sh.entries();
+        assert!(entries.iter().any(|(k, _)| k == &ArcBytes::from_str("y")));
+        let frame = sh.hget_all();
+        assert!(frame.iter().any(|(k, v)| k == "x" && v == "10"));
     }
 
-    /// Проверяет, что порядок итерации не влияет на корректность,
-    /// сортируя записи перед сравнением.
     #[test]
     fn test_iter_order_independent() {
         let mut sh = SmartHash::new();
@@ -308,15 +363,13 @@ mod tests {
         assert_eq!(got, expected_refs);
     }
 
-    /// Проверяет, что реализация FromIterator корректно создаёт SmartHash
-    /// так, что все записи доступны.
     #[test]
     fn test_from_iterator() {
         let pairs = vec![
-            (ArcBytes::from_str("foo"), ArcBytes::from_str("bar")),
-            (ArcBytes::from_str("baz"), ArcBytes::from_str("qux")),
+            (ArcBytes::from_str("k1"), ArcBytes::from_str("v1")),
+            (ArcBytes::from_str("k2"), ArcBytes::from_str("v2")),
         ];
-        let sh: SmartHash = pairs.clone().into_iter().collect();
+        let mut sh: SmartHash = pairs.clone().into_iter().collect();
         assert_eq!(sh.len(), 2);
         for (k, v) in pairs {
             assert_eq!(sh.hget(&k), Some(&v));

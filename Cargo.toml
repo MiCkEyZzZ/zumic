@@ -40,5 +40,5 @@ num_cpus = "1.0"
 criterion = "0.5"
 
 [[bench]]
-name = "zset_commands"
+name = "hash_commands"
 harness = false

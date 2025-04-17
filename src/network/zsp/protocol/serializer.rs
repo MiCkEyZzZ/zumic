@@ -31,7 +31,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
             ZSPFrame::Array(Some(frames))
         }
         // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
-        Value::Hash(smart) => {
+        Value::Hash(mut smart) => {
             let dict: HashMap<String, ZSPFrame> = smart
                 .iter()
                 .map(|(k, v)| {

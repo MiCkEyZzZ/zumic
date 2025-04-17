@@ -28,8 +28,10 @@ pub struct Node<K, V> {
 pub struct SkipList<K, V> {
     /// Головной (dummy) узел; не содержит полезных данных.
     head: Box<Node<K, V>>,
+
     /// Текущий максимальный уровень.
     level: usize,
+
     /// Количество элементов (без головы).
     length: usize,
 }

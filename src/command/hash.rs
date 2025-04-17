@@ -47,7 +47,7 @@ impl CommandExecute for HGetCommand {
         let key = ArcBytes::from_str(&self.key);
         let field = ArcBytes::from_str(&self.field);
 
-        if let Some(Value::Hash(ref smart_hash)) = store.get(key.clone())? {
+        if let Some(Value::Hash(ref mut smart_hash)) = store.get(key.clone())? {
             if let Some(value) = smart_hash.hget(&field) {
                 return Ok(Value::Str(value.clone()));
             } else {
@@ -90,7 +90,7 @@ impl CommandExecute for HGetAllCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
 
-        if let Some(Value::Hash(ref smart_hash)) = store.get(key)? {
+        if let Some(Value::Hash(ref mut smart_hash)) = store.get(key)? {
             let result: QuickList<ArcBytes> = QuickList::from_iter(
                 smart_hash.iter().map(|(k, v)| {
                     ArcBytes::from(format!(

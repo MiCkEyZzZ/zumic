@@ -5,54 +5,56 @@ use serde::{Deserialize, Serialize};
 
 use super::{skip_list::SkipList, ArcBytes, QuickList, SmartHash};
 
-/// Represents a generic value in the storage engine.
+/// Представляет обобщённое значение в движке хранения данных.
 ///
-/// This enum is used as the primary data container for various types
-/// supported by the engine. It supports strings, integers, floats,
-/// nulls, collections (lists, sets, hashes, sorted sets), as well as
-/// more advanced types like HyperLogLog and stream entries.
+/// Используется как основной контейнер для различных поддерживаемых типов данных:
+/// строк, целых чисел, чисел с плавающей точкой, `null`, коллекций
+/// (списки, множества, хэши, упорядоченные множества), а также более сложных
+/// структур, таких как HyperLogLog и потоки.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Value {
-    /// Binary-safe string.
+    /// Двоично-безопасная строка.
     Str(ArcBytes),
-    /// Signed 64-bit integer.
+    /// Знаковое 64-битное целое число.
     Int(i64),
-    /// 64-bit floating-bit point number.
+    /// 64-битное число с плавающей точкой.
     Float(f64),
-    /// Null/None type (used as a placeholder or deletion marker).
+    /// Тип `null` (используется как маркер отсутствия значения или удаления).
     Null,
-    /// List of binary strings using a quicklist representation.
+    /// Список двоичных строк, реализованный через `QuickList`.
     List(QuickList<ArcBytes>),
-    /// Hash map (dictionary) stored as SmartHash.
+    /// Хэш-карта (словарь), хранимая как `SmartHash`.
     Hash(SmartHash),
-    /// Sorted set implementation with score-based ordering.
+    /// Упорядоченное множество с сортировкой по оценке (`score`).
     ///
-    /// `dict` maps each member to its score,
-    /// while `sorted` maintains an ordered map from score to a set of
-    /// members.
+    /// Поле `dict` сопоставляет каждый элемент со значением оценки,
+    /// а `sorted` поддерживает упорядоченный список ключей по оценкам.
     ZSet {
+        /// Соответствие элемента его оценке.
         dict: HashMap<ArcBytes, f64>,
+        /// Список элементов, упорядоченных по оценкам.
         sorted: SkipList<OrderedFloat<f64>, ArcBytes>,
     },
-    /// Set of unique string elements.
+    /// Множество уникальных строковых элементов.
     Set(HashSet<String>),
-    /// HyperLogLog structure for approximate cardinality estimation.
+    /// Структура HyperLogLog для приближённого подсчёта количества уникальных элементов.
     HyperLogLog(HLL),
-    /// Stream of entries, each identified by an ID and associated
-    /// key-value pairs.
+    /// Поток записей, каждая запись имеет идентификатор и набор полей.
     SStream(Vec<StreamEntry>),
 }
 
+/// Запись потока данных.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StreamEntry {
-    /// Unique identifier of the stream entry.
+    /// Уникальный идентификатор записи в потоке.
     pub id: u64,
-    /// Map of field names to values.
+    /// Поля записи и их значения.
     pub data: HashMap<String, Value>,
 }
 
+/// Структура HyperLogLog для приближённого уникального счётчика.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HLL {
-    /// Internal register state used by the HyperLogLog algorithm.
+    /// Внутренние регистры, используемые алгоритмом HyperLogLog.
     pub registers: Vec<u8>,
 }

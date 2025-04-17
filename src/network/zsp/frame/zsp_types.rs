@@ -103,7 +103,7 @@ fn convert_hashset(set: HashSet<String>) -> Result<ZSPFrame, String> {
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
-fn convert_smart_hash(smart: SmartHash) -> Result<ZSPFrame, String> {
+fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
     debug!("Converting SmartHash to ZSPFrame::Dictionary");
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
