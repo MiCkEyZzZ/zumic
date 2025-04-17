@@ -7,3 +7,5 @@ pub mod error;
 pub mod logging;
 pub mod network;
 pub mod pubsub;
+
+pub use database::{ArcBytes, SmartHash};

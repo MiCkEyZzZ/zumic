@@ -139,8 +139,8 @@ mod tests {
     fn test_convert_smart_hash() {
         // Создаем SmartHash с несколькими записями.
         let mut sh = SmartHash::new();
-        sh.hset(ArcBytes::from_str("key1"), ArcBytes::from_str("val1"));
-        sh.hset(ArcBytes::from_str("key2"), ArcBytes::from_str("val2"));
+        sh.insert(ArcBytes::from_str("key1"), ArcBytes::from_str("val1"));
+        sh.insert(ArcBytes::from_str("key2"), ArcBytes::from_str("val2"));
 
         let frame = convert_smart_hash(sh).unwrap();
         if let ZSPFrame::Dictionary(Some(dict)) = frame {

@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn test_serialize_hash() {
         let mut sh = crate::database::smart_hash::SmartHash::new();
-        sh.hset(ArcBytes::from_str("k1"), ArcBytes::from_str("v1"));
+        sh.insert(ArcBytes::from_str("k1"), ArcBytes::from_str("v1"));
         let value = Value::Hash(sh);
         let frame = serialize_response(Response::Value(value));
 

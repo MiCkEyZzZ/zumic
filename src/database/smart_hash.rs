@@ -73,7 +73,7 @@ impl SmartHash {
     ///
     /// При превышении количества элементов порогового значения происходит автоматическое
     /// переключение представления с `Zip` на `Map`.
-    pub fn hset(&mut self, key: ArcBytes, value: ArcBytes) {
+    pub fn insert(&mut self, key: ArcBytes, value: ArcBytes) {
         if self.pending_downgrade {
             self.do_downgrade();
         }
@@ -85,7 +85,7 @@ impl SmartHash {
                     return;
                 }
                 vec.push((key, value));
-                if vec.len() > THRESHOLD {
+                if vec.len() >= THRESHOLD {
                     let mut map = HashMap::with_capacity(vec.len());
                     for (k, v) in vec.drain(..) {
                         map.insert(k, v);
@@ -101,7 +101,7 @@ impl SmartHash {
     }
 
     /// Возвращает ссылку на значение, соответствующее заданному ключу, если оно существует.
-    pub fn hget(&mut self, key: &ArcBytes) -> Option<&ArcBytes> {
+    pub fn get(&mut self, key: &ArcBytes) -> Option<&ArcBytes> {
         if self.pending_downgrade {
             self.do_downgrade()
         }
@@ -117,7 +117,7 @@ impl SmartHash {
     /// Возвращает `true`, если ключ найден и значение удалено. При уменьшении размера
     /// структуры ниже половины порогового значения происходит downgrade до представления
     /// `Zip`.
-    pub fn hdel(&mut self, key: &ArcBytes) -> bool {
+    pub fn remove(&mut self, key: &ArcBytes) -> bool {
         let removed = match &mut self.repr {
             Repr::Zip(vec) => {
                 if let Some(pos) = vec.iter().position(|(k, _)| k == key) {
@@ -144,7 +144,7 @@ impl SmartHash {
     }
 
     /// HGETALL: в виде Vec<(String, String)>
-    pub fn hget_all(&self) -> Vec<(String, String)> {
+    pub fn get_all(&self) -> Vec<(String, String)> {
         self.entries()
             .into_iter()
             .map(|(k, v)| {
@@ -221,7 +221,7 @@ impl FromIterator<(ArcBytes, ArcBytes)> for SmartHash {
     fn from_iter<I: IntoIterator<Item = (ArcBytes, ArcBytes)>>(iter: I) -> Self {
         let mut sh = SmartHash::new();
         for (k, v) in iter {
-            sh.hset(k, v);
+            sh.insert(k, v);
         }
         sh
     }
@@ -230,7 +230,7 @@ impl FromIterator<(ArcBytes, ArcBytes)> for SmartHash {
 impl Extend<(ArcBytes, ArcBytes)> for SmartHash {
     fn extend<I: IntoIterator<Item = (ArcBytes, ArcBytes)>>(&mut self, iter: I) {
         for (k, v) in iter {
-            self.hset(k, v);
+            self.insert(k, v);
         }
     }
 }
@@ -264,8 +264,8 @@ mod tests {
         let key = ArcBytes::from_str("key1");
         let value = ArcBytes::from_str("value1");
 
-        smart_hash.hset(key.clone(), value.clone());
-        assert_eq!(smart_hash.hget(&key), Some(&value));
+        smart_hash.insert(key.clone(), value.clone());
+        assert_eq!(smart_hash.get(&key), Some(&value));
     }
 
     #[test]
@@ -273,8 +273,8 @@ mod tests {
         let mut sh = SmartHash::new();
         let k = ArcBytes::from_str("kin");
         let v = ArcBytes::from_str("za");
-        sh.hset(k.clone(), v);
-        assert!(sh.hdel(&k));
+        sh.insert(k.clone(), v);
+        assert!(sh.remove(&k));
         assert!(!sh.contains(&k));
         assert!(sh.is_empty());
     }
@@ -285,20 +285,20 @@ mod tests {
         // переполним Zip → Map
         for i in 0..(THRESHOLD + 1) {
             let k = ArcBytes::from_str(&i.to_string());
-            sh.hset(k, ArcBytes::from_str("v"));
+            sh.insert(k, ArcBytes::from_str("v"));
         }
         assert!(matches!(sh.repr, Repr::Map(_)));
 
         // удалим всё
         for i in 0..(THRESHOLD + 1) {
             let k = ArcBytes::from_str(&i.to_string());
-            assert!(sh.hdel(&k));
+            assert!(sh.remove(&k));
         }
         // ещё не downgraded
         assert!(sh.pending_downgrade);
 
         // на первой же hset произойдёт downgrade
-        sh.hset(ArcBytes::from_str("x"), ArcBytes::from_str("y"));
+        sh.insert(ArcBytes::from_str("x"), ArcBytes::from_str("y"));
         assert!(!sh.pending_downgrade);
         assert!(matches!(sh.repr, Repr::Zip(_)));
     }
@@ -323,7 +323,7 @@ mod tests {
     fn test_len_and_clear() {
         let mut sh = SmartHash::new();
         assert_eq!(sh.len(), 0);
-        sh.hset(ArcBytes::from_str("a"), ArcBytes::from_str("1"));
+        sh.insert(ArcBytes::from_str("a"), ArcBytes::from_str("1"));
         assert_eq!(sh.len(), 1);
         sh.clear();
         assert_eq!(sh.len(), 0);
@@ -332,15 +332,15 @@ mod tests {
     #[test]
     fn test_keys_values_entries_hget_all() {
         let mut sh = SmartHash::new();
-        sh.hset(ArcBytes::from_str("x"), ArcBytes::from_str("10"));
-        sh.hset(ArcBytes::from_str("y"), ArcBytes::from_str("20"));
+        sh.insert(ArcBytes::from_str("x"), ArcBytes::from_str("10"));
+        sh.insert(ArcBytes::from_str("y"), ArcBytes::from_str("20"));
         let keys = sh.keys();
         assert!(keys.contains(&ArcBytes::from_str("x")));
         let values = sh.values();
         assert!(values.contains(&ArcBytes::from_str("20")));
         let entries = sh.entries();
         assert!(entries.iter().any(|(k, _)| k == &ArcBytes::from_str("y")));
-        let frame = sh.hget_all();
+        let frame = sh.get_all();
         assert!(frame.iter().any(|(k, v)| k == "x" && v == "10"));
     }
 
@@ -372,7 +372,7 @@ mod tests {
         let mut sh: SmartHash = pairs.clone().into_iter().collect();
         assert_eq!(sh.len(), 2);
         for (k, v) in pairs {
-            assert_eq!(sh.hget(&k), Some(&v));
+            assert_eq!(sh.get(&k), Some(&v));
         }
     }
 }

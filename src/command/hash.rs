@@ -21,14 +21,14 @@ impl CommandExecute for HSetCommand {
 
         match store.get(key.clone())? {
             Some(Value::Hash(mut smart_hash)) => {
-                smart_hash.hset(field.clone(), value.clone());
+                smart_hash.insert(field.clone(), value.clone());
                 store.set(key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
                 let mut smart_hash = SmartHash::new();
-                smart_hash.hset(field.clone(), value.clone());
+                smart_hash.insert(field.clone(), value.clone());
                 store.set(key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
@@ -48,7 +48,7 @@ impl CommandExecute for HGetCommand {
         let field = ArcBytes::from_str(&self.field);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(key.clone())? {
-            if let Some(value) = smart_hash.hget(&field) {
+            if let Some(value) = smart_hash.get(&field) {
                 return Ok(Value::Str(value.clone()));
             } else {
                 return Ok(Value::Null);
@@ -70,7 +70,7 @@ impl CommandExecute for HDelCommand {
         let field = ArcBytes::from_str(&self.field);
 
         if let Some(Value::Hash(mut smart_hash)) = store.get(key.clone())? {
-            let removed = smart_hash.hdel(&field);
+            let removed = smart_hash.remove(&field);
             if removed {
                 store.set(key, Value::Hash(smart_hash))?;
                 return Ok(Value::Int(1));
