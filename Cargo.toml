@@ -40,5 +40,5 @@ num_cpus = "1.0"
 criterion = "0.5"
 
 [[bench]]
-name = "quicklist_benchmarks"
+name = "arcbytes_benchmarks"
 harness = false

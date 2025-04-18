@@ -5,6 +5,7 @@
 //! преобразования строк, нарезки, сериализации и операций сравнения.
 
 use std::{
+    cmp::Ordering,
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ops::Deref,
@@ -20,11 +21,13 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// `ArcBytes` инкапсулирует `Arc<Bytes>`, что позволяет эффективно клонировать и
 /// разделять бинарные данные без лишнего копирования. Поддерживает удобные преобразования,
 /// интерпретацию в UTF‑8 и базовые операции над срезами.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct ArcBytes(Arc<Bytes>);
 
 impl ArcBytes {
     /// Создаёт новый экземпляр `ArcBytes` из `Vec<u8>`.
+    #[inline(always)]
     pub fn from_vec(vec: Vec<u8>) -> Self {
         Self(Arc::new(Bytes::from(vec)))
     }
@@ -40,18 +43,33 @@ impl ArcBytes {
     }
 
     /// Возвращает длину среза байтов.
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Клонирует срез байтов.
+    #[inline(always)]
+    pub fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+
     /// Возвращает `true`, если срез байтов пуст.
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// Возвращает срез сохранённых байтов.
+    #[inline(always)]
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
+    }
+
+    /// Возвращает срез сохранённых байтов.
+    #[inline(always)]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_slice()
     }
 
     /// Преобразует сохранённые байты в `Vec<u8>`.
@@ -60,6 +78,7 @@ impl ArcBytes {
     }
 
     /// Пытается интерпретировать внутренние байты как строку UTF‑8.
+    #[inline(always)]
     pub fn as_str(&self) -> Option<&str> {
         from_utf8(self.as_slice()).ok()
     }
@@ -91,9 +110,19 @@ impl ArcBytes {
 
     /// Возвращает новый `ArcBytes`, являющийся срезом исходного по заданному диапазону.
     pub fn slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
-        // Bytes::slice возвращает новый Bytes, который ссылается на ту же память.
-        let bytes = self.0.slice(range);
-        Self(Arc::new(bytes))
+        Self(Arc::new(self.0.slice(range)))
+    }
+
+    /// Возвращает внутренний `Arc<Bytes>` без копирования.
+    #[inline(always)]
+    pub fn into_inner(self) -> Arc<Bytes> {
+        self.0
+    }
+
+    /// Возвращает внутренний `Bytes` без копирования, если `Arc` имеет единственное владение.
+    #[inline(always)]
+    pub fn into_bytes(self) -> Bytes {
+        Arc::try_unwrap(self.0).unwrap_or_else(|arc| (*arc).clone())
     }
 }
 
@@ -140,9 +169,27 @@ impl AsRef<[u8]> for ArcBytes {
 impl Display for ArcBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match from_utf8(self.as_slice()) {
-            Ok(s) => write!(f, "{}", s),
-            Err(_) => write!(f, "<invalid utf-8>"),
+            Ok(s) => write!(f, "{s}"),
+            Err(_) => write!(f, "<invalid utf-8: {} bytes>", self.len()),
         }
+    }
+}
+
+impl fmt::Debug for ArcBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "b\"")?;
+        for &b in self.as_slice() {
+            match b {
+                b'\n' => write!(f, "\\n")?,
+                b'\r' => write!(f, "\\r")?,
+                b'\t' => write!(f, "\\t")?,
+                b'\"' => write!(f, "\\\"")?,
+                b'\\' => write!(f, "\\\\")?,
+                b if b.is_ascii_graphic() || b == b' ' => write!(f, "{}", b as char)?,
+                _ => write!(f, "\\x{:02x}", b)?,
+            }
+        }
+        write!(f, "\"")
     }
 }
 
@@ -183,7 +230,7 @@ impl Hash for ArcBytes {
 }
 
 impl PartialOrd for ArcBytes {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -206,9 +253,28 @@ impl PartialEq<str> for ArcBytes {
     }
 }
 
+impl PartialEq<Vec<u8>> for ArcBytes {
+    fn eq(&self, other: &Vec<u8>) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl PartialEq<Arc<[u8]>> for ArcBytes {
+    fn eq(&self, other: &Arc<[u8]>) -> bool {
+        self.as_slice() == other.as_ref()
+    }
+}
+
 impl std::borrow::Borrow<[u8]> for ArcBytes {
     fn borrow(&self) -> &[u8] {
         self.as_slice()
+    }
+}
+
+impl TryFrom<ArcBytes> for String {
+    type Error = Utf8Error;
+    fn try_from(value: ArcBytes) -> Result<Self, Self::Error> {
+        Ok(std::str::from_utf8(&value)?.to_owned())
     }
 }
 

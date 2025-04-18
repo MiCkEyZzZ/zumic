@@ -57,9 +57,7 @@ fn bench_arcbytes_eq(c: &mut Criterion) {
     let a = ArcBytes::from_vec(vec![1, 2, 3, 4, 5]);
     let b = ArcBytes::from_vec(vec![1, 2, 3, 4, 5]);
     c.bench_function("ArcBytes::eq", |bch| {
-        bch.iter(|| {
-            black_box(a == b);
-        });
+        bch.iter(|| black_box(a == b));
     });
 }
 
@@ -70,6 +68,24 @@ fn bench_arcbytes_hash(c: &mut Criterion) {
             let mut hasher = DefaultHasher::new();
             black_box(a.hash(&mut hasher));
             black_box(hasher.finish());
+        });
+    });
+}
+
+fn bench_arcbytes_into_bytes(c: &mut Criterion) {
+    let ab = ArcBytes::from_vec(vec![0u8; 512]);
+    c.bench_function("ArcBytes::into_bytes", |b| {
+        b.iter(|| {
+            let _ = black_box(ab.clone()).into_bytes();
+        });
+    });
+}
+
+fn bench_arcbytes_into_inner(c: &mut Criterion) {
+    let ab = ArcBytes::from_vec(vec![0u8; 512]);
+    c.bench_function("ArcBytes::into_inner", |b| {
+        b.iter(|| {
+            let _ = black_box(ab.clone()).into_inner();
         });
     });
 }
@@ -123,6 +139,8 @@ criterion_group!(
     bench_arcbytes_slice,
     bench_arcbytes_eq,
     bench_arcbytes_hash,
+    bench_arcbytes_into_bytes,
+    bench_arcbytes_into_inner,
     bench_bytes_from_vec,
     bench_bytes_clone,
     bench_bytes_slice,
