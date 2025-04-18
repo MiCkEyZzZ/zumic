@@ -58,7 +58,11 @@ fn value_to_frame(value: Value) -> ZSPFrame {
         Value::Set(set) => {
             let frames = set
                 .into_iter()
-                .map(|item| ZSPFrame::SimpleString(item))
+                .map(|item| {
+                    let s = String::from_utf8(item.to_vec())
+                        .unwrap_or_else(|_| "<invalid utf8>".into());
+                    ZSPFrame::SimpleString(s)
+                })
                 .collect();
             ZSPFrame::Array(Some(frames))
         }
@@ -143,8 +147,8 @@ mod tests {
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
-        set.insert("x".to_string());
-        set.insert("y".to_string());
+        set.insert(ArcBytes::from_str("x"));
+        set.insert(ArcBytes::from_str("y"));
         let value = Value::Set(set);
         let frame = serialize_response(Response::Value(value));
 

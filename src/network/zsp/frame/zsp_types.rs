@@ -95,11 +95,13 @@ fn convert_quicklist(list: QuickList<ArcBytes>) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Array(Some(frames)))
 }
 
-fn convert_hashset(set: HashSet<String>) -> Result<ZSPFrame, String> {
-    debug!("Converting HashSet to ZSPFrame::Array");
-    Ok(ZSPFrame::Array(Some(
-        set.into_iter().map(ZSPFrame::SimpleString).collect(),
-    )))
+fn convert_hashset(set: HashSet<ArcBytes>) -> Result<ZSPFrame, String> {
+    debug!("Converting HashSet<ArcBytes> to ZSPFrame::Array");
+    let mut frames = Vec::with_capacity(set.len());
+    for item in set {
+        frames.push(convert_arcbytes_to_frame(item)?);
+    }
+    Ok(ZSPFrame::Array(Some(frames)))
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
@@ -198,18 +200,16 @@ mod tests {
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
-        hs.insert("x".to_string());
-        hs.insert("y".to_string());
+        hs.insert(ArcBytes::from_str("x"));
+        hs.insert(ArcBytes::from_str("y"));
         let zsp = convert_hashset(hs).unwrap();
         if let ZSPFrame::Array(Some(vec)) = zsp {
             let mut got: Vec<_> = vec
                 .into_iter()
-                .map(|f| {
-                    if let ZSPFrame::SimpleString(s) = f {
-                        s
-                    } else {
-                        panic!()
-                    }
+                .map(|f| match f {
+                    ZSPFrame::SimpleString(s) => s,
+                    ZSPFrame::BulkString(Some(b)) => String::from_utf8(b).unwrap(),
+                    _ => panic!(),
                 })
                 .collect();
             got.sort();

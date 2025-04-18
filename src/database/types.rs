@@ -36,7 +36,7 @@ pub enum Value {
         sorted: SkipList<OrderedFloat<f64>, ArcBytes>,
     },
     /// Множество уникальных строковых элементов.
-    Set(HashSet<String>),
+    Set(HashSet<ArcBytes>),
     /// Структура HyperLogLog для приближённого подсчёта количества уникальных элементов.
     HyperLogLog(HLL),
     /// Поток записей, каждая запись имеет идентификатор и набор полей.

@@ -17,16 +17,17 @@ pub struct SAddCommand {
 impl CommandExecute for SAddCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
+        let member = ArcBytes::from_str(&self.member);
 
         match store.get(key.clone())? {
             Some(Value::Set(mut set)) => {
-                let inserted = set.insert(self.member.clone());
+                let inserted = set.insert(member.clone());
                 store.set(key.clone(), Value::Set(set))?;
                 Ok(Value::Int(inserted as i64))
             }
             Some(Value::Null) | None => {
                 let mut set = HashSet::new();
-                set.insert(self.member.clone());
+                set.insert(member);
                 store.set(key, Value::Set(set))?;
                 Ok(Value::Int(1))
             }
@@ -44,9 +45,10 @@ pub struct SRemCommand {
 impl CommandExecute for SRemCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
+        let member = ArcBytes::from_str(&self.member);
 
         if let Some(Value::Set(mut set)) = store.get(key.clone())? {
-            let removed = set.remove(&self.member);
+            let removed = set.remove(&member);
             store.set(key, Value::Set(set))?;
             Ok(Value::Int(removed as i64))
         } else {
@@ -64,9 +66,10 @@ pub struct SIsMemberCommand {
 impl CommandExecute for SIsMemberCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
+        let member = ArcBytes::from_str(&self.member);
 
         if let Some(Value::Set(set)) = store.get(key)? {
-            Ok(Value::Int(set.contains(&self.member) as i64))
+            Ok(Value::Int(set.contains(&member) as i64))
         } else {
             Ok(Value::Int(0))
         }
@@ -83,7 +86,7 @@ impl CommandExecute for SMembersCommand {
         let key = ArcBytes::from_str(&self.key);
 
         if let Some(Value::Set(set)) = store.get(key)? {
-            let list = QuickList::from_iter(set.iter().map(|s| ArcBytes::from(s.as_str())), 64);
+            let list = QuickList::from_iter(set.iter().cloned(), 64);
             Ok(Value::List(list))
         } else {
             Ok(Value::Null)
