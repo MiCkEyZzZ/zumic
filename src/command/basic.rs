@@ -1,5 +1,5 @@
 use crate::{
-    database::{arcbytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -175,7 +175,7 @@ mod tests {
             CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, RenameCommand,
             RenameNxCommand, SetNxCommand,
         },
-        database::{arcbytes::ArcBytes, types::Value},
+        database::{arc_bytes::ArcBytes, types::Value},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
 

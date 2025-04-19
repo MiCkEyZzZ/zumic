@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    database::{arcbytes::ArcBytes, types::Value},
+    database::{arc_bytes::ArcBytes, types::Value},
     error::StoreResult,
 };
 

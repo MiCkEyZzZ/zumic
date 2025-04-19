@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    database::{arcbytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
