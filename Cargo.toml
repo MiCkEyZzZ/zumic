@@ -43,5 +43,5 @@ criterion = "0.5"
 opt-level = 3
 
 [[bench]]
-name = "arc_sds_bytes"
+name = "sds_benchmarks"
 harness = false

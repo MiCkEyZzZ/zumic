@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
@@ -6,7 +7,9 @@ use std::str::{from_utf8, Utf8Error};
 
 #[derive(Debug, Clone)]
 enum Repr {
+    /// Короткая строка, размещённая прямо в стеке.
     Inline { len: u8, buf: [u8; Sds::INLINE_CAP] },
+    /// Длинная строка, размещённая в куче.
     Heap { buf: Vec<u8>, len: usize },
 }
 
@@ -14,6 +17,7 @@ enum Repr {
 pub struct Sds(Repr);
 
 impl Sds {
+    /// Максимальный размер строки, при котором используется стек.
     pub const INLINE_CAP: usize = 22;
 
     #[inline(always)]
@@ -27,7 +31,6 @@ impl Sds {
                 buf,
             })
         } else {
-            let len = vec.len();
             Sds(Repr::Heap { buf: vec, len })
         }
     }
@@ -84,22 +87,19 @@ impl Sds {
 
     pub fn reserve(&mut self, additional: usize) {
         match &mut self.0 {
-            Repr::Inline { .. } => {
-                let required = Self::INLINE_CAP + additional;
-                let slice = self.as_slice();
-                let mut vec = Vec::with_capacity(required); // можно протестировать и с `.next_power_of_two()`
-
-                unsafe {
-                    vec.set_len(slice.len());
-                    std::ptr::copy_nonoverlapping(slice.as_ptr(), vec.as_mut_ptr(), slice.len());
+            Repr::Inline { len, buf } => {
+                let cur_len = *len as usize;
+                if cur_len + additional <= Self::INLINE_CAP {
+                    return; // Уже влезает
                 }
-
-                let len = slice.len();
-                self.0 = Repr::Heap { buf: vec, len };
+                let mut vec = Vec::with_capacity((cur_len + additional).next_power_of_two());
+                vec.extend_from_slice(&buf[..cur_len]);
+                self.0 = Repr::Heap {
+                    len: cur_len,
+                    buf: vec,
+                };
             }
-            Repr::Heap { buf, .. } => {
-                buf.reserve(additional);
-            }
+            Repr::Heap { buf, .. } => buf.reserve(additional),
         }
     }
 
@@ -113,21 +113,21 @@ impl Sds {
     pub fn push(&mut self, byte: u8) {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
-                if (*len as usize) < Self::INLINE_CAP {
-                    buf[*len as usize] = byte;
+                let cur_len = *len as usize;
+                if cur_len < Self::INLINE_CAP {
+                    buf[cur_len] = byte;
                     *len += 1;
                 } else {
-                    let mut vec = Vec::with_capacity((Self::INLINE_CAP + 1).next_power_of_two());
-                    vec.extend_from_slice(&buf[..*len as usize]);
+                    let mut vec = Vec::with_capacity((cur_len + 1).next_power_of_two());
+                    vec.extend_from_slice(&buf[..cur_len]);
                     vec.push(byte);
-                    let len = vec.len();
-                    self.0 = Repr::Heap { buf: vec, len };
+                    self.0 = Repr::Heap {
+                        len: vec.len(),
+                        buf: vec,
+                    };
                 }
             }
             Repr::Heap { buf, len } => {
-                if buf.len() == *len {
-                    buf.reserve(1);
-                }
                 if *len < buf.len() {
                     buf[*len] = byte;
                 } else {
@@ -140,30 +140,37 @@ impl Sds {
 
     pub fn append(&mut self, other: &[u8]) {
         let total = self.len() + other.len();
-
         match &mut self.0 {
             Repr::Inline { len, buf } => {
+                let cur_len = *len as usize;
                 if total <= Self::INLINE_CAP {
-                    buf[*len as usize..total].copy_from_slice(other);
+                    buf[cur_len..total].copy_from_slice(other);
                     *len = total as u8;
                 } else {
                     let mut vec = Vec::with_capacity(total.next_power_of_two());
-                    vec.extend_from_slice(&buf[..*len as usize]);
+                    vec.extend_from_slice(&buf[..cur_len]);
                     vec.extend_from_slice(other);
-                    let len = vec.len();
-                    self.0 = Repr::Heap { buf: vec, len };
+                    self.0 = Repr::Heap {
+                        len: vec.len(),
+                        buf: vec,
+                    };
                 }
             }
             Repr::Heap { buf, len } => {
-                if buf.len() < total {
-                    buf.reserve(other.len());
+                let cur_len = *len;
+                let needed = cur_len + other.len();
+
+                if buf.capacity() < needed {
+                    buf.reserve((needed - buf.len()).next_power_of_two());
                 }
-                if buf.len() < *len + other.len() {
+
+                if buf.len() < needed {
                     buf.extend_from_slice(other);
                 } else {
-                    buf[*len..*len + other.len()].copy_from_slice(other);
+                    buf[cur_len..needed].copy_from_slice(other);
                 }
-                *len += other.len();
+
+                *len = needed;
             }
         }
     }
@@ -177,6 +184,7 @@ impl Sds {
                 *len = new_len.min(*len);
             }
         }
+        self.inline_downgrade();
     }
 
     pub fn slice_range(&self, start: usize, end: usize) -> Self {
@@ -195,6 +203,19 @@ impl Sds {
             vec.extend_from_slice(slice);
             let len = vec.len();
             Sds(Repr::Heap { buf: vec, len })
+        }
+    }
+
+    fn inline_downgrade(&mut self) {
+        if let Repr::Heap { buf, len } = &self.0 {
+            if *len <= Self::INLINE_CAP {
+                let mut inline_buf = [0u8; Self::INLINE_CAP];
+                inline_buf[..*len].copy_from_slice(&buf[..*len]);
+                self.0 = Repr::Inline {
+                    len: *len as u8,
+                    buf: inline_buf,
+                }
+            }
         }
     }
 
@@ -241,7 +262,7 @@ impl Eq for Sds {}
 
 impl PartialOrd for Sds {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.as_slice().cmp(other.as_slice()))
+        Some(self.cmp(other))
     }
 }
 

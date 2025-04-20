@@ -105,6 +105,32 @@ fn bench_sds_clear(c: &mut Criterion) {
     });
 }
 
+fn bench_sds_truncate_no_downgrade(c: &mut Criterion) {
+    // Начинаем с кучи, но не укорачиваем до INLINE_CAP
+    let long = Sds::from_str(HEAP_STR);
+    c.bench_function("Sds truncate (heap, no downgrade)", |b| {
+        b.iter(|| {
+            let mut s = long.clone();
+            // новый размер всё ещё > INLINE_CAP
+            s.truncate(Sds::INLINE_CAP + 5);
+            black_box(&s);
+        })
+    });
+}
+
+fn bench_sds_truncate_with_downgrade(c: &mut Criterion) {
+    // Начинаем с кучи и обрезаем до inline-режима
+    let long = Sds::from_str(HEAP_STR);
+    c.bench_function("Sds truncate (heap → inline)", |b| {
+        b.iter(|| {
+            let mut s = long.clone();
+            // новый размер ≤ INLINE_CAP — тут триггерится inline_downgrade
+            s.truncate(10);
+            black_box(&s);
+        })
+    });
+}
+
 criterion_group!(
     benches,
     bench_sds_inline_push,
@@ -114,6 +140,8 @@ criterion_group!(
     bench_sds_slice_range,
     bench_sds_reserve,
     bench_sds_clear,
+    bench_sds_truncate_no_downgrade,
+    bench_sds_truncate_with_downgrade,
     bench_vec_push,
     bench_bytesmut_push,
     bench_string_push,
