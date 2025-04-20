@@ -278,3 +278,136 @@ impl TryFrom<Sds> for String {
         value.as_str().map(|s| s.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Проверяет создание строки, которая помещается в inline-представление.
+    #[test]
+    fn test_inline_creation_from_str() {
+        let s = Sds::from_str("hello");
+        assert_eq!(s.len(), 5);
+        assert_eq!(s.as_slice(), b"hello");
+        assert!(matches!(s.0, Repr::Inline { .. }));
+    }
+
+    /// Проверяет создание строки, которая превышает inline-лимит и переходит в heap.
+    #[test]
+    fn test_heap_creation_from_str() {
+        let long = "this is a long string exceeding the inline cap";
+        let s = Sds::from_str(long);
+        assert_eq!(s.len(), long.len());
+        assert_eq!(s.as_slice(), long.as_bytes());
+        assert!(matches!(s.0, Repr::Heap { .. }));
+    }
+
+    /// Проверяет push одного байта, который укладывается в inline.
+    #[test]
+    fn test_push_within_inline() {
+        let mut s = Sds::from_str("12345");
+        s.push(b'6');
+        assert_eq!(s.as_slice(), b"123456");
+        assert!(matches!(s.0, Repr::Inline { .. }));
+    }
+
+    /// Проверяет, что push приводит к переходу из inline в heap при переполнении.
+    #[test]
+    fn test_push_exceeding_inline() {
+        let mut s = Sds::from_str("a".repeat(Sds::INLINE_CAP).as_str());
+        s.push(b'x');
+        assert!(matches!(s.0, Repr::Heap { .. }));
+        assert_eq!(s.len(), Sds::INLINE_CAP + 1);
+    }
+
+    /// Проверяет append, не выходящий за пределы inline.
+    #[test]
+    fn test_append_within_inline() {
+        let mut s = Sds::from_str("123");
+        s.append(b"456");
+        assert_eq!(s.as_slice(), b"123456");
+        assert!(matches!(s.0, Repr::Inline { .. }));
+    }
+
+    /// Проверяет append, при котором происходит переход из inline в heap.
+    #[test]
+    fn test_append_exceeding_inline() {
+        let mut s = Sds::from_str("hello");
+        s.append(b" world this is too long");
+        assert!(matches!(s.0, Repr::Heap { .. }));
+        assert_eq!(s.as_str().unwrap(), "hello world this is too long");
+    }
+
+    /// Проверяет очистку содержимого строки.
+    #[test]
+    fn test_clear() {
+        let mut s = Sds::from_str("hello");
+        s.clear();
+        assert_eq!(s.len(), 0);
+        assert!(s.is_empty());
+    }
+
+    /// Проверяет усечение строки до заданной длины.
+    #[test]
+    fn test_truncate() {
+        let mut s = Sds::from_str("hello world");
+        s.truncate(5);
+        assert_eq!(s.as_str().unwrap(), "hello");
+    }
+
+    /// Проверяет, что truncate переводит строку из heap в inline, если длина позволяет.
+    #[test]
+    fn test_truncate_to_inline() {
+        let mut s = Sds::from_str("a very very long string indeed");
+        assert!(matches!(s.0, Repr::Heap { .. }));
+        s.truncate(5);
+        assert!(matches!(s.0, Repr::Inline { .. }));
+        assert_eq!(s.as_str().unwrap(), "a ver");
+    }
+
+    /// Проверяет взятие подстроки по диапазону.
+    #[test]
+    fn test_slice_range() {
+        let s = Sds::from_str("abcdefg");
+        let sliced = s.slice_range(2, 5);
+        assert_eq!(sliced.as_slice(), b"cde");
+    }
+
+    /// Проверяет корректный вывод строки в формате Display, если строка — валидный UTF-8.
+    #[test]
+    fn test_display_valid_utf8() {
+        let s = Sds::from_str("test");
+        assert_eq!(format!("{}", s), "test");
+    }
+
+    /// Проверяет сравнение строк на равенство и порядок.
+    #[test]
+    fn test_equality_and_ordering() {
+        let a = Sds::from_str("abc");
+        let b = Sds::from_str("abc");
+        let c = Sds::from_str("def");
+        assert_eq!(a, b);
+        assert!(a < c);
+    }
+
+    /// Проверяет корректную конвертацию строки в String при валидном UTF-8.
+    #[test]
+    fn test_try_from_valid_utf8() {
+        let s = Sds::from_str("hello");
+        let string: String = s.try_into().unwrap();
+        assert_eq!(string, "hello");
+    }
+
+    /// Проверяет, что хеш одинаковых строк совпадает.
+    #[test]
+    fn test_hashing_consistency() {
+        use std::collections::hash_map::DefaultHasher;
+        let a = Sds::from_str("foo");
+        let b = Sds::from_str("foo");
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        a.hash(&mut hasher1);
+        b.hash(&mut hasher2);
+        assert_eq!(hasher1.finish(), hasher2.finish());
+    }
+}
