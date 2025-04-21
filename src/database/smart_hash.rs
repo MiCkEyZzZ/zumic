@@ -16,7 +16,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::ArcBytes;
+use super::Sds;
 
 /// Порог, при достижении которого `SmartHash` переключается с `Zip` на `Map`.
 const THRESHOLD: usize = 32;
@@ -24,10 +24,10 @@ const THRESHOLD: usize = 32;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum Repr {
     /// Компактное представление с использованием вектора пар ключ-значение.
-    Zip(Vec<(ArcBytes, ArcBytes)>),
+    Zip(Vec<(Sds, Sds)>),
 
     /// Хеш‑таблица для больших объёмов.
-    Map(HashMap<ArcBytes, ArcBytes>),
+    Map(HashMap<Sds, Sds>),
 }
 
 /// Адаптивная структура «хеш‑таблица» с автоматическим переключением внутреннего представления.
@@ -62,7 +62,7 @@ impl SmartHash {
     }
 
     /// Проверяет наличие ключа.
-    pub fn contains(&self, key: &ArcBytes) -> bool {
+    pub fn contains(&self, key: &Sds) -> bool {
         match &self.repr {
             Repr::Zip(v) => v.iter().any(|(k, _)| k == key),
             Repr::Map(m) => m.contains_key(key),
@@ -73,7 +73,7 @@ impl SmartHash {
     ///
     /// При превышении количества элементов порогового значения происходит автоматическое
     /// переключение представления с `Zip` на `Map`.
-    pub fn insert(&mut self, key: ArcBytes, value: ArcBytes) {
+    pub fn insert(&mut self, key: Sds, value: Sds) {
         if self.pending_downgrade {
             self.do_downgrade();
         }
@@ -101,7 +101,7 @@ impl SmartHash {
     }
 
     /// Возвращает ссылку на значение, соответствующее заданному ключу, если оно существует.
-    pub fn get(&mut self, key: &ArcBytes) -> Option<&ArcBytes> {
+    pub fn get(&mut self, key: &Sds) -> Option<&Sds> {
         if self.pending_downgrade {
             self.do_downgrade()
         }
@@ -117,7 +117,7 @@ impl SmartHash {
     /// Возвращает `true`, если ключ найден и значение удалено. При уменьшении размера
     /// структуры ниже половины порогового значения происходит downgrade до представления
     /// `Zip`.
-    pub fn remove(&mut self, key: &ArcBytes) -> bool {
+    pub fn remove(&mut self, key: &Sds) -> bool {
         let removed = match &mut self.repr {
             Repr::Zip(vec) => {
                 if let Some(pos) = vec.iter().position(|(k, _)| k == key) {
@@ -175,7 +175,7 @@ impl SmartHash {
     }
 
     /// Список всех ключей (ненумерованный порядок).
-    pub fn keys(&self) -> Vec<ArcBytes> {
+    pub fn keys(&self) -> Vec<Sds> {
         match &self.repr {
             Repr::Zip(v) => v.iter().map(|(k, _)| k.clone()).collect(),
             Repr::Map(m) => m.keys().cloned().collect(),
@@ -183,7 +183,7 @@ impl SmartHash {
     }
 
     /// Список всех значений.
-    pub fn values(&self) -> Vec<ArcBytes> {
+    pub fn values(&self) -> Vec<Sds> {
         match &self.repr {
             Repr::Zip(v) => v.iter().map(|(_, v)| v.clone()).collect(),
             Repr::Map(m) => m.values().cloned().collect(),
@@ -191,7 +191,7 @@ impl SmartHash {
     }
 
     /// Список всех пар (key, value).
-    pub fn entries(&self) -> Vec<(ArcBytes, ArcBytes)> {
+    pub fn entries(&self) -> Vec<(Sds, Sds)> {
         match &self.repr {
             Repr::Zip(v) => v.clone(),
             Repr::Map(m) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -217,8 +217,8 @@ impl Default for SmartHash {
     }
 }
 
-impl FromIterator<(ArcBytes, ArcBytes)> for SmartHash {
-    fn from_iter<I: IntoIterator<Item = (ArcBytes, ArcBytes)>>(iter: I) -> Self {
+impl FromIterator<(Sds, Sds)> for SmartHash {
+    fn from_iter<I: IntoIterator<Item = (Sds, Sds)>>(iter: I) -> Self {
         let mut sh = SmartHash::new();
         for (k, v) in iter {
             sh.insert(k, v);
@@ -227,8 +227,8 @@ impl FromIterator<(ArcBytes, ArcBytes)> for SmartHash {
     }
 }
 
-impl Extend<(ArcBytes, ArcBytes)> for SmartHash {
-    fn extend<I: IntoIterator<Item = (ArcBytes, ArcBytes)>>(&mut self, iter: I) {
+impl Extend<(Sds, Sds)> for SmartHash {
+    fn extend<I: IntoIterator<Item = (Sds, Sds)>>(&mut self, iter: I) {
         for (k, v) in iter {
             self.insert(k, v);
         }
@@ -238,14 +238,14 @@ impl Extend<(ArcBytes, ArcBytes)> for SmartHash {
 /// Итератор по элементам структуры `SmartHash`.
 pub enum SmartHashIter<'a> {
     /// Итератор по компактному представлению `Zip`.
-    Zip(slice::Iter<'a, (ArcBytes, ArcBytes)>),
+    Zip(slice::Iter<'a, (Sds, Sds)>),
 
     /// Итератор по представлению `Map`.
-    Map(hash_map::Iter<'a, ArcBytes, ArcBytes>),
+    Map(hash_map::Iter<'a, Sds, Sds>),
 }
 
 impl<'a> Iterator for SmartHashIter<'a> {
-    type Item = (&'a ArcBytes, &'a ArcBytes);
+    type Item = (&'a Sds, &'a Sds);
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             SmartHashIter::Zip(iter) => iter.next().map(|(k, v)| (k, v)),
@@ -261,8 +261,8 @@ mod tests {
     #[test]
     fn test_hset_hget() {
         let mut smart_hash = SmartHash::new();
-        let key = ArcBytes::from_str("key1");
-        let value = ArcBytes::from_str("value1");
+        let key = Sds::from_str("key1");
+        let value = Sds::from_str("value1");
 
         smart_hash.insert(key.clone(), value.clone());
         assert_eq!(smart_hash.get(&key), Some(&value));
@@ -271,8 +271,8 @@ mod tests {
     #[test]
     fn test_hdel_and_empty() {
         let mut sh = SmartHash::new();
-        let k = ArcBytes::from_str("kin");
-        let v = ArcBytes::from_str("za");
+        let k = Sds::from_str("kin");
+        let v = Sds::from_str("za");
         sh.insert(k.clone(), v);
         assert!(sh.remove(&k));
         assert!(!sh.contains(&k));
@@ -284,21 +284,21 @@ mod tests {
         let mut sh = SmartHash::new();
         // переполним Zip → Map
         for i in 0..(THRESHOLD + 1) {
-            let k = ArcBytes::from_str(&i.to_string());
-            sh.insert(k, ArcBytes::from_str("v"));
+            let k = Sds::from_str(&i.to_string());
+            sh.insert(k, Sds::from_str("v"));
         }
         assert!(matches!(sh.repr, Repr::Map(_)));
 
         // удалим всё
         for i in 0..(THRESHOLD + 1) {
-            let k = ArcBytes::from_str(&i.to_string());
+            let k = Sds::from_str(&i.to_string());
             assert!(sh.remove(&k));
         }
         // ещё не downgraded
         assert!(sh.pending_downgrade);
 
         // на первой же hset произойдёт downgrade
-        sh.insert(ArcBytes::from_str("x"), ArcBytes::from_str("y"));
+        sh.insert(Sds::from_str("x"), Sds::from_str("y"));
         assert!(!sh.pending_downgrade);
         assert!(matches!(sh.repr, Repr::Zip(_)));
     }
@@ -307,9 +307,9 @@ mod tests {
     fn test_iter_and_entries_order_independent() {
         let mut sh = SmartHash::new();
         let pairs = vec![
-            (ArcBytes::from_str("a"), ArcBytes::from_str("1")),
-            (ArcBytes::from_str("b"), ArcBytes::from_str("2")),
-            (ArcBytes::from_str("c"), ArcBytes::from_str("3")),
+            (Sds::from_str("a"), Sds::from_str("1")),
+            (Sds::from_str("b"), Sds::from_str("2")),
+            (Sds::from_str("c"), Sds::from_str("3")),
         ];
         sh.extend(pairs.clone());
         let mut got: Vec<_> = sh.iter().collect();
@@ -323,7 +323,7 @@ mod tests {
     fn test_len_and_clear() {
         let mut sh = SmartHash::new();
         assert_eq!(sh.len(), 0);
-        sh.insert(ArcBytes::from_str("a"), ArcBytes::from_str("1"));
+        sh.insert(Sds::from_str("a"), Sds::from_str("1"));
         assert_eq!(sh.len(), 1);
         sh.clear();
         assert_eq!(sh.len(), 0);
@@ -332,14 +332,14 @@ mod tests {
     #[test]
     fn test_keys_values_entries_hget_all() {
         let mut sh = SmartHash::new();
-        sh.insert(ArcBytes::from_str("x"), ArcBytes::from_str("10"));
-        sh.insert(ArcBytes::from_str("y"), ArcBytes::from_str("20"));
+        sh.insert(Sds::from_str("x"), Sds::from_str("10"));
+        sh.insert(Sds::from_str("y"), Sds::from_str("20"));
         let keys = sh.keys();
-        assert!(keys.contains(&ArcBytes::from_str("x")));
+        assert!(keys.contains(&Sds::from_str("x")));
         let values = sh.values();
-        assert!(values.contains(&ArcBytes::from_str("20")));
+        assert!(values.contains(&Sds::from_str("20")));
         let entries = sh.entries();
-        assert!(entries.iter().any(|(k, _)| k == &ArcBytes::from_str("y")));
+        assert!(entries.iter().any(|(k, _)| k == &Sds::from_str("y")));
         let frame = sh.get_all();
         assert!(frame.iter().any(|(k, v)| k == "x" && v == "10"));
     }
@@ -348,9 +348,9 @@ mod tests {
     fn test_iter_order_independent() {
         let mut sh = SmartHash::new();
         let pairs = vec![
-            (ArcBytes::from_str("x"), ArcBytes::from_str("10")),
-            (ArcBytes::from_str("y"), ArcBytes::from_str("20")),
-            (ArcBytes::from_str("z"), ArcBytes::from_str("30")),
+            (Sds::from_str("x"), Sds::from_str("10")),
+            (Sds::from_str("y"), Sds::from_str("20")),
+            (Sds::from_str("z"), Sds::from_str("30")),
         ];
         // Использование расширения
         sh.extend(pairs.clone());
@@ -366,8 +366,8 @@ mod tests {
     #[test]
     fn test_from_iterator() {
         let pairs = vec![
-            (ArcBytes::from_str("k1"), ArcBytes::from_str("v1")),
-            (ArcBytes::from_str("k2"), ArcBytes::from_str("v2")),
+            (Sds::from_str("k1"), Sds::from_str("v1")),
+            (Sds::from_str("k2"), Sds::from_str("v2")),
         ];
         let mut sh: SmartHash = pairs.clone().into_iter().collect();
         assert_eq!(sh.len(), 2);

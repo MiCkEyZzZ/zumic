@@ -1,7 +1,7 @@
 use super::command::Command as ZSPCommand;
 use crate::{
     command::Command as StoreCommand,
-    database::{ArcBytes, Value},
+    database::{Sds, Value},
     network::zsp::frame::zsp_types::ZSPFrame,
 };
 
@@ -173,8 +173,8 @@ fn parse_key(frame: &ZSPFrame, cmd: &str) -> Result<String, String> {
 
 fn parse_value(frame: &ZSPFrame, cmd: &str) -> Result<Value, String> {
     match frame {
-        ZSPFrame::SimpleString(s) => Ok(Value::Str(ArcBytes::from_str(s))),
-        ZSPFrame::BulkString(Some(bytes)) => Ok(Value::Str(ArcBytes::from(bytes.clone()))),
+        ZSPFrame::SimpleString(s) => Ok(Value::Str(Sds::from_str(s))),
+        ZSPFrame::BulkString(Some(bytes)) => Ok(Value::Str(Sds::from_vec(bytes.clone()))),
         ZSPFrame::Integer(n) => Ok(Value::Int(*n)),
         _ => Err(format!("{cmd}: unsupported value type")),
     }
@@ -198,7 +198,7 @@ mod tests {
         match set_cmd {
             StoreCommand::Set(set) => {
                 assert_eq!(set.key, "anton");
-                assert_eq!(set.value, Value::Str(ArcBytes::from_str("hisvalue")));
+                assert_eq!(set.value, Value::Str(Sds::from_str("hisvalue")));
             }
             _ => panic!("Expected SetCommand"),
         }

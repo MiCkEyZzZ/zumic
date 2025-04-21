@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use tracing::{debug, warn};
 
-use crate::database::{ArcBytes, QuickList, SmartHash, Value};
+use crate::database::{QuickList, Sds, SmartHash, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZSPFrame {
@@ -66,15 +66,15 @@ impl TryFrom<Value> for ZSPFrame {
     }
 }
 
-impl From<ArcBytes> for ZSPFrame {
-    fn from(value: ArcBytes) -> Self {
-        debug!("Converting ArcBytes to ZSPFrame::BulkString");
+impl From<Sds> for ZSPFrame {
+    fn from(value: Sds) -> Self {
+        debug!("Converting Sds to ZSPFrame::BulkString");
         ZSPFrame::BulkString(Some(value.to_vec()))
     }
 }
 
-fn convert_arcbytes_to_frame(bytes: ArcBytes) -> Result<ZSPFrame, String> {
-    debug!("Handling ArcBytes: {:?}", bytes);
+fn convert_arcbytes_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
+    debug!("Handling Sds: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
         .map(ZSPFrame::SimpleString)
         .or_else(|_| {
@@ -83,7 +83,7 @@ fn convert_arcbytes_to_frame(bytes: ArcBytes) -> Result<ZSPFrame, String> {
         })
 }
 
-fn convert_quicklist(list: QuickList<ArcBytes>) -> Result<ZSPFrame, String> {
+fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
     debug!(
         "Converting QuickList to ZSPFrame::Array with length: {}",
         list.len()
@@ -95,8 +95,8 @@ fn convert_quicklist(list: QuickList<ArcBytes>) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Array(Some(frames)))
 }
 
-fn convert_hashset(set: HashSet<ArcBytes>) -> Result<ZSPFrame, String> {
-    debug!("Converting HashSet<ArcBytes> to ZSPFrame::Array");
+fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
+    debug!("Converting HashSet<Sds> to ZSPFrame::Array");
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
         frames.push(convert_arcbytes_to_frame(item)?);
@@ -117,7 +117,7 @@ fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Dictionary(Some(map)))
 }
 
-fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
+fn convert_zset(dict: HashMap<Sds, f64>) -> Result<ZSPFrame, String> {
     debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
     let pairs = dict
         .into_iter()
@@ -132,6 +132,8 @@ fn convert_zset(dict: HashMap<ArcBytes, f64>) -> Result<ZSPFrame, String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::database::Sds;
+
     use super::*;
 
     use std::collections::{HashMap, HashSet};
@@ -141,8 +143,8 @@ mod tests {
     fn test_convert_smart_hash() {
         // Создаем SmartHash с несколькими записями.
         let mut sh = SmartHash::new();
-        sh.insert(ArcBytes::from_str("key1"), ArcBytes::from_str("val1"));
-        sh.insert(ArcBytes::from_str("key2"), ArcBytes::from_str("val2"));
+        sh.insert(Sds::from_str("key1"), Sds::from_str("val1"));
+        sh.insert(Sds::from_str("key2"), Sds::from_str("val2"));
 
         let frame = convert_smart_hash(sh).unwrap();
         if let ZSPFrame::Dictionary(Some(dict)) = frame {
@@ -162,11 +164,11 @@ mod tests {
     // Tests handling of ArcBytes with both valid UTF-8 and binary data.
     #[test]
     fn handle_arcbytes_utf8_and_binary() {
-        let utf8 = ArcBytes::from_str("hello");
+        let utf8 = Sds::from_str("hello");
         let frame = convert_arcbytes_to_frame(utf8).unwrap();
         assert_eq!(frame, ZSPFrame::SimpleString("hello".into()));
 
-        let bin = ArcBytes::from(vec![0xFF, 0xFE]);
+        let bin = Sds::from_vec(vec![0xFF, 0xFE]);
         let frame = convert_arcbytes_to_frame(bin.clone()).unwrap();
         assert_eq!(frame, ZSPFrame::BulkString(Some(bin.to_vec())));
     }
@@ -175,8 +177,8 @@ mod tests {
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
-        ql.push_back(ArcBytes::from_str("a"));
-        ql.push_back(ArcBytes::from_str("b"));
+        ql.push_back(Sds::from_str("a"));
+        ql.push_back(Sds::from_str("b"));
 
         let zsp = convert_quicklist(ql).unwrap();
         if let ZSPFrame::Array(Some(vec)) = zsp {
@@ -200,8 +202,8 @@ mod tests {
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
-        hs.insert(ArcBytes::from_str("x"));
-        hs.insert(ArcBytes::from_str("y"));
+        hs.insert(Sds::from_str("x"));
+        hs.insert(Sds::from_str("y"));
         let zsp = convert_hashset(hs).unwrap();
         if let ZSPFrame::Array(Some(vec)) = zsp {
             let mut got: Vec<_> = vec
@@ -233,8 +235,8 @@ mod tests {
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = HashMap::new();
-        zs.insert(ArcBytes::from_str("foo"), 1.1);
-        zs.insert(ArcBytes::from_str("bar"), 2.2);
+        zs.insert(Sds::from_str("foo"), 1.1);
+        zs.insert(Sds::from_str("bar"), 2.2);
 
         let result = convert_zset(zs).unwrap();
         if let ZSPFrame::ZSet(mut pairs) = result {
@@ -251,8 +253,8 @@ mod tests {
     // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 ArcBytes.
     #[test]
     fn try_from_value_str_valid_and_invalid_utf8() {
-        let valid = ArcBytes::from_str("abc");
-        let invalid = ArcBytes::from(vec![0xFF, 0xFE]);
+        let valid = Sds::from_str("abc");
+        let invalid = Sds::from_vec(vec![0xFF, 0xFE]);
 
         assert_eq!(
             ZSPFrame::try_from(Value::Str(valid.clone())).unwrap(),
@@ -282,7 +284,7 @@ mod tests {
     // Test conversion of an empty HashMap into an empty Dictionary frame.
     #[test]
     fn convert_empty_hashmap() {
-        let hm: HashMap<ArcBytes, ArcBytes> = HashMap::new();
+        let hm: HashMap<Sds, Sds> = HashMap::new();
         let zsp = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap();
         assert_eq!(zsp, ZSPFrame::Dictionary(Some(HashMap::new())));
     }
@@ -291,7 +293,7 @@ mod tests {
     #[test]
     fn convert_hashmap_with_invalid_utf8_key() {
         let mut hm = HashMap::new();
-        hm.insert(ArcBytes::from(vec![0xFF]), ArcBytes::from_str("val"));
+        hm.insert(Sds::from_vec(vec![0xFF]), Sds::from_str("val"));
 
         let err = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap_err();
         assert!(err.contains("Invalid hash key"));
@@ -301,16 +303,16 @@ mod tests {
     #[test]
     fn convert_zset_with_invalid_utf8_key() {
         let mut zs = HashMap::new();
-        zs.insert(ArcBytes::from(vec![0xFF]), 1.0);
+        zs.insert(Sds::from_vec(vec![0xFF]), 1.0);
 
         let err = convert_zset(zs).unwrap_err();
         assert!(err.contains("ZSet key error"));
     }
 
-    // Test that ArcBytes is converted into a BulkString using `From` impl.
+    // Test that Sds is converted into a BulkString using `From` impl.
     #[test]
     fn arcbytes_into_bulkstring() {
-        let arc = ArcBytes::from_str("hello");
+        let arc = Sds::from_str("hello");
         let frame: ZSPFrame = arc.clone().into();
         assert_eq!(frame, ZSPFrame::BulkString(Some(arc.to_vec())));
     }

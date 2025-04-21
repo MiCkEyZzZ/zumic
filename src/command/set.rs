@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -17,7 +17,7 @@ pub struct SAddCommand {
 impl CommandExecute for SAddCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         match store.get(key.clone())? {
             Some(Value::Set(mut set)) => {
@@ -45,7 +45,7 @@ pub struct SRemCommand {
 impl CommandExecute for SRemCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         if let Some(Value::Set(mut set)) = store.get(key.clone())? {
             let removed = set.remove(&member);
@@ -66,7 +66,7 @@ pub struct SIsMemberCommand {
 impl CommandExecute for SIsMemberCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         if let Some(Value::Set(set)) = store.get(key)? {
             Ok(Value::Int(set.contains(&member) as i64))

@@ -8,5 +8,6 @@ pub mod types;
 
 pub use arc_bytes::ArcBytes;
 pub use quicklist::QuickList;
+pub use sds::Sds;
 pub use smart_hash::SmartHash;
 pub use types::Value;

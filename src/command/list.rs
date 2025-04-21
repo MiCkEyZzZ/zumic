@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -15,7 +15,7 @@ pub struct LPushCommand {
 impl CommandExecute for LPushCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let element = ArcBytes::from_str(&self.value);
+        let element = Sds::from_str(&self.value);
 
         let mut list = match store.get(key.clone())? {
             Some(Value::List(list)) => list,
@@ -39,7 +39,7 @@ pub struct RPushCommand {
 impl CommandExecute for RPushCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let element = ArcBytes::from_str(&self.value);
+        let element = Sds::from_str(&self.value);
 
         let mut list = match store.get(key.clone())? {
             Some(Value::List(list)) => list,
@@ -190,7 +190,7 @@ mod tests {
         let lpop = LPopCommand { key: "l".into() };
         assert_eq!(
             lpop.execute(&mut store).unwrap(),
-            Value::Str(ArcBytes::from_str("two"))
+            Value::Str(Sds::from_str("two"))
         );
         assert_eq!(
             LLenCommand { key: "l".into() }.execute(&mut store).unwrap(),
@@ -218,7 +218,7 @@ mod tests {
         let rpop = RPopCommand { key: "r".into() };
         assert_eq!(
             rpop.execute(&mut store).unwrap(),
-            Value::Str(ArcBytes::from_str("b"))
+            Value::Str(Sds::from_str("b"))
         );
         assert_eq!(
             LLenCommand { key: "r".into() }.execute(&mut store).unwrap(),
@@ -252,11 +252,7 @@ mod tests {
         };
         assert_eq!(
             list,
-            vec![
-                ArcBytes::from_str("x"),
-                ArcBytes::from_str("y"),
-                ArcBytes::from_str("z"),
-            ]
+            vec![Sds::from_str("x"), Sds::from_str("y"), Sds::from_str("z"),]
         );
 
         // Извлечение только элемента с индексом 1.
@@ -269,7 +265,7 @@ mod tests {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
             _ => panic!(),
         };
-        assert_eq!(list2, vec![ArcBytes::from_str("y")]);
+        assert_eq!(list2, vec![Sds::from_str("y")]);
     }
 
     /// Тест, что LLenCommand возвращает 0 и LPopCommand возвращает Null, когда

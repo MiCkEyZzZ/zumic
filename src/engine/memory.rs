@@ -85,7 +85,7 @@ impl Default for InMemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::types::Value;
+    use crate::database::{types::Value, Sds};
 
     fn key(data: &str) -> ArcBytes {
         ArcBytes::from(data.as_bytes().to_vec())
@@ -96,7 +96,7 @@ mod tests {
     fn test_set_and_get() {
         let mut store = InMemoryStore::new();
         let k = key("hello");
-        let v = Value::Str(ArcBytes::from_str("world"));
+        let v = Value::Str(Sds::from_str("world"));
 
         store.set(k.clone(), v.clone()).unwrap();
         let got = store.get(k.clone()).unwrap();
@@ -109,8 +109,8 @@ mod tests {
     fn test_overwrite_value() {
         let mut store = InMemoryStore::new();
         let k = key("overwrite");
-        let v1 = Value::Str(ArcBytes::from_str("one"));
-        let v2 = Value::Str(ArcBytes::from_str("two"));
+        let v1 = Value::Str(Sds::from_str("one"));
+        let v2 = Value::Str(Sds::from_str("two"));
 
         store.set(k.clone(), v1.clone()).unwrap();
         store.set(k.clone(), v2.clone()).unwrap();
@@ -124,7 +124,7 @@ mod tests {
     fn test_delete() {
         let mut store = InMemoryStore::new();
         let k = key("key_to_delete");
-        let v = Value::Str(ArcBytes::from_str("some_value"));
+        let v = Value::Str(Sds::from_str("some_value"));
 
         store.set(k.clone(), v).unwrap();
         store.del(k.clone()).unwrap();
@@ -201,7 +201,7 @@ mod tests {
     fn test_renamenx_success() {
         let mut store = InMemoryStore::new();
         store
-            .set(key("old"), Value::Str(ArcBytes::from_str("val")))
+            .set(key("old"), Value::Str(Sds::from_str("val")))
             .unwrap();
 
         let ok = store.renamenx(key("old"), key("new")).unwrap();
@@ -209,7 +209,7 @@ mod tests {
         assert!(store.get(key("old")).unwrap().is_none());
         assert_eq!(
             store.get(key("new")).unwrap(),
-            Some(Value::Str(ArcBytes::from_str("val")))
+            Some(Value::Str(Sds::from_str("val")))
         );
     }
 

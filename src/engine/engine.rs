@@ -92,6 +92,8 @@ impl StorageEngine {
 
 #[cfg(test)]
 mod tests {
+    use crate::database::Sds;
+
     use super::*;
 
     fn key(data: &str) -> ArcBytes {
@@ -103,7 +105,7 @@ mod tests {
     fn test_engine_set_and_get() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("foo");
-        let v = Value::Str(ArcBytes::from_str("bar"));
+        let v = Value::Str(Sds::from_str("bar"));
 
         engine.set(k.clone(), v.clone()).unwrap();
         let got = engine.get(k.clone()).unwrap();
@@ -125,7 +127,7 @@ mod tests {
     fn test_engine_delete() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("hello");
-        let v = Value::Str(ArcBytes::from_str("world"));
+        let v = Value::Str(Sds::from_str("world"));
 
         engine.set(k.clone(), v).unwrap();
         engine.del(k.clone()).unwrap();
@@ -150,8 +152,8 @@ mod tests {
     fn test_engine_mset() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let entries = vec![
-            (key("kin1"), Value::Str(ArcBytes::from_str("dza1"))),
-            (key("kin2"), Value::Str(ArcBytes::from_str("dza2"))),
+            (key("kin1"), Value::Str(Sds::from_str("dza1"))),
+            (key("kin2"), Value::Str(Sds::from_str("dza2"))),
         ];
 
         engine.mset(entries.clone()).unwrap();
@@ -168,8 +170,8 @@ mod tests {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("kin1");
         let k2 = key("kin2");
-        let v1 = Value::Str(ArcBytes::from_str("dza1"));
-        let v2 = Value::Str(ArcBytes::from_str("dza2"));
+        let v1 = Value::Str(Sds::from_str("dza1"));
+        let v2 = Value::Str(Sds::from_str("dza2"));
 
         engine.set(k1.clone(), v1.clone()).unwrap();
         engine.set(k2.clone(), v2.clone()).unwrap();
@@ -184,7 +186,7 @@ mod tests {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
-        let v = Value::Str(ArcBytes::from_str("value"));
+        let v = Value::Str(Sds::from_str("value"));
 
         engine.set(k1.clone(), v.clone()).unwrap();
         engine.rename(k1.clone(), k2.clone()).unwrap();
@@ -212,7 +214,7 @@ mod tests {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
-        let v = Value::Str(ArcBytes::from_str("value"));
+        let v = Value::Str(Sds::from_str("value"));
 
         engine.set(k1.clone(), v.clone()).unwrap();
         let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
@@ -232,10 +234,10 @@ mod tests {
     fn test_engine_flushdb() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         engine
-            .set(ArcBytes::from_str("a"), Value::Str(ArcBytes::from_str("x")))
+            .set(key("a"), Value::Str(Sds::from_str("x")))
             .unwrap();
         engine
-            .set(ArcBytes::from_str("b"), Value::Str(ArcBytes::from_str("y")))
+            .set(key("b"), Value::Str(Sds::from_str("y")))
             .unwrap();
 
         engine.flushdb().unwrap();

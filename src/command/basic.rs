@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -113,12 +113,12 @@ impl CommandExecute for MGetCommand {
 
         let values = store.mget(&converted_keys)?;
 
-        let vec: Vec<ArcBytes> = values
+        let vec: Vec<Sds> = values
             .into_iter()
             .map(|opt| match opt {
                 Some(Value::Str(s)) => Ok(s),
                 Some(_) => Err(StoreError::WrongType("Неверный тип".to_string())),
-                None => Ok(ArcBytes::from_str("")), // пустая строка для None
+                None => Ok(Sds::from_str("")), // пустая строка для None
             })
             .collect::<Result<_, _>>()?;
 
@@ -140,7 +140,7 @@ pub struct RenameCommand {
 impl CommandExecute for RenameCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         store.rename(ArcBytes::from_str(&self.from), ArcBytes::from_str(&self.to))?;
-        Ok(Value::Str(ArcBytes::from_str("")))
+        Ok(Value::Str(Sds::from_str("")))
     }
 }
 
@@ -164,7 +164,7 @@ pub struct FlushDbCommand;
 impl CommandExecute for FlushDbCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         store.flushdb()?;
-        Ok(Value::Str(ArcBytes::from_str("OK")))
+        Ok(Value::Str(Sds::from_str("OK")))
     }
 }
 
@@ -175,7 +175,7 @@ mod tests {
             CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, RenameCommand,
             RenameNxCommand, SetNxCommand,
         },
-        database::{arc_bytes::ArcBytes, types::Value},
+        database::{types::Value, Sds},
         engine::{engine::StorageEngine, memory::InMemoryStore},
     };
 
@@ -190,7 +190,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
-            value: crate::database::types::Value::Str(ArcBytes::from_str("test_value")),
+            value: Value::Str(Sds::from_str("test_value")),
         };
 
         let result = set_cmd.execute(&mut store);
@@ -203,10 +203,7 @@ mod tests {
         let result = get_cmd.execute(&mut store);
         assert!(result.is_ok(), "GetCommand failed: {:?}", result);
 
-        assert_eq!(
-            result.unwrap(),
-            Value::Str(ArcBytes::from_str("test_value"))
-        );
+        assert_eq!(result.unwrap(), Value::Str(Sds::from_str("test_value")));
     }
 
     /// Тестирование `GetCommand` для несуществующего ключа.
@@ -233,7 +230,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
-            value: crate::database::types::Value::Str(ArcBytes::from_str("test_value")),
+            value: Value::Str(Sds::from_str("test_value")),
         };
 
         let result = set_cmd.execute(&mut store);
@@ -288,7 +285,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "test_key1".to_string(),
-            value: Value::Str(ArcBytes::from_str("value")),
+            value: Value::Str(Sds::from_str("value")),
         };
         set_cmd.execute(&mut store).unwrap();
 
@@ -298,7 +295,7 @@ mod tests {
 
         let set_cmd2 = SetCommand {
             key: "test_key2".to_string(),
-            value: Value::Str(ArcBytes::from_str("another")),
+            value: Value::Str(Sds::from_str("another")),
         };
         set_cmd2.execute(&mut store).unwrap();
 
@@ -325,7 +322,7 @@ mod tests {
 
         let setnx_cmd = SetNxCommand {
             key: "new_key".to_string(),
-            value: Value::Str(ArcBytes::from_str("new_value")),
+            value: Value::Str(Sds::from_str("new_value")),
         };
 
         let result = setnx_cmd.execute(&mut store);
@@ -338,10 +335,7 @@ mod tests {
         };
         let get_result = get_cmd.execute(&mut store);
         assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
-        assert_eq!(
-            get_result.unwrap(),
-            Value::Str(ArcBytes::from_str("new_value"))
-        );
+        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("new_value")));
     }
 
     /// Тестирование `SetNxCommand` для существующего ключа.
@@ -352,14 +346,14 @@ mod tests {
 
         let set_cmd = SetNxCommand {
             key: "existing_key".to_string(),
-            value: Value::Str(ArcBytes::from_str("value")),
+            value: Value::Str(Sds::from_str("value")),
         };
 
         let _ = set_cmd.execute(&mut store);
 
         let setnx_cmd = SetNxCommand {
             key: "existing_key".to_string(),
-            value: Value::Str(ArcBytes::from_str("new_value")),
+            value: Value::Str(Sds::from_str("new_value")),
         };
 
         let result = setnx_cmd.execute(&mut store);
@@ -372,7 +366,7 @@ mod tests {
         };
         let get_result = get_cmd.execute(&mut store);
         assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
-        assert_eq!(get_result.unwrap(), Value::Str(ArcBytes::from_str("value")));
+        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value")));
     }
 
     /// Тестирование `MSetCommand` для установки нескольких ключей.
@@ -383,8 +377,8 @@ mod tests {
 
         let mset_cmd = MSetCommand {
             entries: vec![
-                ("key1".to_string(), Value::Str(ArcBytes::from_str("value1"))),
-                ("key2".to_string(), Value::Str(ArcBytes::from_str("value2"))),
+                ("key1".to_string(), Value::Str(Sds::from_str("value1"))),
+                ("key2".to_string(), Value::Str(Sds::from_str("value2"))),
             ],
         };
 
@@ -397,10 +391,7 @@ mod tests {
 
         let get_result1 = get_cmd1.execute(&mut store);
         assert!(get_result1.is_ok(), "GetCommand failed: {:?}", get_result1);
-        assert_eq!(
-            get_result1.unwrap(),
-            Value::Str(ArcBytes::from_str("value1"))
-        );
+        assert_eq!(get_result1.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd2 = GetCommand {
             key: "key2".to_string(),
@@ -408,10 +399,7 @@ mod tests {
 
         let get_result2 = get_cmd2.execute(&mut store);
         assert!(get_result2.is_ok(), "GetCommand failed: {:?}", get_result2);
-        assert_eq!(
-            get_result2.unwrap(),
-            Value::Str(ArcBytes::from_str("value2"))
-        );
+        assert_eq!(get_result2.unwrap(), Value::Str(Sds::from_str("value2")));
     }
 
     /// Тестирование `MGetCommand`.
@@ -423,8 +411,8 @@ mod tests {
 
         let mset_cmd = MSetCommand {
             entries: vec![
-                ("key1".to_string(), Value::Str(ArcBytes::from_str("value1"))),
-                ("key2".to_string(), Value::Str(ArcBytes::from_str("value2"))),
+                ("key1".to_string(), Value::Str(Sds::from_str("value1"))),
+                ("key2".to_string(), Value::Str(Sds::from_str("value2"))),
             ],
         };
         mset_cmd.execute(&mut store).unwrap();
@@ -457,7 +445,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
-            value: Value::Str(ArcBytes::from_str("value1")),
+            value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
@@ -474,10 +462,7 @@ mod tests {
         };
         let get_result = get_cmd.execute(&mut store);
         assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
-        assert_eq!(
-            get_result.unwrap(),
-            Value::Str(ArcBytes::from_str("value1"))
-        );
+        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd_old = GetCommand {
             key: "key1".to_string(),
@@ -501,7 +486,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
-            value: Value::Str(ArcBytes::from_str("value1")),
+            value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
@@ -519,10 +504,7 @@ mod tests {
         };
         let get_result = get_cmd.execute(&mut store);
         assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
-        assert_eq!(
-            get_result.unwrap(),
-            Value::Str(ArcBytes::from_str("value1"))
-        );
+        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd_old = GetCommand {
             key: "key1".to_string(),
@@ -545,7 +527,7 @@ mod tests {
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
-            value: Value::Str(ArcBytes::from_str("value1")),
+            value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
@@ -574,10 +556,7 @@ mod tests {
             "GetCommand failed: {:?}",
             get_result_new
         );
-        assert_eq!(
-            get_result_new.unwrap(),
-            Value::Str(ArcBytes::from_str("value1"))
-        );
+        assert_eq!(get_result_new.unwrap(), Value::Str(Sds::from_str("value1")));
     }
 
     /// This test ensures that the `FlushDbCommand` properly clears all keys from the database.
@@ -588,13 +567,13 @@ mod tests {
 
         let set_cmd1 = SetCommand {
             key: "key1".to_string(),
-            value: Value::Str(ArcBytes::from_str("value1")),
+            value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd1.execute(&mut store).unwrap();
 
         let set_cmd2 = SetCommand {
             key: "key2".to_string(),
-            value: Value::Str(ArcBytes::from_str("value2")),
+            value: Value::Str(Sds::from_str("value2")),
         };
         set_cmd2.execute(&mut store).unwrap();
 
@@ -602,7 +581,7 @@ mod tests {
 
         let result = flush_cmd.execute(&mut store);
         assert!(result.is_ok(), "FlushDbCommand failed: {:?}", result);
-        assert_eq!(result.unwrap(), Value::Str(ArcBytes::from_str("OK")));
+        assert_eq!(result.unwrap(), Value::Str(Sds::from_str("OK")));
 
         let get_cmd = GetCommand {
             key: "key1".to_string(),

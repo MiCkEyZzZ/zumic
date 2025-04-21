@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, types::Value},
+    database::{arc_bytes::ArcBytes, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -40,17 +40,17 @@ impl CommandExecute for AppendCommand {
         match store.get(key.clone())? {
             Some(Value::Str(ref s)) => {
                 let mut result = Vec::with_capacity(s.len() + append_data.len());
-                result.extend_from_slice(s); // копирование исходных данных
-                result.extend_from_slice(append_data); // добавление новых данных
+                result.extend_from_slice(s);
+                result.extend_from_slice(append_data);
 
-                let result = ArcBytes::from_vec(result);
+                let result = Sds::from_vec(result);
                 store.set(key, Value::Str(result.clone()))?;
 
                 Ok(Value::Int(result.len() as i64))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                let new_value = ArcBytes::from_vec(append_data.to_vec()); // одиночное выделение памяти
+                let new_value = Sds::from_vec(append_data.to_vec());
                 store.set(key, Value::Str(new_value.clone()))?;
                 Ok(Value::Int(new_value.len() as i64))
             }
@@ -70,11 +70,29 @@ impl CommandExecute for GetRangeCommand {
         let key = ArcBytes::from_str(&self.key);
         if let Some(value) = store.get(key)? {
             if let Value::Str(ref s) = value {
-                let start = self.start.max(0) as usize;
-                let end = self.end.min(s.len() as i64) as usize;
-                let start = start.min(end); // гарантируем, что start <= end
-                let sliced = s.slice(start..end);
-                return Ok(Value::Str(sliced));
+                // Получаем результат из s.as_str() и обрабатываем возможную ошибку
+                let s = s.as_str().map_err(|_| StoreError::InvalidType)?; // Преобразуем ошибку в StoreError
+
+                let len = s.len() as i64;
+
+                // Приведение отрицательных индексов
+                let start = if self.start < 0 {
+                    len + self.start
+                } else {
+                    self.start
+                };
+                let end = if self.end < 0 {
+                    len + self.end
+                } else {
+                    self.end
+                };
+
+                // Корректные границы диапазона
+                let start = start.max(0).min(len) as usize;
+                let end = end.max(start as i64).min(len) as usize;
+
+                let result = &s[start..end];
+                return Ok(Value::Str(Sds::from_str(result)));
             } else {
                 return Err(StoreError::InvalidType);
             }
@@ -102,7 +120,7 @@ mod tests {
         store
             .set(
                 ArcBytes::from_str("anton"),
-                Value::Str(ArcBytes::from_str("hello")),
+                Value::Str(Sds::from_str("hello")),
             )
             .unwrap();
 
@@ -163,7 +181,7 @@ mod tests {
         store
             .set(
                 ArcBytes::from_str("anton"),
-                Value::Str(ArcBytes::from_str("hello")),
+                Value::Str(Sds::from_str("hello")),
             )
             .unwrap();
 
@@ -200,7 +218,7 @@ mod tests {
         store
             .set(
                 ArcBytes::from_str("anton"),
-                Value::Str(ArcBytes::from_str("hello world")),
+                Value::Str(Sds::from_str("hello world")),
             )
             .unwrap();
 
@@ -211,7 +229,7 @@ mod tests {
         };
         let result = command.execute(&mut store).unwrap();
 
-        assert_eq!(result, Value::Str(ArcBytes::from_str("hello")));
+        assert_eq!(result, Value::Str(Sds::from_str("hello")));
     }
 
     /// Тестирует, что команда `GetRangeCommand` возвращает `Null`, если ключ не существует.

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{skip_list::SkipList, ArcBytes, QuickList, SmartHash};
+use super::{skip_list::SkipList, QuickList, Sds, SmartHash};
 
 /// Представляет обобщённое значение в движке хранения данных.
 ///
@@ -14,7 +14,7 @@ use super::{skip_list::SkipList, ArcBytes, QuickList, SmartHash};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Value {
     /// Двоично-безопасная строка.
-    Str(ArcBytes),
+    Str(Sds),
     /// Знаковое 64-битное целое число.
     Int(i64),
     /// 64-битное число с плавающей точкой.
@@ -22,7 +22,7 @@ pub enum Value {
     /// Тип `null` (используется как маркер отсутствия значения или удаления).
     Null,
     /// Список двоичных строк, реализованный через `QuickList`.
-    List(QuickList<ArcBytes>),
+    List(QuickList<Sds>),
     /// Хэш-карта (словарь), хранимая как `SmartHash`.
     Hash(SmartHash),
     /// Упорядоченное множество с сортировкой по оценке (`score`).
@@ -31,12 +31,12 @@ pub enum Value {
     /// а `sorted` поддерживает упорядоченный список ключей по оценкам.
     ZSet {
         /// Соответствие элемента его оценке.
-        dict: HashMap<ArcBytes, f64>,
+        dict: HashMap<Sds, f64>,
         /// Список элементов, упорядоченных по оценкам.
-        sorted: SkipList<OrderedFloat<f64>, ArcBytes>,
+        sorted: SkipList<OrderedFloat<f64>, Sds>,
     },
     /// Множество уникальных строковых элементов.
-    Set(HashSet<ArcBytes>),
+    Set(HashSet<Sds>),
     /// Структура HyperLogLog для приближённого подсчёта количества уникальных элементов.
     HyperLogLog(HLL),
     /// Поток записей, каждая запись имеет идентификатор и набор полей.

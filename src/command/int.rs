@@ -106,7 +106,7 @@ impl CommandExecute for DecrByCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::memory::InMemoryStore;
+    use crate::{database::Sds, engine::memory::InMemoryStore};
 
     use super::*;
 
@@ -200,7 +200,7 @@ mod tests {
         store
             .set(
                 ArcBytes::from_str("counter"),
-                Value::Str(ArcBytes::from_str("string")),
+                Value::Str(Sds::from_str("string")),
             )
             .unwrap();
 
@@ -220,7 +220,7 @@ mod tests {
         store
             .set(
                 ArcBytes::from_str("counter"),
-                Value::Str(ArcBytes::from_str("string")),
+                Value::Str(Sds::from_str("string")),
             )
             .unwrap();
 

@@ -75,7 +75,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::database::{skip_list::SkipList, ArcBytes, QuickList};
+    use crate::database::{skip_list::SkipList, QuickList, Sds};
 
     use super::*;
 
@@ -96,7 +96,7 @@ mod tests {
     /// Проверяет сериализацию `Value::Str` в `ZSPFrame::BulkString`
     #[test]
     fn test_serialize_str() {
-        let value = Value::Str(ArcBytes::from_str("hello"));
+        let value = Value::Str(Sds::from_str("hello"));
         let frame = serialize_response(Response::Value(value));
         assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
     }
@@ -129,8 +129,8 @@ mod tests {
     #[test]
     fn test_serialize_list() {
         let mut list = QuickList::new(4);
-        list.push_back(ArcBytes::from_str("a"));
-        list.push_back(ArcBytes::from_str("b"));
+        list.push_back(Sds::from_str("a"));
+        list.push_back(Sds::from_str("b"));
 
         let value = Value::List(list);
         let frame = serialize_response(Response::Value(value));
@@ -147,8 +147,8 @@ mod tests {
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
-        set.insert(ArcBytes::from_str("x"));
-        set.insert(ArcBytes::from_str("y"));
+        set.insert(Sds::from_str("x"));
+        set.insert(Sds::from_str("y"));
         let value = Value::Set(set);
         let frame = serialize_response(Response::Value(value));
 
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn test_serialize_hash() {
         let mut sh = crate::database::smart_hash::SmartHash::new();
-        sh.insert(ArcBytes::from_str("k1"), ArcBytes::from_str("v1"));
+        sh.insert(Sds::from_str("k1"), Sds::from_str("v1"));
         let value = Value::Hash(sh);
         let frame = serialize_response(Response::Value(value));
 
@@ -193,10 +193,10 @@ mod tests {
         let mut dict = HashMap::new();
         let mut sorted = SkipList::new();
 
-        let key = ArcBytes::from_str("one");
+        let key = Sds::from_str("one");
         let score = 1.0;
         dict.insert(key.clone(), score);
-        sorted.insert(ordered_float::OrderedFloat(score), ArcBytes::from(key));
+        sorted.insert(ordered_float::OrderedFloat(score), Sds::from(key));
 
         let value = Value::ZSet { dict, sorted };
         let frame = serialize_response(Response::Value(value));

@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, SmartHash},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds, SmartHash},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -16,8 +16,8 @@ pub struct HSetCommand {
 impl CommandExecute for HSetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let field = ArcBytes::from_str(&self.field);
-        let value = ArcBytes::from_str(&self.value);
+        let field = Sds::from_str(&self.field);
+        let value = Sds::from_str(&self.value);
 
         match store.get(key.clone())? {
             Some(Value::Hash(mut smart_hash)) => {
@@ -45,7 +45,7 @@ pub struct HGetCommand {
 impl CommandExecute for HGetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let field = ArcBytes::from_str(&self.field);
+        let field = Sds::from_str(&self.field);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(key.clone())? {
             if let Some(value) = smart_hash.get(&field) {
@@ -67,7 +67,7 @@ pub struct HDelCommand {
 impl CommandExecute for HDelCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let field = ArcBytes::from_str(&self.field);
+        let field = Sds::from_str(&self.field);
 
         if let Some(Value::Hash(mut smart_hash)) = store.get(key.clone())? {
             let removed = smart_hash.remove(&field);
@@ -91,15 +91,11 @@ impl CommandExecute for HGetAllCommand {
         let key = ArcBytes::from_str(&self.key);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(key)? {
-            let result: QuickList<ArcBytes> = QuickList::from_iter(
-                smart_hash.iter().map(|(k, v)| {
-                    ArcBytes::from(format!(
-                        "{}: {}",
-                        String::from_utf8_lossy(k),
-                        String::from_utf8_lossy(v)
-                    ))
-                }),
-                64, // Установите максимальный размер сегмента (при необходимости отрегулируйте)
+            let result: QuickList<Sds> = QuickList::from_iter(
+                smart_hash
+                    .iter()
+                    .flat_map(|(k, v)| [Sds::from(k.as_ref()), Sds::from(v.as_ref())]),
+                64,
             );
             return Ok(Value::List(result));
         }
@@ -144,7 +140,7 @@ mod tests {
         assert!(get_result.is_ok());
         assert_eq!(
             get_result.as_ref().unwrap(),
-            &Value::Str(ArcBytes::from_str("value1"))
+            &Value::Str(Sds::from_str("value1"))
         );
     }
 

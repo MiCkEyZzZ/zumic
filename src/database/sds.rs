@@ -5,6 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::str::{from_utf8, Utf8Error};
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 #[derive(Debug, Clone)]
 enum Repr {
     /// Короткая строка, размещённая прямо в стеке.
@@ -224,6 +226,15 @@ impl Sds {
     }
 }
 
+impl Default for Sds {
+    fn default() -> Self {
+        Sds(Repr::Inline {
+            len: 0,
+            buf: [0u8; Sds::INLINE_CAP],
+        })
+    }
+}
+
 impl Deref for Sds {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
@@ -276,6 +287,43 @@ impl TryFrom<Sds> for String {
     type Error = Utf8Error;
     fn try_from(value: Sds) -> Result<Self, Self::Error> {
         value.as_str().map(|s| s.to_string())
+    }
+}
+
+impl Serialize for Sds {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(self.as_slice())
+    }
+}
+
+impl<'de> Deserialize<'de> for Sds {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes = <Vec<u8>>::deserialize(deserializer)?;
+        Ok(Sds::from_vec(bytes))
+    }
+}
+
+impl From<&[u8]> for Sds {
+    fn from(slice: &[u8]) -> Self {
+        if slice.len() <= Sds::INLINE_CAP {
+            let mut buf = [0u8; Sds::INLINE_CAP];
+            buf[..slice.len()].copy_from_slice(slice);
+            Sds(Repr::Inline {
+                len: slice.len() as u8,
+                buf,
+            })
+        } else {
+            let mut vec = Vec::with_capacity(slice.len());
+            vec.extend_from_slice(slice);
+            let len = vec.len();
+            Sds(Repr::Heap { buf: vec, len })
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value},
+    database::{arc_bytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -20,7 +20,7 @@ pub struct ZAddCommand {
 impl CommandExecute for ZAddCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         // Получить существующий ZSet или создать новый
         let (mut dict, mut sorted) = match store.get(key.clone())? {
@@ -56,7 +56,7 @@ pub struct ZRemCommand {
 impl CommandExecute for ZRemCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         if let Some(Value::ZSet { dict, sorted }) = store.get(key.clone())? {
             let mut dict = dict;
@@ -84,7 +84,7 @@ pub struct ZScoreCommand {
 impl CommandExecute for ZScoreCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = ArcBytes::from_str(&self.key);
-        let member = ArcBytes::from_str(&self.member);
+        let member = Sds::from_str(&self.member);
 
         match store.get(key)? {
             Some(Value::ZSet { dict, .. }) => {
@@ -130,7 +130,7 @@ impl CommandExecute for ZRangeCommand {
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
                 // Собрать члены в порядке возрастания балла.
-                let all: Vec<ArcBytes> = sorted.iter().map(|(_, member)| member.clone()).collect();
+                let all: Vec<Sds> = sorted.iter().map(|(_, member)| member.clone()).collect();
                 let len = all.len() as i64;
                 let s = if self.start < 0 {
                     (len + self.start).max(0)
@@ -170,7 +170,7 @@ impl CommandExecute for ZRevRangeCommand {
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
                 // Собрать члены в обратном порядке по баллу.
-                let all: Vec<ArcBytes> = sorted
+                let all: Vec<Sds> = sorted
                     .iter_rev()
                     .map(|(_, member)| member.clone())
                     .collect();
@@ -201,7 +201,7 @@ impl CommandExecute for ZRevRangeCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::memory::InMemoryStore;
+    use crate::{database::Sds, engine::memory::InMemoryStore};
 
     use super::*;
 
@@ -357,11 +357,7 @@ mod tests {
         };
         assert_eq!(
             list,
-            vec![
-                ArcBytes::from_str("a"),
-                ArcBytes::from_str("b"),
-                ArcBytes::from_str("c"),
-            ]
+            vec![Sds::from_str("a"), Sds::from_str("b"), Sds::from_str("c"),]
         );
 
         let zr2 = ZRangeCommand {
@@ -373,10 +369,7 @@ mod tests {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
             _ => panic!(),
         };
-        assert_eq!(
-            list2,
-            vec![ArcBytes::from_str("b"), ArcBytes::from_str("c"),]
-        );
+        assert_eq!(list2, vec![Sds::from_str("b"), Sds::from_str("c"),]);
 
         // отрицательные индексы: последние два
         let zr3 = ZRangeCommand {
@@ -388,10 +381,7 @@ mod tests {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
             _ => panic!(),
         };
-        assert_eq!(
-            list3,
-            vec![ArcBytes::from_str("b"), ArcBytes::from_str("c"),]
-        );
+        assert_eq!(list3, vec![Sds::from_str("b"), Sds::from_str("c"),]);
     }
 
     /// Проверяет работу команды ZREVRANGE (обратный порядок):
@@ -435,11 +425,7 @@ mod tests {
         };
         assert_eq!(
             list,
-            vec![
-                ArcBytes::from_str("c"),
-                ArcBytes::from_str("b"),
-                ArcBytes::from_str("a"),
-            ]
+            vec![Sds::from_str("c"), Sds::from_str("b"), Sds::from_str("a"),]
         );
 
         // отрицательные индексы: первые два в реверсе
@@ -452,10 +438,7 @@ mod tests {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
             _ => panic!(),
         };
-        assert_eq!(
-            list2,
-            vec![ArcBytes::from_str("c"), ArcBytes::from_str("b"),]
-        );
+        assert_eq!(list2, vec![Sds::from_str("c"), Sds::from_str("b"),]);
     }
 
     /// Проверяет команды ZRANGE, ZREVRANGE, ZSCORE и ZREM на несуществующем ключе:
