@@ -1,3 +1,4 @@
+pub mod int_set;
 pub mod list_pack;
 pub mod lua;
 pub mod quicklist;
