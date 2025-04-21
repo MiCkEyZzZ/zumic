@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
+    database::{quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -14,7 +14,7 @@ pub struct SetCommand {
 
 impl CommandExecute for SetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        store.set(ArcBytes::from_str(self.key.as_str()), self.value.clone())?;
+        store.set(Sds::from_str(self.key.as_str()), self.value.clone())?;
         Ok(Value::Null)
     }
 }
@@ -26,7 +26,7 @@ pub struct GetCommand {
 
 impl CommandExecute for GetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let result = store.get(ArcBytes::from_str(self.key.as_str()));
+        let result = store.get(Sds::from_str(self.key.as_str()));
         match result {
             Ok(Some(value)) => Ok(value),
             Ok(None) => Ok(Value::Null),
@@ -42,7 +42,7 @@ pub struct DelCommand {
 
 impl CommandExecute for DelCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let deleted = store.del(ArcBytes::from_str(&self.key))?;
+        let deleted = store.del(Sds::from_str(&self.key))?;
         Ok(Value::Int(deleted))
     }
 }
@@ -57,7 +57,7 @@ impl CommandExecute for ExistsCommand {
         let count = self
             .keys
             .iter()
-            .map(|key| ArcBytes::from_str(key))
+            .map(|key| Sds::from_str(key))
             .filter_map(|key| store.get(key).ok())
             .filter(|value| value.is_some())
             .count();
@@ -74,9 +74,9 @@ pub struct SetNxCommand {
 
 impl CommandExecute for SetNxCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let exists = store.get(ArcBytes::from_str(&self.key))?.is_some();
+        let exists = store.get(Sds::from_str(&self.key))?.is_some();
         if !exists {
-            store.set(ArcBytes::from_str(&self.key), self.value.clone())?;
+            store.set(Sds::from_str(&self.key), self.value.clone())?;
             Ok(Value::Int(1))
         } else {
             Ok(Value::Int(0))
@@ -94,7 +94,7 @@ impl CommandExecute for MSetCommand {
         let converted = self
             .entries
             .iter()
-            .map(|(k, v)| (ArcBytes::from_str(k), v.clone()))
+            .map(|(k, v)| (Sds::from_str(k), v.clone()))
             .collect();
         store.mset(converted)?;
         Ok(Value::Null)
@@ -108,8 +108,7 @@ pub struct MGetCommand {
 
 impl CommandExecute for MGetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let converted_keys: Vec<ArcBytes> =
-            self.keys.iter().map(|k| ArcBytes::from_str(k)).collect();
+        let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
 
         let values = store.mget(&converted_keys)?;
 
@@ -139,7 +138,7 @@ pub struct RenameCommand {
 
 impl CommandExecute for RenameCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        store.rename(ArcBytes::from_str(&self.from), ArcBytes::from_str(&self.to))?;
+        store.rename(Sds::from_str(&self.from), Sds::from_str(&self.to))?;
         Ok(Value::Str(Sds::from_str("")))
     }
 }
@@ -152,8 +151,7 @@ pub struct RenameNxCommand {
 
 impl CommandExecute for RenameNxCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let success =
-            store.renamenx(ArcBytes::from_str(&self.from), ArcBytes::from_str(&self.to))?;
+        let success = store.renamenx(Sds::from_str(&self.from), Sds::from_str(&self.to))?;
         Ok(Value::Int(if success { 1 } else { 0 }))
     }
 }

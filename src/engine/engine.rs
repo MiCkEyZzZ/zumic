@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    database::{arc_bytes::ArcBytes, types::Value},
+    database::{types::Value, Sds},
     error::StoreResult,
 };
 
@@ -15,49 +15,49 @@ pub enum StorageEngine {
 }
 
 impl StorageEngine {
-    pub fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()> {
+    pub fn set(&mut self, key: Sds, value: Value) -> StoreResult<()> {
         info!("Setting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.set(key, value),
         }
     }
 
-    pub fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
+    pub fn get(&mut self, key: Sds) -> StoreResult<Option<Value>> {
         info!("Getting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.get(key),
         }
     }
 
-    pub fn del(&mut self, key: ArcBytes) -> StoreResult<i64> {
+    pub fn del(&mut self, key: Sds) -> StoreResult<i64> {
         info!("Deleting key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.del(key),
         }
     }
 
-    pub fn mset(&mut self, entries: Vec<(ArcBytes, Value)>) -> StoreResult<()> {
+    pub fn mset(&mut self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
         info!("MSET {} leys", entries.len());
         match self {
             StorageEngine::InMemory(store) => store.mset(entries),
         }
     }
 
-    pub fn mget(&self, keys: &[ArcBytes]) -> StoreResult<Vec<Option<Value>>> {
+    pub fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
         info!("MGET {} keys", keys.len());
         match self {
             StorageEngine::InMemory(store) => store.mget(keys),
         }
     }
 
-    pub fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
+    pub fn rename(&mut self, from: Sds, to: Sds) -> StoreResult<()> {
         info!("Renaming key: {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.rename(from, to),
         }
     }
 
-    pub fn renamenx(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<bool> {
+    pub fn renamenx(&mut self, from: Sds, to: Sds) -> StoreResult<bool> {
         info!("Renaming key (NX): {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.renamenx(from, to),
@@ -96,8 +96,8 @@ mod tests {
 
     use super::*;
 
-    fn key(data: &str) -> ArcBytes {
-        ArcBytes::from(data.as_bytes().to_vec())
+    fn key(data: &str) -> Sds {
+        Sds::from(data.as_bytes())
     }
 
     /// Тестирует, что установка значения, а затем его получение возвращают то же значение.

@@ -1,9 +1,13 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use zumic::{
     command::{CommandExecute, DecrByFloatCommand, IncrByFloatCommand, SetFloatCommand},
-    database::Value,
+    database::{Sds, Value},
     engine::{engine::StorageEngine, memory::InMemoryStore},
 };
+
+fn key(data: &str) -> Sds {
+    Sds::from(data.as_bytes())
+}
 
 fn bench_set_float(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
@@ -21,7 +25,7 @@ fn bench_set_float(c: &mut Criterion) {
 
 fn bench_incr_float(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
-    store.set("floatkey".into(), Value::Float(10.0)).unwrap();
+    store.set(key("floatkey"), Value::Float(10.0)).unwrap();
 
     c.bench_function("incr_by_float command", |b| {
         b.iter(|| {
@@ -36,7 +40,7 @@ fn bench_incr_float(c: &mut Criterion) {
 
 fn bench_decr_float(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
-    store.set("floatkey".into(), Value::Float(10.0)).unwrap();
+    store.set(key("floatkey"), Value::Float(10.0)).unwrap();
 
     c.bench_function("decr_by_float command", |b| {
         b.iter(|| {

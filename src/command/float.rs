@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, types::Value},
+    database::{Sds, Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -14,7 +14,7 @@ pub struct IncrByFloatCommand {
 
 impl CommandExecute for IncrByFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
 
         match store.get(key_bytes.clone())? {
             Some(Value::Float(current)) => {
@@ -39,7 +39,7 @@ pub struct DecrByFloatCommand {
 
 impl CommandExecute for DecrByFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
 
         match store.get(key_bytes.clone())? {
             Some(Value::Float(current)) => {
@@ -64,7 +64,7 @@ pub struct SetFloatCommand {
 
 impl CommandExecute for SetFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
         store.set(key_bytes, Value::Float(self.value))?;
         Ok(Value::Float(self.value))
     }
@@ -82,7 +82,7 @@ mod tests {
     fn test_incr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
-            .set(ArcBytes::from_str("key1"), Value::Float(10.0))
+            .set(Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
 
         let cmd = IncrByFloatCommand {
@@ -99,7 +99,7 @@ mod tests {
     fn test_decr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
-            .set(ArcBytes::from_str("key1"), Value::Float(10.0))
+            .set(Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
 
         let cmd = DecrByFloatCommand {

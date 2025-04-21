@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, types::Value, Sds},
+    database::{Sds, Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -13,7 +13,7 @@ pub struct StrLenCommand {
 
 impl CommandExecute for StrLenCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         if let Some(value) = store.get(key)? {
             if let Value::Str(ref s) = value {
                 Ok(Value::Int(s.len() as i64))
@@ -34,7 +34,7 @@ pub struct AppendCommand {
 
 impl CommandExecute for AppendCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let append_data = self.value.as_bytes();
 
         match store.get(key.clone())? {
@@ -67,7 +67,7 @@ pub struct GetRangeCommand {
 
 impl CommandExecute for GetRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         if let Some(value) = store.get(key)? {
             if let Value::Str(ref s) = value {
                 // Получаем результат из s.as_str() и обрабатываем возможную ошибку
@@ -118,10 +118,7 @@ mod tests {
         let mut store = create_store();
 
         store
-            .set(
-                ArcBytes::from_str("anton"),
-                Value::Str(Sds::from_str("hello")),
-            )
+            .set(Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
             .unwrap();
 
         let strlen_cmd = StrLenCommand {
@@ -136,9 +133,7 @@ mod tests {
     #[test]
     fn test_append_command_invalid_type() {
         let mut store = create_store();
-        store
-            .set(ArcBytes::from_str("test"), Value::Int(42))
-            .unwrap();
+        store.set(Sds::from_str("test"), Value::Int(42)).unwrap();
 
         let cmd = AppendCommand {
             key: "test".to_string(),
@@ -179,10 +174,7 @@ mod tests {
         let mut store = create_store();
 
         store
-            .set(
-                ArcBytes::from_str("anton"),
-                Value::Str(Sds::from_str("hello")),
-            )
+            .set(Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
             .unwrap();
 
         let command = AppendCommand {
@@ -217,7 +209,7 @@ mod tests {
 
         store
             .set(
-                ArcBytes::from_str("anton"),
+                Sds::from_str("anton"),
                 Value::Str(Sds::from_str("hello world")),
             )
             .unwrap();
@@ -254,9 +246,7 @@ mod tests {
         let mut store = create_store();
 
         // Добавляем строку с числовым значением в хранилище
-        store
-            .set(ArcBytes::from_str("anton"), Value::Int(42))
-            .unwrap();
+        store.set(Sds::from_str("anton"), Value::Int(42)).unwrap();
 
         let command = GetRangeCommand {
             key: "anton".to_string(),

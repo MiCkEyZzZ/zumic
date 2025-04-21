@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
+    database::{quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -14,7 +14,7 @@ pub struct LPushCommand {
 
 impl CommandExecute for LPushCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
         let mut list = match store.get(key.clone())? {
@@ -38,7 +38,7 @@ pub struct RPushCommand {
 
 impl CommandExecute for RPushCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
         let mut list = match store.get(key.clone())? {
@@ -61,7 +61,7 @@ pub struct LPopCommand {
 
 impl CommandExecute for LPopCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         match store.get(key.clone())? {
             Some(Value::List(mut list)) => {
@@ -85,7 +85,7 @@ pub struct RPopCommand {
 
 impl CommandExecute for RPopCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         match store.get(key.clone())? {
             Some(Value::List(mut list)) => {
@@ -109,7 +109,7 @@ pub struct LLenCommand {
 
 impl CommandExecute for LLenCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         match store.get(key)? {
             Some(Value::List(list)) => Ok(Value::Int(list.len() as i64)),
             Some(_) => Err(StoreError::InvalidType),
@@ -127,7 +127,7 @@ pub struct LRangeCommand {
 
 impl CommandExecute for LRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         match store.get(key)? {
             Some(Value::List(list)) => {
                 let len = list.len() as i64;
@@ -289,7 +289,7 @@ mod tests {
         );
 
         // Если ключ существует, но это не список, то LPush должен вернуть ошибку InvalidType.
-        store.set(ArcBytes::from_str("k"), Value::Int(5)).unwrap();
+        store.set(Sds::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {
                 key: "k".into(),

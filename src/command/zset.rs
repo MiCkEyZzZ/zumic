@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, skip_list::SkipList, types::Value, Sds},
+    database::{quicklist::QuickList, skip_list::SkipList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -19,7 +19,7 @@ pub struct ZAddCommand {
 
 impl CommandExecute for ZAddCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         // Получить существующий ZSet или создать новый
@@ -55,7 +55,7 @@ pub struct ZRemCommand {
 
 impl CommandExecute for ZRemCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         if let Some(Value::ZSet { dict, sorted }) = store.get(key.clone())? {
@@ -83,7 +83,7 @@ pub struct ZScoreCommand {
 
 impl CommandExecute for ZScoreCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         match store.get(key)? {
@@ -107,7 +107,7 @@ pub struct ZCardCommand {
 
 impl CommandExecute for ZCardCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         match store.get(key)? {
             Some(Value::ZSet { dict, .. }) => Ok(Value::Int(dict.len() as i64)),
             Some(_) => Err(StoreError::InvalidType),
@@ -125,7 +125,7 @@ pub struct ZRangeCommand {
 
 impl CommandExecute for ZRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {
@@ -165,7 +165,7 @@ pub struct ZRevRangeCommand {
 
 impl CommandExecute for ZRevRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         match store.get(key)? {
             Some(Value::ZSet { sorted, .. }) => {

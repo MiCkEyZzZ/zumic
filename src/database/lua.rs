@@ -1,8 +1,8 @@
 use mlua::{UserData, UserDataMethods};
 
-use super::ArcBytes;
+use super::Sds;
 
-impl UserData for ArcBytes {
+impl UserData for Sds {
     fn add_methods<T: UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("len", |_, this, ()| Ok(this.len()));
         methods.add_method("to_vec", |_, this, ()| Ok(this.to_vec()));

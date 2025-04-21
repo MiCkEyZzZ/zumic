@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds},
+    database::{quicklist::QuickList, types::Value, Sds},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -16,7 +16,7 @@ pub struct SAddCommand {
 
 impl CommandExecute for SAddCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         match store.get(key.clone())? {
@@ -44,7 +44,7 @@ pub struct SRemCommand {
 
 impl CommandExecute for SRemCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         if let Some(Value::Set(mut set)) = store.get(key.clone())? {
@@ -65,7 +65,7 @@ pub struct SIsMemberCommand {
 
 impl CommandExecute for SIsMemberCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
         if let Some(Value::Set(set)) = store.get(key)? {
@@ -83,7 +83,7 @@ pub struct SMembersCommand {
 
 impl CommandExecute for SMembersCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         if let Some(Value::Set(set)) = store.get(key)? {
             let list = QuickList::from_iter(set.iter().cloned(), 64);
@@ -101,7 +101,7 @@ pub struct SCardCommand {
 
 impl CommandExecute for SCardCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         match store.get(key)? {
             Some(Value::Set(set)) => Ok(Value::Int(set.len() as i64)),

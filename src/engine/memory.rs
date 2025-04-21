@@ -4,14 +4,14 @@ use dashmap::DashMap;
 
 use super::storage::Storage;
 use crate::{
-    database::{ArcBytes, Value},
+    database::{Sds, Value},
     error::{StoreError, StoreResult},
 };
 
 /// `InMemoryStore` — потокобезопасное хранилище ключей и значений
 /// с использованием `DashMap` и `Arc`.
 pub struct InMemoryStore {
-    pub data: Arc<DashMap<ArcBytes, Value>>,
+    pub data: Arc<DashMap<Sds, Value>>,
 }
 
 impl InMemoryStore {
@@ -23,35 +23,35 @@ impl InMemoryStore {
 }
 
 impl Storage for InMemoryStore {
-    fn set(&mut self, key: ArcBytes, value: Value) -> StoreResult<()> {
+    fn set(&mut self, key: Sds, value: Value) -> StoreResult<()> {
         self.data.insert(key, value);
         Ok(())
     }
 
-    fn get(&mut self, key: ArcBytes) -> StoreResult<Option<Value>> {
+    fn get(&mut self, key: Sds) -> StoreResult<Option<Value>> {
         Ok(self.data.get(&key).map(|entry| entry.clone()))
     }
-    fn del(&self, key: ArcBytes) -> StoreResult<i64> {
+    fn del(&self, key: Sds) -> StoreResult<i64> {
         if self.data.remove(&key).is_some() {
             Ok(1)
         } else {
             Ok(0)
         }
     }
-    fn mset(&mut self, entries: Vec<(ArcBytes, Value)>) -> StoreResult<()> {
+    fn mset(&mut self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
         for (key, value) in entries {
             self.data.insert(key, value);
         }
         Ok(())
     }
-    fn mget(&self, keys: &[ArcBytes]) -> StoreResult<Vec<Option<Value>>> {
+    fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
         let result = keys
             .iter()
             .map(|key| self.data.get(key).map(|entry| entry.clone()))
             .collect();
         Ok(result)
     }
-    fn rename(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<()> {
+    fn rename(&mut self, from: Sds, to: Sds) -> StoreResult<()> {
         if let Some((_, value)) = self.data.remove(&from) {
             self.data.insert(to, value);
             Ok(())
@@ -59,7 +59,7 @@ impl Storage for InMemoryStore {
             Err(StoreError::KeyNotFound)
         }
     }
-    fn renamenx(&mut self, from: ArcBytes, to: ArcBytes) -> StoreResult<bool> {
+    fn renamenx(&mut self, from: Sds, to: Sds) -> StoreResult<bool> {
         if self.data.contains_key(&to) {
             return Ok(false);
         }
@@ -87,8 +87,8 @@ mod tests {
     use super::*;
     use crate::database::{types::Value, Sds};
 
-    fn key(data: &str) -> ArcBytes {
-        ArcBytes::from(data.as_bytes().to_vec())
+    fn key(data: &str) -> Sds {
+        Sds::from(data.as_bytes())
     }
 
     /// Основной тест для проверки установки и последующего получения значения.

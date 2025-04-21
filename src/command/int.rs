@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, types::Value},
+    database::{Sds, Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -13,7 +13,7 @@ pub struct IncrCommand {
 
 impl CommandExecute for IncrCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
 
         match store.get(key_bytes.clone())? {
             Some(Value::Int(current)) => {
@@ -38,7 +38,7 @@ pub struct IncrByCommand {
 
 impl CommandExecute for IncrByCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let keys_bytes = ArcBytes::from_str(&self.key);
+        let keys_bytes = Sds::from_str(&self.key);
 
         match store.get(keys_bytes.clone())? {
             Some(Value::Int(current)) => {
@@ -62,7 +62,7 @@ pub struct DecrCommand {
 
 impl CommandExecute for DecrCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
 
         match store.get(key_bytes.clone())? {
             Some(Value::Int(current)) => {
@@ -87,7 +87,7 @@ pub struct DecrByCommand {
 
 impl CommandExecute for DecrByCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key_bytes = ArcBytes::from_str(&self.key);
+        let key_bytes = Sds::from_str(&self.key);
 
         match store.get(key_bytes.clone())? {
             Some(Value::Int(current)) => {
@@ -199,7 +199,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
             .set(
-                ArcBytes::from_str("counter"),
+                Sds::from_str("counter"),
                 Value::Str(Sds::from_str("string")),
             )
             .unwrap();
@@ -219,7 +219,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
             .set(
-                ArcBytes::from_str("counter"),
+                Sds::from_str("counter"),
                 Value::Str(Sds::from_str("string")),
             )
             .unwrap();

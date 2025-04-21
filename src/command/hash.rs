@@ -1,5 +1,5 @@
 use crate::{
-    database::{arc_bytes::ArcBytes, quicklist::QuickList, types::Value, Sds, SmartHash},
+    database::{quicklist::QuickList, types::Value, Sds, SmartHash},
     engine::engine::StorageEngine,
     error::StoreError,
 };
@@ -15,7 +15,7 @@ pub struct HSetCommand {
 
 impl CommandExecute for HSetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
         let value = Sds::from_str(&self.value);
 
@@ -44,7 +44,7 @@ pub struct HGetCommand {
 
 impl CommandExecute for HGetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(key.clone())? {
@@ -66,7 +66,7 @@ pub struct HDelCommand {
 
 impl CommandExecute for HDelCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
         if let Some(Value::Hash(mut smart_hash)) = store.get(key.clone())? {
@@ -88,7 +88,7 @@ pub struct HGetAllCommand {
 
 impl CommandExecute for HGetAllCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let key = ArcBytes::from_str(&self.key);
+        let key = Sds::from_str(&self.key);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(key)? {
             let result: QuickList<Sds> = QuickList::from_iter(
