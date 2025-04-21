@@ -458,4 +458,57 @@ mod tests {
         b.hash(&mut hasher2);
         assert_eq!(hasher1.finish(), hasher2.finish());
     }
+
+    /// Проверяет, что срез работает корректно.
+    #[test]
+    fn test_check_slice_range() {
+        let s = Sds::from_str("Hello, world!");
+        let sliced = s.slice_range(0, 5); // Ожидаем "Hello"
+        assert_eq!(sliced.as_str().unwrap(), "Hello");
+
+        let sliced = s.slice_range(7, 12); // Ожидаем "world"
+        assert_eq!(sliced.as_str().unwrap(), "world");
+    }
+
+    /// Проверяет, что невалидная строка не конвертируется в UTF-8.
+    #[test]
+    fn test_invalid_utf8() {
+        let invalid_bytes = vec![0x80, 0x80, 0x80]; // Недопустимые байты UTF-8
+        let s = Sds::from_vec(invalid_bytes);
+        assert!(s.as_str().is_err()); // Должен вернуть ошибку при преобразовании
+    }
+
+    /// Проверяет резервирование памяти при добавлении данных.
+    #[test]
+    fn test_reserve() {
+        let mut s = Sds::from_str("Hello");
+        s.reserve(10); // Резервируем дополнительную память.
+        assert!(s.capacity() >= 15);
+        assert_eq!(s.len(), 5);
+    }
+
+    /// Проверяет работу Deref для Sds.
+    #[test]
+    fn test_deref() {
+        let s = Sds::from_str("Hello, world!");
+        let slice: &[u8] = &s; // С использованием Deref
+        assert_eq!(slice, b"Hello, world!");
+    }
+
+    /// Проверяет работу DerefMut для Sds.
+    #[test]
+    fn test_deref_mut() {
+        let mut s = Sds::from_str("Hello");
+        let slice: &mut [u8] = &mut s; // С использование DerefMut
+        slice[0] = b'J'; // Изменяем первый исмвол.
+        assert_eq!(s.as_str().unwrap(), "Jello");
+    }
+
+    /// Проверяет, что метод `push` не ломает строку.
+    #[test]
+    fn test_push_integrity() {
+        let mut s = Sds::from_str("Rust");
+        s.push(b'!');
+        assert_eq!(s.as_str().unwrap(), "Rust!");
+    }
 }
