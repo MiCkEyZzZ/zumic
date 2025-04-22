@@ -44,5 +44,5 @@ criterion = "0.5"
 opt-level = 3
 
 [[bench]]
-name = "decoder_benchmarks"
+name = "encoder_benchmarks"
 harness = false
