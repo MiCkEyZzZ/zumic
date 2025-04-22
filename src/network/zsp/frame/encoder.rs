@@ -24,9 +24,9 @@ impl ZSPEncoder {
         }
 
         match frame {
-            ZSPFrame::SimpleString(s) => {
+            ZSPFrame::InlineString(s) => {
                 Self::validate_simple_string(s)?;
-                info!("Encoding SimpleString: {}", s);
+                info!("Encoding InlineString: {}", s);
                 Ok(format!("+{}\r\n", s).into_bytes())
             }
             ZSPFrame::FrameError(s) => {
@@ -42,7 +42,7 @@ impl ZSPEncoder {
                 info!("Encoding Float: {}", f);
                 Ok(format!(":{}\r\n", f).into_bytes())
             }
-            ZSPFrame::BulkString(Some(b)) => {
+            ZSPFrame::BinaryString(Some(b)) => {
                 if b.len() > MAX_BULK_LENGTH {
                     let err_msg =
                         format!("Bulk string too long ({} > {})", b.len(), MAX_BULK_LENGTH);
@@ -50,14 +50,14 @@ impl ZSPEncoder {
                     return Err(ZSPError::InvalidData(err_msg));
                 }
 
-                info!("Encoding BulkString of length {}", b.len());
+                info!("Encoding BinaryString of length {}", b.len());
                 let mut out = format!("${}\r\n", b.len()).into_bytes();
                 out.extend(b);
                 out.extend(b"\r\n");
                 Ok(out)
             }
-            ZSPFrame::BulkString(None) => {
-                info!("Encoding empty BulkString");
+            ZSPFrame::BinaryString(None) => {
+                info!("Encoding empty BinaryString");
                 Ok(b"$-1\r\n".to_vec())
             }
             ZSPFrame::Array(Some(elements)) => {
@@ -74,7 +74,7 @@ impl ZSPEncoder {
                 for (key, value) in items {
                     // Encode the key
                     out.extend(Self::encode_frame(
-                        &ZSPFrame::SimpleString(key.clone()),
+                        &ZSPFrame::InlineString(key.clone()),
                         current_depth + 1,
                     )?);
                     // Encode the value
@@ -129,20 +129,20 @@ impl ZSPEncoder {
 mod tests {
     use super::*;
 
-    /// Тестирование кодирования SimpleString в байтовый поток.
+    /// Тестирование кодирования InlineString в байтовый поток.
     /// Проверяет, что строка "OK" правильно кодируется в формат "+OK\r\n".
     #[test]
     fn test_simple_string() {
-        let frame = ZSPFrame::SimpleString("OK".to_string());
+        let frame = ZSPFrame::InlineString("OK".to_string());
         let encoded = ZSPEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"+OK\r\n");
     }
 
-    /// Тестирование кодирования BulkString в байтовый поток.
+    /// Тестирование кодирования BinaryString в байтовый поток.
     /// Проверяет, что строка "hello" правильно кодируется с длиной и содержимым.
     #[test]
     fn test_builk_string() {
-        let frame = ZSPFrame::BulkString(Some(b"hello".to_vec()));
+        let frame = ZSPFrame::BinaryString(Some(b"hello".to_vec()));
         let encoded = ZSPEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"$5\r\nhello\r\n");
     }
@@ -152,18 +152,18 @@ mod tests {
     #[test]
     fn test_nested_array() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("test".to_string()),
+            ZSPFrame::InlineString("test".to_string()),
             ZSPFrame::Integer(42),
         ]));
         let encoded = ZSPEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"*2\r\n+test\r\n:42\r\n");
     }
 
-    /// Тестирование кодирования неверного SimpleString.
+    /// Тестирование кодирования неверного InlineString.
     /// Проверяет, что строка с символами \r\n вызывает ошибку.
     #[test]
     fn test_invalid_simple_string() {
-        let frame = ZSPFrame::SimpleString("bad\r\nstring".to_string());
+        let frame = ZSPFrame::InlineString("bad\r\nstring".to_string());
         let result = ZSPEncoder::encode(&frame);
         assert!(result.is_err());
     }
@@ -184,7 +184,7 @@ mod tests {
         let mut items = std::collections::HashMap::new();
         items.insert(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         );
         let frame = ZSPFrame::Dictionary(Some(items));
         let encoded = ZSPEncoder::encode(&frame).unwrap();
@@ -198,11 +198,11 @@ mod tests {
         let mut items = std::collections::HashMap::new();
         items.insert(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         );
         items.insert(
             "key2".to_string(),
-            ZSPFrame::SimpleString("value2".to_string()),
+            ZSPFrame::InlineString("value2".to_string()),
         );
         let frame = ZSPFrame::Dictionary(Some(items));
         let encoded = ZSPEncoder::encode(&frame).unwrap();
@@ -216,9 +216,9 @@ mod tests {
         let mut items = std::collections::HashMap::new();
         items.insert(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         );
-        // Пытаемся вставить значение типа SimpleString в словарь
+        // Пытаемся вставить значение типа InlineString в словарь
         let frame = ZSPFrame::Dictionary(Some(items));
         let result = ZSPEncoder::encode(&frame);
         assert!(result.is_ok()); // Должно пройти, потому что ключи валидные
@@ -231,7 +231,7 @@ mod tests {
         let mut items = std::collections::HashMap::new();
         items.insert(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         );
         // Пример неполного словаря
         let frame = ZSPFrame::Dictionary(Some(items));

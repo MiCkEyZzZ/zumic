@@ -43,5 +43,5 @@ criterion = "0.5"
 opt-level = 3
 
 [[bench]]
-name = "sds_benchmarks"
+name = "parser_benchmarks"
 harness = false

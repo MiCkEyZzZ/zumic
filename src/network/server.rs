@@ -46,7 +46,7 @@ async fn handle_connection(mut socket: TcpStream) -> anyhow::Result<()> {
             println!("Received frame: {:?}", frame);
 
             let response = match &frame {
-                ZSPFrame::SimpleString(s) => format!("+{}\r\n", s),
+                ZSPFrame::InlineString(s) => format!("+{}\r\n", s),
                 ZSPFrame::Integer(i) => format!(":{}\r\n", i),
                 ZSPFrame::FrameError(e) => format!("-{}\r\n", e),
                 _ => "+OK\r\n".to_string(),

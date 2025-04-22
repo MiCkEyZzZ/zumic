@@ -7,11 +7,11 @@ use crate::database::{QuickList, Sds, SmartHash, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZSPFrame {
-    SimpleString(String),
+    InlineString(String),
     FrameError(String),
     Integer(i64),
     Float(f64),
-    BulkString(Option<Vec<u8>>),
+    BinaryString(Option<Vec<u8>>),
     Array(Option<Vec<ZSPFrame>>),
     Dictionary(Option<HashMap<String, ZSPFrame>>),
     ZSet(Vec<(String, f64)>),
@@ -68,18 +68,18 @@ impl TryFrom<Value> for ZSPFrame {
 
 impl From<Sds> for ZSPFrame {
     fn from(value: Sds) -> Self {
-        debug!("Converting Sds to ZSPFrame::BulkString");
-        ZSPFrame::BulkString(Some(value.to_vec()))
+        debug!("Converting Sds to ZSPFrame::BinaryString");
+        ZSPFrame::BinaryString(Some(value.to_vec()))
     }
 }
 
 fn convert_arcbytes_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
     debug!("Handling Sds: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
-        .map(ZSPFrame::SimpleString)
+        .map(ZSPFrame::InlineString)
         .or_else(|_| {
-            debug!("Non-UTF8 ArcBytes, converting to BulkString");
-            Ok(ZSPFrame::BulkString(Some(bytes.to_vec())))
+            debug!("Non-UTF8 ArcBytes, converting to BinaryString");
+            Ok(ZSPFrame::BinaryString(Some(bytes.to_vec())))
         })
 }
 
@@ -150,11 +150,11 @@ mod tests {
         if let ZSPFrame::Dictionary(Some(dict)) = frame {
             assert_eq!(
                 dict.get("key1"),
-                Some(&ZSPFrame::BulkString(Some(b"val1".to_vec())))
+                Some(&ZSPFrame::BinaryString(Some(b"val1".to_vec())))
             );
             assert_eq!(
                 dict.get("key2"),
-                Some(&ZSPFrame::BulkString(Some(b"val2".to_vec())))
+                Some(&ZSPFrame::BinaryString(Some(b"val2".to_vec())))
             );
         } else {
             panic!("Expected Dictionary frame");
@@ -166,14 +166,14 @@ mod tests {
     fn handle_arcbytes_utf8_and_binary() {
         let utf8 = Sds::from_str("hello");
         let frame = convert_arcbytes_to_frame(utf8).unwrap();
-        assert_eq!(frame, ZSPFrame::SimpleString("hello".into()));
+        assert_eq!(frame, ZSPFrame::InlineString("hello".into()));
 
         let bin = Sds::from_vec(vec![0xFF, 0xFE]);
         let frame = convert_arcbytes_to_frame(bin.clone()).unwrap();
-        assert_eq!(frame, ZSPFrame::BulkString(Some(bin.to_vec())));
+        assert_eq!(frame, ZSPFrame::BinaryString(Some(bin.to_vec())));
     }
 
-    // Tests the conversion of QuickList<ArcBytes> into a ZSPFrame::Array of BulkStrings.
+    // Tests the conversion of QuickList<ArcBytes> into a ZSPFrame::Array of BinaryStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -185,10 +185,10 @@ mod tests {
             let strs: Vec<_> = vec
                 .into_iter()
                 .map(|f| {
-                    if let ZSPFrame::BulkString(Some(b)) = f {
+                    if let ZSPFrame::BinaryString(Some(b)) = f {
                         String::from_utf8(b).unwrap()
                     } else {
-                        panic!("Expected BulkString");
+                        panic!("Expected BinaryString");
                     }
                 })
                 .collect();
@@ -198,7 +198,7 @@ mod tests {
         }
     }
 
-    // Tests the conversion of a HashSet<String> to a ZSPFrame::Array of SimpleStrings.
+    // Tests the conversion of a HashSet<String> to a ZSPFrame::Array of InlineStrings.
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
@@ -209,8 +209,8 @@ mod tests {
             let mut got: Vec<_> = vec
                 .into_iter()
                 .map(|f| match f {
-                    ZSPFrame::SimpleString(s) => s,
-                    ZSPFrame::BulkString(Some(b)) => String::from_utf8(b).unwrap(),
+                    ZSPFrame::InlineString(s) => s,
+                    ZSPFrame::BinaryString(Some(b)) => String::from_utf8(b).unwrap(),
                     _ => panic!(),
                 })
                 .collect();
@@ -258,11 +258,11 @@ mod tests {
 
         assert_eq!(
             ZSPFrame::try_from(Value::Str(valid.clone())).unwrap(),
-            ZSPFrame::SimpleString("abc".into())
+            ZSPFrame::InlineString("abc".into())
         );
 
         let frame = ZSPFrame::try_from(Value::Str(invalid.clone())).unwrap();
-        assert_eq!(frame, ZSPFrame::BulkString(Some(invalid.to_vec())));
+        assert_eq!(frame, ZSPFrame::BinaryString(Some(invalid.to_vec())));
     }
 
     // Test conversion of an empty Quicklist into an empty Array frame.
@@ -309,11 +309,11 @@ mod tests {
         assert!(err.contains("ZSet key error"));
     }
 
-    // Test that Sds is converted into a BulkString using `From` impl.
+    // Test that Sds is converted into a BinaryString using `From` impl.
     #[test]
-    fn arcbytes_into_bulkstring() {
+    fn arcbytes_into_binarytring() {
         let arc = Sds::from_str("hello");
         let frame: ZSPFrame = arc.clone().into();
-        assert_eq!(frame, ZSPFrame::BulkString(Some(arc.to_vec())));
+        assert_eq!(frame, ZSPFrame::BinaryString(Some(arc.to_vec())));
     }
 }

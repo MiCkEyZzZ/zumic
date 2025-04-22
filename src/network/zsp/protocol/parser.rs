@@ -2,16 +2,17 @@ use super::command::Command as ZSPCommand;
 use crate::{
     command::Command as StoreCommand,
     database::{Sds, Value},
+    error::ParseError,
     network::zsp::frame::zsp_types::ZSPFrame,
 };
 
 /// RawCommand → ExeCommand
 trait IntoExecutable {
-    fn into_executable(self) -> Result<StoreCommand, String>;
+    fn into_executable(self) -> Result<StoreCommand, ParseError>;
 }
 
 impl IntoExecutable for ZSPCommand {
-    fn into_executable(self) -> Result<StoreCommand, String> {
+    fn into_executable(self) -> Result<StoreCommand, ParseError> {
         match self {
             ZSPCommand::Set { key, value } => {
                 Ok(StoreCommand::Set(crate::command::SetCommand { key, value }))
@@ -43,47 +44,45 @@ impl IntoExecutable for ZSPCommand {
                 }))
             }
 
-            ZSPCommand::Ping => Err("Ping is not implemented yet in executable layer".to_string()),
-            ZSPCommand::Echo(_) => {
-                Err("ECHO is not implemented yet in executable layer".to_string())
-            }
+            ZSPCommand::Ping => Err(ParseError::UnknownCommand),
+            ZSPCommand::Echo(_) => Err(ParseError::UnknownCommand),
         }
     }
 }
 
 /// Main entry point: parsing a frame and converting it into an executable command.
-pub fn parse_command(frame: ZSPFrame) -> Result<StoreCommand, String> {
+pub fn parse_command(frame: ZSPFrame) -> Result<StoreCommand, ParseError> {
     let raw_cmd = parse_raw_command(frame)?;
     raw_cmd.into_executable()
 }
 
 /// Intermediate step: ZSPFrame → RawCommand
-fn parse_raw_command(frame: ZSPFrame) -> Result<ZSPCommand, String> {
+fn parse_raw_command(frame: ZSPFrame) -> Result<ZSPCommand, ParseError> {
     match frame {
         ZSPFrame::Array(Some(items)) if !items.is_empty() => {
-            if let ZSPFrame::SimpleString(cmd) = &items[0] {
+            if let ZSPFrame::InlineString(cmd) = &items[0] {
                 return parse_from_str_command(cmd, &items);
             }
 
-            if let ZSPFrame::BulkString(Some(bytes)) = &items[0] {
-                let cmd_str = String::from_utf8(bytes.clone())
-                    .map_err(|_| "Invalid UTF-8 in command".to_string())?;
+            if let ZSPFrame::BinaryString(Some(bytes)) = &items[0] {
+                let cmd_str =
+                    String::from_utf8(bytes.clone()).map_err(|_| ParseError::InvalidUtf8)?;
                 return parse_from_str_command(&cmd_str, &items);
             }
 
-            Err("Command must be a string".to_string())
+            Err(ParseError::CommandMustBeString)
         }
-        _ => Err("Expected array for command".to_string()),
+        _ => Err(ParseError::ExpectedArray),
     }
 }
 
 /// Parsing command string and arguments from ZSPFrame array → RawCommand
-fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, String> {
+fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, ParseError> {
     match cmd.to_ascii_lowercase().as_str() {
         "ping" => Ok(ZSPCommand::Ping),
         "set" => {
             if items.len() != 3 {
-                return Err("SET requires 2 arguments".to_string());
+                return Err(ParseError::WrongArgCount("SET", 2));
             }
 
             let key = parse_key(&items[1], "SET")?;
@@ -92,7 +91,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "get" => {
             if items.len() != 2 {
-                return Err("GET requires 1 argument".to_string());
+                return Err(ParseError::WrongArgCount("GET", 1));
             }
 
             let key = parse_key(&items[1], "GET")?;
@@ -100,7 +99,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "del" => {
             if items.len() != 2 {
-                return Err("DEL requires 1 argument".to_string());
+                return Err(ParseError::WrongArgCount("DEL", 1));
             }
 
             let key = parse_key(&items[1], "DEL")?;
@@ -108,12 +107,12 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "mset" => {
             if items.len() < 3 || items.len() % 2 == 0 {
-                return Err("MSET requires even number of arguments after command".to_string());
+                return Err(ParseError::MSetWrongArgCount);
             }
 
             let mut parsed = Vec::new();
             for pair in items[1..].chunks(2) {
-                let key = parse_key(&pair[1], "MSET")?;
+                let key = parse_key(&pair[0], "MSET")?;
                 let value = parse_value(&pair[1], "MSET")?;
                 parsed.push((key, value));
             }
@@ -121,7 +120,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "mget" => {
             if items.len() < 2 {
-                return Err("MGET requires at least one key".to_string());
+                return Err(ParseError::WrongArgCount("MGET", 1));
             }
 
             let keys = items[1..]
@@ -132,7 +131,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "setnx" => {
             if items.len() != 3 {
-                return Err("SETNX requires 2 arguments".to_string());
+                return Err(ParseError::WrongArgCount("SETNX", 2));
             }
 
             let key = parse_key(&items[1], "SETNX")?;
@@ -141,7 +140,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "rename" => {
             if items.len() != 3 {
-                return Err("RENAME requires 2 arguments".to_string());
+                return Err(ParseError::WrongArgCount("RENAME", 2));
             }
 
             let from = parse_key(&items[1], "RENAME")?;
@@ -150,33 +149,33 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, S
         }
         "renamenx" => {
             if items.len() != 3 {
-                return Err("RENAMENX requires 2 arguments".to_string());
+                return Err(ParseError::WrongArgCount("RENAMENX", 2));
             }
 
             let from = parse_key(&items[1], "RENAMENX")?;
             let to = parse_key(&items[2], "RENAMENX")?;
             Ok(ZSPCommand::RenameNX { from, to })
         }
-        _ => Err("Unknown command".to_string()),
+        _ => Err(ParseError::UnknownCommand),
     }
 }
 
-fn parse_key(frame: &ZSPFrame, cmd: &str) -> Result<String, String> {
+fn parse_key(frame: &ZSPFrame, cmd: &'static str) -> Result<String, ParseError> {
     match frame {
-        ZSPFrame::SimpleString(s) => Ok(s.clone()),
-        ZSPFrame::BulkString(Some(bytes)) => {
-            String::from_utf8(bytes.clone()).map_err(|_| format!("{cmd}: key must be valid UTF-8"))
+        ZSPFrame::InlineString(s) => Ok(s.clone()),
+        ZSPFrame::BinaryString(Some(bytes)) => {
+            String::from_utf8(bytes.clone()).map_err(|_| ParseError::KeyNotUtf8(cmd))
         }
-        _ => Err(format!("{cmd}: invalid key")),
+        _ => Err(ParseError::InvalidKey(cmd)),
     }
 }
 
-fn parse_value(frame: &ZSPFrame, cmd: &str) -> Result<Value, String> {
+fn parse_value(frame: &ZSPFrame, cmd: &'static str) -> Result<Value, ParseError> {
     match frame {
-        ZSPFrame::SimpleString(s) => Ok(Value::Str(Sds::from_str(s))),
-        ZSPFrame::BulkString(Some(bytes)) => Ok(Value::Str(Sds::from_vec(bytes.clone()))),
+        ZSPFrame::InlineString(s) => Ok(Value::Str(Sds::from_str(s))),
+        ZSPFrame::BinaryString(Some(bytes)) => Ok(Value::Str(Sds::from_vec(bytes.clone()))),
         ZSPFrame::Integer(n) => Ok(Value::Int(*n)),
-        _ => Err(format!("{cmd}: unsupported value type")),
+        _ => Err(ParseError::InvalidValueType(cmd)),
     }
 }
 
@@ -188,9 +187,9 @@ mod tests {
     #[test]
     fn test_parse_set_command() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("SET".to_string()),
-            ZSPFrame::SimpleString("anton".to_string()),
-            ZSPFrame::SimpleString("hisvalue".to_string()),
+            ZSPFrame::InlineString("SET".to_string()),
+            ZSPFrame::InlineString("anton".to_string()),
+            ZSPFrame::InlineString("hisvalue".to_string()),
         ]));
 
         let set_cmd = parse_command(frame).unwrap();
@@ -204,12 +203,12 @@ mod tests {
         }
     }
 
-    /// Проверяет парсинг команды GET с аргументом в виде BulkString
+    /// Проверяет парсинг команды GET с аргументом в виде BinaryString
     #[test]
     fn test_parse_get_command_with_bulk_key() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::BulkString(Some(b"GET".to_vec())),
-            ZSPFrame::BulkString(Some(b"anton".to_vec())),
+            ZSPFrame::BinaryString(Some(b"GET".to_vec())),
+            ZSPFrame::BinaryString(Some(b"anton".to_vec())),
         ]));
 
         let get_cmd = parse_command(frame).unwrap();
@@ -222,12 +221,12 @@ mod tests {
         }
     }
 
-    /// Проверяет парсинг команды DEL с ключом в виде SimpleString
+    /// Проверяет парсинг команды DEL с ключом в виде InlineString
     #[test]
     fn test_parse_del_command_with_simple_key() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("DEL".to_string()),
-            ZSPFrame::SimpleString("anton".to_string()),
+            ZSPFrame::InlineString("DEL".to_string()),
+            ZSPFrame::InlineString("anton".to_string()),
         ]));
 
         let del_cmd = parse_command(frame).unwrap();
@@ -244,8 +243,8 @@ mod tests {
     #[test]
     fn test_parse_set_command_with_int_value() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("SET".to_string()),
-            ZSPFrame::SimpleString("count".to_string()),
+            ZSPFrame::InlineString("SET".to_string()),
+            ZSPFrame::InlineString("count".to_string()),
             ZSPFrame::Integer(42),
         ]));
 
@@ -263,44 +262,44 @@ mod tests {
     /// Проверяет поведение при неизвестной команде
     #[test]
     fn test_unknown_command() {
-        let frame = ZSPFrame::Array(Some(vec![ZSPFrame::SimpleString("KIN".to_string())]));
+        let frame = ZSPFrame::Array(Some(vec![ZSPFrame::InlineString("KIN".to_string())]));
 
         let err = parse_command(frame).unwrap_err();
-        assert_eq!(err, "Unknown command");
+        assert_eq!(err.to_string(), "Unknown command");
     }
 
     /// Проверяет ошибку при слишком большом числе аргументов в GET
     #[test]
     fn test_get_command_with_too_many_args() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("GET".to_string()),
-            ZSPFrame::SimpleString("anton".to_string()),
-            ZSPFrame::SimpleString("hisvalue".to_string()),
+            ZSPFrame::InlineString("GET".to_string()),
+            ZSPFrame::InlineString("anton".to_string()),
+            ZSPFrame::InlineString("hisvalue".to_string()),
         ]));
 
         let err = parse_command(frame).unwrap_err();
-        assert_eq!(err, "GET requires 1 argument");
+        assert_eq!(err.to_string(), "GET requires 1 argument(s)");
     }
 
     /// Проверяет ошибку, если ключ передан некорректного типа (Integer)
     #[test]
     fn test_set_command_with_invalid_key_type() {
         let frame = ZSPFrame::Array(Some(vec![
-            ZSPFrame::SimpleString("SET".to_string()),
+            ZSPFrame::InlineString("SET".to_string()),
             ZSPFrame::Integer(123),
-            ZSPFrame::SimpleString("value".to_string()),
+            ZSPFrame::InlineString("value".to_string()),
         ]));
 
         let err = parse_command(frame).unwrap_err();
-        assert_eq!(err, "SET: invalid key");
+        assert_eq!(err.to_string(), "SET: invalid key");
     }
 
     /// Проверяет ошибку, если команда не представлена массивом
     #[test]
     fn test_command_not_array() {
-        let frame = ZSPFrame::SimpleString("SET".to_string());
+        let frame = ZSPFrame::InlineString("SET".to_string());
         let err = parse_command(frame).unwrap_err();
-        assert_eq!(err, "Expected array for command");
+        assert_eq!(err.to_string(), "Expected array for command");
     }
 
     /// Проверяет ошибку при пустом массиве команды
@@ -308,6 +307,6 @@ mod tests {
     fn test_command_array_empty() {
         let frame = ZSPFrame::Array(Some(vec![]));
         let err = parse_command(frame).unwrap_err();
-        assert_eq!(err, "Expected array for command");
+        assert_eq!(err.to_string(), "Expected array for command");
     }
 }

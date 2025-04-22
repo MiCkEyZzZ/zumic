@@ -3,8 +3,8 @@ use std::io::Cursor;
 use zumic::network::zsp::frame::{decoder::ZSPDecoder, encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
 #[test]
-fn test_roundtrip_simple_string() {
-    let original = ZSPFrame::SimpleString("hello".into());
+fn test_roundtrip_inline_string() {
+    let original = ZSPFrame::InlineString("hello".into());
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
@@ -15,8 +15,8 @@ fn test_roundtrip_simple_string() {
 }
 
 #[test]
-fn test_roundtrip_bulk_string() {
-    let original = ZSPFrame::BulkString(Some(b"world".to_vec()));
+fn test_roundtrip_binary_string() {
+    let original = ZSPFrame::BinaryString(Some(b"world".to_vec()));
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
@@ -30,8 +30,8 @@ fn test_roundtrip_bulk_string() {
 fn test_roundtrip_array() {
     let original = ZSPFrame::Array(Some(vec![
         ZSPFrame::Integer(42),
-        ZSPFrame::SimpleString("nested".into()),
-        ZSPFrame::BulkString(None),
+        ZSPFrame::InlineString("nested".into()),
+        ZSPFrame::BinaryString(None),
     ]));
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
@@ -47,7 +47,7 @@ fn test_roundtrip_dictionary() {
     let mut items = std::collections::HashMap::new();
     items.insert(
         "key1".to_string(),
-        ZSPFrame::SimpleString("value1".to_string()),
+        ZSPFrame::InlineString("value1".to_string()),
     );
     items.insert("key2".to_string(), ZSPFrame::Integer(100));
     let original = ZSPFrame::Dictionary(Some(items));
@@ -85,12 +85,12 @@ fn test_roundtrip_incomplete_dictionary() {
 #[test]
 fn test_roundtrip_mixed_types() {
     let original = ZSPFrame::Array(Some(vec![
-        ZSPFrame::SimpleString("hello".into()),
-        ZSPFrame::BulkString(Some(b"world".to_vec())),
+        ZSPFrame::InlineString("hello".into()),
+        ZSPFrame::BinaryString(Some(b"world".to_vec())),
         ZSPFrame::Integer(100),
         ZSPFrame::Dictionary(Some(std::collections::HashMap::from([(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         )]))),
     ]));
     let encoded = ZSPEncoder::encode(&original).unwrap();

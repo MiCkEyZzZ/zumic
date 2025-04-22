@@ -7,7 +7,7 @@ use super::{errors::ZSPError, zsp_types::ZSPFrame};
 
 /// Максимальная длина строки (1 МБ).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
-/// Максимальный размер BulkString (512 МБ).
+/// Максимальный размер BinaryString (512 МБ).
 pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024;
 /// Максимальная вложенность массивов (32 уровня).
 pub const MAX_ARRAY_DEPTH: usize = 32;
@@ -16,7 +16,7 @@ pub const MAX_ARRAY_DEPTH: usize = 32;
 pub enum ZSPDecodeState {
     /// Initial state.
     Initial,
-    /// State when BulkString is not fully read.
+    /// State when BinaryString is not fully read.
     PartialBulkString { len: usize, data: Vec<u8> },
     /// State when Array is not read completely.
     PartialArray {
@@ -89,14 +89,14 @@ impl ZSPDecoder {
 
     // --- Методы анализа отдельных типов фреймов ---
 
-    /// Parses SimpleString, readable up to CRLF.
+    /// Parses InlineString, readable up to CRLF.
     fn parse_simple_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
     ) -> Result<Option<ZSPFrame>, ZSPError> {
         let line = self.read_line(buf)?;
-        info!("Parsed simple string: {}", line);
-        Ok(Some(ZSPFrame::SimpleString(line)))
+        info!("Parsed inline string: {}", line);
+        Ok(Some(ZSPFrame::InlineString(line)))
     }
 
     /// Parses the Error frame.
@@ -120,17 +120,17 @@ impl ZSPDecoder {
 
     fn parse_bulk_string(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, ZSPError> {
         let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            let err_msg = format!("Invalid bulk length at byte {}", buf.position());
+            let err_msg = format!("Invalid binary length at byte {}", buf.position());
             error!("{}", err_msg);
             ZSPError::InvalidData(err_msg)
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::BulkString(None))), // Null bulk string
+            -1 => Ok(Some(ZSPFrame::BinaryString(None))), // Null binary string
             len if len >= 0 => {
                 let len = len as usize;
                 if len > MAX_BULK_LENGTH {
-                    let err_msg = format!("Bulk string too long ({} > {})", len, MAX_BULK_LENGTH);
+                    let err_msg = format!("Binary string too long ({} > {})", len, MAX_BULK_LENGTH);
                     error!("{}", err_msg);
                     return Err(ZSPError::InvalidData(err_msg));
                 }
@@ -144,8 +144,8 @@ impl ZSPDecoder {
                 if data.len() == len {
                     // If the data is complete, check the trailing CRLF
                     self.expect_crlf(buf)?;
-                    info!("Parsed bulk string of length {}", len);
-                    Ok(Some(ZSPFrame::BulkString(Some(data))))
+                    info!("Parsed binary string of length {}", len);
+                    Ok(Some(ZSPFrame::BinaryString(Some(data))))
                 } else {
                     // If there is not enough data, save the state
                     self.state = ZSPDecodeState::PartialBulkString { len, data };
@@ -153,14 +153,14 @@ impl ZSPDecoder {
                 }
             }
             _ => {
-                let err_msg = format!("Negative bulk length at byte {}", buf.position());
+                let err_msg = format!("Negative binary length at byte {}", buf.position());
                 error!("{}", err_msg);
                 Err(ZSPError::InvalidData(err_msg))
             }
         }
     }
 
-    /// Continues reading the BulkString if the data was incomplete.
+    /// Continues reading the BinaryString if the data was incomplete.
     fn continue_bulk_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -174,8 +174,8 @@ impl ZSPDecoder {
 
         if data.len() == len {
             self.expect_crlf(buf)?;
-            info!("Completed parsing bulk string.");
-            Ok(Some(ZSPFrame::BulkString(Some(std::mem::take(data)))))
+            info!("Completed parsing binary string.");
+            Ok(Some(ZSPFrame::BinaryString(Some(std::mem::take(data)))))
         } else {
             Ok(None)
         }
@@ -258,12 +258,12 @@ impl ZSPDecoder {
                     }
                     let value = value_opt.unwrap();
 
-                    // Key must be SimpleString
-                    if let ZSPFrame::SimpleString(key_str) = key {
+                    // Key must be InlineString
+                    if let ZSPFrame::InlineString(key_str) = key {
                         items.insert(key_str, value);
                     } else {
                         let err_msg =
-                            format!("Expected SimpleString as key at byte {}", buf.position());
+                            format!("Expected InlineString as key at byte {}", buf.position());
                         error!("{}", err_msg);
                         return Err(ZSPError::InvalidData(err_msg));
                     }
@@ -367,7 +367,7 @@ mod tests {
 
     use crate::network::zsp::frame::encoder::ZSPEncoder;
 
-    // Test for simple strings
+    // Test for inline strings
     // Tests decoding of a string starting with '+'
     #[test]
     fn test_simple_string() {
@@ -375,10 +375,10 @@ mod tests {
         let data = b"+OK\r\n".to_vec();
         let mut cursor = Cursor::new(data.as_slice());
         let frame = decoder.decode(&mut cursor).unwrap().unwrap();
-        assert_eq!(frame, ZSPFrame::SimpleString("OK".to_string()));
+        assert_eq!(frame, ZSPFrame::InlineString("OK".to_string()));
     }
 
-    // Test for bulk strings
+    // Test for binary strings
     // Tests decoding of a string starting with '$'
     #[test]
     fn test_bulk_string() {
@@ -386,10 +386,10 @@ mod tests {
         let data = b"$5\r\nhello\r\n".to_vec();
         let mut cursor = Cursor::new(data.as_slice());
         let frame = decoder.decode(&mut cursor).unwrap().unwrap();
-        assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
+        assert_eq!(frame, ZSPFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    // Test for partial bulk string
+    // Test for partial binary string
     // Tests the decoding of a bulk string in two steps
     #[test]
     fn test_partial_bulk_string() {
@@ -404,7 +404,7 @@ mod tests {
         let data2 = b"lo\r\n".to_vec();
         let mut cursor = Cursor::new(data2.as_slice());
         let frame = decoder.decode(&mut cursor).unwrap().unwrap();
-        assert_eq!(frame, ZSPFrame::BulkString(Some(b"hello".to_vec())));
+        assert_eq!(frame, ZSPFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
     // Test for empty dictionary
@@ -430,7 +430,7 @@ mod tests {
         let mut expected_dict = HashMap::new();
         expected_dict.insert(
             "key".to_string(),
-            ZSPFrame::SimpleString("value".to_string()),
+            ZSPFrame::InlineString("value".to_string()),
         );
 
         assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
@@ -445,11 +445,11 @@ mod tests {
         let mut items = HashMap::new();
         items.insert(
             "key1".to_string(),
-            ZSPFrame::SimpleString("value1".to_string()),
+            ZSPFrame::InlineString("value1".to_string()),
         );
         items.insert(
             "key2".to_string(),
-            ZSPFrame::SimpleString("value2".to_string()),
+            ZSPFrame::InlineString("value2".to_string()),
         );
         let original = ZSPFrame::Dictionary(Some(items));
         let encoded = ZSPEncoder::encode(&original).unwrap();
