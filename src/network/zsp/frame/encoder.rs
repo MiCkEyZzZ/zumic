@@ -1,26 +1,27 @@
 use tracing::{debug, error, info};
 
+use crate::error::EncodeError;
+
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BULK_LENGTH},
-    errors::ZSPError,
     zsp_types::ZSPFrame,
 };
 
 pub struct ZSPEncoder;
 
 impl ZSPEncoder {
-    pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, ZSPError> {
+    pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, EncodeError> {
         debug!("Encoding frame: {:?}", frame);
         Self::encode_frame(frame, 0)
     }
 
-    fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, ZSPError> {
+    fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
         debug!("Encoding frame at depth {}: {:?}", current_depth, frame);
 
         if current_depth > MAX_ARRAY_DEPTH {
             let err_msg = format!("Max array depth exceed ({})", MAX_ARRAY_DEPTH);
             error!("{}", err_msg);
-            return Err(ZSPError::InvalidData(err_msg));
+            return Err(EncodeError::InvalidData(err_msg));
         }
 
         match frame {
@@ -47,7 +48,7 @@ impl ZSPEncoder {
                     let err_msg =
                         format!("Bulk string too long ({} > {})", b.len(), MAX_BULK_LENGTH);
                     error!("{}", err_msg);
-                    return Err(ZSPError::InvalidData(err_msg));
+                    return Err(EncodeError::InvalidData(err_msg));
                 }
 
                 info!("Encoding BinaryString of length {}", b.len());
@@ -104,21 +105,21 @@ impl ZSPEncoder {
             }
         }
     }
-    fn validate_simple_string(s: &str) -> Result<(), ZSPError> {
+    fn validate_simple_string(s: &str) -> Result<(), EncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Simple string contains CR or LF characters";
             error!("{}", err_msg);
-            Err(ZSPError::InvalidData(err_msg.into()))
+            Err(EncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }
     }
 
-    fn validate_error_string(s: &str) -> Result<(), ZSPError> {
+    fn validate_error_string(s: &str) -> Result<(), EncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Error message contains CR or LF characters";
             error!("{}", err_msg);
-            Err(ZSPError::InvalidData(err_msg.into()))
+            Err(EncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }
