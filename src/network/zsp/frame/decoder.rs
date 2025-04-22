@@ -1,6 +1,6 @@
-use std::{collections::HashMap, io::Cursor};
-
 use bytes::Buf;
+use memchr::memchr;
+use std::{collections::HashMap, io::Cursor};
 use tracing::{error, info};
 
 use crate::error::DecodeError;
@@ -16,11 +16,11 @@ pub const MAX_ARRAY_DEPTH: usize = 32;
 
 #[derive(Debug)]
 pub enum ZSPDecodeState {
-    /// Initial state.
+    /// Исходное состояние.
     Initial,
-    /// State when BinaryString is not fully read.
-    PartialBulkString { len: usize, data: Vec<u8> },
-    /// State when Array is not read completely.
+    /// Состояние, когда BinaryString не полностью прочитан.
+    PartialBinaryString { len: usize, data: Vec<u8> },
+    /// Состояние, когда массив не прочитан полностью.
     PartialArray {
         len: usize,
         items: Vec<ZSPFrame>,
@@ -48,12 +48,12 @@ impl ZSPDecoder {
                     info!("No data left to decode.");
                     return Ok(None);
                 }
-                // Depending on the first byte, we call the corresponding parsing method.
+                // В зависимости от первого байта вызываем соответствующий метод анализа.
                 match buf.get_u8() {
                     b'+' => self.parse_simple_string(buf),
                     b'-' => self.parse_error(buf),
                     b':' => self.parse_integer(buf),
-                    b'$' => self.parse_bulk_string(buf),
+                    b'$' => self.parse_binary_string(buf),
                     b'*' => self.parse_array(buf, 0),
                     b'%' => self.parse_dictionary(buf),
                     _ => {
@@ -63,11 +63,11 @@ impl ZSPDecoder {
                     }
                 }
             }
-            ZSPDecodeState::PartialBulkString { len, mut data } => {
+            ZSPDecodeState::PartialBinaryString { len, mut data } => {
                 let result = self.continue_binary_string(buf, len, &mut data);
-                // If the data is still incomplete, save the state.
+                // Если данные все еще неполные, сохраняем состояние.
                 if let Ok(None) = result {
-                    self.state = ZSPDecodeState::PartialBulkString { len, data };
+                    self.state = ZSPDecodeState::PartialBinaryString { len, data };
                 }
                 result
             }
@@ -91,24 +91,24 @@ impl ZSPDecoder {
 
     // --- Методы анализа отдельных типов фреймов ---
 
-    /// Parses InlineString, readable up to CRLF.
+    /// Анализирует InlineString, читаемый до CRLF.
     fn parse_simple_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
     ) -> Result<Option<ZSPFrame>, DecodeError> {
         let line = self.read_line(buf)?;
         info!("Parsed inline string: {}", line);
-        Ok(Some(ZSPFrame::InlineString(line)))
+        Ok(Some(ZSPFrame::InlineString(line.to_string())))
     }
 
-    /// Parses the Error frame.
+    /// Анализирует Error frame.
     fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, DecodeError> {
         let line = self.read_line(buf)?;
         info!("Parsed error: {}", line);
-        Ok(Some(ZSPFrame::FrameError(line)))
+        Ok(Some(ZSPFrame::FrameError(line.to_string())))
     }
 
-    /// Parses Integer frame.
+    /// Анализирует Integer frame.
     fn parse_integer(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, DecodeError> {
         let line = self.read_line(buf)?;
         let num = line.parse::<i64>().map_err(|_| {
@@ -120,7 +120,7 @@ impl ZSPDecoder {
         Ok(Some(ZSPFrame::Integer(num)))
     }
 
-    fn parse_bulk_string(
+    fn parse_binary_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
     ) -> Result<Option<ZSPFrame>, DecodeError> {
@@ -131,7 +131,7 @@ impl ZSPDecoder {
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::BinaryString(None))), // Null binary string
+            -1 => Ok(Some(ZSPFrame::BinaryString(None))), // Null двоичная строка
             len if len >= 0 => {
                 let len = len as usize;
                 if len > MAX_BINARY_LENGTH {
@@ -141,20 +141,20 @@ impl ZSPDecoder {
                     return Err(DecodeError::InvalidData(err_msg));
                 }
 
-                // Read the available number of bytes
+                // Читаем доступное количество байтов
                 let available = buf.remaining().min(len);
                 let mut data = Vec::with_capacity(len);
                 data.extend_from_slice(&buf.chunk()[..available]);
                 buf.advance(available);
 
                 if data.len() == len {
-                    // If the data is complete, check the trailing CRLF
+                    // Если данные полные, проверяем завершающий CRLF
                     self.expect_crlf(buf)?;
                     info!("Parsed binary string of length {}", len);
                     Ok(Some(ZSPFrame::BinaryString(Some(data))))
                 } else {
-                    // If there is not enough data, save the state
-                    self.state = ZSPDecodeState::PartialBulkString { len, data };
+                    // Если данные полные, проверяем завершающий CRLF
+                    self.state = ZSPDecodeState::PartialBinaryString { len, data };
                     Ok(None)
                 }
             }
@@ -166,7 +166,7 @@ impl ZSPDecoder {
         }
     }
 
-    /// Continues reading the BinaryString if the data was incomplete.
+    /// Продолжает чтение BinaryString, если данные были неполными.
     fn continue_binary_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -205,7 +205,7 @@ impl ZSPDecoder {
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::Array(None))), // Null array
+            -1 => Ok(Some(ZSPFrame::Array(None))), // Null массив
             len if len >= 0 => {
                 let len = len as usize;
                 let mut items = Vec::with_capacity(len);
@@ -247,27 +247,27 @@ impl ZSPDecoder {
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::Dictionary(None))), // Null dictionary
+            -1 => Ok(Some(ZSPFrame::Dictionary(None))), // Null словарь
             len if len >= 0 => {
                 let len = len as usize;
                 let mut items = HashMap::new();
 
                 for _ in 0..len {
-                    // Read the key
+                    // Читаем ключ
                     let key_opt = self.decode(buf)?;
                     if key_opt.is_none() {
-                        return Ok(None); // Return Ok(None) if there is no data for the key
+                        return Ok(None); // Возвращает Ok(None), если для ключа нет данных
                     }
                     let key = key_opt.unwrap();
 
-                    // Read the value
+                    // Читаем значение
                     let value_opt = self.decode(buf)?;
                     if value_opt.is_none() {
-                        return Ok(None); // Return Ok(None) if there is no data for the value
+                        return Ok(None); // Возвращает Ok(None), если для значения нет данных
                     }
                     let value = value_opt.unwrap();
 
-                    // Key must be InlineString
+                    // Ключ должен быть InlineString
                     if let ZSPFrame::InlineString(key_str) = key {
                         items.insert(key_str, value);
                     } else {
@@ -289,7 +289,7 @@ impl ZSPDecoder {
         }
     }
 
-    /// Continues reading the Array frame if the data was incomplete.
+    /// Продолжает чтение кадра массива, если данные были неполными.
     fn continue_array(
         &mut self,
         buf: &mut Cursor<&[u8]>,
@@ -316,44 +316,31 @@ impl ZSPDecoder {
         Ok(Some(ZSPFrame::Array(Some(std::mem::take(items)))))
     }
 
-    // --- Helper methods ---
+    // --- Вспомогательные методы ---
 
-    fn read_line(&mut self, buf: &mut Cursor<&[u8]>) -> Result<String, DecodeError> {
-        let start_pos = buf.position();
-        let mut line = Vec::new();
+    fn read_line<'a>(&mut self, buf: &mut Cursor<&'a [u8]>) -> Result<&'a str, DecodeError> {
+        let slice = buf.get_ref();
+        let start = buf.position() as usize;
 
-        while buf.has_remaining() && line.len() < MAX_LINE_LENGTH {
-            let b = buf.get_u8();
-            if b == b'\r' {
-                if buf.get_u8() == b'\n' {
-                    return String::from_utf8(line).map_err(|_| {
-                        let err_msg = format!("Invalid UTF-8 sequence at byte {}", start_pos);
-                        error!("{}", err_msg);
-                        DecodeError::InvalidData(err_msg)
-                    });
-                } else {
-                    let err_msg = format!("Expected \\n after \\r at byte {}", buf.position());
-                    error!("{}", err_msg);
-                    return Err(DecodeError::InvalidData(err_msg));
-                }
+        // найти '\r'
+        if let Some(pos) = memchr(b'\r', &slice[start..]) {
+            let end = start + pos;
+            // убедились, что за '\r' идёт '\n'
+            if slice.get(end + 1) == Some(&b'\n') {
+                // безопасно конвертим, проверка UTF-8 может быть пропущена позже
+                let line = unsafe { std::str::from_utf8_unchecked(&slice[start..end]) };
+                buf.set_position((end + 2) as u64);
+                return Ok(line);
             }
-            line.push(b);
         }
 
-        if line.len() >= MAX_LINE_LENGTH {
-            Err(DecodeError::InvalidData(format!(
-                "Line to long (max {} bytes)",
-                MAX_LINE_LENGTH
-            )))
-        } else {
-            Err(DecodeError::UnexpectedEof(format!(
-                "Incomplete line at byte {}",
-                start_pos
-            )))
-        }
+        Err(DecodeError::UnexpectedEof(format!(
+            "Incomplete line at byte {}",
+            start
+        )))
     }
 
-    /// Checks that the next two bytes are CRLF.
+    /// Проверяем, что следующие два байта — CRLF.
     fn expect_crlf(&mut self, buf: &mut Cursor<&[u8]>) -> Result<(), DecodeError> {
         if buf.remaining() < 2 {
             let err_msg = format!("Expected CRLF at byte {}", buf.position());

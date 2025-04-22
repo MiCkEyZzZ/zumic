@@ -1993,6 +1993,7 @@ dependencies = [
  "dashmap",
  "glob",
  "lru",
+ "memchr",
  "mlua",
  "num_cpus",
  "once_cell",

@@ -73,7 +73,7 @@ impl From<Sds> for ZSPFrame {
     }
 }
 
-fn convert_sds_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
+pub fn convert_sds_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
     debug!("Handling Sds: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
         .map(ZSPFrame::InlineString)
@@ -83,7 +83,7 @@ fn convert_sds_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
         })
 }
 
-fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
+pub fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
     debug!(
         "Converting QuickList to ZSPFrame::Array with length: {}",
         list.len()
@@ -95,7 +95,7 @@ fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Array(Some(frames)))
 }
 
-fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
+pub fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
     debug!("Converting HashSet<Sds> to ZSPFrame::Array");
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
@@ -105,7 +105,7 @@ fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
-fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
+pub fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
     debug!("Converting SmartHash to ZSPFrame::Dictionary");
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
@@ -117,7 +117,7 @@ fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Dictionary(Some(map)))
 }
 
-fn convert_zset(dict: HashMap<Sds, f64>) -> Result<ZSPFrame, String> {
+pub fn convert_zset(dict: HashMap<Sds, f64>) -> Result<ZSPFrame, String> {
     debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
     let pairs = dict
         .into_iter()
