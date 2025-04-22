@@ -1,12 +1,12 @@
 pub mod decode;
 pub mod encode;
-pub mod global;
 pub mod parser;
+pub mod system;
 
 pub use decode::DecodeError;
 pub use encode::EncodeError;
-pub use global::{StoreError, StoreResult};
 pub use parser::ParseError;
+pub use system::{StoreError, StoreResult};
 
 use thiserror::Error;
 

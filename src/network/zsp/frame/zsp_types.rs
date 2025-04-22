@@ -25,8 +25,8 @@ impl TryFrom<Value> for ZSPFrame {
         debug!("Attempting to convert Value to ZSPFrame: {:?}", value);
         match value {
             Value::Str(s) => {
-                debug!("Converting Value::Str to ZSPFrame::SimpleString");
-                convert_arcbytes_to_frame(s)
+                debug!("Converting Value::Str to ZSPFrame::InlineString");
+                convert_sds_to_frame(s)
             }
             Value::Int(i) => {
                 debug!("Converting Value::Int to ZSPFrame::Integer: {}", i);
@@ -73,12 +73,12 @@ impl From<Sds> for ZSPFrame {
     }
 }
 
-fn convert_arcbytes_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
+fn convert_sds_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
     debug!("Handling Sds: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
         .map(ZSPFrame::InlineString)
         .or_else(|_| {
-            debug!("Non-UTF8 ArcBytes, converting to BinaryString");
+            debug!("Non-UTF8 Sds, converting to BinaryString");
             Ok(ZSPFrame::BinaryString(Some(bytes.to_vec())))
         })
 }
@@ -99,7 +99,7 @@ fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
     debug!("Converting HashSet<Sds> to ZSPFrame::Array");
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
-        frames.push(convert_arcbytes_to_frame(item)?);
+        frames.push(convert_sds_to_frame(item)?);
     }
     Ok(ZSPFrame::Array(Some(frames)))
 }
@@ -161,19 +161,19 @@ mod tests {
         }
     }
 
-    // Tests handling of ArcBytes with both valid UTF-8 and binary data.
+    // Tests handling of Sds with both valid UTF-8 and binary data.
     #[test]
-    fn handle_arcbytes_utf8_and_binary() {
+    fn handle_sds_utf8_and_binary() {
         let utf8 = Sds::from_str("hello");
-        let frame = convert_arcbytes_to_frame(utf8).unwrap();
+        let frame = convert_sds_to_frame(utf8).unwrap();
         assert_eq!(frame, ZSPFrame::InlineString("hello".into()));
 
         let bin = Sds::from_vec(vec![0xFF, 0xFE]);
-        let frame = convert_arcbytes_to_frame(bin.clone()).unwrap();
+        let frame = convert_sds_to_frame(bin.clone()).unwrap();
         assert_eq!(frame, ZSPFrame::BinaryString(Some(bin.to_vec())));
     }
 
-    // Tests the conversion of QuickList<ArcBytes> into a ZSPFrame::Array of BinaryStrings.
+    // Tests the conversion of QuickList<Sds> into a ZSPFrame::Array of BinaryStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(ZSPFrame::try_from(Value::Null).unwrap(), ZSPFrame::Null);
     }
 
-    // Tests conversion of a ZSet (HashMap<ArcBytes, f64>) into a ZSPFrame::ZSet.
+    // Tests conversion of a ZSet (HashMap<Sds, f64>) into a ZSPFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = HashMap::new();
@@ -250,7 +250,7 @@ mod tests {
         }
     }
 
-    // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 ArcBytes.
+    // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 Sds.
     #[test]
     fn try_from_value_str_valid_and_invalid_utf8() {
         let valid = Sds::from_str("abc");

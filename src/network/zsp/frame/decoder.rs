@@ -10,7 +10,7 @@ use super::zsp_types::ZSPFrame;
 /// Максимальная длина строки (1 МБ).
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
 /// Максимальный размер BinaryString (512 МБ).
-pub const MAX_BULK_LENGTH: usize = 512 * 1024 * 1024;
+pub const MAX_BINARY_LENGTH: usize = 512 * 1024 * 1024;
 /// Максимальная вложенность массивов (32 уровня).
 pub const MAX_ARRAY_DEPTH: usize = 32;
 
@@ -64,7 +64,7 @@ impl ZSPDecoder {
                 }
             }
             ZSPDecodeState::PartialBulkString { len, mut data } => {
-                let result = self.continue_bulk_string(buf, len, &mut data);
+                let result = self.continue_binary_string(buf, len, &mut data);
                 // If the data is still incomplete, save the state.
                 if let Ok(None) = result {
                     self.state = ZSPDecodeState::PartialBulkString { len, data };
@@ -134,8 +134,9 @@ impl ZSPDecoder {
             -1 => Ok(Some(ZSPFrame::BinaryString(None))), // Null binary string
             len if len >= 0 => {
                 let len = len as usize;
-                if len > MAX_BULK_LENGTH {
-                    let err_msg = format!("Binary string too long ({} > {})", len, MAX_BULK_LENGTH);
+                if len > MAX_BINARY_LENGTH {
+                    let err_msg =
+                        format!("Binary string too long ({} > {})", len, MAX_BINARY_LENGTH);
                     error!("{}", err_msg);
                     return Err(DecodeError::InvalidData(err_msg));
                 }
@@ -166,7 +167,7 @@ impl ZSPDecoder {
     }
 
     /// Continues reading the BinaryString if the data was incomplete.
-    fn continue_bulk_string(
+    fn continue_binary_string(
         &mut self,
         buf: &mut Cursor<&[u8]>,
         len: usize,
@@ -389,7 +390,7 @@ mod tests {
     // Test for binary strings
     // Tests decoding of a string starting with '$'
     #[test]
-    fn test_bulk_string() {
+    fn test_binary_string() {
         let mut decoder = ZSPDecoder::new();
         let data = b"$5\r\nhello\r\n".to_vec();
         let mut cursor = Cursor::new(data.as_slice());
@@ -400,7 +401,7 @@ mod tests {
     // Test for partial binary string
     // Tests the decoding of a bulk string in two steps
     #[test]
-    fn test_partial_bulk_string() {
+    fn test_partial_binary_string() {
         let mut decoder = ZSPDecoder::new();
 
         // First part - should return None indicating more data needed

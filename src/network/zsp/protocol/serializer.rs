@@ -7,7 +7,7 @@ use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
 pub fn serialize_response(response: Response) -> ZSPFrame {
     match response {
         Response::Ok => ZSPFrame::InlineString("OK".into()),
-        Response::Value(value) => value_to_frame(value), // Всё делается через вспомогательную функцию
+        Response::Value(value) => value_to_frame(value),
         Response::Error(msg) => ZSPFrame::FrameError(msg),
         Response::NotFound => ZSPFrame::Null,
         Response::Integer(n) => ZSPFrame::Integer(n),
@@ -30,6 +30,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .collect();
             ZSPFrame::Array(Some(frames))
         }
+
         // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
         Value::Hash(mut smart) => {
             let dict: HashMap<String, ZSPFrame> = smart
@@ -44,6 +45,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .collect();
             ZSPFrame::Dictionary(Some(dict))
         }
+
         Value::ZSet { dict, .. } => {
             let pairs = dict
                 .into_iter()
@@ -55,6 +57,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .collect();
             ZSPFrame::ZSet(pairs)
         }
+
         Value::Set(set) => {
             let frames = set
                 .into_iter()

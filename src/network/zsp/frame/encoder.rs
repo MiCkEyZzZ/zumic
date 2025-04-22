@@ -3,7 +3,7 @@ use tracing::{debug, error, info};
 use crate::error::EncodeError;
 
 use super::{
-    decoder::{MAX_ARRAY_DEPTH, MAX_BULK_LENGTH},
+    decoder::{MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
     zsp_types::ZSPFrame,
 };
 
@@ -44,9 +44,12 @@ impl ZSPEncoder {
                 Ok(format!(":{}\r\n", f).into_bytes())
             }
             ZSPFrame::BinaryString(Some(b)) => {
-                if b.len() > MAX_BULK_LENGTH {
-                    let err_msg =
-                        format!("Bulk string too long ({} > {})", b.len(), MAX_BULK_LENGTH);
+                if b.len() > MAX_BINARY_LENGTH {
+                    let err_msg = format!(
+                        "Binary string too long ({} > {})",
+                        b.len(),
+                        MAX_BINARY_LENGTH
+                    );
                     error!("{}", err_msg);
                     return Err(EncodeError::InvalidData(err_msg));
                 }
@@ -142,7 +145,7 @@ mod tests {
     /// Тестирование кодирования BinaryString в байтовый поток.
     /// Проверяет, что строка "hello" правильно кодируется с длиной и содержимым.
     #[test]
-    fn test_builk_string() {
+    fn test_binary_string() {
         let frame = ZSPFrame::BinaryString(Some(b"hello".to_vec()));
         let encoded = ZSPEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"$5\r\nhello\r\n");
