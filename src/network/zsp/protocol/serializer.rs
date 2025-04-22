@@ -28,7 +28,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .iter()
                 .map(|item| ZSPFrame::BinaryString(Some(item.to_vec())))
                 .collect();
-            ZSPFrame::Array(Some(frames))
+            ZSPFrame::Array(frames)
         }
 
         // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
@@ -67,7 +67,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                     ZSPFrame::InlineString(s)
                 })
                 .collect();
-            ZSPFrame::Array(Some(frames))
+            ZSPFrame::Array(frames)
         }
         Value::HyperLogLog(_) => ZSPFrame::InlineString("HLL(NotImplemented)".into()),
         Value::SStream(_) => ZSPFrame::InlineString("SStream(NotImplemented)".into()),
@@ -139,10 +139,10 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
         assert_eq!(
             frame,
-            ZSPFrame::Array(Some(vec![
+            ZSPFrame::Array(vec![
                 ZSPFrame::BinaryString(Some(b"a".to_vec())),
                 ZSPFrame::BinaryString(Some(b"b".to_vec())),
-            ]))
+            ])
         );
     }
 
@@ -156,7 +156,7 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZSPFrame::Array(Some(mut items)) => {
+            ZSPFrame::Array(mut items) => {
                 let mut strings = items
                     .drain(..)
                     .map(|item| match item {

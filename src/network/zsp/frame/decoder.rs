@@ -205,7 +205,7 @@ impl ZSPDecoder {
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::Array(None))), // Null массив
+            -1 => Ok(Some(ZSPFrame::Array(Vec::new()))),
             len if len >= 0 => {
                 let len = len as usize;
                 let mut items = Vec::with_capacity(len);
@@ -226,7 +226,7 @@ impl ZSPDecoder {
                 }
 
                 info!("Parsed array with {} elements.", items.len());
-                Ok(Some(ZSPFrame::Array(Some(items))))
+                Ok(Some(ZSPFrame::Array(items)))
             }
             _ => {
                 let err_msg = format!("Negative array length at byte {}", buf.position());
@@ -313,7 +313,7 @@ impl ZSPDecoder {
         }
 
         self.state = ZSPDecodeState::Initial;
-        Ok(Some(ZSPFrame::Array(Some(std::mem::take(items)))))
+        Ok(Some(ZSPFrame::Array(std::mem::take(items))))
     }
 
     // --- Вспомогательные методы ---

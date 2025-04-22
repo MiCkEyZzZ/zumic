@@ -25,11 +25,11 @@ fn bench_integer(c: &mut Criterion) {
 }
 
 fn bench_array(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(Some(vec![
+    let frame = ZSPFrame::Array(vec![
         ZSPFrame::InlineString("a".repeat(10)),
         ZSPFrame::Integer(123),
         ZSPFrame::Float(3.1415),
-    ]));
+    ]);
     c.bench_function("encode_small_array", |b| {
         b.iter(|| ZSPEncoder::encode(black_box(&frame)).unwrap())
     });

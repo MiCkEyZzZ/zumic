@@ -12,7 +12,7 @@ pub enum ZSPFrame {
     Integer(i64),
     Float(f64),
     BinaryString(Option<Vec<u8>>),
-    Array(Option<Vec<ZSPFrame>>),
+    Array(Vec<ZSPFrame>),
     Dictionary(Option<HashMap<String, ZSPFrame>>),
     ZSet(Vec<(String, f64)>),
     Null,
@@ -92,7 +92,7 @@ pub fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
     for item in list.iter() {
         frames.push(item.clone().into());
     }
-    Ok(ZSPFrame::Array(Some(frames)))
+    Ok(ZSPFrame::Array(frames))
 }
 
 pub fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
@@ -101,7 +101,7 @@ pub fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
     for item in set {
         frames.push(convert_sds_to_frame(item)?);
     }
-    Ok(ZSPFrame::Array(Some(frames)))
+    Ok(ZSPFrame::Array(frames))
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
@@ -181,7 +181,7 @@ mod tests {
         ql.push_back(Sds::from_str("b"));
 
         let zsp = convert_quicklist(ql).unwrap();
-        if let ZSPFrame::Array(Some(vec)) = zsp {
+        if let ZSPFrame::Array(vec) = zsp {
             let strs: Vec<_> = vec
                 .into_iter()
                 .map(|f| {
@@ -205,7 +205,7 @@ mod tests {
         hs.insert(Sds::from_str("x"));
         hs.insert(Sds::from_str("y"));
         let zsp = convert_hashset(hs).unwrap();
-        if let ZSPFrame::Array(Some(vec)) = zsp {
+        if let ZSPFrame::Array(vec) = zsp {
             let mut got: Vec<_> = vec
                 .into_iter()
                 .map(|f| match f {
@@ -270,7 +270,7 @@ mod tests {
     fn test_empty_quicklist() {
         let ql = QuickList::new(16);
         let zsp = convert_quicklist(ql).unwrap();
-        assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
+        assert_eq!(zsp, ZSPFrame::Array(vec![]));
     }
 
     // Test conversion of an empty HashSet into an empty Array frame.
@@ -278,7 +278,7 @@ mod tests {
     fn convert_empty_hashset() {
         let hs = HashSet::new();
         let zsp = convert_hashset(hs).unwrap();
-        assert_eq!(zsp, ZSPFrame::Array(Some(vec![])));
+        assert_eq!(zsp, ZSPFrame::Array(vec![]));
     }
 
     // Test conversion of an empty HashMap into an empty Dictionary frame.

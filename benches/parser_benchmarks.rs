@@ -2,11 +2,11 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::network::zsp::{frame::zsp_types::ZSPFrame, protocol::parser::parse_command};
 
 fn bench_parse_set_inline_string(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(Some(vec![
+    let frame = ZSPFrame::Array(vec![
         ZSPFrame::InlineString("SET".to_string()),
         ZSPFrame::InlineString("mykey".to_string()),
         ZSPFrame::InlineString("myvalue".to_string()),
-    ]));
+    ]);
 
     c.bench_function("parse_command - SET (InlineString)", |b| {
         b.iter(|| {
@@ -16,11 +16,11 @@ fn bench_parse_set_inline_string(c: &mut Criterion) {
 }
 
 fn bench_parse_set_binary_string(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(Some(vec![
+    let frame = ZSPFrame::Array(vec![
         ZSPFrame::BinaryString(Some(b"SET".to_vec())),
         ZSPFrame::BinaryString(Some(b"mykey".to_vec())),
         ZSPFrame::BinaryString(Some(b"myvalue".to_vec())),
-    ]));
+    ]);
 
     c.bench_function("parse_command - SET (BinaryString)", |b| {
         b.iter(|| {
@@ -30,10 +30,10 @@ fn bench_parse_set_binary_string(c: &mut Criterion) {
 }
 
 fn bench_parse_get(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(Some(vec![
+    let frame = ZSPFrame::Array(vec![
         ZSPFrame::InlineString("GET".to_string()),
         ZSPFrame::InlineString("key".to_string()),
-    ]));
+    ]);
 
     c.bench_function("parse_command - GET", |b| {
         b.iter(|| {
@@ -43,11 +43,11 @@ fn bench_parse_get(c: &mut Criterion) {
 }
 
 fn bench_parse_set_with_integer(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(Some(vec![
+    let frame = ZSPFrame::Array(vec![
         ZSPFrame::InlineString("SET".to_string()),
         ZSPFrame::InlineString("num".to_string()),
         ZSPFrame::Integer(12345),
-    ]));
+    ]);
 
     c.bench_function("parse_command - SET (Int)", |b| {
         b.iter(|| {

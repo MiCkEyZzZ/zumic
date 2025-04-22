@@ -64,40 +64,42 @@ impl ZSPEncoder {
                 info!("Encoding empty BinaryString");
                 Ok(b"$-1\r\n".to_vec())
             }
-            ZSPFrame::Array(Some(elements)) => {
+            ZSPFrame::Array(ref elements) if elements.is_empty() => Ok(b"*-1\r\n".to_vec()),
+            ZSPFrame::Array(ref elements) => {
                 let mut out = format!("*{}\r\n", elements.len()).into_bytes();
                 for e in elements {
                     out.extend(Self::encode_frame(e, current_depth + 1)?);
                 }
                 Ok(out)
             }
-            ZSPFrame::Array(None) => Ok(b"*-1\r\n".to_vec()),
-            ZSPFrame::Dictionary(Some(items)) => {
-                info!("Encoding Dictionary with {} items", items.len());
-                let mut out = format!("%{}\r\n", items.len()).into_bytes();
-                for (key, value) in items {
-                    // Encode the key
-                    out.extend(Self::encode_frame(
-                        &ZSPFrame::InlineString(key.clone()),
-                        current_depth + 1,
-                    )?);
-                    // Encode the value
-                    out.extend(Self::encode_frame(value, current_depth + 1)?);
-                }
-                Ok(out)
-            }
-            ZSPFrame::Dictionary(None) => {
+            ZSPFrame::Dictionary(Some(ref items)) if items.is_empty() => {
                 info!("Encoding empty Dictionary");
                 Ok(b"%-1\r\n".to_vec())
             }
+            ZSPFrame::Dictionary(ref items) => match items {
+                Some(items) => {
+                    info!("Encoding Dictionary with {} items", items.len());
+                    let mut out = format!("%{}\r\n", items.len()).into_bytes();
+                    for (key, value) in items {
+                        out.extend(Self::encode_frame(
+                            &ZSPFrame::InlineString(key.clone()),
+                            current_depth + 1,
+                        )?);
+                        out.extend(Self::encode_frame(value, current_depth + 1)?);
+                    }
+                    Ok(out)
+                }
+                None => {
+                    info!("Encoding empty Dictionary");
+                    Ok(b"%-1\r\n".to_vec())
+                }
+            },
             ZSPFrame::ZSet(entries) => {
                 info!("Encoding ZSet with {} entries", entries.len());
                 let mut out = format!("^{}\r\n", entries.len()).into_bytes();
                 for (member, score) in entries {
-                    // member as simple string
                     Self::validate_simple_string(member)?;
                     out.extend(format!("+{}\r\n", member).into_bytes());
-                    // score as float
                     out.extend(format!(":{}\r\n", score).into_bytes());
                 }
                 Ok(out)
@@ -108,6 +110,7 @@ impl ZSPEncoder {
             }
         }
     }
+
     fn validate_simple_string(s: &str) -> Result<(), EncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Simple string contains CR or LF characters";
@@ -155,10 +158,10 @@ mod tests {
     /// Проверяет, что массив из двух элементов (строка и число) правильно кодируется.
     #[test]
     fn test_nested_array() {
-        let frame = ZSPFrame::Array(Some(vec![
+        let frame = ZSPFrame::Array(vec![
             ZSPFrame::InlineString("test".to_string()),
             ZSPFrame::Integer(42),
-        ]));
+        ]);
         let encoded = ZSPEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"*2\r\n+test\r\n:42\r\n");
     }

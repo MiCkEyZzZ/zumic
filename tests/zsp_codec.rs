@@ -28,11 +28,11 @@ fn test_roundtrip_binary_string() {
 
 #[test]
 fn test_roundtrip_array() {
-    let original = ZSPFrame::Array(Some(vec![
+    let original = ZSPFrame::Array(vec![
         ZSPFrame::Integer(42),
         ZSPFrame::InlineString("nested".into()),
         ZSPFrame::BinaryString(None),
-    ]));
+    ]);
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
@@ -84,7 +84,7 @@ fn test_roundtrip_incomplete_dictionary() {
 
 #[test]
 fn test_roundtrip_mixed_types() {
-    let original = ZSPFrame::Array(Some(vec![
+    let original = ZSPFrame::Array(vec![
         ZSPFrame::InlineString("hello".into()),
         ZSPFrame::BinaryString(Some(b"world".to_vec())),
         ZSPFrame::Integer(100),
@@ -92,7 +92,7 @@ fn test_roundtrip_mixed_types() {
             "key1".to_string(),
             ZSPFrame::InlineString("value1".to_string()),
         )]))),
-    ]));
+    ]);
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
