@@ -9,5 +9,6 @@ pub mod types;
 
 pub use quicklist::QuickList;
 pub use sds::Sds;
+pub use skip_list::SkipList;
 pub use smart_hash::SmartHash;
 pub use types::Value;

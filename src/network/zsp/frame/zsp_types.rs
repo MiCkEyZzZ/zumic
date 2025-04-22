@@ -5,6 +5,14 @@ use tracing::{debug, warn};
 
 use crate::database::{QuickList, Sds, SmartHash, Value};
 
+/// Типы фреймов, поддерживаемые протоколом ZSP.
+///
+/// Включает в себя различные виды данных, которые могут быть переданы в рамках протокола:
+/// - Простые строки
+/// - Ошибки
+/// - Целые числа
+/// - Двоичные строки
+/// - Массивы и словари
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZSPFrame {
     InlineString(String),

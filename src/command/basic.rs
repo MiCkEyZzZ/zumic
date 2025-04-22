@@ -1,5 +1,5 @@
 use crate::{
-    database::{quicklist::QuickList, types::Value, Sds},
+    database::{QuickList, Sds, Value},
     engine::engine::StorageEngine,
     error::StoreError,
 };

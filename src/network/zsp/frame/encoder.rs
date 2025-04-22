@@ -1,3 +1,11 @@
+//! Энкодер ZSP (Zumic Serialization Protocol).
+//!
+//! Этот модуль предоставляет функциональность для кодирования
+//! различных типов данных в формат ZSP (Zumic Serialization
+//! Protocol), включая строки, числа, массивы, бинарные строки,
+//! словари и ZSet. Также реализована валидация строк и глубины
+//! вложенности массивов для предотвращения ошибок сериализации.
+
 use tracing::{debug, error, info};
 
 use crate::error::EncodeError;
@@ -7,6 +15,7 @@ use super::{
     zsp_types::ZSPFrame,
 };
 
+/// Структура энкодера для кодирования в формат ZSP.
 pub struct ZSPEncoder;
 
 impl ZSPEncoder {
