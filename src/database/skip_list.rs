@@ -1,3 +1,9 @@
+//! Пропускной список (SkipList).
+//!
+//! Это реализация структуры данных SkipList — вероятностной
+//! альтернативы сбалансированным деревьям, обеспечивающей
+//! логарифмическое время операций вставки, поиска и удаления.
+
 use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt::Debug, marker::PhantomData, ptr::NonNull};

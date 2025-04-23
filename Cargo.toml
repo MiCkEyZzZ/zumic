@@ -44,5 +44,5 @@ criterion = "0.5"
 opt-level = 3
 
 [[bench]]
-name = "encoder_benchmarks"
+name = "zsptypes_benchmarks"
 harness = false

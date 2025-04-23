@@ -8,8 +8,6 @@
 
 use std::borrow::Cow;
 
-use tracing::{debug, error, info};
-
 use crate::error::EncodeError;
 
 use super::{
@@ -22,38 +20,26 @@ pub struct ZSPEncoder;
 
 impl ZSPEncoder {
     pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, EncodeError> {
-        debug!("Encoding frame: {:?}", frame);
         Self::encode_frame(frame, 0)
     }
 
     fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
-        debug!("Encoding frame at depth {}: {:?}", current_depth, frame);
-
         if current_depth > MAX_ARRAY_DEPTH {
             let err_msg = format!("Max array depth exceed ({})", MAX_ARRAY_DEPTH);
-            error!("{}", err_msg);
             return Err(EncodeError::InvalidData(err_msg));
         }
 
         match frame {
             ZSPFrame::InlineString(s) => {
                 Self::validate_simple_string(s)?;
-                info!("Encoding InlineString: {}", s);
                 Ok(format!("+{}\r\n", s).into_bytes())
             }
             ZSPFrame::FrameError(s) => {
                 Self::validate_error_string(s)?;
-                info!("Encoding FrameError: {}", s);
                 Ok(format!("-{}\r\n", s).into_bytes())
             }
-            ZSPFrame::Integer(i) => {
-                info!("Encoding Integer: {}", i);
-                Ok(format!(":{}\r\n", i).into_bytes())
-            }
-            ZSPFrame::Float(f) => {
-                info!("Encoding Float: {}", f);
-                Ok(format!(":{}\r\n", f).into_bytes())
-            }
+            ZSPFrame::Integer(i) => Ok(format!(":{}\r\n", i).into_bytes()),
+            ZSPFrame::Float(f) => Ok(format!(":{}\r\n", f).into_bytes()),
             ZSPFrame::BinaryString(Some(b)) => {
                 if b.len() > MAX_BINARY_LENGTH {
                     let err_msg = format!(
@@ -61,20 +47,15 @@ impl ZSPEncoder {
                         b.len(),
                         MAX_BINARY_LENGTH
                     );
-                    error!("{}", err_msg);
                     return Err(EncodeError::InvalidData(err_msg));
                 }
 
-                info!("Encoding BinaryString of length {}", b.len());
                 let mut out = format!("${}\r\n", b.len()).into_bytes();
                 out.extend(b);
                 out.extend(b"\r\n");
                 Ok(out)
             }
-            ZSPFrame::BinaryString(None) => {
-                info!("Encoding empty BinaryString");
-                Ok(b"$-1\r\n".to_vec())
-            }
+            ZSPFrame::BinaryString(None) => Ok(b"$-1\r\n".to_vec()),
             ZSPFrame::Array(ref elements) if elements.is_empty() => Ok(b"*-1\r\n".to_vec()),
             ZSPFrame::Array(ref elements) => {
                 let mut out = format!("*{}\r\n", elements.len()).into_bytes();
@@ -83,18 +64,13 @@ impl ZSPEncoder {
                 }
                 Ok(out)
             }
-            ZSPFrame::Dictionary(ref items) if items.is_empty() => {
-                info!("Encoding empty Dictionary");
-                Ok(b"%-1\r\n".to_vec())
-            }
+            ZSPFrame::Dictionary(ref items) if items.is_empty() => Ok(b"%-1\r\n".to_vec()),
             ZSPFrame::Dictionary(ref items) => {
                 if items.is_empty() {
                     // Если словарь пустой, возвращаем специальный формат для пустого словаря
-                    info!("Encoding empty Dictionary");
                     return Ok(b"%-1\r\n".to_vec());
                 }
 
-                info!("Encoding Dictionary with {} items", items.len());
                 let mut out = format!("%{}\r\n", items.len()).into_bytes();
                 for (key, value) in items {
                     let key_cow: Cow<'_, str> = key.clone();
@@ -107,7 +83,6 @@ impl ZSPEncoder {
                 Ok(out)
             }
             ZSPFrame::ZSet(entries) => {
-                info!("Encoding ZSet with {} entries", entries.len());
                 let mut out = format!("^{}\r\n", entries.len()).into_bytes();
                 for (member, score) in entries {
                     Self::validate_simple_string(member)?;
@@ -116,17 +91,13 @@ impl ZSPEncoder {
                 }
                 Ok(out)
             }
-            ZSPFrame::Null => {
-                info!("Encoding Null");
-                Ok(b"$-1\r\n".to_vec())
-            }
+            ZSPFrame::Null => Ok(b"$-1\r\n".to_vec()),
         }
     }
 
     fn validate_simple_string(s: &str) -> Result<(), EncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Simple string contains CR or LF characters";
-            error!("{}", err_msg);
             Err(EncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())
@@ -136,7 +107,6 @@ impl ZSPEncoder {
     fn validate_error_string(s: &str) -> Result<(), EncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Error message contains CR or LF characters";
-            error!("{}", err_msg);
             Err(EncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())

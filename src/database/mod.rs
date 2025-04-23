@@ -1,3 +1,4 @@
+pub mod dict;
 pub mod int_set;
 pub mod list_pack;
 pub mod lua;
@@ -7,6 +8,7 @@ pub mod skip_list;
 pub mod smart_hash;
 pub mod types;
 
+pub use dict::Dict;
 pub use quicklist::QuickList;
 pub use sds::Sds;
 pub use skip_list::SkipList;
