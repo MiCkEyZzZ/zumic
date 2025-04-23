@@ -12,8 +12,7 @@
 
 use bytes::Buf;
 use memchr::memchr;
-use std::{collections::HashMap, io::Cursor};
-use tracing::{error, info};
+use std::{borrow::Cow, collections::HashMap};
 
 use crate::error::DecodeError;
 
@@ -21,202 +20,174 @@ use super::zsp_types::ZSPFrame;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///
-/// Эта константа ограничивает длину строки, которая может быть
-/// передана в протоколе ZSP. Если строка превышает это значение,
-/// произойдет ошибка декодирования.
+/// Эта константа ограничивает длину строки, которая может
+/// быть передана в протоколе ZSP. Если строка превышает
+/// это значение, произойдет ошибка декодирования.
 pub const MAX_LINE_LENGTH: usize = 1024 * 1024;
 
 /// Максимальный размер BinaryString (512 МБ).
-/// Эта константа ограничивает размер бинарных строк в протоколе
-/// ZSP. Если длина бинарной строки превышает это значение,
-/// декодирование завершится ошибкой.
+/// Эта константа ограничивает размер бинарных строк в
+/// протоколе ZSP. Если длина бинарной строки превышает
+/// это значение, декодирование завершится ошибкой.
 pub const MAX_BINARY_LENGTH: usize = 512 * 1024 * 1024;
 
 /// Максимальная вложенность массивов (32 уровня).
-/// Эта константа ограничивает глубину вложенности массивов в
-/// протоколе ZSP. Превышение этого значения приведёт к ошибке
-/// декодирования.
+/// Эта константа ограничивает глубину вложенности массивов
+/// в протоколе ZSP. Превышение этого значения приведёт к
+/// ошибке декодирования.
 pub const MAX_ARRAY_DEPTH: usize = 32;
 
 #[derive(Debug)]
-pub enum ZSPDecodeState {
-    /// Исходное состояние, когда ещё не начали декодировать данные.
+pub enum ZSPDecodeState<'a> {
     Initial,
-    /// Состояние, когда BinaryString ещё не полностью прочитан.
-    PartialBinaryString { len: usize, data: Vec<u8> },
-    /// Состояние, когда массив (Array) не прочитан полностью.
+    PartialBinaryString {
+        len: usize,
+        data: Vec<u8>,
+    },
     PartialArray {
-        len: usize,           // Ожидаемое количество элементов в массиве.
-        items: Vec<ZSPFrame>, // Прочитанные элементы массива.
-        remaining: usize,     // Оставшееся количество элементов для декодирования.
+        len: usize,
+        items: Vec<ZSPFrame<'a>>,
+        remaining: usize,
     },
 }
 
-/// Основная структура декодера ZSP.
-pub struct ZSPDecoder {
-    state: ZSPDecodeState, // Текущее состояние декодирования.
+pub struct ZSPDecoder<'a> {
+    state: ZSPDecodeState<'a>,
 }
 
-impl ZSPDecoder {
-    /// Конструктор для создания нового экземпляра ZSPDecoder.
+impl<'a> ZSPDecoder<'a> {
     pub fn new() -> Self {
         Self {
             state: ZSPDecodeState::Initial,
         }
     }
 
-    /// Декодирует один фрейм из потока данных.
-    ///
-    /// Эта функция принимает буфер данных и, в зависимости от текущего
-    /// состояния, пытается декодировать фрейм. Если декодирование
-    /// прошло успешно, возвращается результат в виде `Some(ZSPFrame)`.
-    /// Если данные ещё неполные, возвращается `None`. В случае ошибки
-    /// возвращается `Err(DecodeError)`.
-    pub fn decode(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, DecodeError> {
+    pub fn decode(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
         let state = std::mem::replace(&mut self.state, ZSPDecodeState::Initial);
 
         match state {
-            ZSPDecodeState::Initial => {
-                if !buf.has_remaining() {
-                    info!("No data left to decode.");
-                    return Ok(None);
-                }
-                // В зависимости от первого байта вызываем соответствующий метод анализа.
-                match buf.get_u8() {
-                    b'+' => self.parse_simple_string(buf),
-                    b'-' => self.parse_error(buf),
-                    b':' => self.parse_integer(buf),
-                    b'$' => self.parse_binary_string(buf),
-                    b'*' => self.parse_array(buf, 0),
-                    b'%' => self.parse_dictionary(buf),
-                    _ => {
-                        let err_msg = format!("Unknown ZSP type at byte {}", buf.position() - 1);
-                        error!("{}", err_msg);
-                        Err(DecodeError::InvalidData(err_msg))
-                    }
-                }
-            }
-
-            // Обработка состояния для частично прочитанной бинарной строки.
+            ZSPDecodeState::Initial => self.initial_decode(slice),
             ZSPDecodeState::PartialBinaryString { len, mut data } => {
-                let result = self.continue_binary_string(buf, len, &mut data);
-                if let Ok(None) = result {
-                    self.state = ZSPDecodeState::PartialBinaryString { len, data };
-                }
-                result
+                self.continue_binary_string(slice, len, &mut data)
             }
-
-            // Обработка состояния для частично прочитанного массива.
             ZSPDecodeState::PartialArray {
                 len,
                 mut items,
-                remaining,
-            } => {
-                let result = self.continue_array(buf, len, &mut items, remaining);
-                if let Ok(None) = result {
+                mut remaining,
+            } => match Self::continue_array(self, slice, &mut items, &mut remaining)? {
+                Some(array) => Ok(Some(array)),
+                None => {
                     self.state = ZSPDecodeState::PartialArray {
                         len,
                         items,
                         remaining,
                     };
+                    Ok(None)
                 }
-                result
-            }
+            },
         }
     }
 
-    // --- Методы анализа отдельных типов фреймов ---
-
-    /// Анализирует строку типа InlineString, которая читается до CRLF.
-    fn parse_simple_string(
+    fn initial_decode(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
-        let line = self.read_line(buf)?;
-        info!("Parsed inline string: {}", line);
-        Ok(Some(ZSPFrame::InlineString(line.to_string())))
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        if !slice.has_remaining() {
+            return Ok(None);
+        }
+        match slice.get_u8() {
+            b'+' => self.parse_inline_string(slice),
+            b'-' => self.parse_error(slice),
+            b':' => self.parse_integer(slice),
+            b'$' => self.parse_binary_string(slice),
+            b'*' => self.parse_array(slice, 0),
+            b'%' => self.parse_dictionary(slice),
+            _ => Err(DecodeError::InvalidData("Unknown ZSP type".to_string())),
+        }
     }
 
-    /// Анализирует фрейм ошибки.
-    fn parse_error(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, DecodeError> {
-        let line = self.read_line(buf)?;
-        info!("Parsed error: {}", line);
+    fn parse_inline_string(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        let line = self.read_line(slice)?;
+        Ok(Some(ZSPFrame::InlineString(Cow::Borrowed(line))))
+    }
+
+    fn parse_error(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        let line = self.read_line(slice)?;
         Ok(Some(ZSPFrame::FrameError(line.to_string())))
     }
 
-    /// Анализирует целочисленный фрейм.
-    fn parse_integer(&mut self, buf: &mut Cursor<&[u8]>) -> Result<Option<ZSPFrame>, DecodeError> {
-        let line = self.read_line(buf)?;
+    fn parse_integer(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        let line = self.read_line(slice)?;
         let num = line.parse::<i64>().map_err(|_| {
-            let err_msg = format!("Invalid integer at byte {}", buf.position());
-            error!("{}", err_msg);
+            let err_msg = "Invalid integer".to_string();
             DecodeError::InvalidData(err_msg)
         })?;
-        info!("Parsed integer: {}", num);
         Ok(Some(ZSPFrame::Integer(num)))
     }
 
     fn parse_binary_string(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
-        let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            let err_msg = format!("Invalid binary length at byte {}", buf.position());
-            error!("{}", err_msg);
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
+            let err_msg = "Invalid binary".to_string();
             DecodeError::InvalidData(err_msg)
         })?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::BinaryString(None))), // Null двоичная строка
+            -1 => Ok(Some(ZSPFrame::BinaryString(None))),
             len if len >= 0 => {
                 let len = len as usize;
                 if len > MAX_BINARY_LENGTH {
                     let err_msg =
                         format!("Binary string too long ({} > {})", len, MAX_BINARY_LENGTH);
-                    error!("{}", err_msg);
                     return Err(DecodeError::InvalidData(err_msg));
                 }
 
-                // Читаем доступное количество байтов
-                let available = buf.remaining().min(len);
+                let available = slice.remaining().min(len);
                 let mut data = Vec::with_capacity(len);
-                data.extend_from_slice(&buf.chunk()[..available]);
-                buf.advance(available);
+                data.extend_from_slice(&slice.chunk()[..available]);
+                slice.advance(available);
 
                 if data.len() == len {
-                    // Если данные полные, проверяем завершающий CRLF
-                    self.expect_crlf(buf)?;
-                    info!("Parsed binary string of length {}", len);
+                    self.expect_crlf(slice)?;
                     Ok(Some(ZSPFrame::BinaryString(Some(data))))
                 } else {
-                    // Если данные полные, проверяем завершающий CRLF
                     self.state = ZSPDecodeState::PartialBinaryString { len, data };
                     Ok(None)
                 }
             }
             _ => {
-                let err_msg = format!("Negative binary length at byte {}", buf.position());
-                error!("{}", err_msg);
+                let err_msg = "Negative binary length".to_string();
                 Err(DecodeError::InvalidData(err_msg))
             }
         }
     }
 
-    /// Продолжает чтение BinaryString, если данные были неполными.
     fn continue_binary_string(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
+        slice: &mut &'a [u8],
         len: usize,
         data: &mut Vec<u8>,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
         let remaining_bytes = len - data.len();
-        let available = buf.remaining().min(remaining_bytes);
-        data.extend_from_slice(&buf.chunk()[..available]);
-        buf.advance(available);
+        let available = slice.remaining().min(remaining_bytes);
+
+        // Резервируем память, если не хватит (защита от realloc)
+        if data.capacity() < len {
+            data.reserve(len - data.capacity());
+        }
+
+        // Безопасное разделение с минимальными копиями
+        let (to_copy, rest) = slice.split_at(available);
+        data.extend_from_slice(to_copy);
+        *slice = rest;
 
         if data.len() == len {
-            self.expect_crlf(buf)?;
-            info!("Completed parsing binary string.");
+            self.expect_crlf(slice)?;
             Ok(Some(ZSPFrame::BinaryString(Some(std::mem::take(data)))))
         } else {
             Ok(None)
@@ -225,18 +196,16 @@ impl ZSPDecoder {
 
     fn parse_array(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
+        slice: &mut &'a [u8],
         depth: usize,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
         if depth > MAX_ARRAY_DEPTH {
-            let err_msg = format!("Max array depth exceeded at byte {}", buf.position());
-            error!("{}", err_msg);
+            let err_msg = "Max array depth exceeded".to_string();
             return Err(DecodeError::InvalidData(err_msg));
         }
 
-        let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            let err_msg = format!("Invalid array length at byte {}", buf.position());
-            error!("{}", err_msg);
+        let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
+            let err_msg = "Invalid array length".to_string();
             DecodeError::InvalidData(err_msg)
         })?;
 
@@ -248,25 +217,28 @@ impl ZSPDecoder {
                 let mut remaining = len;
 
                 while remaining > 0 {
-                    if let Some(frame) = self.decode(buf)? {
-                        items.push(frame);
-                        remaining -= 1;
-                    } else {
-                        self.state = ZSPDecodeState::PartialArray {
-                            len,
-                            items,
-                            remaining,
-                        };
-                        return Ok(None);
+                    let decoded = self.decode(slice)?;
+
+                    match decoded {
+                        Some(frame) => {
+                            items.push(frame);
+                            remaining -= 1;
+                        }
+                        None => {
+                            self.state = ZSPDecodeState::PartialArray {
+                                len,
+                                items,
+                                remaining,
+                            };
+                            return Ok(None);
+                        }
                     }
                 }
 
-                info!("Parsed array with {} elements.", items.len());
                 Ok(Some(ZSPFrame::Array(items)))
             }
             _ => {
-                let err_msg = format!("Negative array length at byte {}", buf.position());
-                error!("{}", err_msg);
+                let err_msg = "Negative array length".to_string();
                 Err(DecodeError::InvalidData(err_msg))
             }
         }
@@ -274,122 +246,90 @@ impl ZSPDecoder {
 
     fn parse_dictionary(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
-        let len = self.read_line(buf)?.parse::<isize>().map_err(|_| {
-            let err_msg = format!("Invalid dictionary length at byte {}", buf.position());
-            error!("{}", err_msg);
-            DecodeError::InvalidData(err_msg)
-        })?;
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        let len_str = self.read_line(slice)?;
+        let len = len_str
+            .parse::<isize>()
+            .map_err(|_| DecodeError::InvalidData("Invalid dictionary length".to_string()))?;
 
         match len {
-            -1 => Ok(Some(ZSPFrame::Dictionary(None))), // Null словарь
+            -1 => Ok(Some(ZSPFrame::Dictionary(HashMap::new()))),
             len if len >= 0 => {
                 let len = len as usize;
-                let mut items = HashMap::new();
+                let mut items = HashMap::with_capacity(len);
 
                 for _ in 0..len {
-                    // Читаем ключ
-                    let key_opt = self.decode(buf)?;
-                    if key_opt.is_none() {
-                        return Ok(None); // Возвращает Ok(None), если для ключа нет данных
-                    }
-                    let key = key_opt.unwrap();
+                    let key = match self.decode(slice)? {
+                        Some(frame) => frame,
+                        None => return Ok(None),
+                    };
 
-                    // Читаем значение
-                    let value_opt = self.decode(buf)?;
-                    if value_opt.is_none() {
-                        return Ok(None); // Возвращает Ok(None), если для значения нет данных
-                    }
-                    let value = value_opt.unwrap();
+                    let value = match self.decode(slice)? {
+                        Some(frame) => frame,
+                        None => return Ok(None),
+                    };
 
-                    // Ключ должен быть InlineString
-                    if let ZSPFrame::InlineString(key_str) = key {
-                        items.insert(key_str, value);
-                    } else {
-                        let err_msg =
-                            format!("Expected InlineString as key at byte {}", buf.position());
-                        error!("{}", err_msg);
-                        return Err(DecodeError::InvalidData(err_msg));
+                    match key {
+                        ZSPFrame::InlineString(key_str) => {
+                            items.insert(key_str, value);
+                        }
+                        _ => {
+                            return Err(DecodeError::InvalidData(
+                                "Expected InlineString as key".to_string(),
+                            ));
+                        }
                     }
                 }
 
-                info!("Parsed dictionary with {} items.", items.len());
-                Ok(Some(ZSPFrame::Dictionary(Some(items))))
+                Ok(Some(ZSPFrame::Dictionary(items)))
             }
-            _ => {
-                let err_msg = format!("Negative dictionary length at byte {}", buf.position());
-                error!("{}", err_msg);
-                Err(DecodeError::InvalidData(err_msg))
-            }
+            _ => Err(DecodeError::InvalidData(
+                "Negative dictionary length".to_string(),
+            )),
         }
     }
 
-    /// Продолжает чтение кадра массива, если данные были неполными.
     fn continue_array(
         &mut self,
-        buf: &mut Cursor<&[u8]>,
-        len: usize,
-        items: &mut Vec<ZSPFrame>,
-        remaining: usize,
-    ) -> Result<Option<ZSPFrame>, DecodeError> {
-        let mut remaining = remaining;
-        while remaining > 0 {
-            if let Some(frame) = self.decode(buf)? {
-                items.push(frame);
-                remaining -= 1;
-            } else {
-                self.state = ZSPDecodeState::PartialArray {
-                    len,
-                    items: std::mem::take(items),
-                    remaining,
-                };
-                return Ok(None);
+        slice: &mut &'a [u8],
+        items: &mut Vec<ZSPFrame<'a>>,
+        remaining: &mut usize,
+    ) -> Result<Option<ZSPFrame<'a>>, DecodeError> {
+        while *remaining > 0 {
+            match self.decode(slice)? {
+                Some(frame) => {
+                    items.push(frame);
+                    *remaining -= 1;
+                }
+                None => return Ok(None),
             }
         }
 
-        self.state = ZSPDecodeState::Initial;
         Ok(Some(ZSPFrame::Array(std::mem::take(items))))
     }
 
-    // --- Вспомогательные методы ---
-
-    fn read_line<'a>(&mut self, buf: &mut Cursor<&'a [u8]>) -> Result<&'a str, DecodeError> {
-        let slice = buf.get_ref();
-        let start = buf.position() as usize;
-
-        // найти '\r'
-        if let Some(pos) = memchr(b'\r', &slice[start..]) {
-            let end = start + pos;
-            // убедились, что за '\r' идёт '\n'
-            if slice.get(end + 1) == Some(&b'\n') {
-                // безопасно конвертим, проверка UTF-8 может быть пропущена позже
-                let line = unsafe { std::str::from_utf8_unchecked(&slice[start..end]) };
-                buf.set_position((end + 2) as u64);
-                return Ok(line);
+    fn read_line(&mut self, slice: &mut &'a [u8]) -> Result<&'a str, DecodeError> {
+        if let Some(pos) = memchr(b'\r', slice) {
+            if pos + 1 < slice.len() && slice[pos + 1] == b'\n' {
+                let line = &slice[..pos];
+                let result = std::str::from_utf8(line)
+                    .map_err(|_| DecodeError::InvalidUtf8("Invalid UTF-8".into()))?;
+                *slice = &slice[(pos + 2)..];
+                return Ok(result);
             }
         }
 
-        Err(DecodeError::UnexpectedEof(format!(
-            "Incomplete line at byte {}",
-            start
-        )))
+        Err(DecodeError::UnexpectedEof("Incomplete line".to_string()))
     }
 
-    /// Проверяем, что следующие два байта — CRLF.
-    fn expect_crlf(&mut self, buf: &mut Cursor<&[u8]>) -> Result<(), DecodeError> {
-        if buf.remaining() < 2 {
-            let err_msg = format!("Expected CRLF at byte {}", buf.position());
-            error!("{}", err_msg);
-            return Err(DecodeError::UnexpectedEof(err_msg));
+    #[inline(always)]
+    fn expect_crlf(&self, slice: &mut &'a [u8]) -> Result<(), DecodeError> {
+        if slice.len() < 2 || slice[0] != b'\r' || slice[1] != b'\n' {
+            return Err(DecodeError::UnexpectedEof("Expected CRLF".to_string()));
         }
-        if buf.get_u8() != b'\r' || buf.get_u8() != b'\n' {
-            let err_msg = format!("Invalid CRLF sequence at byte {}", buf.position());
-            error!("{}", err_msg);
-            return Err(DecodeError::UnexpectedEof(err_msg));
-        } else {
-            Ok(())
-        }
+        *slice = &slice[2..];
+        Ok(())
     }
 }
 
@@ -405,9 +345,9 @@ mod tests {
     fn test_simple_string() {
         let mut decoder = ZSPDecoder::new();
         let data = b"+OK\r\n".to_vec();
-        let mut cursor = Cursor::new(data.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
-        assert_eq!(frame, ZSPFrame::InlineString("OK".to_string()));
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+        assert_eq!(frame, ZSPFrame::InlineString("OK".into()));
     }
 
     // Тест для бинарных строк
@@ -416,8 +356,8 @@ mod tests {
     fn test_binary_string() {
         let mut decoder = ZSPDecoder::new();
         let data = b"$5\r\nhello\r\n".to_vec();
-        let mut cursor = Cursor::new(data.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
         assert_eq!(frame, ZSPFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
@@ -429,13 +369,13 @@ mod tests {
 
         // Первая часть - должно вернуться None, что означает необходимость дополнительных данных
         let data1 = b"$5\r\nhel".to_vec();
-        let mut cursor = Cursor::new(data1.as_slice());
-        assert!(matches!(decoder.decode(&mut cursor), Ok(None)));
+        let mut slice = data1.as_slice();
+        assert!(matches!(decoder.decode(&mut slice), Ok(None)));
 
         // Вторая часть - теперь должно вернуться полное сообщение
         let data2 = b"lo\r\n".to_vec();
-        let mut cursor = Cursor::new(data2.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+        let mut slice = data2.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
         assert_eq!(frame, ZSPFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
@@ -445,9 +385,9 @@ mod tests {
     fn test_empty_dictionary() {
         let mut decoder = ZSPDecoder::new();
         let data = b"%0\r\n".to_vec();
-        let mut cursor = Cursor::new(data.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
-        assert_eq!(frame, ZSPFrame::Dictionary(Some(HashMap::new())));
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+        assert_eq!(frame, ZSPFrame::Dictionary(HashMap::new()));
     }
 
     // Тест для словаря с одним элементом
@@ -456,16 +396,16 @@ mod tests {
     fn test_single_item_dictionary() {
         let mut decoder = ZSPDecoder::new();
         let data = b"%1\r\n+key\r\n+value\r\n".to_vec(); // Один ключ-значение
-        let mut cursor = Cursor::new(data.as_slice());
-        let frame = decoder.decode(&mut cursor).unwrap().unwrap();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
 
         let mut expected_dict = HashMap::new();
         expected_dict.insert(
-            "key".to_string(),
-            ZSPFrame::InlineString("value".to_string()),
+            "key".into(),
+            ZSPFrame::InlineString("value".to_string().into()),
         );
 
-        assert_eq!(frame, ZSPFrame::Dictionary(Some(expected_dict)));
+        assert_eq!(frame, ZSPFrame::Dictionary(expected_dict));
     }
 
     // Тест для словаря с несколькими элементами
@@ -476,20 +416,20 @@ mod tests {
 
         let mut items = HashMap::new();
         items.insert(
-            "key1".to_string(),
-            ZSPFrame::InlineString("value1".to_string()),
+            "key1".into(),
+            ZSPFrame::InlineString("value1".to_string().into()),
         );
         items.insert(
-            "key2".to_string(),
-            ZSPFrame::InlineString("value2".to_string()),
+            "key2".into(),
+            ZSPFrame::InlineString("value2".to_string().into()),
         );
-        let original = ZSPFrame::Dictionary(Some(items));
+        let original = ZSPFrame::Dictionary(items);
         let encoded = ZSPEncoder::encode(&original).unwrap();
 
         // Вместо прямого сравнения байтов, декодируем их обратно:
         let mut decoder = ZSPDecoder::new();
-        let mut cursor = std::io::Cursor::new(encoded.as_slice());
-        let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+        let mut slice = encoded.as_slice();
+        let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
         assert_eq!(original, decoded);
     }
@@ -500,8 +440,8 @@ mod tests {
     fn test_invalid_dictionary_key() {
         let mut decoder = ZSPDecoder::new();
         let data = b"%1\r\n-err\r\n+value\r\n".to_vec(); // Ошибка, ключ должен быть InlineString
-        let mut cursor = Cursor::new(data.as_slice());
-        let result = decoder.decode(&mut cursor);
+        let mut slice = data.as_slice();
+        let result = decoder.decode(&mut slice);
         assert!(result.is_err());
     }
 
@@ -511,8 +451,8 @@ mod tests {
     fn test_incomplete_dictionary() {
         let mut decoder = ZSPDecoder::new();
         let data = b"%2\r\n+key1\r\n+value1\r\n".to_vec(); // Недостаточно данных для второго элемента
-        let mut cursor = Cursor::new(data.as_slice());
-        let result = decoder.decode(&mut cursor);
+        let mut slice = data.as_slice();
+        let result = decoder.decode(&mut slice);
         assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
     }
 }

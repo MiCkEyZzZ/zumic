@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::collections::HashMap;
 
 use zumic::network::zsp::frame::{decoder::ZSPDecoder, encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
@@ -8,8 +8,8 @@ fn test_roundtrip_inline_string() {
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
@@ -20,8 +20,8 @@ fn test_roundtrip_binary_string() {
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
@@ -36,8 +36,8 @@ fn test_roundtrip_array() {
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
@@ -45,29 +45,26 @@ fn test_roundtrip_array() {
 #[test]
 fn test_roundtrip_dictionary() {
     let mut items = std::collections::HashMap::new();
-    items.insert(
-        "key1".to_string(),
-        ZSPFrame::InlineString("value1".to_string()),
-    );
-    items.insert("key2".to_string(), ZSPFrame::Integer(100));
-    let original = ZSPFrame::Dictionary(Some(items));
+    items.insert("key1".into(), ZSPFrame::InlineString("value1".into()));
+    items.insert("key2".into(), ZSPFrame::Integer(100));
+    let original = ZSPFrame::Dictionary(items);
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
 
 #[test]
 fn test_roundtrip_empty_dictionary() {
-    let original = ZSPFrame::Dictionary(None);
+    let original = ZSPFrame::Dictionary(HashMap::new());
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
@@ -77,8 +74,8 @@ fn test_roundtrip_empty_dictionary() {
 fn test_roundtrip_incomplete_dictionary() {
     let mut decoder = ZSPDecoder::new();
     let data = b"%2\r\n+key1\r\n+value1\r\n".to_vec(); // Недостаточно данных для второго элемента
-    let mut cursor = Cursor::new(data.as_slice());
-    let result = decoder.decode(&mut cursor);
+    let mut slice = data.as_slice();
+    let result = decoder.decode(&mut slice);
     assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
 }
 
@@ -88,16 +85,16 @@ fn test_roundtrip_mixed_types() {
         ZSPFrame::InlineString("hello".into()),
         ZSPFrame::BinaryString(Some(b"world".to_vec())),
         ZSPFrame::Integer(100),
-        ZSPFrame::Dictionary(Some(std::collections::HashMap::from([(
-            "key1".to_string(),
-            ZSPFrame::InlineString("value1".to_string()),
-        )]))),
+        ZSPFrame::Dictionary(HashMap::from([(
+            "key1".into(),
+            ZSPFrame::InlineString("value1".into()),
+        )])),
     ]);
     let encoded = ZSPEncoder::encode(&original).unwrap();
 
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(encoded.as_slice());
-    let decoded = decoder.decode(&mut cursor).unwrap().unwrap();
+    let mut slice = encoded.as_slice();
+    let decoded = decoder.decode(&mut slice).unwrap().unwrap();
 
     assert_eq!(original, decoded);
 }
@@ -106,8 +103,8 @@ fn test_roundtrip_mixed_types() {
 fn test_roundtrip_invalid_data() {
     let data = b"Invalid data that should fail decoding".to_vec();
     let mut decoder = ZSPDecoder::new();
-    let mut cursor = Cursor::new(data.as_slice());
-    let result = decoder.decode(&mut cursor);
+    let mut slice = data.as_slice();
+    let result = decoder.decode(&mut slice);
 
     assert!(result.is_err()); // Ожидаем ошибку, так как данные некорректны.
 }

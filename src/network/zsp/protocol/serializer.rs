@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use super::command::Response;
 use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
 
 /// Сериализует ответ команды в формат ZSPFrame.
-pub fn serialize_response(response: Response) -> ZSPFrame {
+pub fn serialize_response<'a>(response: Response) -> ZSPFrame<'a> {
     match response {
         Response::Ok => ZSPFrame::InlineString("OK".into()),
         Response::Value(value) => value_to_frame(value),
@@ -12,12 +12,12 @@ pub fn serialize_response(response: Response) -> ZSPFrame {
         Response::NotFound => ZSPFrame::Null,
         Response::Integer(n) => ZSPFrame::Integer(n),
         Response::Float(f) => ZSPFrame::Float(f),
-        Response::String(s) => ZSPFrame::InlineString(s),
+        Response::String(s) => ZSPFrame::InlineString(s.into()),
     }
 }
 
 /// Преобразует тип Value в ZSPFrame.
-fn value_to_frame(value: Value) -> ZSPFrame {
+fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
     match value {
         Value::Str(s) => ZSPFrame::BinaryString(Some(s.to_vec())),
         Value::Int(i) => ZSPFrame::Integer(i),
@@ -33,17 +33,22 @@ fn value_to_frame(value: Value) -> ZSPFrame {
 
         // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
         Value::Hash(mut smart) => {
-            let dict: HashMap<String, ZSPFrame> = smart
+            let dict: HashMap<Cow<'a, str>, ZSPFrame<'a>> = smart
                 .iter()
                 .map(|(k, v)| {
-                    let key =
-                        String::from_utf8(k.to_vec()).unwrap_or_else(|_| "<invalid utf8>".into());
-                    // Преобразуем значение в BinaryString; можно при необходимости расширить логику.
+                    // Преобразуем ключ в Cow<'a, str>
+                    let key = Cow::from(
+                        String::from_utf8(k.to_vec()).unwrap_or_else(|_| "<invalid utf8>".into()),
+                    );
+
+                    // Преобразуем значение в BinaryString, как раньше
                     let val = ZSPFrame::BinaryString(Some(v.to_vec()));
+
                     (key, val)
                 })
                 .collect();
-            ZSPFrame::Dictionary(Some(dict))
+
+            ZSPFrame::Dictionary(dict)
         }
 
         Value::ZSet { dict, .. } => {
@@ -64,7 +69,7 @@ fn value_to_frame(value: Value) -> ZSPFrame {
                 .map(|item| {
                     let s = String::from_utf8(item.to_vec())
                         .unwrap_or_else(|_| "<invalid utf8>".into());
-                    ZSPFrame::InlineString(s)
+                    ZSPFrame::InlineString(Cow::Owned(s))
                 })
                 .collect();
             ZSPFrame::Array(frames)
@@ -180,7 +185,7 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZSPFrame::Dictionary(Some(dict)) => {
+            ZSPFrame::Dictionary(dict) => {
                 assert_eq!(
                     dict.get("k1"),
                     Some(&ZSPFrame::BinaryString(Some(b"v1".to_vec())))

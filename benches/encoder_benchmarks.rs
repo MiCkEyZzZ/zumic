@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 use zumic::network::zsp::frame::{encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
 fn bench_inline_string(c: &mut Criterion) {
-    let frame = ZSPFrame::InlineString("hello".to_string());
+    let frame = ZSPFrame::InlineString("hello".into());
     c.bench_function("encode_inline_string", |b| {
         b.iter(|| ZSPEncoder::encode(black_box(&frame)).unwrap())
     });
@@ -26,7 +26,7 @@ fn bench_integer(c: &mut Criterion) {
 
 fn bench_array(c: &mut Criterion) {
     let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("a".repeat(10)),
+        ZSPFrame::InlineString(Cow::Owned("a".repeat(10))),
         ZSPFrame::Integer(123),
         ZSPFrame::Float(3.1415),
     ]);
@@ -36,14 +36,15 @@ fn bench_array(c: &mut Criterion) {
 }
 
 fn bench_dictionary(c: &mut Criterion) {
-    let mut map = HashMap::new();
+    let mut map: HashMap<Cow<'_, str>, ZSPFrame<'_>> = HashMap::new();
     for i in 0..10 {
         map.insert(
-            format!("key{}", i),
-            ZSPFrame::InlineString(format!("val{}", i)),
+            Cow::Owned(format!("key{}", i)),
+            ZSPFrame::InlineString(Cow::Owned(format!("val{}", i))),
         );
     }
-    let frame = ZSPFrame::Dictionary(Some(map));
+
+    let frame = ZSPFrame::Dictionary(map);
     c.bench_function("encode_dictionary_10_items", |b| {
         b.iter(|| ZSPEncoder::encode(black_box(&frame)).unwrap())
     });

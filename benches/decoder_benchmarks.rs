@@ -1,7 +1,4 @@
-use std::io::Cursor;
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-
 use zumic::network::zsp::frame::decoder::ZSPDecoder;
 
 fn bench_simple_string(c: &mut Criterion) {
@@ -12,9 +9,8 @@ fn bench_simple_string(c: &mut Criterion) {
         .throughput(Throughput::Bytes(input.len() as u64))
         .bench_function("simple_string", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -27,9 +23,8 @@ fn bench_error_string(c: &mut Criterion) {
         .throughput(Throughput::Bytes(input.len() as u64))
         .bench_function("error_string", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -42,9 +37,8 @@ fn bench_integer(c: &mut Criterion) {
         .throughput(Throughput::Bytes(input.len() as u64))
         .bench_function("integer", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -57,9 +51,8 @@ fn bench_bulk_small(c: &mut Criterion) {
         .throughput(Throughput::Bytes(input.len() as u64))
         .bench_function("bulk_small", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -76,9 +69,8 @@ fn bench_bulk_large(c: &mut Criterion) {
         .throughput(Throughput::Bytes(input.len() as u64))
         .bench_function("bulk_large_1KB", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -95,9 +87,8 @@ fn bench_array(c: &mut Criterion) {
         .throughput(Throughput::Elements(100))
         .bench_function("array_100_ints", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }
@@ -115,9 +106,8 @@ fn bench_dictionary(c: &mut Criterion) {
         .throughput(Throughput::Elements(50))
         .bench_function("dictionary_50", |b| {
             b.iter(|| {
-                let mut cur = Cursor::new(&input[..]);
-                let frame = decoder.decode(&mut cur).unwrap().unwrap();
-                black_box(frame);
+                let mut slice = &input[..];
+                black_box(decoder.decode(&mut slice).unwrap().unwrap());
             })
         });
 }

@@ -3,9 +3,9 @@ use zumic::network::zsp::{frame::zsp_types::ZSPFrame, protocol::parser::parse_co
 
 fn bench_parse_set_inline_string(c: &mut Criterion) {
     let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("SET".to_string()),
-        ZSPFrame::InlineString("mykey".to_string()),
-        ZSPFrame::InlineString("myvalue".to_string()),
+        ZSPFrame::InlineString("SET".into()),
+        ZSPFrame::InlineString("mykey".into()),
+        ZSPFrame::InlineString("myvalue".into()),
     ]);
 
     c.bench_function("parse_command - SET (InlineString)", |b| {
@@ -31,8 +31,8 @@ fn bench_parse_set_binary_string(c: &mut Criterion) {
 
 fn bench_parse_get(c: &mut Criterion) {
     let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("GET".to_string()),
-        ZSPFrame::InlineString("key".to_string()),
+        ZSPFrame::InlineString("GET".into()),
+        ZSPFrame::InlineString("key".into()),
     ]);
 
     c.bench_function("parse_command - GET", |b| {
@@ -44,8 +44,8 @@ fn bench_parse_get(c: &mut Criterion) {
 
 fn bench_parse_set_with_integer(c: &mut Criterion) {
     let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("SET".to_string()),
-        ZSPFrame::InlineString("num".to_string()),
+        ZSPFrame::InlineString("SET".into()),
+        ZSPFrame::InlineString("num".into()),
         ZSPFrame::Integer(12345),
     ]);
 

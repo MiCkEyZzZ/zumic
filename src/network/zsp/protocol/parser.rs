@@ -162,7 +162,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, P
 
 fn parse_key(frame: &ZSPFrame, cmd: &'static str) -> Result<String, ParseError> {
     match frame {
-        ZSPFrame::InlineString(s) => Ok(s.clone()),
+        ZSPFrame::InlineString(s) => Ok(s.to_string()),
         ZSPFrame::BinaryString(Some(bytes)) => {
             String::from_utf8(bytes.clone()).map_err(|_| ParseError::KeyNotUtf8(cmd))
         }
@@ -181,15 +181,17 @@ fn parse_value(frame: &ZSPFrame, cmd: &'static str) -> Result<Value, ParseError>
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     /// Проверяет корректный парсинг команды SET с двумя строковыми аргументами (ключ и значение)
     #[test]
     fn test_parse_set_command() {
         let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("SET".to_string()),
-            ZSPFrame::InlineString("anton".to_string()),
-            ZSPFrame::InlineString("hisvalue".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("SET")),
+            ZSPFrame::InlineString(Cow::Borrowed("anton")),
+            ZSPFrame::InlineString(Cow::Borrowed("hisvalue")),
         ]);
 
         let set_cmd = parse_command(frame).unwrap();
@@ -225,8 +227,8 @@ mod tests {
     #[test]
     fn test_parse_del_command_with_simple_key() {
         let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("DEL".to_string()),
-            ZSPFrame::InlineString("anton".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("DEL")),
+            ZSPFrame::InlineString(Cow::Borrowed("anton")),
         ]);
 
         let del_cmd = parse_command(frame).unwrap();
@@ -243,8 +245,8 @@ mod tests {
     #[test]
     fn test_parse_set_command_with_int_value() {
         let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("SET".to_string()),
-            ZSPFrame::InlineString("count".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("SET")),
+            ZSPFrame::InlineString(Cow::Borrowed("count")),
             ZSPFrame::Integer(42),
         ]);
 
@@ -262,7 +264,7 @@ mod tests {
     /// Проверяет поведение при неизвестной команде
     #[test]
     fn test_unknown_command() {
-        let frame = ZSPFrame::Array(vec![ZSPFrame::InlineString("KIN".to_string())]);
+        let frame = ZSPFrame::Array(vec![ZSPFrame::InlineString(Cow::Borrowed("KIN"))]);
 
         let err = parse_command(frame).unwrap_err();
         assert_eq!(err.to_string(), "Unknown command");
@@ -272,9 +274,9 @@ mod tests {
     #[test]
     fn test_get_command_with_too_many_args() {
         let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("GET".to_string()),
-            ZSPFrame::InlineString("anton".to_string()),
-            ZSPFrame::InlineString("hisvalue".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("GET")),
+            ZSPFrame::InlineString(Cow::Borrowed("anton")),
+            ZSPFrame::InlineString(Cow::Borrowed("hisvalue")),
         ]);
 
         let err = parse_command(frame).unwrap_err();
@@ -285,9 +287,9 @@ mod tests {
     #[test]
     fn test_set_command_with_invalid_key_type() {
         let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("SET".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("SET")),
             ZSPFrame::Integer(123),
-            ZSPFrame::InlineString("value".to_string()),
+            ZSPFrame::InlineString(Cow::Borrowed("value")),
         ]);
 
         let err = parse_command(frame).unwrap_err();
@@ -297,7 +299,7 @@ mod tests {
     /// Проверяет ошибку, если команда не представлена массивом
     #[test]
     fn test_command_not_array() {
-        let frame = ZSPFrame::InlineString("SET".to_string());
+        let frame = ZSPFrame::InlineString(Cow::Borrowed("SET"));
         let err = parse_command(frame).unwrap_err();
         assert_eq!(err.to_string(), "Expected array for command");
     }

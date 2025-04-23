@@ -1,3 +1,11 @@
+//! Типы ZSP (Zumic Serialization Protocol).
+//!
+//! Протокол ZSP — это текстово-бинарный протокол с расширенным
+//! набором типов. Здесь определён enum `ZSPFrame<'a>`, а также
+//! конвертации из внутренних типов `Value`, `Sds`, `SmartHash`
+//! и т. д.
+
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
@@ -7,26 +15,27 @@ use crate::database::{QuickList, Sds, SmartHash, Value};
 
 /// Типы фреймов, поддерживаемые протоколом ZSP.
 ///
-/// Включает в себя различные виды данных, которые могут быть переданы в рамках протокола:
+/// Включает в себя различные виды данных, которые могут быть
+/// переданы в рамках протокола: быть переданы в рамках протокола:
 /// - Простые строки
 /// - Ошибки
 /// - Целые числа
 /// - Двоичные строки
 /// - Массивы и словари
 #[derive(Debug, Clone, PartialEq)]
-pub enum ZSPFrame {
-    InlineString(String),
+pub enum ZSPFrame<'a> {
+    InlineString(Cow<'a, str>),
     FrameError(String),
     Integer(i64),
     Float(f64),
     BinaryString(Option<Vec<u8>>),
-    Array(Vec<ZSPFrame>),
-    Dictionary(Option<HashMap<String, ZSPFrame>>),
+    Array(Vec<ZSPFrame<'a>>),
+    Dictionary(HashMap<Cow<'a, str>, ZSPFrame<'a>>),
     ZSet(Vec<(String, f64)>),
     Null,
 }
 
-impl TryFrom<Value> for ZSPFrame {
+impl<'a> TryFrom<Value> for ZSPFrame<'a> {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
@@ -74,24 +83,24 @@ impl TryFrom<Value> for ZSPFrame {
     }
 }
 
-impl From<Sds> for ZSPFrame {
+impl<'a> From<Sds> for ZSPFrame<'a> {
     fn from(value: Sds) -> Self {
         debug!("Converting Sds to ZSPFrame::BinaryString");
         ZSPFrame::BinaryString(Some(value.to_vec()))
     }
 }
 
-pub fn convert_sds_to_frame(bytes: Sds) -> Result<ZSPFrame, String> {
+pub fn convert_sds_to_frame<'a>(bytes: Sds) -> Result<ZSPFrame<'a>, String> {
     debug!("Handling Sds: {:?}", bytes);
     String::from_utf8(bytes.to_vec())
-        .map(ZSPFrame::InlineString)
+        .map(|s| ZSPFrame::InlineString(Cow::Owned(s)))
         .or_else(|_| {
             debug!("Non-UTF8 Sds, converting to BinaryString");
             Ok(ZSPFrame::BinaryString(Some(bytes.to_vec())))
         })
 }
 
-pub fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
+pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZSPFrame<'a>, String> {
     debug!(
         "Converting QuickList to ZSPFrame::Array with length: {}",
         list.len()
@@ -103,7 +112,7 @@ pub fn convert_quicklist(list: QuickList<Sds>) -> Result<ZSPFrame, String> {
     Ok(ZSPFrame::Array(frames))
 }
 
-pub fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
+pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZSPFrame<'a>, String> {
     debug!("Converting HashSet<Sds> to ZSPFrame::Array");
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
@@ -113,19 +122,20 @@ pub fn convert_hashset(set: HashSet<Sds>) -> Result<ZSPFrame, String> {
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
-pub fn convert_smart_hash(mut smart: SmartHash) -> Result<ZSPFrame, String> {
+pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, String> {
     debug!("Converting SmartHash to ZSPFrame::Dictionary");
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
     for (k, v) in smart.iter() {
         let key = String::from_utf8(k.to_vec()).map_err(|e| format!("Invalid hash key: {}", e))?;
+        let key_cow: Cow<'a, str> = Cow::Owned(key);
         let frame = v.clone().into();
-        map.insert(key, frame);
+        map.insert(key_cow, frame);
     }
-    Ok(ZSPFrame::Dictionary(Some(map)))
+    Ok(ZSPFrame::Dictionary(map))
 }
 
-pub fn convert_zset(dict: HashMap<Sds, f64>) -> Result<ZSPFrame, String> {
+pub fn convert_zset<'a>(dict: HashMap<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
     debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
     let pairs = dict
         .into_iter()
@@ -146,7 +156,7 @@ mod tests {
 
     use std::collections::{HashMap, HashSet};
 
-    // Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
+    /// Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
     #[test]
     fn test_convert_smart_hash() {
         // Создаем SmartHash с несколькими записями.
@@ -155,7 +165,7 @@ mod tests {
         sh.insert(Sds::from_str("key2"), Sds::from_str("val2"));
 
         let frame = convert_smart_hash(sh).unwrap();
-        if let ZSPFrame::Dictionary(Some(dict)) = frame {
+        if let ZSPFrame::Dictionary(dict) = frame {
             assert_eq!(
                 dict.get("key1"),
                 Some(&ZSPFrame::BinaryString(Some(b"val1".to_vec())))
@@ -169,7 +179,7 @@ mod tests {
         }
     }
 
-    // Tests handling of Sds with both valid UTF-8 and binary data.
+    /// Тестирует обработку Sds как с допустимыми данными UTF-8, так и с двоичными данными.
     #[test]
     fn handle_sds_utf8_and_binary() {
         let utf8 = Sds::from_str("hello");
@@ -181,7 +191,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BinaryString(Some(bin.to_vec())));
     }
 
-    // Tests the conversion of QuickList<Sds> into a ZSPFrame::Array of BinaryStrings.
+    /// Тестирует преобразование QuickList<Sds> в ZSPFrame::Array BinaryStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -206,7 +216,7 @@ mod tests {
         }
     }
 
-    // Tests the conversion of a HashSet<String> to a ZSPFrame::Array of InlineStrings.
+    /// Тестирует преобразование HashSet<String> в ZSPFrame::Array InlineStrings.
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
@@ -217,7 +227,8 @@ mod tests {
             let mut got: Vec<_> = vec
                 .into_iter()
                 .map(|f| match f {
-                    ZSPFrame::InlineString(s) => s,
+                    ZSPFrame::InlineString(Cow::Borrowed(s)) => s.to_string(),
+                    ZSPFrame::InlineString(Cow::Owned(s)) => s,
                     ZSPFrame::BinaryString(Some(b)) => String::from_utf8(b).unwrap(),
                     _ => panic!(),
                 })
@@ -229,7 +240,7 @@ mod tests {
         }
     }
 
-    // Tests TryFrom<Value> for ZSPFrame with various types like Int and Null.
+    /// Тестирует TryFrom<Value> для ZSPFrame с различными типами, такими как Int и Null.
     #[test]
     fn try_from_value_various() {
         assert_eq!(
@@ -239,7 +250,7 @@ mod tests {
         assert_eq!(ZSPFrame::try_from(Value::Null).unwrap(), ZSPFrame::Null);
     }
 
-    // Tests conversion of a ZSet (HashMap<Sds, f64>) into a ZSPFrame::ZSet.
+    /// Тестирует преобразование ZSet (HashMap<Sds, f64>) в ZSPFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = HashMap::new();
@@ -258,7 +269,7 @@ mod tests {
         }
     }
 
-    // Tests TryFrom<Value::Str> for both valid UTF-8 and invalid UTF-8 Sds.
+    /// Проверяет TryFrom<Value::Str> как на допустимые, так и на недопустимые UTF-8 Sds.
     #[test]
     fn try_from_value_str_valid_and_invalid_utf8() {
         let valid = Sds::from_str("abc");
@@ -273,7 +284,7 @@ mod tests {
         assert_eq!(frame, ZSPFrame::BinaryString(Some(invalid.to_vec())));
     }
 
-    // Test conversion of an empty Quicklist into an empty Array frame.
+    /// Тестовое преобразование пустого Quicklist в пустой фрейм массива.
     #[test]
     fn test_empty_quicklist() {
         let ql = QuickList::new(16);
@@ -281,7 +292,7 @@ mod tests {
         assert_eq!(zsp, ZSPFrame::Array(vec![]));
     }
 
-    // Test conversion of an empty HashSet into an empty Array frame.
+    /// Тестовое преобразование пустого HashSet в пустой фрейм массива.
     #[test]
     fn convert_empty_hashset() {
         let hs = HashSet::new();
@@ -289,15 +300,15 @@ mod tests {
         assert_eq!(zsp, ZSPFrame::Array(vec![]));
     }
 
-    // Test conversion of an empty HashMap into an empty Dictionary frame.
+    /// Тестовое преобразование пустого HashMap в пустой фрейм словаря.
     #[test]
     fn convert_empty_hashmap() {
         let hm: HashMap<Sds, Sds> = HashMap::new();
         let zsp = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap();
-        assert_eq!(zsp, ZSPFrame::Dictionary(Some(HashMap::new())));
+        assert_eq!(zsp, ZSPFrame::Dictionary(HashMap::new()));
     }
 
-    // Test that converting a HashMap with an invalid UTF-8 key returns an error.
+    /// Проверьте, что преобразование HashMap с недопустимым ключом UTF-8 возвращает ошибку.
     #[test]
     fn convert_hashmap_with_invalid_utf8_key() {
         let mut hm = HashMap::new();
@@ -307,7 +318,7 @@ mod tests {
         assert!(err.contains("Invalid hash key"));
     }
 
-    // Test that converting a ZSet with an invalid UTF-8 key returns an error.
+    /// Проверьте, что преобразование ZSet с недопустимым ключом UTF-8 возвращает ошибку.
     #[test]
     fn convert_zset_with_invalid_utf8_key() {
         let mut zs = HashMap::new();
@@ -317,7 +328,7 @@ mod tests {
         assert!(err.contains("ZSet key error"));
     }
 
-    // Test that Sds is converted into a BinaryString using `From` impl.
+    /// Проверяем, что Sds преобразуется в BinaryString с помощью `From` impl.
     #[test]
     fn arcbytes_into_binarytring() {
         let arc = Sds::from_str("hello");
