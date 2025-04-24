@@ -1,8 +1,8 @@
-//! Redis-style hash table (dict) with incremental rehashing.
+//! Хеш-таблица (Dict) с инкрементальным рехешированием.
 //!
-//! Поддерживает: insert, get, remove, len, clear и автоматический
-//! инкрементальный реhash без пауз.
-//! Ключи: любые `K: Hash + Eq`. Значения: любые `V`.
+//! Реализация словаря (ассоциативного массива), основанная на
+//! цепочечной хеш-таблице с двумя таблицами и плавным
+//! рехешированием без пауз.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
