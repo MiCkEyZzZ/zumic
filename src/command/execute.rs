@@ -1,13 +1,13 @@
 use crate::{database::types::Value, engine::engine::StorageEngine, error::StoreError};
 
 use super::{
-    AppendCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand,
-    GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand,
-    IncrByCommand, IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand, LPushCommand,
-    LRangeCommand, MGetCommand, MSetCommand, RPopCommand, RPushCommand, RenameCommand,
-    RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand,
-    SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand,
-    ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
+    AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
+    FlushDbCommand, GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand,
+    HSetCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand,
+    LPushCommand, LRangeCommand, MGetCommand, MSetCommand, RPopCommand, RPushCommand,
+    RenameCommand, RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand,
+    SRemCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand,
+    ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 
 pub trait CommandExecute: std::fmt::Debug {
@@ -57,6 +57,7 @@ pub enum Command {
     RPop(RPopCommand),
     LLen(LLenCommand),
     LRange(LRangeCommand),
+    Auth(AuthCommand),
 }
 
 impl CommandExecute for Command {
@@ -103,6 +104,7 @@ impl CommandExecute for Command {
             Command::RPop(cmd) => cmd.execute(store),
             Command::LLen(cmd) => cmd.execute(store),
             Command::LRange(cmd) => cmd.execute(store),
+            Command::Auth(cmd) => cmd.execute(store),
         }
     }
 }

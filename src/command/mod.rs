@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod basic;
 pub mod execute;
 pub mod float;
@@ -8,6 +9,7 @@ pub mod set;
 pub mod string;
 pub mod zset;
 
+pub use auth::*;
 pub use basic::*;
 pub use execute::*;
 pub use float::*;

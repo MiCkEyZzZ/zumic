@@ -15,6 +15,9 @@ pub enum Command {
     SetNX { key: String, value: Value },
     Rename { from: String, to: String },
     RenameNX { from: String, to: String },
+
+    // Авторизация
+    Auth { user: Option<String>, pass: String },
 }
 
 #[derive(Debug, Clone)]

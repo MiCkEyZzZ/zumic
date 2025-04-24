@@ -43,6 +43,12 @@ impl IntoExecutable for ZSPCommand {
                     to,
                 }))
             }
+            ZSPCommand::Auth { user, pass } => {
+                Ok(StoreCommand::Auth(crate::command::AuthCommand {
+                    user: user.unwrap(),
+                    pass,
+                }))
+            }
 
             ZSPCommand::Ping => Err(ParseError::UnknownCommand),
             ZSPCommand::Echo(_) => Err(ParseError::UnknownCommand),
@@ -155,6 +161,24 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, P
             let from = parse_key(&items[1], "RENAMENX")?;
             let to = parse_key(&items[2], "RENAMENX")?;
             Ok(ZSPCommand::RenameNX { from, to })
+        }
+        "auth" => {
+            // AUTH <password> или AUTH <user> <password>
+            match items.len() {
+                2 => {
+                    let pass = parse_key(&items[1], "AUTH")?;
+                    Ok(ZSPCommand::Auth { user: None, pass })
+                }
+                3 => {
+                    let user = parse_key(&items[1], "AUTH")?;
+                    let pass = parse_key(&items[2], "AUTH")?;
+                    Ok(ZSPCommand::Auth {
+                        user: Some(user),
+                        pass,
+                    })
+                }
+                _ => return Err(ParseError::WrongArgCount("AUTH", 1)),
+            }
         }
         _ => Err(ParseError::UnknownCommand),
     }
