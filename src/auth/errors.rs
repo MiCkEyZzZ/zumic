@@ -11,7 +11,7 @@ pub enum AclError {
     #[error("Authentication failed")]
     AuthFailed,
     #[error("Invalid ACL rule")]
-    InvalidAclRule,
+    InvalidAclRule(String),
     #[error("Channel access denied")]
     ChannelDenied,
     #[error("Password hashing failed")]
@@ -30,6 +30,8 @@ pub enum AuthError {
     Acl(#[from] AclError),
     #[error("User already exists")]
     UserAlreadyExists,
+    #[error("Too many tries")]
+    TooManyAttempts,
 }
 
 #[derive(Debug, Error)]

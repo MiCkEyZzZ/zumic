@@ -1,43 +1,93 @@
+use globset::{Glob, GlobSet, GlobSetBuilder};
+
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use super::errors::AclError;
 
+bitflags::bitflags! {
+    /// Битовая маска категорий команд (@read, @write ...).
+    #[derive(Clone, Debug)]
+    pub struct CmdCategory: u32 {
+        const READ = 1 << 0;
+        const WRITE = 1 << 1;
+        const ADMIN = 1 << 2;
+        // ... добавим категории по мере необходимости
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AclUser {
     pub username: String,
-    pub password_hash: Option<String>,
     pub enabled: bool,
-    pub permissions: HashSet<String>,
-    pub channels: HashSet<String>,
-    pub keys: HashSet<String>,
+
+    /// Поддерживаем несколько старых хешей для ротации.
+    pub password_hashes: Vec<String>,
+
+    /// Разрешённые категории.
+    pub allowed_categories: CmdCategory,
+    /// Разрещённые конкретные команды.
+    pub allowed_commands: HashSet<String>,
+    /// Запрещённые конкретные команды (например, `-flushall`)
+    pub denied_commands: HashSet<String>,
+
+    /// Шаблоны ключей и каналов
+    raw_key_patterns: Vec<Glob>,
+    pub key_patterns: GlobSet,
+    raw_channel_patterns: Vec<Glob>,
+    pub channel_patterns: GlobSet,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default, Debug)]
 pub struct Acl {
     users: RwLock<HashMap<String, Arc<RwLock<AclUser>>>>,
 }
 
 impl AclUser {
-    pub fn new(username: &str) -> Self {
-        Self {
+    pub fn new(username: &str) -> Result<Self, AclError> {
+        // по умолчанию: включён, без пароля, все команды @all
+        let mut user = AclUser {
             username: username.to_string(),
-            password_hash: None,
             enabled: true,
-            permissions: ["+@all"].iter().map(|s| s.to_string()).collect(),
-            channels: ["*"].iter().map(|s| s.to_string()).collect(),
-            keys: ["*"].iter().map(|s| s.to_string()).collect(),
-        }
+            password_hashes: Vec::new(),
+            allowed_categories: CmdCategory::empty(),
+            allowed_commands: HashSet::new(),
+            denied_commands: HashSet::new(),
+            raw_key_patterns: Vec::new(),
+            key_patterns: GlobSetBuilder::new().build().unwrap(),
+            raw_channel_patterns: Vec::new(),
+            channel_patterns: GlobSetBuilder::new().build().unwrap(),
+        };
+
+        // по умолчанию разрешаем всё (эквивалент +@all, ~*)
+        user.allowed_categories = CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
+        user.raw_key_patterns.push(Glob::new("*").unwrap());
+        user.rebuild_key_patterns()?;
+        user.raw_channel_patterns.push(Glob::new("*").unwrap());
+        user.rebuild_channel_patterns()?;
+        Ok(user)
     }
 
-    pub fn authenticate(&self, password_hash: &str) -> Result<(), AclError> {
-        if !self.enabled {
-            return Err(AclError::AuthFailed);
+    fn rebuild_key_patterns(&mut self) -> Result<(), AclError> {
+        let mut b = GlobSetBuilder::new();
+        for g in &self.raw_key_patterns {
+            b.add(g.clone());
         }
-        match &self.password_hash {
-            Some(hash) if hash == password_hash => Ok(()),
-            _ => Err(AclError::AuthFailed),
+        self.key_patterns = b
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("bad key glob".into()))?;
+        Ok(())
+    }
+
+    fn rebuild_channel_patterns(&mut self) -> Result<(), AclError> {
+        let mut b = GlobSetBuilder::new();
+        for g in &self.raw_channel_patterns {
+            b.add(g.clone());
         }
+        self.channel_patterns = b
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("bad channel glob".into()))?;
+        Ok(())
     }
 
     pub fn check_permission(&self, category: &str, command: &str) -> bool {
@@ -45,91 +95,61 @@ impl AclUser {
             return false;
         }
 
-        let perm = format!("+@{category}|{command}");
-        self.permissions.contains("*")
-            || self.permissions.contains(&format!("+@{category}"))
-            || self.permissions.contains(&perm)
-    }
-
-    pub fn check_channel(&self, channel: &str) -> bool {
-        self.enabled
-            && (self.channels.contains("*") && !self.channels.contains(channel) == false
-                || self.channels.contains(channel))
-    }
-
-    pub fn check_key(&self, key: &str) -> bool {
-        if !self.enabled {
+        let cmd = command.to_lowercase();
+        // 1) проверяем явный запрет
+        if self.denied_commands.contains(&cmd) {
             return false;
         }
 
-        if self.keys.contains("*") {
+        // 2) если категория разрешена — сразу true
+        let cat = match category {
+            "read" => CmdCategory::READ,
+            "write" => CmdCategory::WRITE,
+            "admin" => CmdCategory::ADMIN,
+            _ => CmdCategory::empty(),
+        };
+
+        // сначала категория
+        if self.allowed_categories.contains(cat) {
+            // если есть wildcard всех команд в этой категории - сразу true
             return true;
         }
 
-        self.keys
-            .iter()
-            .any(|pattern| pattern == key || key_matches(pattern, key))
-    }
-}
-
-fn key_matches(pattern: &str, key: &str) -> bool {
-    let pattern: Vec<char> = pattern.chars().collect();
-    let key: Vec<char> = key.chars().collect();
-    let mut p_idx = 0;
-    let mut k_idx = 0;
-    let mut backtrack: Option<(usize, usize)> = None;
-
-    while k_idx < key.len() {
-        if p_idx < pattern.len() {
-            match pattern[p_idx] {
-                '*' => {
-                    backtrack = Some((p_idx + 1, k_idx));
-                    p_idx += 1;
-                    continue;
-                }
-                '?' => {
-                    k_idx += 1;
-                    p_idx += 1;
-                    continue;
-                }
-                pc => {
-                    if k_idx < key.len() && key[k_idx] == pc {
-                        k_idx += 1;
-                        p_idx += 1;
-                        continue;
-                    }
-                }
-            }
-        }
-
-        if let Some((bp, bk)) = backtrack {
-            if bk < key.len() {
-                p_idx = bp;
-                k_idx = bk + 1;
-                backtrack = Some((bp, bk + 1));
-                continue;
-            }
-        }
-
-        return false;
+        // 3) иначе проверяем разрешённые конкретные команды
+        self.allowed_commands.contains(&cmd)
     }
 
-    // Проверяем, что в шаблоне не осталось символов, кроме '*'
-    while p_idx < pattern.len() && pattern[p_idx] == '*' {
-        p_idx += 1;
+    pub fn check_key(&self, key: &str) -> bool {
+        self.enabled && self.key_patterns.is_match(key)
     }
 
-    p_idx == pattern.len()
+    // Проверка Pub/Sub-канала по шаблонам.
+    pub fn check_channel(&self, channel: &str) -> bool {
+        self.enabled && self.channel_patterns.is_match(channel)
+    }
 }
 
 impl Acl {
+    /// Установить/обновить пользователя с набором ACL-правил.
     pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
         let mut users = self.users.write().unwrap();
         let user = users
             .entry(username.to_string())
-            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username))));
+            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username).unwrap())));
 
         let mut user = user.write().unwrap();
+
+        // очищаем прежние ACL (кроме username)
+        user.enabled = false;
+        user.password_hashes.clear();
+        user.allowed_categories = CmdCategory::empty();
+        user.allowed_commands.clear();
+        user.denied_commands.clear();
+        user.raw_key_patterns.clear();
+        user.raw_channel_patterns.clear();
+        user.key_patterns = GlobSetBuilder::new().build().unwrap();
+        user.channel_patterns = GlobSetBuilder::new().build().unwrap();
+
         for rule in rules {
             self.apply_rule(&mut user, rule)?;
         }
@@ -137,30 +157,65 @@ impl Acl {
     }
 
     fn apply_rule(&self, user: &mut AclUser, rule: &str) -> Result<(), AclError> {
-        match rule {
-            "on" => user.enabled = true,
-            "off" => user.enabled = false,
-            _ if rule.starts_with('>') => {
-                user.password_hash = Some(rule[1..].to_string());
+        // включение/отключение
+        if rule == "on" {
+            user.enabled = true;
+            return Ok(());
+        }
+        if rule == "off" {
+            user.enabled = false;
+            return Ok(());
+        }
+        let first = rule.chars().next().unwrap();
+        match first {
+            '>' => {
+                user.password_hashes.push(rule[1..].to_string());
             }
-            _ if rule.starts_with('+') || rule.starts_with('-') => {
-                user.permissions.insert(rule.to_string());
-            }
-            _ if rule.starts_with('~') => {
-                // Если присутствует глобальный доступ "*", удаляем его перед установкой конкретного шаблона
-                if user.keys.contains("*") {
-                    user.keys.clear();
+            '+' => {
+                if rule.starts_with("+@") {
+                    match &rule[2..] {
+                        "read" => user.allowed_categories |= CmdCategory::READ,
+                        "write" => user.allowed_categories |= CmdCategory::WRITE,
+                        "admin" => user.allowed_categories |= CmdCategory::ADMIN,
+                        "all" => {
+                            user.allowed_categories =
+                                CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
+                        }
+                        other => return Err(AclError::InvalidAclRule(other.into())),
+                    }
+                } else {
+                    user.allowed_commands.insert(rule[1..].to_lowercase());
                 }
-                user.keys.insert(rule[1..].to_string());
             }
-            _ if rule.starts_with('&') => {
-                user.channels.insert(rule[1..].to_string());
+            '-' => {
+                if rule.starts_with("-@") {
+                    // запрет целой категории (опционально)
+                    match &rule[2..] {
+                        "read" => user.allowed_categories.remove(CmdCategory::READ),
+                        "write" => user.allowed_categories.remove(CmdCategory::WRITE),
+                        "admin" => user.allowed_categories.remove(CmdCategory::ADMIN),
+                        other => return Err(AclError::InvalidAclRule(other.into())),
+                    }
+                } else {
+                    user.denied_commands.insert(rule[1..].to_lowercase());
+                }
             }
-            _ => return Err(AclError::PermissionDenied),
+            '~' => {
+                let g = Glob::new(&rule[1..]).map_err(|_| AclError::InvalidAclRule(rule.into()))?;
+                user.raw_key_patterns.push(g);
+                user.rebuild_key_patterns()?;
+            }
+            '&' => {
+                let g = Glob::new(&rule[1..]).map_err(|_| AclError::InvalidAclRule(rule.into()))?;
+                user.raw_channel_patterns.push(g);
+                user.rebuild_channel_patterns()?;
+            }
+            _ => return Err(AclError::InvalidAclRule(rule.into())),
         }
         Ok(())
     }
 
+    /// Получаем копию AclUser.
     pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
         self.users
             .read()
@@ -169,13 +224,14 @@ impl Acl {
             .map(|u| u.read().unwrap().clone())
     }
 
+    /// Удалить пользователя.
     pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
-        self.users
-            .write()
-            .unwrap()
-            .remove(username)
-            .map(|_| ())
-            .ok_or(AclError::UserNotFound)
+        let removed = self.users.write().unwrap().remove(username);
+        if removed.is_some() {
+            Ok(())
+        } else {
+            Err(AclError::UserNotFound)
+        }
     }
 
     pub fn acl_users(&self) -> Vec<String> {
@@ -187,154 +243,110 @@ impl Acl {
 mod tests {
     use super::*;
 
-    // Утверждаем, что создаём пользователя и он добавляется в систему
+    /// Проверяет, что пользователь по умолчанию (`AclUser::new`) включён,
+    /// имеет доступ ко всем категориям, командам, ключам и каналам.
     #[test]
-    fn test_acl_setuser() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin", "~key1", "&channel1"];
+    fn default_user_allows_everything() {
+        // AlcUser::new даёт пользователя с enabled = true, все категории, шаблоны "*".
+        let user = AclUser::new("u").unwrap();
 
-        assert!(acl.acl_setuser(username, &rules).is_ok());
-        let user = acl.acl_getuser(username).unwrap();
+        // категории.
+        assert!(user.check_permission("read", "wharever"));
+        assert!(user.check_permission("write", "any"));
+        assert!(user.check_permission("admin", "config"));
 
-        assert_eq!(user.username, username);
-        assert_eq!(user.password_hash.unwrap(), "password123");
-        assert!(user.permissions.contains("+@admin"));
-        assert!(user.keys.contains("key1"));
-        assert!(user.channels.contains("channel1"));
+        // команды.
+        assert!(user.check_permission("any", "randomcmd"));
+
+        // ключи.
+        assert!(user.check_key("kin"));
+        assert!(user.check_key("za:za"));
+
+        // каналы.
+        assert!(user.check_channel("chan1"));
+        assert!(user.check_channel("anything"));
     }
 
-    // Проверяем, что если пользователя нет, то он не может аутентифицироваться
+    /// Проверяет применение правил:
+    /// включение пользователя, разрешение категории @read, добавление команды +get,
+    /// запрет команды -del. Проверяем приоритеты между категориями и командами.
     #[test]
-    fn test_authenticate_user_no_found() {
+    fn setuser_read_and_individual_commands() {
         let acl = Acl::default();
-        let username = "non_existent_user";
-        assert!(acl.acl_getuser(username).is_none());
+        let rules = vec![
+            "on",     // включаем
+            "+@read", // все команды категории read
+            "+get",   // разрешаем get вне зависимости от категории
+            "-del",   // запрещаем del
+        ];
+        acl.acl_setuser("anton", &rules).unwrap();
+        let u = acl.acl_getuser("anton").unwrap();
+
+        // read-команды любые
+        assert!(u.check_permission("read", "kin"));
+        // write-команды не из списка
+        assert!(!u.check_permission("write", "kin"));
+        // но конкретно get разрешён
+        assert!(u.check_permission("write", "get"));
+        // а del — запрещён
+        assert!(!u.check_permission("read", "del"));
+        assert!(!u.check_permission("write", "del"));
     }
 
-    // Проверка на успешную аутентификацию
+    /// Проверяет работу шаблонов ключей (~pattern) и каналов (&pattern).
     #[test]
-    fn test_authenticate_success() {
+    fn key_and_channel_patterns() {
         let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin"];
-        acl.acl_setuser(username, &rules).unwrap();
+        let rules = vec![
+            "on", "~data:*", // ключи, начинающиеся с data:
+            "&chan?",  // каналы chan1, chan2 …
+        ];
+        acl.acl_setuser("anton", &rules).unwrap();
+        let u = acl.acl_getuser("anton").unwrap();
 
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(user.authenticate("password123").is_ok());
+        // ключи
+        assert!(u.check_key("data:123"));
+        assert!(u.check_key("data:"));
+        assert!(!u.check_key("other:100"));
+        // каналы
+        assert!(u.check_channel("chan1"));
+        assert!(u.check_channel("chanX"));
+        assert!(!u.check_channel("channel"));
     }
 
-    // Проверка на неудачную аутентификацию с неправильным паролем
+    /// Проверяет, что выключенный пользователь (`off`) не имеет доступ ни к чему,
+    /// даже если разрешены все команды и шаблоны.
     #[test]
-    fn test_authenticate_failure() {
+    fn disabling_user_blocks_everything() {
         let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin"];
-        acl.acl_setuser(username, &rules).unwrap();
+        let rules = vec![
+            "off",   // выключаем полностью
+            "+@all", // пусть будет, но disabled всё равно перекроет
+            "~*",    // шаблон «всё»
+        ];
+        acl.acl_setuser("anton", &rules).unwrap();
+        let u = acl.acl_getuser("anton").unwrap();
 
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(user.authenticate("wrong_password").is_err());
+        assert!(!u.check_permission("read", "get"));
+        assert!(!u.check_key("any"));
+        assert!(!u.check_channel("chan"));
     }
 
-    // Проверка разрешения на команду с нужной категорией
+    /// Проверяет, что пользователь удаляется и больше не доступен через `acl_getuser`.
     #[test]
-    fn test_check_permission_success() {
+    fn removing_user_works() {
         let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin", "+@write|set"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(user.check_permission("write", "set"));
+        acl.acl_setuser("anton", &["on", "+@read"]).unwrap();
+        assert!(acl.acl_getuser("anton").is_some());
+        acl.acl_deluser("anton").unwrap();
+        assert!(acl.acl_getuser("anton").is_none());
     }
 
-    // Проверка отказа в разрешении на команду
+    /// Проверяет, что при установке неизвестного правила возвращается ошибка `InvalidAclRule`.
     #[test]
-    fn test_check_permission_failure() {
+    fn unknown_rule_returns_error() {
         let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(!user.check_permission("write", "set"));
-    }
-
-    // Проверка доступа к каналу
-    #[test]
-    fn test_check_channel_access() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "&channel1"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(user.check_channel("channel1"));
-    }
-
-    // Проверка отказа в доступе к каналу
-    #[test]
-    fn test_check_channel_denied() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "&channel1"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(!user.check_channel("channel2"));
-    }
-
-    // Проверка доступа к ключу
-    #[test]
-    fn test_check_key_access() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "~key1"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(user.check_key("key1"));
-    }
-
-    // Проверка отказа в доступе к ключу.
-    #[test]
-    fn test_check_key_denied() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "~key1"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        let user = acl.acl_getuser(username).unwrap();
-        assert!(
-            !user.check_key("key2"),
-            "User should not have access to key2"
-        );
-        assert!(
-            !user.check_key("key1_extra"),
-            "User should not have access to similar keys"
-        );
-        assert!(
-            !user.check_key("key"),
-            "User should not have access to partial matches"
-        );
-    }
-
-    // Удаление пользователя
-    #[test]
-    fn test_acl_deluser() {
-        let acl = Acl::default();
-        let username = "test_user";
-        let rules = ["on", ">password123", "+@admin"];
-        acl.acl_setuser(username, &rules).unwrap();
-
-        assert!(acl.acl_deluser(username).is_ok());
-        assert!(acl.acl_getuser(username).is_none());
-    }
-
-    // Проверка удаления несуществующего пользователя
-    #[test]
-    fn test_acl_deluser_not_found() {
-        let acl = Acl::default();
-        assert!(acl.acl_deluser("non_existent_user").is_err());
+        let err = acl.acl_setuser("anton", &["on", "kin=zaza"]);
+        assert!(matches!(err, Err(AclError::InvalidAclRule(_))));
     }
 }

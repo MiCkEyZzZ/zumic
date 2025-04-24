@@ -1,78 +1,115 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use tokio::sync::RwLock;
 
 use super::{
     acl::Acl,
     config::ServerConfig,
-    errors::{AclError, AuthError},
+    errors::{AclError, AuthError, PasswordError},
     password::{hash_password, verify_password},
 };
 
-#[derive(Debug, Clone)]
+const MAX_FAILS: u8 = 5;
+const BLOCK_DURATION: Duration = Duration::from_secs(60);
+
+#[derive(Debug)]
 pub struct AuthManager {
-    acl: Arc<Acl>,
+    acl: Arc<RwLock<Acl>>,
     pepper: Option<String>,
+    failures: Arc<RwLock<HashMap<String, (u8, Instant)>>>,
 }
 
 impl AuthManager {
     pub fn new() -> Self {
         Self {
-            acl: Arc::new(Acl::default()),
+            acl: Arc::new(RwLock::new(Acl::default())),
             pepper: None,
+            failures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
     pub fn with_pepper(pepper: impl Into<String>) -> Self {
         Self {
-            acl: Arc::new(Acl::default()),
+            acl: Arc::new(RwLock::new(Acl::default())),
             pepper: Some(pepper.into()),
+            failures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    pub fn create_user(
+
+    pub async fn create_user(
         &self,
         username: &str,
         password: &str,
         permissions: &[&str],
     ) -> Result<(), AuthError> {
-        if self.acl.acl_getuser(username).is_some() {
+        let hash = hash_password(password, self.pepper.as_deref())?;
+        let mut rules: Vec<String> = vec![format!(">{}", hash), "on".into()];
+        rules.extend(permissions.iter().map(|s| s.to_string()));
+        let rules_ref: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
+
+        let acl = self.acl.write().await;
+        if acl.acl_getuser(username).is_some() {
             return Err(AuthError::UserAlreadyExists);
         }
 
-        let hash = hash_password(password, self.pepper.as_deref())?;
-        let mut rules: Vec<String> = vec![format!(">{}", hash), "on".to_string()];
-        rules.extend(permissions.iter().map(|s| s.to_string()));
-
-        let rules_ref: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
-        self.acl.acl_setuser(username, &rules_ref)?;
+        acl.acl_setuser(username, &rules_ref)?;
         Ok(())
     }
 
-    pub fn authenticate(&self, username: &str, password: &str) -> Result<(), AuthError> {
-        let user = self
-            .acl
-            .acl_getuser(username)
-            .ok_or(AuthError::UserNotFound)?;
+    pub async fn authenticate(&self, username: &str, password: &str) -> Result<(), AuthError> {
+        // Проверка блокировки пользователя по неудачным попыткам
+        {
+            let mut failures = self.failures.write().await;
+            if let Some((count, ts)) = failures.get(username) {
+                if *count >= MAX_FAILS && ts.elapsed() < BLOCK_DURATION {
+                    return Err(AuthError::TooManyAttempts);
+                } else if ts.elapsed() >= BLOCK_DURATION {
+                    failures.remove(username); // сбрасываем счётчик
+                }
+            }
+        }
 
-        if verify_password(
-            &user.password_hash.unwrap_or_default(),
-            password,
-            self.pepper.as_deref(),
-        )? {
+        let acl = self.acl.read().await;
+        let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
+
+        let pepper = self.pepper.clone();
+        let hashes = user.password_hashes.clone();
+        let password = password.to_owned();
+
+        let ok = tokio::task::spawn_blocking(move || {
+            hashes
+                .iter()
+                .any(|hash| verify_password(hash, &password, pepper.as_deref()).unwrap_or(false))
+        })
+        .await
+        .map_err(|_| AuthError::Password(PasswordError::Verify))?;
+
+        if ok {
+            let mut failures = self.failures.write().await;
+            failures.remove(username);
             Ok(())
         } else {
+            let mut failures = self.failures.write().await;
+            let entry = failures
+                .entry(username.to_string())
+                .or_insert((0, Instant::now()));
+            entry.0 += 1;
             Err(AuthError::AuthenticationFailed)
         }
     }
 
-    pub fn authorize_command(
+    pub async fn authorize_command(
         &self,
         username: &str,
         category: &str,
         command: &str,
     ) -> Result<(), AuthError> {
-        let user = self
-            .acl
-            .acl_getuser(username)
-            .ok_or(AuthError::UserNotFound)?;
-
+        let acl = self.acl.read().await;
+        let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
         if user.check_permission(category, command) {
             Ok(())
         } else {
@@ -80,12 +117,9 @@ impl AuthManager {
         }
     }
 
-    pub fn authorize_key(&self, username: &str, key: &str) -> Result<(), AuthError> {
-        let user = self
-            .acl
-            .acl_getuser(username)
-            .ok_or(AuthError::UserNotFound)?;
-
+    pub async fn authorize_key(&self, username: &str, key: &str) -> Result<(), AuthError> {
+        let acl = self.acl.read().await;
+        let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
         if user.check_key(key) {
             Ok(())
         } else {
@@ -93,26 +127,24 @@ impl AuthManager {
         }
     }
 
-    pub fn from_config(config: &ServerConfig) -> Result<Self, AuthError> {
+    pub async fn from_config(config: &ServerConfig) -> Result<Self, AuthError> {
         let pepper = config.auth_pepper.clone();
-        let acl = Arc::new(Acl::default());
+        let acl = Acl::default();
 
-        // requirepass → пользователь "default"
         if let Some(pass) = &config.requirepass {
             let hash = hash_password(pass, pepper.as_deref())?;
-            let rules: Vec<String> = vec![
+            let rules = vec![
                 format!(">{}", hash),
                 "on".into(),
                 "~*".into(),
                 "+@all".into(),
             ];
-            let rule_refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
-            acl.acl_setuser("default", &rule_refs)?;
+            let refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
+            acl.acl_setuser("default", &refs)?;
         }
 
-        // Доп. пользователи
         for user_config in &config.users {
-            let mut rules: Vec<String> = Vec::new();
+            let mut rules = Vec::new();
 
             if !user_config.nopass {
                 if let Some(pass) = &user_config.password {
@@ -121,126 +153,163 @@ impl AuthManager {
                 }
             }
 
-            rules.push(if user_config.enabled {
-                "on".to_string()
-            } else {
-                "off".to_string()
-            });
+            rules.push(if user_config.enabled { "on" } else { "off" }.to_string());
 
             if user_config.nopass {
-                rules.push("nopass".to_string());
+                rules.push("nopass".into());
             }
 
             rules.extend(user_config.keys.iter().cloned());
             rules.extend(user_config.permissions.iter().cloned());
 
-            let rule_refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
-            acl.acl_setuser(&user_config.username, &rule_refs)?;
+            let refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
+            acl.acl_setuser(&user_config.username, &refs)?;
         }
 
-        Ok(Self { acl, pepper })
+        Ok(Self {
+            acl: Arc::new(RwLock::new(acl)),
+            pepper,
+            failures: Arc::new(RwLock::new(HashMap::new())),
+        })
+    }
+
+    pub fn acl(&self) -> Arc<RwLock<Acl>> {
+        Arc::clone(&self.acl)
     }
 }
 
+impl Clone for AuthManager {
+    fn clone(&self) -> Self {
+        Self {
+            acl: Arc::clone(&self.acl),
+            pepper: self.pepper.clone(),
+            failures: Arc::clone(&self.failures),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio;
 
     use crate::auth::config::UserConfig;
 
-    // Тест создания пользователя и успешной аутентификации
-    #[test]
-    fn test_create_and_authenticate_user() {
-        let auth_manager = AuthManager::new();
-
-        // Создаем пользователя с правами "+get" и "+set"
-        auth_manager
-            .create_user("bob", "s3cr3t", &["+get", "+set"])
-            .expect("User creation should succeed");
-
-        // Успешная аутентификация с корректным паролем
-        assert!(auth_manager.authenticate("bob", "s3cr3t").is_ok());
-
-        // Аутентификация с неправильным паролем должна вернуть ошибку
-        assert!(matches!(
-            auth_manager.authenticate("bob", "wrongpass"),
-            Err(AuthError::AuthenticationFailed)
-        ));
-
-        // Попытка аутентификации несуществующего пользователя
-        assert!(matches!(
-            auth_manager.authenticate("nonexistent", "any"),
-            Err(AuthError::UserNotFound)
-        ));
+    // Тест создания пользователя и аутентификации
+    #[tokio::test]
+    async fn test_create_and_authenticate() {
+        let manager = AuthManager::new();
+        // создаём anton
+        manager
+            .create_user("anton", "secret", &["+get", "+@read"])
+            .await
+            .unwrap();
+        // успешный вход
+        assert!(manager.authenticate("anton", "secret").await.is_ok());
+        // неправильный пароль
+        let err = manager.authenticate("anton", "wrong").await.unwrap_err();
+        assert!(matches!(err, AuthError::AuthenticationFailed));
+        // несуществующий пользователь
+        let err = manager.authenticate("nobody", "any").await.unwrap_err();
+        assert!(matches!(err, AuthError::UserNotFound));
     }
 
-    // Тест авторизации команд для пользователя
-    #[test]
-    fn test_authorize_command() {
-        let auth_manager = AuthManager::new();
+    // Тест authorize_command
+    #[tokio::test]
+    async fn test_authorize_command() {
+        let manager = AuthManager::new();
+        manager
+            .create_user("alice", "pw", &["+@write", "+get"])
+            .await
+            .unwrap();
+        manager.authenticate("alice", "pw").await.unwrap();
 
-        // Создаем пользователя с правами "+@admin" и правом на команду "set" в категории "write"
-        auth_manager
-            .create_user("alice", "topsecret", &["+@admin", "+@write|set"])
-            .expect("User creation should succeed");
-
-        // Авторизация существующей команды должна пройти успешно
-        assert!(auth_manager
-            .authorize_command("alice", "write", "set")
+        // +@write => все write-команды, в том числе "del"
+        assert!(manager
+            .authorize_command("alice", "write", "del")
+            .await
             .is_ok());
-
-        // Попытка авторизации несуществующей команды должна вернуть ошибку
-        assert!(auth_manager
-            .authorize_command("alice", "write", "get")
-            .is_err());
+        // +get => разрешает get вне категории
+        assert!(manager
+            .authorize_command("alice", "any", "get")
+            .await
+            .is_ok());
+        // команду, не попадающую в write и не +get, без правила — должны запретить
+        let err = manager
+            .authorize_command("alice", "read", "set")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест авторизации доступа к ключам
-    #[test]
-    fn test_authorize_key() {
-        let auth_manager = AuthManager::new();
+    // Тест authorize_key
+    #[tokio::test]
+    async fn test_authorize_key() {
+        let manager = AuthManager::new();
+        // даём доступ только к data:*
+        manager
+            .create_user("charlie", "pw", &["~data:*"])
+            .await
+            .unwrap();
+        manager.authenticate("charlie", "pw").await.unwrap();
 
-        // Создаем пользователя с доступом к ключам, начинающимся с "data:"
-        auth_manager
-            .create_user("charlie", "pass123", &["~data:*"])
-            .expect("User creation should succeed");
-
-        // Ключ, удовлетворяющий шаблону, должен авторизоваться
-        assert!(auth_manager.authorize_key("charlie", "data:123").is_ok());
-
-        // Ключ, не удовлетворяющий шаблону, должен вернуть ошибку
-        assert!(auth_manager.authorize_key("charlie", "info:123").is_err());
+        // должен разрешить
+        assert!(manager.authorize_key("charlie", "data:123").await.is_ok());
+        // другие ключи — запрещены
+        let err = manager.authorize_key("charlie", "other").await.unwrap_err();
+        assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест инициализации через конфигурацию (from_config)
-    #[test]
-    fn test_from_config() {
-        // Создаем конфигурацию с requirepass для пользователя "default"
-        // и дополнительного пользователя "dave"
-        let mut config = ServerConfig::default();
-        config.requirepass = Some("foobared".to_string());
-        config.users.push(UserConfig {
-            username: "dave".to_string(),
+    // Тест rate-limiting
+    #[tokio::test]
+    async fn test_rate_limiting() {
+        let manager = AuthManager::new();
+        manager.create_user("d", "x", &[]).await.unwrap();
+
+        // пять неуспешных попыток подряд
+        for _ in 0..MAX_FAILS {
+            let _ = manager.authenticate("d", "wrong").await;
+        }
+        // шестая должна блокироваться
+        let err = manager.authenticate("d", "wrong").await.unwrap_err();
+        assert!(matches!(err, AuthError::TooManyAttempts));
+    }
+
+    // Тест инициализации из конфига
+    #[tokio::test]
+    async fn test_from_config() {
+        let mut cfg = ServerConfig::default();
+        cfg.requirepass = Some("master".into());
+        cfg.auth_pepper = Some("pep".into());
+        cfg.users.push(UserConfig {
+            username: "u1".into(),
             enabled: true,
             nopass: false,
-            password: Some("davepassword".to_string()),
-            keys: vec!["~davekey".to_string()],
-            permissions: vec!["+@custom".to_string()],
+            password: Some("p1".into()),
+            keys: vec!["~foo:*".into()],
+            permissions: vec!["+@read".into()],
         });
 
-        let auth_manager = AuthManager::from_config(&config).expect("Config should be parsed");
+        let manager = AuthManager::from_config(&cfg).await.unwrap();
 
-        // Проверяем, что создан пользователь "default" с requirepass
-        assert!(auth_manager.authenticate("default", "foobared").is_ok());
-        // Для пользователя default, согласно конфигурации, доступ к ключам не ограничен,
-        // поэтому authorize_key всегда должен возвращать Ok.
-        assert!(auth_manager.authorize_key("default", "any_key").is_ok());
+        // 5.1 default → requirepass, полный доступ
+        assert!(manager.authenticate("default", "master").await.is_ok());
+        assert!(manager.authorize_key("default", "anything").await.is_ok());
+        assert!(manager
+            .authorize_command("default", "admin", "config")
+            .await
+            .is_ok());
 
-        // Проверяем пользователя "dave"
-        assert!(auth_manager.authenticate("dave", "davepassword").is_ok());
-        // Доступ к ключу, удовлетворяющему шаблону "~davekey"
-        assert!(auth_manager.authorize_key("dave", "davekey").is_ok());
-        // Попытка авторизации для ключа, не соответствующего шаблону, должна вернуть ошибку
-        assert!(auth_manager.authorize_key("dave", "otherkey").is_err());
+        // 5.2 пользователь u1
+        assert!(manager.authenticate("u1", "p1").await.is_ok());
+        // доступ к foo:*
+        assert!(manager.authorize_key("u1", "foo:bar").await.is_ok());
+        // read-команды разрешены
+        assert!(manager.authorize_command("u1", "read", "get").await.is_ok());
+        // write-команды запрещены
+        let err = manager
+            .authorize_command("u1", "write", "set")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 }
