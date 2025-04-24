@@ -6,44 +6,71 @@ use std::sync::{Arc, RwLock};
 use super::errors::AclError;
 
 bitflags::bitflags! {
-    /// Битовая маска категорий команд (@read, @write ...).
+    /// Битовая маска категорий команд, используемая для обозначения групп команд,
+    /// например, `@read`, `@write`, `@admin`.
     #[derive(Clone, Debug)]
     pub struct CmdCategory: u32 {
+        /// Команды для операций чтения.
         const READ = 1 << 0;
+        /// Команды для операций записи.
         const WRITE = 1 << 1;
+        /// Административные команды.
         const ADMIN = 1 << 2;
         // ... добавим категории по мере необходимости
     }
 }
 
+/// Конфигурация пользователя ACL.
+///
+/// Содержит информацию об имени пользователя, состоянии,
+/// хэшах паролей, разрешённых категориях и командах, а также
+/// шаблонах ключей и каналов.
 #[derive(Debug, Clone)]
 pub struct AclUser {
+    /// Имя пользователя.
     pub username: String,
+    /// Флаг, обозначающий, включён ли пользователь.
     pub enabled: bool,
-
-    /// Поддерживаем несколько старых хешей для ротации.
+    /// Список хэшей паролей для поддержки ротации.
     pub password_hashes: Vec<String>,
-
-    /// Разрешённые категории.
+    /// Разрешённые категории команд.
     pub allowed_categories: CmdCategory,
-    /// Разрещённые конкретные команды.
+    /// Разрешённые конкретные команды.
     pub allowed_commands: HashSet<String>,
-    /// Запрещённые конкретные команды (например, `-flushall`)
+    /// Запрещённые конкретные команды (например, `-flushall`).
     pub denied_commands: HashSet<String>,
-
-    /// Шаблоны ключей и каналов
+    /// "Сырые" шаблоны ключей в виде `Glob`.
     raw_key_patterns: Vec<Glob>,
+    /// Скомпилированный набор шаблонов ключей.
     pub key_patterns: GlobSet,
+    /// "Сырые" шаблоны каналов в виде `Glob`.
     raw_channel_patterns: Vec<Glob>,
+    /// Скомпилированный набор шаблонов каналов.
     pub channel_patterns: GlobSet,
 }
 
+/// Основная структура для управления ACL (Access Control List).
+///
+/// Содержит набор пользователей ACL, доступных для чтения и модификации.
 #[derive(Default, Debug)]
 pub struct Acl {
     users: RwLock<HashMap<String, Arc<RwLock<AclUser>>>>,
 }
 
 impl AclUser {
+    /// Создает нового пользователя ACL с заданным именем.
+    ///
+    /// По умолчанию пользователь включён, не имеет установленных паролей,
+    /// разрешены все категории команд, а шаблоны ключей и каналов разрешают всё
+    /// (эквивалентно правилам `+@all` и `~*`).
+    ///
+    /// # Аргументы
+    ///
+    /// * `username` - имя пользователя.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// Результат, содержащий нового `AclUser` или ошибку `AclError` в случае неудачи.
     pub fn new(username: &str) -> Result<Self, AclError> {
         // по умолчанию: включён, без пароля, все команды @all
         let mut user = AclUser {
@@ -61,13 +88,20 @@ impl AclUser {
 
         // по умолчанию разрешаем всё (эквивалент +@all, ~*)
         user.allowed_categories = CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
+        // Разрешаем все ключи по умолчанию.
         user.raw_key_patterns.push(Glob::new("*").unwrap());
         user.rebuild_key_patterns()?;
+        // Разрешаем все каналы по умолчанию.
         user.raw_channel_patterns.push(Glob::new("*").unwrap());
         user.rebuild_channel_patterns()?;
         Ok(user)
     }
 
+    /// Перестраивает компиляцию шаблонов для ключей.
+    ///
+    /// Использует список "сырых" шаблонов `raw_key_patterns` для создания
+    /// скомпилированного набора `GlobSet`. Возвращает ошибку `AclError`, если
+    /// компиляция не удалась.
     fn rebuild_key_patterns(&mut self) -> Result<(), AclError> {
         let mut b = GlobSetBuilder::new();
         for g in &self.raw_key_patterns {
@@ -79,6 +113,11 @@ impl AclUser {
         Ok(())
     }
 
+    /// Перестраивает компиляцию шаблонов для каналов.
+    ///
+    /// Использует список "сырых" шаблонов `raw_channel_patterns` для создания
+    /// скомпилированного набора `GlobSet`. Возвращает ошибку `AclError`, если
+    /// компиляция не удалась.
     fn rebuild_channel_patterns(&mut self) -> Result<(), AclError> {
         let mut b = GlobSetBuilder::new();
         for g in &self.raw_channel_patterns {
@@ -90,6 +129,20 @@ impl AclUser {
         Ok(())
     }
 
+    /// Проверяет, имеет ли пользователь право выполнить команду.
+    ///
+    /// Сначала проверяется, включён ли пользователь и нет ли явного запрета для команды.
+    /// Затем проверяется, разрешена ли категория команды. Если да, команда разрешается.
+    /// Иначе выполняется проверка на наличие команды в списке разрешённых.
+    ///
+    /// # Аргументы
+    ///
+    /// * `category` - категория команды в виде строки (например, `"read"`, `"write"`, `"admin"`).
+    /// * `command` - имя команды.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// `true`, если команда разрешена для данного пользователя, иначе `false`.
     pub fn check_permission(&self, category: &str, command: &str) -> bool {
         if !self.enabled {
             return false;
@@ -119,18 +172,51 @@ impl AclUser {
         self.allowed_commands.contains(&cmd)
     }
 
+    /// Проверяет, разрешён ли доступ к заданному ключу.
+    ///
+    /// Использует скомпилированный набор шаблонов `key_patterns`.
+    ///
+    /// # Аргументы
+    ///
+    /// * `key` - ключ, который нужно проверить.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// `true`, если ключ соответствует хотя бы одному из шаблонов и пользователь включён.
     pub fn check_key(&self, key: &str) -> bool {
         self.enabled && self.key_patterns.is_match(key)
     }
 
-    // Проверка Pub/Sub-канала по шаблонам.
+    /// Проверяет доступность Pub/Sub-канала на основе заданных шаблонов.
+    ///
+    /// Использует скомпилированный набор шаблонов `channel_patterns`.
+    ///
+    /// # Аргументы
+    ///
+    /// * `channel` - название канала, которое нужно проверить.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// `true`, если канал соответствует хотя бы одному шаблону и пользователь включён.
     pub fn check_channel(&self, channel: &str) -> bool {
         self.enabled && self.channel_patterns.is_match(channel)
     }
 }
 
 impl Acl {
-    /// Установить/обновить пользователя с набором ACL-правил.
+    /// Устанавливает или обновляет пользователя с набором правил ACL.
+    ///
+    /// При этом происходит очистка предыдущих правил (кроме имени пользователя),
+    /// после чего к пользователю применяются переданные правила.
+    ///
+    /// # Аргументы
+    ///
+    /// * `username` - имя пользователя для которого применяется набор правил.
+    /// * `rules` - срез строк, представляющих ACL-правила (например, `"on"`, `"+@read"`, `"-del"`).
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// Результат выполнения операции. В случае ошибки возвращается `AclError`.
     pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
         let mut users = self.users.write().unwrap();
         let user = users
@@ -139,7 +225,7 @@ impl Acl {
 
         let mut user = user.write().unwrap();
 
-        // очищаем прежние ACL (кроме username)
+        // Очищаем прежние настройки (за исключением имени пользователя).
         user.enabled = false;
         user.password_hashes.clear();
         user.allowed_categories = CmdCategory::empty();
@@ -156,6 +242,21 @@ impl Acl {
         Ok(())
     }
 
+    /// Применяет отдельное правило ACL к пользователю.
+    ///
+    /// Обрабатываются разные типы правил:
+    /// - `"on"` и `"off"` — включение/выключение пользователя;
+    /// - `"+"` и `"-"` для разрешения или запрета категорий и команд;
+    /// - `"~"` и `"&"` для задания шаблонов ключей и каналов.
+    ///
+    /// # Аргументы
+    ///
+    /// * `user` - изменяемый пользователь ACL.
+    /// * `rule` - правило в виде строки.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// Результат выполнения операции. При ошибке возвращается `AclError::InvalidAclRule`.
     fn apply_rule(&self, user: &mut AclUser, rule: &str) -> Result<(), AclError> {
         // включение/отключение
         if rule == "on" {
@@ -215,7 +316,15 @@ impl Acl {
         Ok(())
     }
 
-    /// Получаем копию AclUser.
+    /// Возвращает копию данных пользователя ACL по его имени.
+    ///
+    /// # Аргументы
+    ///
+    /// * `username` - имя пользователя.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// `Some(AclUser)` если пользователь найден, иначе `None`.
     pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
         self.users
             .read()
@@ -224,7 +333,15 @@ impl Acl {
             .map(|u| u.read().unwrap().clone())
     }
 
-    /// Удалить пользователя.
+    /// Удаляет пользователя ACL по его имени.
+    ///
+    /// # Аргументы
+    ///
+    /// * `username` - имя пользователя, которого необходимо удалить.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// `Ok(())` если пользователь успешно удалён, иначе ошибка `AclError::UserNotFound`.
     pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
         let removed = self.users.write().unwrap().remove(username);
         if removed.is_some() {
@@ -234,6 +351,11 @@ impl Acl {
         }
     }
 
+    /// Возвращает список имен всех зарегистрированных пользователей ACL.
+    ///
+    /// # Возвращаемое значение
+    ///
+    /// Вектор строк с именами пользователей.
     pub fn acl_users(&self) -> Vec<String> {
         self.users.read().unwrap().keys().cloned().collect()
     }
@@ -247,7 +369,8 @@ mod tests {
     /// имеет доступ ко всем категориям, командам, ключам и каналам.
     #[test]
     fn default_user_allows_everything() {
-        // AlcUser::new даёт пользователя с enabled = true, все категории, шаблоны "*".
+        // AclUser::new создаёт пользователя с enabled = true, разрешив все категории
+        // и установив шаблоны "*", что позволяет доступ ко всему.
         let user = AclUser::new("u").unwrap();
 
         // категории.
@@ -274,10 +397,10 @@ mod tests {
     fn setuser_read_and_individual_commands() {
         let acl = Acl::default();
         let rules = vec![
-            "on",     // включаем
-            "+@read", // все команды категории read
-            "+get",   // разрешаем get вне зависимости от категории
-            "-del",   // запрещаем del
+            "on",     // включаем пользователя
+            "+@read", // разрешаем все команды категории read
+            "+get",   // разрешаем команду get в любом случае
+            "-del",   // запрещаем команду del
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();
@@ -298,8 +421,9 @@ mod tests {
     fn key_and_channel_patterns() {
         let acl = Acl::default();
         let rules = vec![
-            "on", "~data:*", // ключи, начинающиеся с data:
-            "&chan?",  // каналы chan1, chan2 …
+            "on",
+            "~data:*", // разрешаем ключи, начинающиеся с "data:"
+            "&chan?",  // разрешаем каналы, соответствующие шаблону "chan?" (например, chan1, chanA)
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();
@@ -320,9 +444,9 @@ mod tests {
     fn disabling_user_blocks_everything() {
         let acl = Acl::default();
         let rules = vec![
-            "off",   // выключаем полностью
-            "+@all", // пусть будет, но disabled всё равно перекроет
-            "~*",    // шаблон «всё»
+            "off",   // выключаем пользователя
+            "+@all", // правило, которое должно сработать, если бы пользователь был включён
+            "~*",    // универсальный шаблон для ключей
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();

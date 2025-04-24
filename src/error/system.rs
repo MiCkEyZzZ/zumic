@@ -6,7 +6,7 @@ pub type StoreResult<T> = Result<T, StoreError>;
 
 #[derive(Error, Debug)]
 pub enum StoreError {
-    // ==== System / External ====
+    // ==== Система / Внешний ====
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
@@ -19,7 +19,7 @@ pub enum StoreError {
     #[error("Lua VM error: {0}")]
     Lua(#[from] mlua::Error),
 
-    // ==== Command errors ====
+    // ==== Ошибки команды ====
     #[error("Invalid command: {0}")]
     InvalidCommand(String),
 
@@ -41,7 +41,7 @@ pub enum StoreError {
     #[error("Operation not implemented: {0}")]
     NotImplemented(String),
 
-    // ==== Network and cluster ====
+    // ==== Сеть и кластер ====
     #[error("Connection error: {0}")]
     Connection(String),
 
@@ -55,7 +55,7 @@ pub enum StoreError {
     #[error("Subscriber error: {0}")]
     Subscriber(String),
 
-    // ==== General ====
+    // ==== Общие сведения ====
     #[error("Internal error: {0}")]
     Internal(String),
 

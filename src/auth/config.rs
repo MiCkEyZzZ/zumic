@@ -92,14 +92,18 @@ impl ServerConfig {
 mod tests {
     use super::*;
 
+    /// Тест проверяет, что директива `requirepass` корректно парсится
+    /// и сохраняется в поле `requirepass`, а список пользователей остаётся пустым.
     #[test]
     fn test_parse_requirepass() {
-        let content = "requirepass foobared";
+        let content = "requirepass kinzaza";
         let config = ServerConfig::parse(content).unwrap();
-        assert_eq!(config.requirepass.unwrap(), "foobared");
+        assert_eq!(config.requirepass.unwrap(), "kinzaza");
         assert!(config.users.is_empty());
     }
 
+    /// Тест проверяет корректность парсинга одного пользователя с параметрами:
+    /// включён (`on`), без пароля (`nopass`), с доступом ко всем ключам (`~*`) и всеми правами (`+@all`).
     #[test]
     fn test_parse_single_user() {
         let content = "user default on nopass ~* +@all";
@@ -115,26 +119,30 @@ mod tests {
         assert!(user.permissions.contains(&"+@all".to_string()));
     }
 
+    /// Тест проверяет парсинг конфигурации с несколькими пользователями.
+    /// Удостоверяется, что `requirepass` установлен и оба пользователя корректно разобраны.
     #[test]
     fn test_parse_multiple_users() {
         let content = "\
-    requirepass foobared
+    requirepass kinzaza
     user default on nopass ~* +@all
-    user alice on >supersecret ~data:* +get +set";
+    user anton on >supersecret ~data:* +get +set";
         let config = ServerConfig::parse(content).unwrap();
-        assert_eq!(config.requirepass.unwrap(), "foobared");
+        assert_eq!(config.requirepass.unwrap(), "kinzaza");
         assert_eq!(config.users.len(), 2);
 
-        let alice = &config.users[1];
-        assert_eq!(alice.username, "alice");
-        assert!(alice.enabled);
+        let anton = &config.users[1];
+        assert_eq!(anton.username, "anton");
+        assert!(anton.enabled);
         // Здесь пароль хранится без префикса '>', т.е. просто "supersecret"
-        assert_eq!(alice.password.as_ref().unwrap(), "supersecret");
-        assert!(alice.keys.contains(&"~data:*".to_string()));
-        assert!(alice.permissions.contains(&"+get".to_string()));
-        assert!(alice.permissions.contains(&"+set".to_string()));
+        assert_eq!(anton.password.as_ref().unwrap(), "supersecret");
+        assert!(anton.keys.contains(&"~data:*".to_string()));
+        assert!(anton.permissions.contains(&"+get".to_string()));
+        assert!(anton.permissions.contains(&"+set".to_string()));
     }
 
+    /// Тест проверяет поведение при попытке парсинга пользователя в некорректном формате:
+    /// ожидание ошибки из-за недостаточного количества параметров.
     #[test]
     fn test_parse_invalid_user_format() {
         // Должно вернуть ошибку, так как формат пользователя неверный (меньше 3-х частей)
@@ -143,6 +151,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Тест проверяет, что при наличии неизвестной директивы в строке пользователя возникает ошибка парсинга.
     #[test]
     fn test_unknown_directive() {
         // Если встретилась неизвестная директива, должен возникнуть ParseError

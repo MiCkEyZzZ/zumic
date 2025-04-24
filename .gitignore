@@ -3,6 +3,8 @@
 .zed
 .vscode
 .trunk
+docs
+book
 
 /target
 
