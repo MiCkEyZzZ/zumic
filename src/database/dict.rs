@@ -17,17 +17,30 @@ struct Entry<K, V> {
     next: Option<Box<Entry<K, V>>>,
 }
 
-impl<K, V> Entry<K, V> {
-    fn new(key: K, val: V, next: Option<Box<Entry<K, V>>>) -> Box<Self> {
-        Box::new(Entry { key, val, next })
-    }
-}
-
 /// Одна таблица: вектор бакетов, маска размера и число занятых элементов.
 struct HashTable<K, V> {
     buckets: Vec<Option<Box<Entry<K, V>>>>,
     size_mask: usize,
     used: usize,
+}
+
+/// Основной словарь с двумя таблицами для реhash'а.
+pub struct Dict<K, V> {
+    ht: [HashTable<K, V>; 2],
+    rehash_idx: isize, // -1 = нет реhash, иначе индекс в ht[0]
+}
+
+pub struct DictIter<'a, K, V> {
+    tables: [&'a HashTable<K, V>; 2],
+    table_idx: usize,
+    bucket_idx: usize,
+    current_entry: Option<&'a Entry<K, V>>,
+}
+
+impl<K, V> Entry<K, V> {
+    fn new(key: K, val: V, next: Option<Box<Entry<K, V>>>) -> Box<Self> {
+        Box::new(Entry { key, val, next })
+    }
 }
 
 impl<K, V> HashTable<K, V> {
@@ -50,12 +63,6 @@ impl<K, V> HashTable<K, V> {
         self.size_mask = 0;
         self.used = 0;
     }
-}
-
-/// Основной словарь с двумя таблицами для реhash'а.
-pub struct Dict<K, V> {
-    ht: [HashTable<K, V>; 2],
-    rehash_idx: isize, // -1 = нет реhash, иначе индекс в ht[0]
 }
 
 impl<K, V> Dict<K, V>
@@ -177,6 +184,15 @@ where
         self.rehash_idx = -1;
     }
 
+    pub fn iter(&self) -> DictIter<K, V> {
+        DictIter {
+            tables: [&self.ht[0], &self.ht[1]],
+            table_idx: 0,
+            bucket_idx: 0,
+            current_entry: None,
+        }
+    }
+
     /// Рекурсивно разбирает цепочку: вынимает первый узел с ключом `key`.
     /// Возвращает (новая_цепочка, был_удален).
     fn remove_from_chain(
@@ -254,6 +270,32 @@ where
     }
 }
 
+impl<'a, K, V> Iterator for DictIter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(entry) = self.current_entry.take() {
+                self.current_entry = entry.next.as_deref();
+                return Some((&entry.key, &entry.val));
+            }
+
+            if self.bucket_idx >= self.tables[self.table_idx].buckets.len() {
+                if self.table_idx == 0 && self.tables[1].size_mask != 0 {
+                    self.table_idx = 1;
+                    self.bucket_idx = 0;
+                    continue;
+                } else {
+                    return None;
+                }
+            }
+
+            self.current_entry = self.tables[self.table_idx].buckets[self.bucket_idx].as_deref();
+            self.bucket_idx += 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +341,21 @@ mod tests {
         d.clear();
         assert_eq!(d.len(), 0);
         assert_eq!(d.get(&"k"), None);
+    }
+
+    #[test]
+    fn iteration_work() {
+        let mut d = Dict::new();
+        d.insert("x", 1);
+        d.insert("y", 2);
+        d.insert("z", 3);
+
+        let mut seen = vec![];
+        for (k, v) in d.iter() {
+            seen.push((k, *v));
+        }
+
+        seen.sort();
+        assert_eq!(seen, vec![(&"x", 1), (&"y", 2), (&"z", 3)]);
     }
 }
