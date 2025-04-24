@@ -300,6 +300,7 @@ impl<'a, K, V> Iterator for DictIter<'a, K, V> {
 mod tests {
     use super::*;
 
+    /// Проверяет базовые операции вставки и получения значений по ключу.
     #[test]
     fn basic_insert_get() {
         let mut d = Dict::new();
@@ -312,6 +313,16 @@ mod tests {
         assert_eq!(d.get(&"a"), Some(&10));
     }
 
+    /// Проверяет обновление значения при повторной вставке с тем же ключом.
+    #[test]
+    fn insert_updates_existing_key() {
+        let mut d = Dict::new();
+        assert!(d.insert("key", 42));
+        assert!(!d.insert("key", 100));
+        assert_eq!(d.get(&"key"), Some(&100));
+    }
+
+    /// Проверяет корректность удаления: значение удаляется, повторное удаление возвращает false.
     #[test]
     fn removal() {
         let mut d = Dict::new();
@@ -322,6 +333,7 @@ mod tests {
         assert!(!d.remove(&"x"));
     }
 
+    /// Проверяет поведение словаря при большом числе вставок и последующем доступе.
     #[test]
     fn rehash_behavior() {
         let mut d = Dict::new();
@@ -334,6 +346,28 @@ mod tests {
         assert_eq!(d.len(), 100);
     }
 
+    /// Проверяет корректную работу удаления ключей во время рехеширования.
+    #[test]
+    fn rehash_with_removal() {
+        let mut d = Dict::new();
+        for i in 0..20 {
+            d.insert(i, i);
+        }
+
+        for i in 0..10 {
+            assert!(d.remove(&i));
+        }
+
+        for i in 0..10 {
+            assert_eq!(d.get(&i), None);
+        }
+
+        for i in 10..20 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    /// Проверяет, что словарь корректно очищается.
     #[test]
     fn clear_dict() {
         let mut d = Dict::new();
@@ -343,6 +377,18 @@ mod tests {
         assert_eq!(d.get(&"k"), None);
     }
 
+    /// Проверяет, что после очистки словаря его можно повторно использовать.
+    #[test]
+    fn clear_and_reuse() {
+        let mut d = Dict::new();
+        d.insert("a", 1);
+        d.clear();
+        assert_eq!(d.len(), 0);
+        assert!(d.insert("a", 2));
+        assert_eq!(d.get(&"a"), Some(&2));
+    }
+
+    /// Проверяет корректную работу итератора по словарю.
     #[test]
     fn iteration_work() {
         let mut d = Dict::new();
@@ -357,5 +403,13 @@ mod tests {
 
         seen.sort();
         assert_eq!(seen, vec![(&"x", 1), (&"y", 2), (&"z", 3)]);
+    }
+
+    /// Проверяет, что итератор по пустому словарю не возвращает элементов.
+    #[test]
+    fn empty_iterator() {
+        let d: Dict<&str, i32> = Dict::new();
+        let mut iter = d.iter();
+        assert_eq!(iter.next(), None);
     }
 }
