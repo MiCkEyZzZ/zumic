@@ -194,104 +194,108 @@ mod tests {
 
     use crate::auth::config::UserConfig;
 
-    // Тест создания пользователя и аутентификации
+    // Тест проверяет создание пользователя и успешную/неуспешную аутентификацию.
     #[tokio::test]
     async fn test_create_and_authenticate() {
         let manager = AuthManager::new();
-        // создаём anton
+
+        // Создание пользователя anton с паролем и разрешениями.
         manager
             .create_user("anton", "secret", &["+get", "+@read"])
             .await
             .unwrap();
-        // успешный вход
+        // Успешная аутентификация по правильному паролю.
         assert!(manager.authenticate("anton", "secret").await.is_ok());
-        // неправильный пароль
+        // Ошибка при попытке входа с неправильным паролем.
         let err = manager.authenticate("anton", "wrong").await.unwrap_err();
         assert!(matches!(err, AuthError::AuthenticationFailed));
-        // несуществующий пользователь
+        // Ошибка при попытке входа несуществующим пользователем.
         let err = manager.authenticate("nobody", "any").await.unwrap_err();
         assert!(matches!(err, AuthError::UserNotFound));
     }
 
-    // Тест authorize_command
+    // Тест проверяет доступ пользователя к командам по категориям и индивидуальным разрешениям.
     #[tokio::test]
     async fn test_authorize_command() {
         let manager = AuthManager::new();
         manager
-            .create_user("alice", "pw", &["+@write", "+get"])
+            .create_user("anton", "pw", &["+@write", "+get"])
             .await
             .unwrap();
-        manager.authenticate("alice", "pw").await.unwrap();
+        manager.authenticate("anton", "pw").await.unwrap();
 
-        // +@write => все write-команды, в том числе "del"
+        // Доступ к write-команде (разрешено через категорию).
         assert!(manager
-            .authorize_command("alice", "write", "del")
+            .authorize_command("anton", "write", "del")
             .await
             .is_ok());
-        // +get => разрешает get вне категории
+        // Доступ к команде get вне категорий (разрешено явно).
         assert!(manager
-            .authorize_command("alice", "any", "get")
+            .authorize_command("anton", "any", "get")
             .await
             .is_ok());
-        // команду, не попадающую в write и не +get, без правила — должны запретить
+        // Запрет на read-команду set (не разрешена ни категорией, ни индивидуально).
         let err = manager
-            .authorize_command("alice", "read", "set")
+            .authorize_command("anton", "read", "set")
             .await
             .unwrap_err();
         assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест authorize_key
+    // Тест проверяет, что работает ограничение доступа к ключам по шаблону.
     #[tokio::test]
     async fn test_authorize_key() {
         let manager = AuthManager::new();
-        // даём доступ только к data:*
+        // Пользователь с доступом только к ключам вида data:*
         manager
-            .create_user("charlie", "pw", &["~data:*"])
+            .create_user("anton", "pw", &["~data:*"])
             .await
             .unwrap();
-        manager.authenticate("charlie", "pw").await.unwrap();
+        manager.authenticate("anton", "pw").await.unwrap();
 
-        // должен разрешить
-        assert!(manager.authorize_key("charlie", "data:123").await.is_ok());
-        // другие ключи — запрещены
-        let err = manager.authorize_key("charlie", "other").await.unwrap_err();
+        // Ключ, соответствующий шаблону, разрешён.
+        assert!(manager.authorize_key("anton", "data:123").await.is_ok());
+
+        // Ключ, не попадающий под шаблон, запрещён.
+        let err = manager.authorize_key("anton", "other").await.unwrap_err();
         assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест rate-limiting
+    // Тест проверяет, что при множестве неудачных попыток входа срабатывает rate-limiting.
     #[tokio::test]
     async fn test_rate_limiting() {
         let manager = AuthManager::new();
         manager.create_user("d", "x", &[]).await.unwrap();
 
-        // пять неуспешных попыток подряд
+        // Совершаем MAX_FAILS неудачных попыток.
         for _ in 0..MAX_FAILS {
             let _ = manager.authenticate("d", "wrong").await;
         }
-        // шестая должна блокироваться
+
+        // После превышения лимита должна сработать блокировка.
         let err = manager.authenticate("d", "wrong").await.unwrap_err();
         assert!(matches!(err, AuthError::TooManyAttempts));
     }
 
-    // Тест инициализации из конфига
+    // Тест проверяет корректную инициализацию менеджера авторизации из конфигурации.
     #[tokio::test]
     async fn test_from_config() {
         let mut cfg = ServerConfig::default();
-        cfg.requirepass = Some("master".into());
-        cfg.auth_pepper = Some("pep".into());
+        cfg.requirepass = Some("master".into()); // глобальный пароль
+        cfg.auth_pepper = Some("pep".into()); // соль
         cfg.users.push(UserConfig {
             username: "u1".into(),
             enabled: true,
             nopass: false,
             password: Some("p1".into()),
-            keys: vec!["~foo:*".into()],
+            keys: vec!["~kin:*".into()],
             permissions: vec!["+@read".into()],
         });
 
+        // Инициализация из конфига.
         let manager = AuthManager::from_config(&cfg).await.unwrap();
 
-        // 5.1 default → requirepass, полный доступ
+        // Проверка дефолтного пользователя: глобальный пароль даёт полный доступ.
         assert!(manager.authenticate("default", "master").await.is_ok());
         assert!(manager.authorize_key("default", "anything").await.is_ok());
         assert!(manager
@@ -299,13 +303,12 @@ mod tests {
             .await
             .is_ok());
 
-        // 5.2 пользователь u1
+        // Проверка u1: доступ к ключам по шаблону, разрешение только на read-команды.
         assert!(manager.authenticate("u1", "p1").await.is_ok());
-        // доступ к foo:*
-        assert!(manager.authorize_key("u1", "foo:bar").await.is_ok());
-        // read-команды разрешены
+        assert!(manager.authorize_key("u1", "kin:zaza").await.is_ok());
         assert!(manager.authorize_command("u1", "read", "get").await.is_ok());
-        // write-команды запрещены
+
+        // Команды категории write должны быть запрещены.
         let err = manager
             .authorize_command("u1", "write", "set")
             .await

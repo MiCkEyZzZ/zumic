@@ -40,11 +40,11 @@ bitflags = "2.9.0"
 globset = "0.4.16"
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { version = "0.5", features = ["async"] }
 
 [profile.bench]
 opt-level = 3
 
 [[bench]]
-name = "dict_benchmarks"
+name = "manager_benchmarks"
 harness = false
