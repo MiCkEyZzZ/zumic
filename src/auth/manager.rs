@@ -187,6 +187,7 @@ impl Clone for AuthManager {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,6 +16,8 @@ pub enum AclError {
     ChannelDenied,
     #[error("Password hashing failed")]
     HashingFailed,
+    #[error("Serialize failed")]
+    Internal(String),
 }
 
 #[derive(Debug, Error)]
