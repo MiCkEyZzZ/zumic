@@ -1,6 +1,7 @@
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use super::errors::AclError;
@@ -18,6 +19,29 @@ bitflags::bitflags! {
         const ADMIN = 1 << 2;
         // ... добавим категории по мере необходимости
     }
+}
+
+/// Представляет одно ACL-правило, разобранное из строки конфигурации.
+#[derive(Debug)]
+pub enum AclRule {
+    /// Включить пользователя (`on`).
+    On,
+    /// Выключить пользователя (`off`).
+    Off,
+    /// Добавить хэш пароля (`>hash`).
+    PasswordHash(String),
+    /// Разрешить всю категорию (`+@read`, `+@write`, `+@admin`, `+@all`).
+    AllowCategory(CmdCategory),
+    /// Запретить всю категорию (`-@read`, `-@write`, `-@admin`).
+    DenyCategory(CmdCategory),
+    /// Разрешить конкретную команду (`+get`, `+del`).
+    AllowCommand(String),
+    /// Запретить конкретную команду (`-flushall`, `-mset`).
+    DenyCommand(String),
+    /// Добавить шаблон ключей (`~pattern`).
+    AllowKeyPattern(String),
+    /// Добавить шаблон каналов Pub/Sub (`&pattern`).
+    AllowChannelPattern(String),
 }
 
 /// Конфигурация пользователя ACL.
@@ -72,8 +96,17 @@ impl AclUser {
     ///
     /// Результат, содержащий нового `AclUser` или ошибку `AclError` в случае неудачи.
     pub fn new(username: &str) -> Result<Self, AclError> {
-        // по умолчанию: включён, без пароля, все команды @all
-        let mut user = AclUser {
+        // Компилируем пустой набор шаблонов ключей
+        let key_patterns = GlobSetBuilder::new()
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("initial key glob".into()))?;
+
+        // Компилируем пустой набор шаблонов каналов
+        let channel_patterns = GlobSetBuilder::new()
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("initial channel glob".into()))?;
+
+        let mut u = AclUser {
             username: username.to_string(),
             enabled: true,
             password_hashes: Vec::new(),
@@ -81,20 +114,20 @@ impl AclUser {
             allowed_commands: HashSet::new(),
             denied_commands: HashSet::new(),
             raw_key_patterns: Vec::new(),
-            key_patterns: GlobSetBuilder::new().build().unwrap(),
+            key_patterns,
             raw_channel_patterns: Vec::new(),
-            channel_patterns: GlobSetBuilder::new().build().unwrap(),
+            channel_patterns,
         };
 
         // по умолчанию разрешаем всё (эквивалент +@all, ~*)
-        user.allowed_categories = CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
+        u.allowed_categories = CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
         // Разрешаем все ключи по умолчанию.
-        user.raw_key_patterns.push(Glob::new("*").unwrap());
-        user.rebuild_key_patterns()?;
+        u.raw_key_patterns.push(Glob::new("*").unwrap());
+        u.rebuild_key_patterns()?;
         // Разрешаем все каналы по умолчанию.
-        user.raw_channel_patterns.push(Glob::new("*").unwrap());
-        user.rebuild_channel_patterns()?;
-        Ok(user)
+        u.raw_channel_patterns.push(Glob::new("*").unwrap());
+        u.rebuild_channel_patterns()?;
+        Ok(u)
     }
 
     /// Перестраивает компиляцию шаблонов для ключей.
@@ -218,12 +251,16 @@ impl Acl {
     ///
     /// Результат выполнения операции. В случае ошибки возвращается `AclError`.
     pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
-        let mut users = self.users.write().unwrap();
-        let user = users
-            .entry(username.to_string())
-            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username).unwrap())));
+        // Сначала парсим все строки-правила в enum-значения
+        let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
-        let mut user = user.write().unwrap();
+        let mut users = self.users.write().unwrap();
+        let user_arc = users
+            .entry(username.to_string())
+            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username).unwrap())))
+            .clone();
+
+        let mut user = user_arc.write().unwrap();
 
         // Очищаем прежние настройки (за исключением имени пользователя).
         user.enabled = false;
@@ -233,86 +270,40 @@ impl Acl {
         user.denied_commands.clear();
         user.raw_key_patterns.clear();
         user.raw_channel_patterns.clear();
-        user.key_patterns = GlobSetBuilder::new().build().unwrap();
-        user.channel_patterns = GlobSetBuilder::new().build().unwrap();
+        // Сбрасываем скомпилированные наборы шаблонов, ловя ошибки
+        user.key_patterns = GlobSetBuilder::new()
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("reset key glob".into()))?;
+        user.channel_patterns = GlobSetBuilder::new()
+            .build()
+            .map_err(|_| AclError::InvalidAclRule("reset channel glob".into()))?;
 
-        for rule in rules {
-            self.apply_rule(&mut user, rule)?;
-        }
-        Ok(())
-    }
-
-    /// Применяет отдельное правило ACL к пользователю.
-    ///
-    /// Обрабатываются разные типы правил:
-    /// - `"on"` и `"off"` — включение/выключение пользователя;
-    /// - `"+"` и `"-"` для разрешения или запрета категорий и команд;
-    /// - `"~"` и `"&"` для задания шаблонов ключей и каналов.
-    ///
-    /// # Аргументы
-    ///
-    /// * `user` - изменяемый пользователь ACL.
-    /// * `rule` - правило в виде строки.
-    ///
-    /// # Возвращаемое значение
-    ///
-    /// Результат выполнения операции. При ошибке возвращается `AclError::InvalidAclRule`.
-    fn apply_rule(&self, user: &mut AclUser, rule: &str) -> Result<(), AclError> {
-        // включение/отключение
-        if rule == "on" {
-            user.enabled = true;
-            return Ok(());
-        }
-        if rule == "off" {
-            user.enabled = false;
-            return Ok(());
-        }
-        let first = rule.chars().next().unwrap();
-        match first {
-            '>' => {
-                user.password_hashes.push(rule[1..].to_string());
-            }
-            '+' => {
-                if rule.starts_with("+@") {
-                    match &rule[2..] {
-                        "read" => user.allowed_categories |= CmdCategory::READ,
-                        "write" => user.allowed_categories |= CmdCategory::WRITE,
-                        "admin" => user.allowed_categories |= CmdCategory::ADMIN,
-                        "all" => {
-                            user.allowed_categories =
-                                CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
-                        }
-                        other => return Err(AclError::InvalidAclRule(other.into())),
-                    }
-                } else {
-                    user.allowed_commands.insert(rule[1..].to_lowercase());
+        for rule in parsed {
+            match rule {
+                AclRule::On => user.enabled = true,
+                AclRule::Off => user.enabled = false,
+                AclRule::PasswordHash(h) => user.password_hashes.push(h),
+                AclRule::AllowCategory(c) => user.allowed_categories |= c,
+                AclRule::DenyCategory(c) => user.allowed_categories.remove(c),
+                AclRule::AllowCommand(cmd) => {
+                    user.allowed_commands.insert(cmd);
+                }
+                AclRule::DenyCommand(cmd) => {
+                    user.denied_commands.insert(cmd);
+                }
+                AclRule::AllowKeyPattern(pat) => {
+                    let g = Glob::new(&pat).map_err(|_| AclError::InvalidAclRule(pat.clone()))?;
+                    user.raw_key_patterns.push(g);
+                    user.rebuild_key_patterns()?;
+                }
+                AclRule::AllowChannelPattern(pat) => {
+                    let g = Glob::new(&pat).map_err(|_| AclError::InvalidAclRule(pat.clone()))?;
+                    user.raw_channel_patterns.push(g);
+                    user.rebuild_channel_patterns()?;
                 }
             }
-            '-' => {
-                if rule.starts_with("-@") {
-                    // запрет целой категории (опционально)
-                    match &rule[2..] {
-                        "read" => user.allowed_categories.remove(CmdCategory::READ),
-                        "write" => user.allowed_categories.remove(CmdCategory::WRITE),
-                        "admin" => user.allowed_categories.remove(CmdCategory::ADMIN),
-                        other => return Err(AclError::InvalidAclRule(other.into())),
-                    }
-                } else {
-                    user.denied_commands.insert(rule[1..].to_lowercase());
-                }
-            }
-            '~' => {
-                let g = Glob::new(&rule[1..]).map_err(|_| AclError::InvalidAclRule(rule.into()))?;
-                user.raw_key_patterns.push(g);
-                user.rebuild_key_patterns()?;
-            }
-            '&' => {
-                let g = Glob::new(&rule[1..]).map_err(|_| AclError::InvalidAclRule(rule.into()))?;
-                user.raw_channel_patterns.push(g);
-                user.rebuild_channel_patterns()?;
-            }
-            _ => return Err(AclError::InvalidAclRule(rule.into())),
         }
+
         Ok(())
     }
 
@@ -358,6 +349,77 @@ impl Acl {
     /// Вектор строк с именами пользователей.
     pub fn acl_users(&self) -> Vec<String> {
         self.users.read().unwrap().keys().cloned().collect()
+    }
+}
+
+impl FromStr for AclRule {
+    type Err = AclError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // простые "on"/"off"
+        if s == "on" {
+            return Ok(AclRule::On);
+        }
+        if s == "off" {
+            return Ok(AclRule::Off);
+        }
+
+        // дальше – все остальные правила, у каждого первый символ—префикс
+        let first = s.chars().next().unwrap();
+        // остаток строки после префикса
+        let rest = &s[1..];
+
+        match first {
+            '>' => {
+                // >hash
+                Ok(AclRule::PasswordHash(rest.to_string()))
+            }
+            '+' => {
+                if s.starts_with("+@") {
+                    // +@category
+                    let cat_name = &s[2..];
+                    let cat = match cat_name {
+                        "read" => CmdCategory::READ,
+                        "write" => CmdCategory::WRITE,
+                        "admin" => CmdCategory::ADMIN,
+                        "all" => CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
+                        other => return Err(AclError::InvalidAclRule(other.into())),
+                    };
+                    Ok(AclRule::AllowCategory(cat))
+                } else {
+                    // +command
+                    Ok(AclRule::AllowCommand(rest.to_lowercase()))
+                }
+            }
+            '-' => {
+                if s.starts_with("-@") {
+                    // -@category
+                    let cat_name = &s[2..];
+                    let cat = match cat_name {
+                        "read" => CmdCategory::READ,
+                        "write" => CmdCategory::WRITE,
+                        "admin" => CmdCategory::ADMIN,
+                        other => return Err(AclError::InvalidAclRule(other.into())),
+                    };
+                    Ok(AclRule::DenyCategory(cat))
+                } else {
+                    // -command
+                    Ok(AclRule::DenyCommand(rest.to_lowercase()))
+                }
+            }
+            '~' => {
+                // ~pattern
+                Ok(AclRule::AllowKeyPattern(rest.to_string()))
+            }
+            '&' => {
+                // &pattern
+                Ok(AclRule::AllowChannelPattern(rest.to_string()))
+            }
+            _ => {
+                // неизвестный префикс
+                Err(AclError::InvalidAclRule(s.into()))
+            }
+        }
     }
 }
 
