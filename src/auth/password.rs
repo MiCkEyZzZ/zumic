@@ -61,6 +61,7 @@ mod tests {
 
     const TEST_PEPPER: &str = "super_pepper";
 
+    /// Проверяет, что хеширование и верификация без pepper работают корректно.
     #[test]
     fn test_hash_and_verify_no_pepper() {
         let password = "password123";
@@ -68,6 +69,7 @@ mod tests {
         assert!(verify_password(&hash, password, None).unwrap());
     }
 
+    /// Проверяет, что хеширование с pepper требует передавать тот же pepper для верификации.
     #[test]
     fn test_hash_and_verify_with_pepper() {
         let password = "password123";
@@ -76,12 +78,14 @@ mod tests {
         assert!(verify_password(&hash, password, Some(TEST_PEPPER)).unwrap());
     }
 
+    /// Проверяет, что верификация неверного пароля возвращает false.
     #[test]
     fn test_verify_password_failure() {
         let hash = hash_password("correct", None).unwrap();
         assert!(!verify_password(&hash, "wrong", None).unwrap());
     }
 
+    /// Проверяет, что передача некорректного формата хеша приводит к ошибке.
     #[test]
     fn test_verify_invalid_hash() {
         assert!(verify_password("invalid_hash", "any", None).is_err());

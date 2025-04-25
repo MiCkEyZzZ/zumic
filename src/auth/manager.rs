@@ -13,17 +13,27 @@ use super::{
     password::{hash_password, verify_password},
 };
 
+/// Максимальное количество неудачных попыток входа перед временной блокировкой.
 const MAX_FAILS: u8 = 5;
+/// Длительность блокировки после превышения `MAX_FAILS`.
 const BLOCK_DURATION: Duration = Duration::from_secs(60);
 
+/// Менеджер аутентификации и авторизации пользователей.
+///
+/// Хранит ACL, опциональную «pepper»-строку для хеширования паролей и
+/// информацию о неудачных попытках входа (для rate-limiting).
 #[derive(Debug)]
 pub struct AuthManager {
+    /// Ссылка на ACL-систему для проверки прав доступа.
     acl: Arc<RwLock<Acl>>,
+    /// Опциональная «pepper»-строка, добавляемая к паролям перед хешированием.
     pepper: Option<String>,
+    /// Счётчик неудачных попыток входа: имя пользователя → (кол-во, время первой неудачи).
     failures: Arc<RwLock<HashMap<String, (u8, Instant)>>>,
 }
 
 impl AuthManager {
+    /// Создаёт нового `AuthManager` без «pepper».
     pub fn new() -> Self {
         Self {
             acl: Arc::new(RwLock::new(Acl::default())),
@@ -32,6 +42,7 @@ impl AuthManager {
         }
     }
 
+    /// Создаёт новый `AuthManager` с заданной «pepper»-строкой для хеширования.
     pub fn with_pepper(pepper: impl Into<String>) -> Self {
         Self {
             acl: Arc::new(RwLock::new(Acl::default())),
@@ -40,6 +51,7 @@ impl AuthManager {
         }
     }
 
+    /// Создаёт пользователя с паролем и набором ACL-правил.
     pub async fn create_user(
         &self,
         username: &str,
@@ -60,6 +72,7 @@ impl AuthManager {
         Ok(())
     }
 
+    /// Аутентифицирует пользователя по имени и паролю.
     pub async fn authenticate(&self, username: &str, password: &str) -> Result<(), AuthError> {
         // Проверка блокировки пользователя по неудачным попыткам
         {
@@ -73,13 +86,14 @@ impl AuthManager {
             }
         }
 
+        // Получаем шаблоны паролей из ACL
         let acl = self.acl.read().await;
         let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
-
         let pepper = self.pepper.clone();
         let hashes = user.password_hashes.clone();
         let password = password.to_owned();
 
+        // Проверяем пароль в блокирующем задаче потоке
         let ok = tokio::task::spawn_blocking(move || {
             hashes
                 .iter()
@@ -102,6 +116,7 @@ impl AuthManager {
         }
     }
 
+    /// Проверяет, разрешена ли пользователю команда в заданной категории.
     pub async fn authorize_command(
         &self,
         username: &str,
@@ -117,6 +132,7 @@ impl AuthManager {
         }
     }
 
+    /// Проверяет доступ пользователя к конкретному ключу.
     pub async fn authorize_key(&self, username: &str, key: &str) -> Result<(), AuthError> {
         let acl = self.acl.read().await;
         let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
@@ -127,10 +143,12 @@ impl AuthManager {
         }
     }
 
+    /// Инициализирует `AuthManager` из конфигурации сервера.
     pub async fn from_config(config: &ServerConfig) -> Result<Self, AuthError> {
         let pepper = config.auth_pepper.clone();
         let acl = Acl::default();
 
+        // Глобальный пароль
         if let Some(pass) = &config.requirepass {
             let hash = hash_password(pass, pepper.as_deref())?;
             let rules = vec![
@@ -143,6 +161,7 @@ impl AuthManager {
             acl.acl_setuser("default", &refs)?;
         }
 
+        // Пользователи из конфига
         for user_config in &config.users {
             let mut rules = Vec::new();
 
@@ -173,6 +192,8 @@ impl AuthManager {
         })
     }
 
+    /// Возвращает клонированный `Arc<RwLock<Acl>>`, чтобы можно было
+    /// проверить или изменить ACL извне.
     pub fn acl(&self) -> Arc<RwLock<Acl>> {
         Arc::clone(&self.acl)
     }
@@ -195,7 +216,7 @@ mod tests {
 
     use crate::auth::config::UserConfig;
 
-    // Тест проверяет создание пользователя и успешную/неуспешную аутентификацию.
+    /// Тест проверяет создание пользователя и успешную/неуспешную аутентификацию.
     #[tokio::test]
     async fn test_create_and_authenticate() {
         let manager = AuthManager::new();
@@ -215,7 +236,7 @@ mod tests {
         assert!(matches!(err, AuthError::UserNotFound));
     }
 
-    // Тест проверяет доступ пользователя к командам по категориям и индивидуальным разрешениям.
+    /// Тест проверяет доступ пользователя к командам по категориям и индивидуальным разрешениям.
     #[tokio::test]
     async fn test_authorize_command() {
         let manager = AuthManager::new();
@@ -243,7 +264,7 @@ mod tests {
         assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест проверяет, что работает ограничение доступа к ключам по шаблону.
+    /// Тест проверяет, что работает ограничение доступа к ключам по шаблону.
     #[tokio::test]
     async fn test_authorize_key() {
         let manager = AuthManager::new();
@@ -262,7 +283,7 @@ mod tests {
         assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
     }
 
-    // Тест проверяет, что при множестве неудачных попыток входа срабатывает rate-limiting.
+    /// Тест проверяет, что при множестве неудачных попыток входа срабатывает rate-limiting.
     #[tokio::test]
     async fn test_rate_limiting() {
         let manager = AuthManager::new();
@@ -278,7 +299,7 @@ mod tests {
         assert!(matches!(err, AuthError::TooManyAttempts));
     }
 
-    // Тест проверяет корректную инициализацию менеджера авторизации из конфигурации.
+    /// Тест проверяет корректную инициализацию менеджера авторизации из конфигурации.
     #[tokio::test]
     async fn test_from_config() {
         let mut cfg = ServerConfig::default();
