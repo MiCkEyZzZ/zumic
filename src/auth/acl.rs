@@ -528,4 +528,77 @@ mod tests {
         assert!(!users.contains(&"anton".to_string()));
         assert!(users.contains(&"boris".to_string()));
     }
+
+    #[test]
+    fn test_multiple_users() {
+        let acl = Acl::default();
+
+        // Устанавливаем разные правила для двух пользователей
+        acl.acl_setuser("user1", &["on", "+@read", "~data:*"])
+            .unwrap();
+        acl.acl_setuser("user2", &["on", "+@write", "&chan?"])
+            .unwrap();
+
+        // Проверяем, что user1 имеет доступ к ключам, начинающимся с "data:"
+        let user1 = acl.acl_getuser("user1").unwrap();
+        assert!(user1.check_key("data:123"));
+        assert!(!user1.check_key("other:100"));
+
+        // Проверяем, что user2 имеет доступ к каналам, начинающимся с "chan"
+        let user2 = acl.acl_getuser("user2").unwrap();
+        assert!(user2.check_channel("chan1"));
+        assert!(!user2.check_channel("channel"));
+    }
+
+    #[test]
+    fn test_multiple_rules() {
+        let acl = Acl::default();
+        let rules = vec![
+            "on",      // включаем пользователя
+            "+@read",  // разрешаем все команды категории read
+            "+get",    // разрешаем команду get в любом случае
+            "-set",    // запрещаем команду set
+            "~data:*", // разрешаем ключи, начинающиеся с "data:"
+            "&chan?",  // разрешаем каналы, начинающиеся с "chan"
+        ];
+        acl.acl_setuser("user", &rules).unwrap();
+
+        let u = acl.acl_getuser("user").unwrap();
+
+        // Проверяем разрешения
+        assert!(u.check_permission("read", "get"));
+        assert!(!u.check_permission("write", "set"));
+        assert!(u.check_key("data:123"));
+        assert!(!u.check_key("other:100"));
+        assert!(u.check_channel("chan1"));
+        assert!(!u.check_channel("channel"));
+    }
+
+    #[test]
+    fn test_user_with_multiple_passwords() {
+        let acl = Acl::default();
+        let rules = vec![
+            "on", ">hash1", // хэш пароля 1
+            ">hash2", // хэш пароля 2
+        ];
+        acl.acl_setuser("user", &rules).unwrap();
+        let u = acl.acl_getuser("user").unwrap();
+
+        // Проверяем, что пароли добавлены
+        assert_eq!(u.password_hashes.len(), 2);
+        assert!(u.password_hashes.contains(&"hash1".to_string()));
+        assert!(u.password_hashes.contains(&"hash2".to_string()));
+    }
+
+    #[test]
+    fn test_acl_deluser_removes_user() {
+        let acl = Acl::default();
+        acl.acl_setuser("user", &["on", "+@read"]).unwrap();
+
+        // Удаляем пользователя
+        acl.acl_deluser("user").unwrap();
+
+        // Проверяем, что пользователь больше не существует
+        assert!(acl.acl_getuser("user").is_none());
+    }
 }
