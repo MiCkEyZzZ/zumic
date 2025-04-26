@@ -1,10 +1,7 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
+use tokio::time::{Duration, Instant};
 
 use super::{
     acl::Acl,
@@ -93,14 +90,18 @@ impl AuthManager {
         let hashes = user.password_hashes.clone();
         let password = password.to_owned();
 
-        // Проверяем пароль в блокирующем задаче потоке
-        let ok = tokio::task::spawn_blocking(move || {
-            hashes
-                .iter()
-                .any(|hash| verify_password(hash, &password, pepper.as_deref()).unwrap_or(false))
-        })
-        .await
-        .map_err(|_| AuthError::Password(PasswordError::Verify))?;
+        // Если пустой список хэшей - пароль не требуется (nopass)
+        let ok: bool = if hashes.is_empty() {
+            true
+        } else {
+            tokio::task::spawn_blocking(move || {
+                hashes.iter().any(|hash| {
+                    verify_password(hash, &password, pepper.as_deref()).unwrap_or(false)
+                })
+            })
+            .await
+            .map_err(|_| AuthError::Password(PasswordError::Verify))?
+        };
 
         if ok {
             let mut failures = self.failures.write().await;
@@ -336,5 +337,85 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
+    }
+
+    #[tokio::test]
+    async fn test_create_user_duplicate() {
+        let m = AuthManager::new();
+        m.create_user("anton", "pw", &[]).await.unwrap();
+        let err = m.create_user("anton", "pw", &[]).await.unwrap_err();
+        assert!(matches!(err, AuthError::UserAlreadyExists));
+    }
+
+    #[tokio::test]
+    async fn test_pepper_changes_hash() {
+        let m1 = AuthManager::new();
+        let m2 = AuthManager::with_pepper("pep");
+        m1.create_user("anton", "secret", &[]).await.unwrap();
+        m2.create_user("anton2", "secret", &[]).await.unwrap();
+
+        // Хеши разные, поэтому из m1 не залогиниться через м2 и наоборот
+        assert!(m1.authenticate("anton", "secret").await.is_ok());
+        assert!(matches!(
+            m2.authenticate("anton", "secret").await,
+            Err(AuthError::UserNotFound)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_block_expires() {
+        tokio::time::pause();
+        let manager = AuthManager::new();
+        manager.create_user("u", "p", &[]).await.unwrap();
+
+        for _ in 0..MAX_FAILS {
+            let _ = manager.authenticate("u", "wrong").await;
+        }
+        // сейчас заблокирован
+        assert!(matches!(
+            manager.authenticate("u", "p").await.unwrap_err(),
+            AuthError::TooManyAttempts
+        ));
+
+        // двигаем время вперёд на BLOCK_DURATION
+        tokio::time::advance(BLOCK_DURATION).await;
+        // блокировка сброшена
+        assert!(manager.authenticate("u", "p").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_clone_shares_state() {
+        let m1 = AuthManager::new();
+        m1.create_user("u", "p", &[]).await.unwrap();
+        let m2 = m1.clone();
+
+        // несколько неудачных попыток через m1
+        for _ in 0..MAX_FAILS {
+            let _ = m1.authenticate("u", "wrong").await;
+        }
+        // m2 тоже видит блокировку
+        assert!(matches!(
+            m2.authenticate("u", "p").await.unwrap_err(),
+            AuthError::TooManyAttempts
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_from_config_nopass_user() {
+        let mut cfg = ServerConfig::default();
+        cfg.users.push(UserConfig {
+            username: "nop".into(),
+            enabled: true,
+            nopass: true,
+            password: None,
+            keys: vec![],
+            permissions: vec!["+@all".into()],
+        });
+        let manager = AuthManager::from_config(&cfg).await.unwrap();
+
+        // логин без пароля
+        assert!(manager.authenticate("nop", "").await.is_ok());
+        // команды разрешены
+        assert!(manager.authorize_command("nop", "read", "x").await.is_ok());
     }
 }

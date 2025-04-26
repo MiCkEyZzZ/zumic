@@ -45,6 +45,8 @@ pub enum AclRule {
     AllowChannelPattern(String),
     /// Запретить шаблон каналов Pub/Sub (`-&pattern`).
     DenyChannelPattern(String),
+    /// Пользовател. не требуется пароля (nopass).
+    NoPass,
 }
 
 /// Конфигурация пользователя ACL.
@@ -327,6 +329,9 @@ impl Acl {
                 AclRule::DenyKeyPattern(p) => user.deny_key_pattern(&p)?,
                 AclRule::AllowChannelPattern(p) => user.allow_channel_pattern(&p)?,
                 AclRule::DenyChannelPattern(p) => user.deny_channel_pattern(&p)?,
+                AclRule::NoPass => {
+                    // nopass: не добавляем в password_hashes — authenticate увидит пустой список и пропустит логин
+                }
             }
         }
 
@@ -365,6 +370,9 @@ impl FromStr for AclRule {
         }
         if s == "off" {
             return Ok(AclRule::Off);
+        }
+        if s == "nopass" {
+            return Ok(AclRule::NoPass);
         }
         let first = s
             .chars()
