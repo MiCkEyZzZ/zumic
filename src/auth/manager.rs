@@ -135,7 +135,7 @@ impl AuthManager {
     /// Проверяет доступ пользователя к конкретному ключу.
     pub async fn authorize_key(&self, username: &str, key: &str) -> Result<(), AuthError> {
         let acl = self.acl.read().await;
-        let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
+        let mut user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
         if user.check_key(key) {
             Ok(())
         } else {
