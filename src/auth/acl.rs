@@ -89,19 +89,6 @@ pub struct Acl {
 impl AclUser {
     /// Создает нового пользователя ACL с заданным именем.
     pub fn new(username: &str) -> Result<Self, AclError> {
-        let key_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("init key glob".into()))?;
-        let deny_key_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("init deny key glob".into()))?;
-        let channel_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("init chan glob".into()))?;
-        let deny_channel_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("init deny chan glob".into()))?;
-
         let mut u = AclUser {
             username: username.to_string(),
             enabled: true,
@@ -111,25 +98,19 @@ impl AclUser {
             denied_commands: HashSet::new(),
 
             raw_key_patterns: vec![Glob::new("*").unwrap()],
-            key_patterns,
+            key_patterns: GlobSetBuilder::new().build().unwrap(),
 
-            raw_deny_key_patterns: Vec::new(),
-            deny_key_patterns,
+            raw_deny_key_patterns: vec![],
+            deny_key_patterns: GlobSetBuilder::new().build().unwrap(),
 
             raw_channel_patterns: vec![Glob::new("*").unwrap()],
-            channel_patterns,
+            channel_patterns: GlobSetBuilder::new().build().unwrap(),
 
-            raw_deny_channel_patterns: Vec::new(),
-            deny_channel_patterns,
+            raw_deny_channel_patterns: vec![],
+            deny_channel_patterns: GlobSetBuilder::new().build().unwrap(),
         };
 
-        // по умолчанию разрешаем всё (эквивалент +@all, ~*)
-        u.allowed_categories = CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN;
-        // Разрешаем все ключи по умолчанию.
-        u.raw_key_patterns.push(Glob::new("*").unwrap());
         u.rebuild_key_patterns()?;
-        // Разрешаем все каналы по умолчанию.
-        u.raw_channel_patterns.push(Glob::new("*").unwrap());
         u.rebuild_channel_patterns()?;
         Ok(u)
     }
@@ -248,14 +229,15 @@ impl Acl {
         user.allowed_commands.clear();
         user.denied_commands.clear();
         user.raw_key_patterns.clear();
+        user.raw_deny_key_patterns.clear();
         user.raw_channel_patterns.clear();
+        user.raw_deny_channel_patterns.clear();
+
         // Сбрасываем скомпилированные наборы шаблонов, ловя ошибки
-        user.key_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("reset key glob".into()))?;
-        user.channel_patterns = GlobSetBuilder::new()
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("reset channel glob".into()))?;
+        user.rebuild_key_patterns()?;
+        user.rebuild_deny_key_patterns()?;
+        user.rebuild_channel_patterns()?;
+        user.rebuild_deny_channel_patterns()?;
 
         for rule in parsed {
             match rule {
@@ -307,8 +289,7 @@ impl Acl {
 
     /// Удаляет пользователя ACL по его имени.
     pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
-        let removed = self.users.write().unwrap().remove(username);
-        if removed.is_some() {
+        if self.users.write().unwrap().remove(username).is_some() {
             Ok(())
         } else {
             Err(AclError::UserNotFound)
@@ -323,6 +304,7 @@ impl Acl {
 
 impl FromStr for AclRule {
     type Err = AclError;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s == "on" {
             return Ok(AclRule::On);
@@ -330,7 +312,10 @@ impl FromStr for AclRule {
         if s == "off" {
             return Ok(AclRule::Off);
         }
-        let first = s.chars().next().unwrap();
+        let first = s
+            .chars()
+            .next()
+            .ok_or_else(|| AclError::InvalidAclRule(s.into()))?;
         let rest = &s[1..];
         match first {
             '>' => Ok(AclRule::PasswordHash(rest.to_string())),
@@ -354,7 +339,7 @@ impl FromStr for AclRule {
                         "read" => CmdCategory::READ,
                         "write" => CmdCategory::WRITE,
                         "admin" => CmdCategory::ADMIN,
-                        other => return Err(AclError::InvalidAclRule(other.into())),
+                        other => return Err(AclError::InvalidAclRule(other.to_string())),
                     };
                     Ok(AclRule::DenyCategory(cat))
                 } else if rest.starts_with('~') {
