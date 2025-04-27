@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
 
 use std::str::FromStr;
@@ -13,7 +13,7 @@ static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());
 bitflags::bitflags! {
     /// Битовая маска категорий команд, используемая для обозначения групп команд,
     /// например, `@read`, `@write`, `@admin`.
-    #[derive(Clone, Debug)]
+    #[derive(Copy, Clone, Debug)]
     pub struct CmdCategory: u32 {
         /// Команды для операций чтения.
         const READ = 1 << 0;
@@ -22,6 +22,24 @@ bitflags::bitflags! {
         /// Административные команды.
         const ADMIN = 1 << 2;
     }
+}
+
+/// Парсим строки категории один раз, сразу в битовую маску.
+pub fn parse_category(cat: &str) -> CmdCategory {
+    match cat {
+        "read" => CmdCategory::READ,
+        "write" => CmdCategory::WRITE,
+        "admin" => CmdCategory::ADMIN,
+        _ => CmdCategory::empty(),
+    }
+}
+
+/// Парсим имя команды один раз в индекс.
+/// Возвращает `None` для незнакомых команд.
+pub fn lookup_cmd_idx(cmd: &str) -> Option<usize> {
+    // один раз привлдим к to_ascii_lowercase, а в горящем пути уже usize
+    let lower = cmd.to_ascii_lowercase();
+    COMMAND_INDEX.get(lower.as_str()).copied()
 }
 
 /// Список всех команд и их индексы для битовой маски.
@@ -134,13 +152,7 @@ impl AclUser {
     fn rebuild_globset(patterns: &[Glob]) -> Result<GlobSet, AclError> {
         let mut b = GlobSetBuilder::new();
         for g in patterns {
-            // включаем literal_separator для корректного матчинга
-            let pat = g.to_string();
-            let g = GlobBuilder::new(&pat)
-                .literal_separator(true)
-                .build()
-                .map_err(|_| AclError::InvalidAclRule(pat.clone()))?;
-            b.add(g);
+            b.add(g.clone());
         }
         b.build()
             .map_err(|_| AclError::InvalidAclRule("globset build".into()))
@@ -193,28 +205,23 @@ impl AclUser {
     }
 
     /// Проверяет, имеет ли пользователь право выполнить команду.
-    pub fn check_permission(&self, category: &str, command: &str) -> bool {
+    /// Горячий путь: принимает уже разобранную категорию и опциональный индекс команды.
+    pub fn check_idx(&self, category: CmdCategory, cmd_idx: Option<usize>) -> bool {
         if !self.enabled {
             return false;
         }
-        let cat = match category {
-            "read" => CmdCategory::READ,
-            "write" => CmdCategory::WRITE,
-            "admin" => CmdCategory::ADMIN,
-            _ => CmdCategory::empty(),
-        };
-        let cmd = command.to_lowercase();
-        if let Some(&idx) = COMMAND_INDEX.get(cmd.as_str()) {
+        if let Some(idx) = cmd_idx {
             let bit = 1u128 << idx;
             if self.denied_commands & bit != 0 {
                 return false;
             }
-            if self.allowed_categories.contains(cat) {
+            if self.allowed_categories.contains(category) {
                 return true;
             }
             return self.allowed_commands & bit != 0;
         }
-        self.allowed_categories.contains(cat)
+        // неизвестная команда — только по категории
+        self.allowed_categories.contains(category)
     }
 
     /// Проверяет, разрешён ли доступ к заданному ключу.
@@ -345,37 +352,24 @@ impl FromStr for AclRule {
         match head {
             ">" => Ok(AclRule::PasswordHash(rest.into())),
             "+" if rest.starts_with('@') => {
-                let c = match &rest[1..] {
-                    "read" => CmdCategory::READ,
-                    "write" => CmdCategory::WRITE,
-                    "admin" => CmdCategory::ADMIN,
-                    "all" => CmdCategory::all(),
-                    o => return Err(AclError::InvalidAclRule(o.into())),
-                };
+                let c = parse_category(&rest[1..]);
                 Ok(AclRule::AllowCategory(c))
             }
             "+" => {
-                let idx = COMMAND_INDEX
-                    .get(&rest.to_lowercase()[..])
-                    .ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
-                Ok(AclRule::AllowCommand(*idx))
+                let idx =
+                    lookup_cmd_idx(rest).ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
+                Ok(AclRule::AllowCommand(idx))
             }
             "-" if rest.starts_with('@') => {
-                let c = match &rest[1..] {
-                    "read" => CmdCategory::READ,
-                    "write" => CmdCategory::WRITE,
-                    "admin" => CmdCategory::ADMIN,
-                    o => return Err(AclError::InvalidAclRule(o.into())),
-                };
+                let c = parse_category(&rest[1..]);
                 Ok(AclRule::DenyCategory(c))
             }
             "-" if rest.starts_with('~') => Ok(AclRule::DenyKeyPattern(rest[1..].into())),
             "-" if rest.starts_with('&') => Ok(AclRule::DenyChannelPattern(rest[1..].into())),
             "-" => {
-                let idx = COMMAND_INDEX
-                    .get(&rest.to_lowercase()[..])
-                    .ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
-                Ok(AclRule::DenyCommand(*idx))
+                let idx =
+                    lookup_cmd_idx(rest).ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
+                Ok(AclRule::DenyCommand(idx))
             }
             "~" => Ok(AclRule::AllowKeyPattern(rest.into())),
             "&" => Ok(AclRule::AllowChannelPattern(rest.into())),
@@ -392,17 +386,24 @@ mod tests {
     /// имеет доступ ко всем категориям, командам, ключам и каналам.
     #[test]
     fn default_user_allows_everything() {
-        // AclUser::new создаёт пользователя с enabled = true, разрешив все категории
-        // и установив шаблоны "*", что позволяет доступ ко всему.
+        // AclUser::new создаёт пользователя с enabled = true,
+        // разрешив все категории и установив шаблоны "*",
+        // что позволяет доступ ко всему.
         let user = AclUser::new("u").unwrap();
 
         // категории.
-        assert!(user.check_permission("read", "wharever"));
-        assert!(user.check_permission("write", "any"));
-        assert!(user.check_permission("admin", "config"));
+        let cat_read = parse_category("read");
+        let cat_write = parse_category("write");
+        let cat_admin = parse_category("admin");
 
-        // команды.
-        assert!(user.check_permission("any", "randomcmd"));
+        assert!(user.check_idx(cat_read, lookup_cmd_idx("wharever")));
+        assert!(user.check_idx(cat_write, lookup_cmd_idx("any")));
+        assert!(user.check_idx(cat_admin, lookup_cmd_idx("config")));
+
+        // команды: незнакомая команда idx == None — но по категориям всё разрешено.
+        assert!(user.check_idx(cat_read, lookup_cmd_idx("randomcmd")));
+        assert!(user.check_idx(cat_write, lookup_cmd_idx("randomcmd")));
+        assert!(user.check_idx(cat_admin, lookup_cmd_idx("randomcmd")));
 
         // ключи.
         assert!(user.check_key("kin"));
@@ -428,15 +429,19 @@ mod tests {
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();
 
-        // read-команды любые
-        assert!(u.check_permission("read", "kin"));
+        // парсим категории один раз
+        let cat_read = parse_category("read");
+        let cat_write = parse_category("write");
+
+        // read-команды любые (lookup_cmd_idx("kin") == None → проверка по категории)
+        assert!(u.check_idx(cat_read, lookup_cmd_idx("kin")));
         // write-команды не из списка
-        assert!(!u.check_permission("write", "kin"));
+        assert!(!u.check_idx(cat_write, lookup_cmd_idx("kin")));
         // но конкретно get разрешён
-        assert!(u.check_permission("write", "get"));
+        assert!(u.check_idx(cat_write, lookup_cmd_idx("get")));
         // а del — запрещён
-        assert!(!u.check_permission("read", "del"));
-        assert!(!u.check_permission("write", "del"));
+        assert!(!u.check_idx(cat_read, lookup_cmd_idx("del")));
+        assert!(!u.check_idx(cat_write, lookup_cmd_idx("del")));
     }
 
     /// Тест проверяет работу шаблонов ключей (~pattern) и каналов (&pattern).
@@ -468,13 +473,17 @@ mod tests {
         let acl = Acl::default();
         let rules = vec![
             "off",   // выключаем пользователя
-            "+@all", // правило, которое должно сработать, если бы пользователь был включён
+            "+@all", // правило, которое сработало бы, если пользователь был включён
             "~*",    // универсальный шаблон для ключей
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();
 
-        assert!(!u.check_permission("read", "get"));
+        // Категории парсим один раз
+        let cat_read = parse_category("read");
+
+        // Пользователь выключен → любой вызов check_idx(false), check_key, check_channel должен вернуть false
+        assert!(!u.check_idx(cat_read, lookup_cmd_idx("get")));
         assert!(!u.check_key("any"));
         assert!(!u.check_channel("chan"));
     }
@@ -500,12 +509,30 @@ mod tests {
     /// Тест проверяет, что `AclUser::new` создаёт пользователя с корректными значениями по умолчанию.
     #[test]
     fn test_create_user_and_check_defaults() {
+        // Создаём нового пользователя и проверяем базовые поля
         let user = AclUser::new("anton").unwrap();
         assert_eq!(user.username, "anton");
         assert!(user.enabled);
-        assert!(user.check_permission("read", "get"));
-        assert!(user.check_permission("write", "set"));
-        assert!(user.check_permission("admin", "acl"));
+
+        // Парсим категории один раз
+        let cat_read = parse_category("read");
+        let cat_write = parse_category("write");
+        let cat_admin = parse_category("admin");
+
+        // Известные команды должны иметь индексы
+        let idx_get = lookup_cmd_idx("get").expect("get должно быть в COMMAND_INDEX");
+        let idx_set = lookup_cmd_idx("set").expect("set должно быть в COMMAND_INDEX");
+
+        // Проверяем разрешения по категориям и индексам
+        assert!(user.check_idx(cat_read, Some(idx_get)));
+        assert!(user.check_idx(cat_write, Some(idx_set)));
+
+        // Команда "acl" не в COMMAND_INDEX → lookup_cmd_idx вернёт None,
+        // но по категории admin доступ всё равно есть.
+        assert_eq!(lookup_cmd_idx("acl"), None);
+        assert!(user.check_idx(cat_admin, None));
+
+        // Проверяем доступ к ключам и каналам по умолчанию
         assert!(user.check_key("anykey"));
         assert!(user.check_channel("anychannel"));
     }
@@ -514,23 +541,30 @@ mod tests {
     #[test]
     fn test_acl_overwrite_existing_user() {
         let acl = Acl::default();
+
+        // Изначальные правила: read + get, ключи ~x*
         acl.acl_setuser("anton", &["on", "+@read", "+get", "~x*"])
             .unwrap();
+        let u1 = acl.acl_getuser("anton").unwrap();
 
-        let user1 = acl.acl_getuser("anton").unwrap();
-        assert!(user1.check_permission("read", "get"));
-        assert!(user1.check_key("x42"));
-        assert!(!user1.check_key("y42"));
+        let cat_read = parse_category("read");
+        assert!(u1.check_idx(cat_read, lookup_cmd_idx("get")));
+        assert!(u1.check_key("x42"));
+        assert!(!u1.check_key("y42"));
 
-        // Перезаписываем правила
+        // Перезаписываем правила: write, снимаем +get, ключи ~y*
         acl.acl_setuser("anton", &["on", "+@write", "-get", "~y*"])
             .unwrap();
+        let u2 = acl.acl_getuser("anton").unwrap();
 
-        let user2 = acl.acl_getuser("anton").unwrap();
-        assert!(!user2.check_permission("read", "get")); // теперь запрещено
-        assert!(user2.check_permission("write", "set"));
-        assert!(user2.check_key("y99"));
-        assert!(!user2.check_key("x99")); // старый паттерн больше не действует
+        let cat_write = parse_category("write");
+        // Теперь read-get запрещён:
+        assert!(!u2.check_idx(cat_read, lookup_cmd_idx("get")));
+        // А write-set разрешён:
+        assert!(u2.check_idx(cat_write, lookup_cmd_idx("set")));
+        // Новый паттерн ~y* работает, старый ~x* — уже нет
+        assert!(u2.check_key("y99"));
+        assert!(!u2.check_key("x99"));
     }
 
     /// Тест проверяет список пользователей и удаление через `acl_deluser`.
@@ -585,14 +619,23 @@ mod tests {
             "&chan?",  // разрешаем каналы, начинающиеся с "chan"
         ];
         acl.acl_setuser("user", &rules).unwrap();
-
         let u = acl.acl_getuser("user").unwrap();
 
-        // Проверяем разрешения
-        assert!(u.check_permission("read", "get"));
-        assert!(!u.check_permission("write", "set"));
+        // Разбираем категории один раз
+        let cat_read = parse_category("read");
+        let cat_write = parse_category("write");
+
+        // Проверяем команды через check_idx
+        // Для "get" lookup_cmd_idx вернёт Some(idx)
+        assert!(u.check_idx(cat_read, lookup_cmd_idx("get")));
+        // Для "set" lookup_cmd_idx вернёт Some(idx), но мы его явно запретили
+        assert!(!u.check_idx(cat_write, lookup_cmd_idx("set")));
+
+        // Проверяем шаблоны ключей
         assert!(u.check_key("data:123"));
         assert!(!u.check_key("other:100"));
+
+        // Проверяем шаблоны каналов
         assert!(u.check_channel("chan1"));
         assert!(!u.check_channel("channel"));
     }
@@ -657,17 +700,21 @@ mod tests {
     #[test]
     fn test_reset_rules_behavior() {
         let mut user = AclUser::new("u").unwrap();
-        // задаём несколько правил.
+
+        // Задаём несколько правил вручную:
         user.allow_key_pattern("kin*").unwrap();
         user.allow_channel_pattern("dzadza*").unwrap();
         user.password_hashes.push("h".into());
-        // разрешаем команду "get" через битовую маску
-        let idx = *COMMAND_INDEX.get("get").unwrap();
+        // Разрешаем команду "get" через битовую маску:
+        let idx = lookup_cmd_idx("get").expect("get должно быть в карте");
         user.allowed_commands |= 1u128 << idx;
-        // сбрасываем
+
+        // Сбрасываем все правила
         user.reset_rules();
-        // после reset любое разрешение должно быть запрещено.
-        assert!(!user.check_permission("read", "something"));
+
+        // После reset всё должно быть запрещено:
+        let cat_read = parse_category("read");
+        assert!(!user.check_idx(cat_read, lookup_cmd_idx("something")));
         assert!(!user.check_key("kin123"));
         assert!(!user.check_channel("dzadzaXYZ"));
     }

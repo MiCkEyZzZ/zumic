@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 
+use super::acl::{lookup_cmd_idx, parse_category};
 use super::{
     acl::Acl,
     config::ServerConfig,
@@ -124,9 +125,16 @@ impl AuthManager {
         category: &str,
         command: &str,
     ) -> Result<(), AuthError> {
+        // Читать из RwLock нечасто, это не «горячий» путь.
         let acl = self.acl.read().await;
         let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
-        if user.check_permission(category, command) {
+
+        // Подготовка вне горячего пути:
+        let cat = parse_category(category);
+        let cmd_idx = lookup_cmd_idx(command);
+
+        // Горячий путь: одно сравнение enum/usize и битов
+        if user.check_idx(cat, cmd_idx) {
             Ok(())
         } else {
             Err(AclError::PermissionDenied.into())

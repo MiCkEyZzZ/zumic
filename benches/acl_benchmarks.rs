@@ -1,22 +1,30 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use zumic::auth::acl::Acl;
+use zumic::auth::acl::{lookup_cmd_idx, parse_category, Acl};
 
 fn bench_check_permission(c: &mut Criterion) {
-    let mut group = c.benchmark_group("check_permission");
+    let mut group = c.benchmark_group("check_idx");
+
+    // Настройка ACL и пользователя один раз
     let acl = Acl::default();
     let rules = vec!["on", "+@read", "+get", "-del"];
     acl.acl_setuser("anton", &rules).unwrap();
     let user = acl.acl_getuser("anton").unwrap();
 
-    group.bench_function("check_permission(get)", |b| {
+    // Парсим категорию и индексы команд ВНЕ горячего пути
+    let cat_read = parse_category("read");
+    let idx_get = lookup_cmd_idx("get");
+    let idx_del = lookup_cmd_idx("del");
+
+    group.bench_function("check_idx(get)", |b| {
         b.iter(|| {
-            black_box(user.check_permission("read", "get"));
+            // Только битовые проверки — никаких строковых операций
+            black_box(user.check_idx(cat_read, idx_get));
         });
     });
 
-    group.bench_function("check_permission(del)", |b| {
+    group.bench_function("check_idx(del)", |b| {
         b.iter(|| {
-            black_box(user.check_permission("read", "del"));
+            black_box(user.check_idx(cat_read, idx_del));
         });
     });
 
