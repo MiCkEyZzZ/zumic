@@ -1,6 +1,6 @@
+use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
@@ -78,18 +78,24 @@ pub struct AclUser {
     raw_key_patterns: Vec<Glob>,
     /// Скомпилированный набор шаблонов ключей.
     pub key_patterns: GlobSet,
+    /// true, если мы НИКОГДА не добавляли к шаблонам ничего, кроме дефолтного "*"
+    no_custom_key_patterns: bool,
     /// "Сырые" шаблоны запрещённых ключей в виде `Glob`.
     raw_deny_key_patterns: Vec<Glob>,
     /// Скомпилированный набор запрещённых ключей.
     pub deny_key_patterns: GlobSet,
+    /// true, если мы НИКОГДА не добавляли deny-шаблонов (raw_deny_key_patterns всегда пуст)
+    no_custom_deny_key_patterns: bool,
     /// "Сырые" шаблоны каналов в виде `Glob`.
     raw_channel_patterns: Vec<Glob>,
     /// Скомпилированный набор шаблонов каналов.
     pub channel_patterns: GlobSet,
+    no_custom_channel_patterns: bool,
     /// "Сырые" шаблоны запрещённых каналов в виде `Glob`.
     raw_deny_channel_patterns: Vec<Glob>,
     /// Скомпилированный набор запрещённых каналов.
     pub deny_channel_patterns: GlobSet,
+    no_custom_deny_channel_patterns: bool,
 
     dirty_key: bool,
     dirty_deny_key: bool,
@@ -100,7 +106,7 @@ pub struct AclUser {
 /// Основная структура для управления ACL (Access Control List).
 #[derive(Default, Debug)]
 pub struct Acl {
-    users: RwLock<HashMap<String, Arc<RwLock<AclUser>>>>,
+    users: DashMap<String, Arc<RwLock<AclUser>>>,
 }
 
 impl AclUser {
@@ -117,15 +123,19 @@ impl AclUser {
 
             raw_key_patterns: vec![Glob::new("*").unwrap()],
             key_patterns: GlobSetBuilder::new().build().unwrap(),
+            no_custom_key_patterns: true,
 
             raw_deny_key_patterns: vec![],
             deny_key_patterns: GlobSetBuilder::new().build().unwrap(),
+            no_custom_deny_key_patterns: true,
 
             raw_channel_patterns: vec![Glob::new("*").unwrap()],
             channel_patterns: GlobSetBuilder::new().build().unwrap(),
+            no_custom_channel_patterns: true,
 
             raw_deny_channel_patterns: vec![],
             deny_channel_patterns: GlobSetBuilder::new().build().unwrap(),
+            no_custom_deny_channel_patterns: true,
 
             dirty_key: false,
             dirty_deny_key: false,
@@ -146,6 +156,7 @@ impl AclUser {
         let g = Glob::new(part).map_err(|_| AclError::InvalidAclRule(part.into()))?;
         self.raw_key_patterns.push(g);
         self.dirty_key = true;
+        self.no_custom_key_patterns = false;
         Ok(())
     }
 
@@ -154,6 +165,7 @@ impl AclUser {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_key_patterns.push(g);
         self.dirty_deny_key = true;
+        self.no_custom_deny_key_patterns = false;
         Ok(())
     }
 
@@ -162,6 +174,7 @@ impl AclUser {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_channel_patterns.push(g);
         self.dirty_channel = true;
+        self.no_custom_channel_patterns = false;
         Ok(())
     }
 
@@ -170,6 +183,7 @@ impl AclUser {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_channel_patterns.push(g);
         self.dirty_deny_channel = true;
+        self.no_custom_deny_channel_patterns = false;
         Ok(())
     }
 
@@ -261,6 +275,12 @@ impl AclUser {
 
     /// Проверяет, разрешён ли доступ к заданному ключу.
     pub fn check_key(&mut self, key: &str) -> bool {
+        // самая первая горячая проверка:
+        // если у нас с момента new() не было ни одного кастомного паттерна
+        // и не было deny-паттернов — разрешаем ВСЁ сразу
+        if self.enabled && self.no_custom_key_patterns && self.no_custom_deny_key_patterns {
+            return true;
+        }
         if self.dirty_key {
             self.rebuild_key_patterns().unwrap();
             self.dirty_key = false;
@@ -282,6 +302,12 @@ impl AclUser {
 
     /// Проверяет доступность Pub/Sub-канала на основе заданных шаблонов.
     pub fn check_channel(&mut self, channel: &str) -> bool {
+        // самая первая горячая проверка:
+        // если у нас с момента new() не было ни одного кастомного паттерна
+        // и не было deny-паттернов — разрешаем ВСЁ сразу
+        if self.enabled && self.no_custom_key_patterns && self.no_custom_deny_key_patterns {
+            return true;
+        }
         if self.dirty_deny_channel {
             self.rebuild_deny_channel_patterns().unwrap();
             self.dirty_deny_channel = false;
@@ -311,9 +337,13 @@ impl AclUser {
 
         // Очищаем "сырые" паттерны
         self.raw_key_patterns.clear();
+        self.no_custom_key_patterns = false;
         self.raw_deny_key_patterns.clear();
+        self.no_custom_deny_key_patterns = false;
         self.raw_channel_patterns.clear();
+        self.no_custom_channel_patterns = false;
         self.raw_deny_channel_patterns.clear();
+        self.no_custom_deny_channel_patterns = false;
 
         // Отмечаем, что все четыре набора паттернов нужно пересобрать при следующих проверках
         self.dirty_key = true;
@@ -330,11 +360,13 @@ impl Acl {
         let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
         // Получаем либо создаём пользователя
-        let mut users = self.users.write().unwrap();
-        let user_arc = users
-            .entry(username.to_string())
-            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username).unwrap())))
-            .clone();
+        let user_arc = if let Some(entry) = self.users.get(username) {
+            entry.value().clone()
+        } else {
+            let arc = Arc::new(RwLock::new(AclUser::new(username)?));
+            self.users.insert(username.to_string(), arc.clone());
+            arc
+        };
 
         let mut user = user_arc.write().unwrap();
 
@@ -369,16 +401,12 @@ impl Acl {
 
     /// Возвращает копию данных пользователя ACL по его имени.
     pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
-        self.users
-            .read()
-            .unwrap()
-            .get(username)
-            .map(|u| u.read().unwrap().clone())
+        self.users.get(username).map(|u| u.read().unwrap().clone())
     }
 
     /// Удаляет пользователя ACL по его имени.
     pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
-        if self.users.write().unwrap().remove(username).is_some() {
+        if self.users.remove(username).is_some() {
             Ok(())
         } else {
             Err(AclError::UserNotFound)
@@ -387,7 +415,7 @@ impl Acl {
 
     /// Возвращает список имен всех зарегистрированных пользователей ACL.
     pub fn acl_users(&self) -> Vec<String> {
-        self.users.read().unwrap().keys().cloned().collect()
+        self.users.iter().map(|entry| entry.key().clone()).collect()
     }
 }
 
@@ -786,6 +814,9 @@ mod tests {
     #[test]
     fn test_allow_and_deny_pattern_priority_channel() {
         let mut user = AclUser::new("u").unwrap();
+        user.reset_rules();
+        // после reset_rules пользователь выключен, нужно снова включить
+        user.enabled = true;
         user.allow_channel_pattern("chan*").unwrap();
         user.deny_channel_pattern("chanbad*").unwrap();
         assert!(user.check_channel("chanGood"));
