@@ -1,10 +1,14 @@
 use dashmap::DashMap;
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
+use once_cell::sync::Lazy;
 
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use super::errors::AclError;
+
+/// Глобальный "всегда разрешающий" паттерн.
+static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());
 
 bitflags::bitflags! {
     /// Битовая маска категорий команд, используемая для обозначения групп команд,
@@ -74,33 +78,24 @@ pub struct AclUser {
     pub allowed_commands: u128,
     /// Запрещённые конкретные команды (например, `-flushall`).
     pub denied_commands: u128,
+
     /// "Сырые" шаблоны ключей в виде `Glob`.
     raw_key_patterns: Vec<Glob>,
-    /// Скомпилированный набор шаблонов ключей.
-    pub key_patterns: GlobSet,
-    /// true, если мы НИКОГДА не добавляли к шаблонам ничего, кроме дефолтного "*"
-    no_custom_key_patterns: bool,
     /// "Сырые" шаблоны запрещённых ключей в виде `Glob`.
     raw_deny_key_patterns: Vec<Glob>,
-    /// Скомпилированный набор запрещённых ключей.
-    pub deny_key_patterns: GlobSet,
-    /// true, если мы НИКОГДА не добавляли deny-шаблонов (raw_deny_key_patterns всегда пуст)
-    no_custom_deny_key_patterns: bool,
     /// "Сырые" шаблоны каналов в виде `Glob`.
     raw_channel_patterns: Vec<Glob>,
-    /// Скомпилированный набор шаблонов каналов.
-    pub channel_patterns: GlobSet,
-    no_custom_channel_patterns: bool,
     /// "Сырые" шаблоны запрещённых каналов в виде `Glob`.
     raw_deny_channel_patterns: Vec<Glob>,
+
+    /// Скомпилированный набор шаблонов ключей.
+    pub key_patterns: GlobSet,
+    /// Скомпилированный набор запрещённых ключей.
+    pub deny_key_patterns: GlobSet,
+    /// Скомпилированный набор шаблонов каналов.
+    pub channel_patterns: GlobSet,
     /// Скомпилированный набор запрещённых каналов.
     pub deny_channel_patterns: GlobSet,
-    no_custom_deny_channel_patterns: bool,
-
-    dirty_key: bool,
-    dirty_deny_key: bool,
-    dirty_channel: bool,
-    dirty_deny_channel: bool,
 }
 
 /// Основная структура для управления ACL (Access Control List).
@@ -112,51 +107,63 @@ pub struct Acl {
 impl AclUser {
     /// Создает нового пользователя ACL с заданным именем.
     pub fn new(username: &str) -> Result<Self, AclError> {
+        let default_glob = DEFAULT_GLOB.clone();
         let mut u = AclUser {
             username: username.to_string(),
             enabled: true,
             password_hashes: Vec::new(),
             allowed_categories: CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
-
             allowed_commands: 0,
             denied_commands: 0,
-
-            raw_key_patterns: vec![Glob::new("*").unwrap()],
-            key_patterns: GlobSetBuilder::new().build().unwrap(),
-            no_custom_key_patterns: true,
-
-            raw_deny_key_patterns: vec![],
-            deny_key_patterns: GlobSetBuilder::new().build().unwrap(),
-            no_custom_deny_key_patterns: true,
-
-            raw_channel_patterns: vec![Glob::new("*").unwrap()],
-            channel_patterns: GlobSetBuilder::new().build().unwrap(),
-            no_custom_channel_patterns: true,
-
-            raw_deny_channel_patterns: vec![],
-            deny_channel_patterns: GlobSetBuilder::new().build().unwrap(),
-            no_custom_deny_channel_patterns: true,
-
-            dirty_key: false,
-            dirty_deny_key: false,
-            dirty_channel: false,
-            dirty_deny_channel: false,
+            raw_key_patterns: vec![default_glob.clone()],
+            raw_deny_key_patterns: Vec::new(),
+            raw_channel_patterns: vec![default_glob.clone()],
+            raw_deny_channel_patterns: Vec::new(),
+            key_patterns: GlobSet::empty(),
+            deny_key_patterns: GlobSet::empty(),
+            channel_patterns: GlobSet::empty(),
+            deny_channel_patterns: GlobSet::empty(),
         };
 
-        u.rebuild_key_patterns()?;
-        u.rebuild_deny_key_patterns()?;
-        u.rebuild_channel_patterns()?;
-        u.rebuild_deny_channel_patterns()?;
+        u.rebuild_all_patterns()?;
+        u.rebuild_all_deny_patterns()?;
 
         Ok(u)
     }
 
+    fn rebuild_globset(patterns: &[Glob]) -> Result<GlobSet, AclError> {
+        let mut b = GlobSetBuilder::new();
+        for g in patterns {
+            // включаем literal_separator для корректного матчинга
+            let pat = g.to_string();
+            let g = GlobBuilder::new(&pat)
+                .literal_separator(true)
+                .build()
+                .map_err(|_| AclError::InvalidAclRule(pat.clone()))?;
+            b.add(g);
+        }
+        b.build()
+            .map_err(|_| AclError::InvalidAclRule("globset build".into()))
+    }
+
+    fn rebuild_all_patterns(&mut self) -> Result<(), AclError> {
+        self.key_patterns = Self::rebuild_globset(&self.raw_key_patterns)?;
+        self.channel_patterns = Self::rebuild_globset(&self.raw_channel_patterns)?;
+        Ok(())
+    }
+
+    fn rebuild_all_deny_patterns(&mut self) -> Result<(), AclError> {
+        self.deny_key_patterns = Self::rebuild_globset(&self.raw_deny_key_patterns)?;
+        self.deny_channel_patterns = Self::rebuild_globset(&self.raw_deny_channel_patterns)?;
+        Ok(())
+    }
+
     /// Добавляет новый шаблон ключей для разрешения и помечает паттерны "dirty".
-    pub fn allow_key_pattern(&mut self, part: &str) -> Result<(), AclError> {
-        let g = Glob::new(part).map_err(|_| AclError::InvalidAclRule(part.into()))?;
+    pub fn allow_key_pattern(&mut self, pat: &str) -> Result<(), AclError> {
+        let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_key_patterns.push(g);
-        self.dirty_key = true;
-        self.no_custom_key_patterns = false;
+        // Пересобираем только ключи:
+        self.key_patterns = Self::rebuild_globset(&self.raw_key_patterns)?;
         Ok(())
     }
 
@@ -164,8 +171,8 @@ impl AclUser {
     pub fn deny_key_pattern(&mut self, pat: &str) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_key_patterns.push(g);
-        self.dirty_deny_key = true;
-        self.no_custom_deny_key_patterns = false;
+        // Пересобираем только deny-ключи:
+        self.deny_key_patterns = Self::rebuild_globset(&self.raw_deny_key_patterns)?;
         Ok(())
     }
 
@@ -173,8 +180,7 @@ impl AclUser {
     pub fn allow_channel_pattern(&mut self, pat: &str) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_channel_patterns.push(g);
-        self.dirty_channel = true;
-        self.no_custom_channel_patterns = false;
+        self.channel_patterns = Self::rebuild_globset(&self.raw_channel_patterns)?;
         Ok(())
     }
 
@@ -182,174 +188,84 @@ impl AclUser {
     pub fn deny_channel_pattern(&mut self, pat: &str) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_channel_patterns.push(g);
-        self.dirty_deny_channel = true;
-        self.no_custom_deny_channel_patterns = false;
-        Ok(())
-    }
-
-    /// Перестраивает компиляцию шаблонов для ключей.
-    fn rebuild_key_patterns(&mut self) -> Result<(), AclError> {
-        let mut b = GlobSetBuilder::new();
-        for g in &self.raw_key_patterns {
-            b.add(g.clone());
-        }
-        self.key_patterns = b
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("bad key glob".into()))?;
-        Ok(())
-    }
-
-    /// Перестраивает компиляцию шаблонов запрещённых ключей.
-    fn rebuild_deny_key_patterns(&mut self) -> Result<(), AclError> {
-        let mut b = GlobSetBuilder::new();
-        for g in &self.raw_deny_key_patterns {
-            b.add(g.clone());
-        }
-        self.deny_key_patterns = b
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("bad deny-key glob".into()))?;
-        Ok(())
-    }
-
-    /// Перестраивает компиляцию шаблонов для каналов.
-    fn rebuild_channel_patterns(&mut self) -> Result<(), AclError> {
-        let mut b = GlobSetBuilder::new();
-        for g in &self.raw_channel_patterns {
-            b.add(g.clone());
-        }
-        self.channel_patterns = b
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("bad channel glob".into()))?;
-        Ok(())
-    }
-
-    /// Перестраивает компиляцию шаблонов запрещённых каналов.
-    fn rebuild_deny_channel_patterns(&mut self) -> Result<(), AclError> {
-        let mut b = GlobSetBuilder::new();
-        for g in &self.raw_deny_channel_patterns {
-            b.add(g.clone());
-        }
-        self.deny_channel_patterns = b
-            .build()
-            .map_err(|_| AclError::InvalidAclRule("bad deny-channel glob".into()))?;
+        self.deny_channel_patterns = Self::rebuild_globset(&self.raw_deny_channel_patterns)?;
         Ok(())
     }
 
     /// Проверяет, имеет ли пользователь право выполнить команду.
     pub fn check_permission(&self, category: &str, command: &str) -> bool {
-        // Если пользователь отключён — сразу отказ.
         if !self.enabled {
             return false;
         }
-
-        // Определяем категорию.
         let cat = match category {
             "read" => CmdCategory::READ,
             "write" => CmdCategory::WRITE,
             "admin" => CmdCategory::ADMIN,
             _ => CmdCategory::empty(),
         };
-
-        // Приводим команду к нижнему регистру (для lookup в COMMAND_INDEX).
-        let cmd_lower = command.to_lowercase();
-
-        // Если команда известна (есть в COMMAND_INDEX) — работаем через битовые маски.
-        if let Some(&idx) = COMMAND_INDEX.get(cmd_lower.as_str()) {
+        let cmd = command.to_lowercase();
+        if let Some(&idx) = COMMAND_INDEX.get(cmd.as_str()) {
             let bit = 1u128 << idx;
-
-            // 1) Запрет имеет приоритет.
             if self.denied_commands & bit != 0 {
                 return false;
             }
-            // 2) Глобальная категория.
             if self.allowed_categories.contains(cat) {
                 return true;
             }
-            // 3) Специальное разрешение по биту.
             return self.allowed_commands & bit != 0;
         }
-
-        // Для неизвестных команд — только по категории.
         self.allowed_categories.contains(cat)
     }
 
     /// Проверяет, разрешён ли доступ к заданному ключу.
-    pub fn check_key(&mut self, key: &str) -> bool {
-        // самая первая горячая проверка:
-        // если у нас с момента new() не было ни одного кастомного паттерна
-        // и не было deny-паттернов — разрешаем ВСЁ сразу
-        if self.enabled && self.no_custom_key_patterns && self.no_custom_deny_key_patterns {
-            return true;
-        }
-        if self.dirty_key {
-            self.rebuild_key_patterns().unwrap();
-            self.dirty_key = false;
-        }
-        if self.dirty_deny_key {
-            self.rebuild_deny_key_patterns().unwrap();
-            self.dirty_deny_key = false;
-        }
+    pub fn check_key(&self, key: &str) -> bool {
         if !self.enabled {
             return false;
         }
-        // Сначала отрицательные шаблоны
         if self.deny_key_patterns.is_match(key) {
             return false;
         }
-        // Потом положительные
-        self.key_patterns.is_match(key)
+        if self.key_patterns.is_empty() {
+            true
+        } else {
+            self.key_patterns.is_match(key)
+        }
     }
 
     /// Проверяет доступность Pub/Sub-канала на основе заданных шаблонов.
-    pub fn check_channel(&mut self, channel: &str) -> bool {
-        // самая первая горячая проверка:
-        // если у нас с момента new() не было ни одного кастомного паттерна
-        // и не было deny-паттернов — разрешаем ВСЁ сразу
-        if self.enabled && self.no_custom_key_patterns && self.no_custom_deny_key_patterns {
-            return true;
-        }
-        if self.dirty_deny_channel {
-            self.rebuild_deny_channel_patterns().unwrap();
-            self.dirty_deny_channel = false;
-        }
-        if self.dirty_channel {
-            self.rebuild_channel_patterns().unwrap();
-            self.dirty_channel = false;
-        }
-
+    pub fn check_channel(&self, channel: &str) -> bool {
         if !self.enabled {
             return false;
         }
         if self.deny_channel_patterns.is_match(channel) {
             return false;
         }
-        self.channel_patterns.is_match(channel)
+        if self.channel_patterns.is_empty() {
+            true
+        } else {
+            self.channel_patterns.is_match(channel)
+        }
     }
 
     /// Сбрасывает все правила ACL, оставляя только username.
     pub fn reset_rules(&mut self) {
-        // Сброс флагов доступа и списков
+        // Выключаем пользователя и чистим команды
         self.enabled = false;
         self.password_hashes.clear();
         self.allowed_categories = CmdCategory::empty();
         self.allowed_commands = 0;
         self.denied_commands = 0;
 
-        // Очищаем "сырые" паттерны
+        // Очищаем все "сырые" паттерны
         self.raw_key_patterns.clear();
-        self.no_custom_key_patterns = false;
         self.raw_deny_key_patterns.clear();
-        self.no_custom_deny_key_patterns = false;
         self.raw_channel_patterns.clear();
-        self.no_custom_channel_patterns = false;
         self.raw_deny_channel_patterns.clear();
-        self.no_custom_deny_channel_patterns = false;
 
-        // Отмечаем, что все четыре набора паттернов нужно пересобрать при следующих проверках
-        self.dirty_key = true;
-        self.dirty_deny_key = true;
-        self.dirty_channel = true;
-        self.dirty_deny_channel = true;
+        // Мгновенно пересобираем пустые множества — теперь key_patterns и channel_patterns пусты,
+        // и check_key/check_channel всегда вернут false, пока не добавятся новые паттерны.
+        let _ = self.rebuild_all_patterns();
+        let _ = self.rebuild_all_deny_patterns();
     }
 }
 
@@ -360,13 +276,11 @@ impl Acl {
         let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
         // Получаем либо создаём пользователя
-        let user_arc = if let Some(entry) = self.users.get(username) {
-            entry.value().clone()
-        } else {
-            let arc = Arc::new(RwLock::new(AclUser::new(username)?));
-            self.users.insert(username.to_string(), arc.clone());
-            arc
-        };
+        let user_arc = self
+            .users
+            .entry(username.to_string())
+            .or_insert_with(|| Arc::new(RwLock::new(AclUser::new(username).unwrap())))
+            .clone();
 
         let mut user = user_arc.write().unwrap();
 
@@ -380,22 +294,19 @@ impl Acl {
                 AclRule::PasswordHash(h) => user.password_hashes.push(h),
                 AclRule::AllowCategory(c) => user.allowed_categories |= c,
                 AclRule::DenyCategory(c) => user.allowed_categories.remove(c),
-                AclRule::AllowCommand(idx) => {
-                    user.allowed_commands |= 1u128 << idx;
-                }
-                AclRule::DenyCommand(idx) => {
-                    user.denied_commands |= 1u128 << idx;
-                }
+                AclRule::AllowCommand(i) => user.allowed_commands |= 1u128 << i,
+                AclRule::DenyCommand(i) => user.denied_commands |= 1u128 << i,
                 AclRule::AllowKeyPattern(p) => user.allow_key_pattern(&p)?,
                 AclRule::DenyKeyPattern(p) => user.deny_key_pattern(&p)?,
                 AclRule::AllowChannelPattern(p) => user.allow_channel_pattern(&p)?,
                 AclRule::DenyChannelPattern(p) => user.deny_channel_pattern(&p)?,
-                AclRule::NoPass => {
-                    // nopass: не добавляем в password_hashes — authenticate увидит пустой список и пропустит логин
-                }
+                AclRule::NoPass => {}
             }
         }
 
+        // Eager-rebuild после всех изменений
+        user.rebuild_all_patterns()?;
+        user.rebuild_all_deny_patterns()?;
         Ok(())
     }
 
@@ -406,16 +317,15 @@ impl Acl {
 
     /// Удаляет пользователя ACL по его имени.
     pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
-        if self.users.remove(username).is_some() {
-            Ok(())
-        } else {
-            Err(AclError::UserNotFound)
-        }
+        self.users
+            .remove(username)
+            .map(|_| ())
+            .ok_or(AclError::UserNotFound)
     }
 
     /// Возвращает список имен всех зарегистрированных пользователей ACL.
     pub fn acl_users(&self) -> Vec<String> {
-        self.users.iter().map(|entry| entry.key().clone()).collect()
+        self.users.iter().map(|e| e.key().clone()).collect()
     }
 }
 
@@ -431,56 +341,44 @@ impl FromStr for AclRule {
         if s == "nopass" {
             return Ok(AclRule::NoPass);
         }
-
-        let first = s
-            .chars()
-            .next()
-            .ok_or_else(|| AclError::InvalidAclRule(s.into()))?;
-        let rest = &s[1..];
-
-        match first {
-            '>' => Ok(AclRule::PasswordHash(rest.to_string())),
-            '+' if rest.starts_with('@') => {
-                let cat = match &rest[1..] {
+        let (head, rest) = s.split_at(1);
+        match head {
+            ">" => Ok(AclRule::PasswordHash(rest.into())),
+            "+" if rest.starts_with('@') => {
+                let c = match &rest[1..] {
                     "read" => CmdCategory::READ,
                     "write" => CmdCategory::WRITE,
                     "admin" => CmdCategory::ADMIN,
-                    "all" => CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
+                    "all" => CmdCategory::all(),
                     o => return Err(AclError::InvalidAclRule(o.into())),
                 };
-                Ok(AclRule::AllowCategory(cat))
+                Ok(AclRule::AllowCategory(c))
             }
-            '+' => {
-                let cmd = rest.to_lowercase();
-                let &idx = COMMAND_INDEX
-                    .get(cmd.as_str())
-                    .ok_or_else(|| AclError::InvalidAclRule(cmd.clone()))?;
-                Ok(AclRule::AllowCommand(idx))
+            "+" => {
+                let idx = COMMAND_INDEX
+                    .get(&rest.to_lowercase()[..])
+                    .ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
+                Ok(AclRule::AllowCommand(*idx))
             }
-            '-' if rest.starts_with('@') => {
-                let cat = match &rest[1..] {
+            "-" if rest.starts_with('@') => {
+                let c = match &rest[1..] {
                     "read" => CmdCategory::READ,
                     "write" => CmdCategory::WRITE,
                     "admin" => CmdCategory::ADMIN,
                     o => return Err(AclError::InvalidAclRule(o.into())),
                 };
-                Ok(AclRule::DenyCategory(cat))
+                Ok(AclRule::DenyCategory(c))
             }
-            '-' => {
-                if rest.starts_with('~') {
-                    return Ok(AclRule::DenyKeyPattern(rest[1..].to_string()));
-                }
-                if rest.starts_with('&') {
-                    return Ok(AclRule::DenyChannelPattern(rest[1..].to_string()));
-                }
-                let cmd = rest.to_lowercase();
-                let &idx = COMMAND_INDEX
-                    .get(cmd.as_str())
-                    .ok_or_else(|| AclError::InvalidAclRule(cmd.clone()))?;
-                Ok(AclRule::DenyCommand(idx))
+            "-" if rest.starts_with('~') => Ok(AclRule::DenyKeyPattern(rest[1..].into())),
+            "-" if rest.starts_with('&') => Ok(AclRule::DenyChannelPattern(rest[1..].into())),
+            "-" => {
+                let idx = COMMAND_INDEX
+                    .get(&rest.to_lowercase()[..])
+                    .ok_or_else(|| AclError::InvalidAclRule(rest.into()))?;
+                Ok(AclRule::DenyCommand(*idx))
             }
-            '~' => Ok(AclRule::AllowKeyPattern(rest.to_string())),
-            '&' => Ok(AclRule::AllowChannelPattern(rest.to_string())),
+            "~" => Ok(AclRule::AllowKeyPattern(rest.into())),
+            "&" => Ok(AclRule::AllowChannelPattern(rest.into())),
             _ => Err(AclError::InvalidAclRule(s.into())),
         }
     }
@@ -496,7 +394,7 @@ mod tests {
     fn default_user_allows_everything() {
         // AclUser::new создаёт пользователя с enabled = true, разрешив все категории
         // и установив шаблоны "*", что позволяет доступ ко всему.
-        let mut user = AclUser::new("u").unwrap();
+        let user = AclUser::new("u").unwrap();
 
         // категории.
         assert!(user.check_permission("read", "wharever"));
@@ -551,7 +449,7 @@ mod tests {
             "&chan?",  // разрешаем каналы, соответствующие шаблону "chan?" (например, chan1, chanA)
         ];
         acl.acl_setuser("anton", &rules).unwrap();
-        let mut u = acl.acl_getuser("anton").unwrap();
+        let u = acl.acl_getuser("anton").unwrap();
 
         // ключи
         assert!(u.check_key("data:123"));
@@ -574,7 +472,7 @@ mod tests {
             "~*",    // универсальный шаблон для ключей
         ];
         acl.acl_setuser("anton", &rules).unwrap();
-        let mut u = acl.acl_getuser("anton").unwrap();
+        let u = acl.acl_getuser("anton").unwrap();
 
         assert!(!u.check_permission("read", "get"));
         assert!(!u.check_key("any"));
@@ -602,7 +500,7 @@ mod tests {
     /// Тест проверяет, что `AclUser::new` создаёт пользователя с корректными значениями по умолчанию.
     #[test]
     fn test_create_user_and_check_defaults() {
-        let mut user = AclUser::new("anton").unwrap();
+        let user = AclUser::new("anton").unwrap();
         assert_eq!(user.username, "anton");
         assert!(user.enabled);
         assert!(user.check_permission("read", "get"));
@@ -619,7 +517,7 @@ mod tests {
         acl.acl_setuser("anton", &["on", "+@read", "+get", "~x*"])
             .unwrap();
 
-        let mut user1 = acl.acl_getuser("anton").unwrap();
+        let user1 = acl.acl_getuser("anton").unwrap();
         assert!(user1.check_permission("read", "get"));
         assert!(user1.check_key("x42"));
         assert!(!user1.check_key("y42"));
@@ -628,7 +526,7 @@ mod tests {
         acl.acl_setuser("anton", &["on", "+@write", "-get", "~y*"])
             .unwrap();
 
-        let mut user2 = acl.acl_getuser("anton").unwrap();
+        let user2 = acl.acl_getuser("anton").unwrap();
         assert!(!user2.check_permission("read", "get")); // теперь запрещено
         assert!(user2.check_permission("write", "set"));
         assert!(user2.check_key("y99"));
@@ -664,12 +562,12 @@ mod tests {
             .unwrap();
 
         // Проверяем, что user1 имеет доступ к ключам, начинающимся с "data:"
-        let mut user1 = acl.acl_getuser("user1").unwrap();
+        let user1 = acl.acl_getuser("user1").unwrap();
         assert!(user1.check_key("data:123"));
         assert!(!user1.check_key("other:100"));
 
         // Проверяем, что user2 имеет доступ к каналам, начинающимся с "chan"
-        let mut user2 = acl.acl_getuser("user2").unwrap();
+        let user2 = acl.acl_getuser("user2").unwrap();
         assert!(user2.check_channel("chan1"));
         assert!(!user2.check_channel("channel"));
     }
@@ -688,7 +586,7 @@ mod tests {
         ];
         acl.acl_setuser("user", &rules).unwrap();
 
-        let mut u = acl.acl_getuser("user").unwrap();
+        let u = acl.acl_getuser("user").unwrap();
 
         // Проверяем разрешения
         assert!(u.check_permission("read", "get"));

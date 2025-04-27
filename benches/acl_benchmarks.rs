@@ -28,7 +28,7 @@ fn bench_check_key(c: &mut Criterion) {
     let acl = Acl::default();
     let rules = vec!["on", "~data:*"];
     acl.acl_setuser("anton", &rules).unwrap();
-    let mut user = acl.acl_getuser("anton").unwrap();
+    let user = acl.acl_getuser("anton").unwrap();
 
     group.bench_function("check_key(data:123)", |b| {
         b.iter(|| {
@@ -50,7 +50,7 @@ fn bench_check_channel(c: &mut Criterion) {
     let acl = Acl::default();
     let rules = vec!["on", "&chan?"];
     acl.acl_setuser("anton", &rules).unwrap();
-    let mut user = acl.acl_getuser("anton").unwrap();
+    let user = acl.acl_getuser("anton").unwrap();
 
     group.bench_function("check_channel(chan1)", |b| {
         b.iter(|| {
