@@ -1,6 +1,6 @@
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
@@ -20,8 +20,18 @@ bitflags::bitflags! {
     }
 }
 
+/// Список всех команд и их индексы для битовой маски.
+static COMMAND_INDEX: phf::Map<&'static str, usize> = phf::phf_map! {
+    "get" => 0,
+    "set" => 1,
+    "del" => 2,
+    "flushall" => 3,
+    // тут можно добавить в будущем остальные команды с уникаьным индексом.
+};
+
 /// Представляет одно ACL-правило, разобранное из строки конфигурации.
 #[derive(Debug)]
+#[repr(u8)]
 pub enum AclRule {
     /// Включить пользователя (`on`).
     On,
@@ -34,9 +44,9 @@ pub enum AclRule {
     /// Запретить всю категорию (`-@read`, `-@write`, `-@admin`).
     DenyCategory(CmdCategory),
     /// Разрешить конкретную команду (`+get`, `+del`).
-    AllowCommand(String),
+    AllowCommand(usize),
     /// Запретить конкретную команду (`-flushall`, `-mset`).
-    DenyCommand(String),
+    DenyCommand(usize),
     /// Добавить шаблон ключей (`~pattern`).
     AllowKeyPattern(String),
     /// Запретить шаблон ключей (`-~pattern`).
@@ -61,9 +71,9 @@ pub struct AclUser {
     /// Разрешённые категории команд.
     pub allowed_categories: CmdCategory,
     /// Разрешённые конкретные команды.
-    pub allowed_commands: HashSet<String>,
+    pub allowed_commands: u128,
     /// Запрещённые конкретные команды (например, `-flushall`).
-    pub denied_commands: HashSet<String>,
+    pub denied_commands: u128,
     /// "Сырые" шаблоны ключей в виде `Glob`.
     raw_key_patterns: Vec<Glob>,
     /// Скомпилированный набор шаблонов ключей.
@@ -80,6 +90,7 @@ pub struct AclUser {
     raw_deny_channel_patterns: Vec<Glob>,
     /// Скомпилированный набор запрещённых каналов.
     pub deny_channel_patterns: GlobSet,
+
     dirty_key: bool,
     dirty_deny_key: bool,
     dirty_channel: bool,
@@ -100,8 +111,9 @@ impl AclUser {
             enabled: true,
             password_hashes: Vec::new(),
             allowed_categories: CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
-            allowed_commands: HashSet::new(),
-            denied_commands: HashSet::new(),
+
+            allowed_commands: 0,
+            denied_commands: 0,
 
             raw_key_patterns: vec![Glob::new("*").unwrap()],
             key_patterns: GlobSetBuilder::new().build().unwrap(),
@@ -211,23 +223,40 @@ impl AclUser {
 
     /// Проверяет, имеет ли пользователь право выполнить команду.
     pub fn check_permission(&self, category: &str, command: &str) -> bool {
+        // Если пользователь отключён — сразу отказ.
         if !self.enabled {
             return false;
         }
-        let cmd = command.to_lowercase();
-        if self.denied_commands.contains(&cmd) {
-            return false;
-        }
+
+        // Определяем категорию.
         let cat = match category {
             "read" => CmdCategory::READ,
             "write" => CmdCategory::WRITE,
             "admin" => CmdCategory::ADMIN,
             _ => CmdCategory::empty(),
         };
-        if self.allowed_categories.contains(cat) {
-            return true;
+
+        // Приводим команду к нижнему регистру (для lookup в COMMAND_INDEX).
+        let cmd_lower = command.to_lowercase();
+
+        // Если команда известна (есть в COMMAND_INDEX) — работаем через битовые маски.
+        if let Some(&idx) = COMMAND_INDEX.get(cmd_lower.as_str()) {
+            let bit = 1u128 << idx;
+
+            // 1) Запрет имеет приоритет.
+            if self.denied_commands & bit != 0 {
+                return false;
+            }
+            // 2) Глобальная категория.
+            if self.allowed_categories.contains(cat) {
+                return true;
+            }
+            // 3) Специальное разрешение по биту.
+            return self.allowed_commands & bit != 0;
         }
-        self.allowed_commands.contains(&cmd)
+
+        // Для неизвестных команд — только по категории.
+        self.allowed_categories.contains(cat)
     }
 
     /// Проверяет, разрешён ли доступ к заданному ключу.
@@ -277,8 +306,8 @@ impl AclUser {
         self.enabled = false;
         self.password_hashes.clear();
         self.allowed_categories = CmdCategory::empty();
-        self.allowed_commands.clear();
-        self.denied_commands.clear();
+        self.allowed_commands = 0;
+        self.denied_commands = 0;
 
         // Очищаем "сырые" паттерны
         self.raw_key_patterns.clear();
@@ -319,11 +348,11 @@ impl Acl {
                 AclRule::PasswordHash(h) => user.password_hashes.push(h),
                 AclRule::AllowCategory(c) => user.allowed_categories |= c,
                 AclRule::DenyCategory(c) => user.allowed_categories.remove(c),
-                AclRule::AllowCommand(cmd) => {
-                    user.allowed_commands.insert(cmd);
+                AclRule::AllowCommand(idx) => {
+                    user.allowed_commands |= 1u128 << idx;
                 }
-                AclRule::DenyCommand(cmd) => {
-                    user.denied_commands.insert(cmd);
+                AclRule::DenyCommand(idx) => {
+                    user.denied_commands |= 1u128 << idx;
                 }
                 AclRule::AllowKeyPattern(p) => user.allow_key_pattern(&p)?,
                 AclRule::DenyKeyPattern(p) => user.deny_key_pattern(&p)?,
@@ -374,11 +403,13 @@ impl FromStr for AclRule {
         if s == "nopass" {
             return Ok(AclRule::NoPass);
         }
+
         let first = s
             .chars()
             .next()
             .ok_or_else(|| AclError::InvalidAclRule(s.into()))?;
         let rest = &s[1..];
+
         match first {
             '>' => Ok(AclRule::PasswordHash(rest.to_string())),
             '+' if rest.starts_with('@') => {
@@ -391,7 +422,13 @@ impl FromStr for AclRule {
                 };
                 Ok(AclRule::AllowCategory(cat))
             }
-            '+' => Ok(AclRule::AllowCommand(rest.to_lowercase())),
+            '+' => {
+                let cmd = rest.to_lowercase();
+                let &idx = COMMAND_INDEX
+                    .get(cmd.as_str())
+                    .ok_or_else(|| AclError::InvalidAclRule(cmd.clone()))?;
+                Ok(AclRule::AllowCommand(idx))
+            }
             '-' if rest.starts_with('@') => {
                 let cat = match &rest[1..] {
                     "read" => CmdCategory::READ,
@@ -401,9 +438,19 @@ impl FromStr for AclRule {
                 };
                 Ok(AclRule::DenyCategory(cat))
             }
-            '-' if rest.starts_with('~') => Ok(AclRule::DenyKeyPattern(rest[1..].to_string())),
-            '-' if rest.starts_with('&') => Ok(AclRule::DenyChannelPattern(rest[1..].to_string())),
-            '-' => Ok(AclRule::DenyCommand(rest.to_lowercase())),
+            '-' => {
+                if rest.starts_with('~') {
+                    return Ok(AclRule::DenyKeyPattern(rest[1..].to_string()));
+                }
+                if rest.starts_with('&') {
+                    return Ok(AclRule::DenyChannelPattern(rest[1..].to_string()));
+                }
+                let cmd = rest.to_lowercase();
+                let &idx = COMMAND_INDEX
+                    .get(cmd.as_str())
+                    .ok_or_else(|| AclError::InvalidAclRule(cmd.clone()))?;
+                Ok(AclRule::DenyCommand(idx))
+            }
             '~' => Ok(AclRule::AllowKeyPattern(rest.to_string())),
             '&' => Ok(AclRule::AllowChannelPattern(rest.to_string())),
             _ => Err(AclError::InvalidAclRule(s.into())),
@@ -688,7 +735,9 @@ mod tests {
         user.allow_key_pattern("kin*").unwrap();
         user.allow_channel_pattern("dzadza*").unwrap();
         user.password_hashes.push("h".into());
-        user.allowed_commands.insert("cmd".into());
+        // разрешаем команду "get" через битовую маску
+        let idx = *COMMAND_INDEX.get("get").unwrap();
+        user.allowed_commands |= 1u128 << idx;
         // сбрасываем
         user.reset_rules();
         // после reset любое разрешение должно быть запрещено.
