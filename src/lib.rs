@@ -27,4 +27,4 @@ pub use database::{Dict, QuickList, Sds, SkipList, SmartHash, Value};
 pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
 pub use error::{DecodeError, EncodeError, NetworkError, ParseError, StoreError, StoreResult};
 pub use network::{server, zsp};
-pub use pubsub::{Broker, Message, Subscriber};
+pub use pubsub::{Broker, Message, Subscription};

@@ -2,6 +2,6 @@ pub mod broker;
 pub mod message;
 pub mod subscriber;
 
-pub use broker::Broker;
-pub use message::Message;
-pub use subscriber::Subscriber;
+pub use broker::*;
+pub use message::*;
+pub use subscriber::*;
