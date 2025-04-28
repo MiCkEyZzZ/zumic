@@ -1,6 +1,5 @@
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {QuickList, Sds, SmartHash, Value},
+    StorageEngine, StoreError, {QuickList, Sds, SmartHash, Value},
 };
 
 use super::CommandExecute;
@@ -104,7 +103,7 @@ impl CommandExecute for HGetAllCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::memory::InMemoryStore;
+    use crate::InMemoryStore;
 
     use super::*;
 

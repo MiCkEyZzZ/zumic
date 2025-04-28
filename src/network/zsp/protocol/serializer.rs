@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
-use super::command::Response;
+use super::Response;
 use crate::{zsp::frame::zsp_types::ZSPFrame, Value};
 
 /// Сериализует ответ команды в формат ZSPFrame.

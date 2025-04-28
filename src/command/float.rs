@@ -1,6 +1,5 @@
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {Sds, Value},
+    StorageEngine, StoreError, {Sds, Value},
 };
 
 use super::CommandExecute;
@@ -71,7 +70,7 @@ impl CommandExecute for SetFloatCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::memory::InMemoryStore;
+    use crate::InMemoryStore;
 
     use super::*;
 

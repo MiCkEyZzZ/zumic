@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use super::storage::Storage;
+use super::Storage;
 use crate::{
     {Sds, Value}, {StoreError, StoreResult},
 };
@@ -84,7 +84,6 @@ impl Default for InMemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{types::Value, Sds};
 
     fn key(data: &str) -> Sds {
         Sds::from(data.as_bytes())

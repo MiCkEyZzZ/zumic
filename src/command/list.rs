@@ -1,6 +1,5 @@
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {QuickList, Sds, Value},
+    StorageEngine, StoreError, {QuickList, Sds, Value},
 };
 
 use super::CommandExecute;
@@ -158,7 +157,7 @@ impl CommandExecute for LRangeCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::memory::InMemoryStore;
+    use crate::InMemoryStore;
 
     // Вспомогательная функция для создания нового хранилища в памяти.
     fn create_store() -> StorageEngine {

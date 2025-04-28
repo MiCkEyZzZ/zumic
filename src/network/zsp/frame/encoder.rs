@@ -8,11 +8,10 @@
 
 use std::borrow::Cow;
 
-use crate::error::EncodeError;
+use crate::EncodeError;
 
 use super::{
-    decoder::{MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
-    zsp_types::ZSPFrame,
+    ZSPFrame, {MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
 };
 
 /// Структура энкодера для кодирования в формат ZSP.

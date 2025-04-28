@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {QuickList, Sds, SkipList, Value},
+    StorageEngine, StoreError, {QuickList, Sds, SkipList, Value},
 };
 
 use super::CommandExecute;
@@ -200,7 +199,7 @@ impl CommandExecute for ZRevRangeCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::{database::Sds, engine::memory::InMemoryStore};
+    use crate::{InMemoryStore, Sds};
 
     use super::*;
 

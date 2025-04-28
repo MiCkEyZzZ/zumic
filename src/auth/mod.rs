@@ -4,6 +4,7 @@ pub mod errors;
 pub mod manager;
 pub mod password;
 
-pub use acl::Acl;
-pub use config::ServerConfig;
-pub use manager::AuthManager;
+pub use acl::*;
+pub use config::*;
+pub use manager::*;
+pub use password::*;

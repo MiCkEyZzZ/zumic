@@ -7,7 +7,7 @@ use crate::{
     StoreResult, {Sds, Value},
 };
 
-use super::{memory::InMemoryStore, storage::Storage};
+use super::{InMemoryStore, Storage};
 
 pub enum StorageEngine {
     InMemory(InMemoryStore),
@@ -91,8 +91,6 @@ impl StorageEngine {
 
 #[cfg(test)]
 mod tests {
-    use crate::database::Sds;
-
     use super::*;
 
     fn key(data: &str) -> Sds {

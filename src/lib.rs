@@ -9,7 +9,10 @@ pub mod logging;
 pub mod network;
 pub mod pubsub;
 
-pub use auth::{Acl, AuthManager, ServerConfig};
+pub use auth::{
+    hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
+    UserConfig,
+};
 pub use command::{
     AppendCommand, AuthCommand, Command, CommandExecute, DecrByCommand, DecrByFloatCommand,
     DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, GetRangeCommand,
@@ -21,5 +24,7 @@ pub use command::{
     ZScoreCommand,
 };
 pub use database::{Dict, QuickList, Sds, SkipList, SmartHash, Value};
+pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
 pub use error::{DecodeError, EncodeError, NetworkError, ParseError, StoreError, StoreResult};
 pub use network::{server, zsp};
+pub use pubsub::{Broker, Message, Subscriber};

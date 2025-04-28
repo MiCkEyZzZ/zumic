@@ -3,13 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 
-use super::acl::{lookup_cmd_idx, parse_category};
 use super::{
-    acl::Acl,
-    config::ServerConfig,
     errors::{AclError, AuthError, PasswordError},
-    password::{hash_password, verify_password},
+    Acl, ServerConfig, {hash_password, verify_password},
 };
+use super::{lookup_cmd_idx, parse_category};
 
 /// Максимальное количество неудачных попыток входа перед временной блокировкой.
 const MAX_FAILS: u8 = 5;
@@ -221,6 +219,7 @@ impl Clone for AuthManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use tokio;
 
     use crate::auth::config::UserConfig;

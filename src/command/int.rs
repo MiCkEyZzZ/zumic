@@ -1,6 +1,5 @@
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {Sds, Value},
+    StorageEngine, StoreError, {Sds, Value},
 };
 
 use super::CommandExecute;
@@ -105,7 +104,7 @@ impl CommandExecute for DecrByCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::{database::Sds, engine::memory::InMemoryStore};
+    use crate::{InMemoryStore, Sds};
 
     use super::*;
 

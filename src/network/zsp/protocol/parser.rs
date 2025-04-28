@@ -1,4 +1,4 @@
-use super::command::Command as ZSPCommand;
+use super::Command as ZSPCommand;
 use crate::{
     zsp::frame::zsp_types::ZSPFrame,
     Command as StoreCommand, ParseError, {Sds, Value},

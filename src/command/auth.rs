@@ -1,4 +1,4 @@
-use crate::{engine::StorageEngine, Sds, StoreError, Value};
+use crate::{Sds, StorageEngine, StoreError, Value};
 
 use super::CommandExecute;
 
@@ -32,7 +32,7 @@ impl CommandExecute for AuthCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::memory::InMemoryStore;
+    use crate::InMemoryStore;
 
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())

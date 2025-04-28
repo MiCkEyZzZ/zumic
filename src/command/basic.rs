@@ -1,6 +1,5 @@
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {QuickList, Sds, Value},
+    StorageEngine, StoreError, {QuickList, Sds, Value},
 };
 
 use super::execute::CommandExecute;
@@ -168,12 +167,11 @@ impl CommandExecute for FlushDbCommand {
 #[cfg(test)]
 mod tests {
     use crate::{
-        command::{
+        {
             CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, RenameCommand,
             RenameNxCommand, SetNxCommand,
         },
-        database::{types::Value, Sds},
-        engine::{engine::StorageEngine, memory::InMemoryStore},
+        {InMemoryStore, StorageEngine}, {Sds, Value},
     };
 
     use super::{MGetCommand, MSetCommand, SetCommand};

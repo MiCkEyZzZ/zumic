@@ -14,9 +14,9 @@ use bytes::Buf;
 use memchr::memchr;
 use std::{borrow::Cow, collections::HashMap};
 
-use crate::error::DecodeError;
+use crate::DecodeError;
 
-use super::zsp_types::ZSPFrame;
+use super::ZSPFrame;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///

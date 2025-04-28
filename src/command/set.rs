@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    engine::engine::StorageEngine,
-    StoreError, {QuickList, Sds, Value},
+    StorageEngine, StoreError, {QuickList, Sds, Value},
 };
 
 use super::CommandExecute;
@@ -112,7 +111,7 @@ impl CommandExecute for SCardCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::memory::InMemoryStore;
+    use crate::InMemoryStore;
 
     use super::*;
 
