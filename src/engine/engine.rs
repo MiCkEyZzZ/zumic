@@ -4,8 +4,7 @@ use tracing::info;
 
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    database::{types::Value, Sds},
-    error::StoreResult,
+    StoreResult, {Sds, Value},
 };
 
 use super::{memory::InMemoryStore, storage::Storage};

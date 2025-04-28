@@ -1,4 +1,4 @@
-use crate::database::types::Value;
+use crate::Value;
 
 #[derive(Debug, Clone)]
 pub enum Command {

@@ -4,8 +4,7 @@ use dashmap::DashMap;
 
 use super::storage::Storage;
 use crate::{
-    database::{Sds, Value},
-    error::{StoreError, StoreResult},
+    {Sds, Value}, {StoreError, StoreResult},
 };
 
 /// `InMemoryStore` — потокобезопасное хранилище ключей и значений

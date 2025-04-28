@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{skip_list::SkipList, QuickList, Sds, SmartHash};
+use super::{QuickList, Sds, SkipList, SmartHash};
 
 /// Представляет обобщённое значение в движке хранения данных.
 ///

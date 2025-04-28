@@ -1,1 +1,0 @@
-{"sasha":{"username":"sasha","enabled":true,"password_hashes":["$argon2id$v=19$m=65536,t=3,p=6$qjrV/zqvRvkZEkpUlTrSmA$ux9yW+RHThIMLHTZLjXuxNKO5ok0rhTPo4cc9tjXHZg"],"allowed_categories":"READ","allowed_commands":["get"],"denied_commands":[],"serialized_key_patterns":[]}}

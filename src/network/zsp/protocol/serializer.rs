@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use super::command::Response;
-use crate::{database::Value, network::zsp::frame::zsp_types::ZSPFrame};
+use crate::{zsp::frame::zsp_types::ZSPFrame, Value};
 
 /// Сериализует ответ команды в формат ZSPFrame.
 pub fn serialize_response<'a>(response: Response) -> ZSPFrame<'a> {

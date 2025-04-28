@@ -1,6 +1,5 @@
 use crate::{
-    database::{Sds, Value},
-    error::StoreResult,
+    StoreResult, {Sds, Value},
 };
 
 /// Трейт `Storage` задаёт интерфейс для бэкендов хранилищ "ключ-значение".
