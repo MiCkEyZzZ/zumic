@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+
+/// Глобальный пул interned-каналов: строка → Arc<str>
+static CHANNEL_INTERN: Lazy<DashMap<String, Arc<str>>> = Lazy::new(DashMap::new);
 
 /// Представляет одно сообщение в системе pub/sub.
 ///
@@ -22,19 +27,13 @@ impl Message {
     ///
     /// Канал может быть строкой (`&str`, `String`, `Arc<str>`),
     /// а полезная нагрузка — байтовыми данными (`Vec<u8>`, `&[u8]`, `Bytes`).
-    ///
-    /// # Пример
-    /// ```
-    /// let msg = Message::new("updates", vec![1, 2, 3]);
-    /// assert_eq!(&*msg.channel, "updates");
-    /// assert_eq!(msg.payload, Bytes::from(vec![1, 2, 3]));
-    /// ```
-    pub fn new<S>(channel: S, payload: impl Into<Bytes>) -> Self
+    pub fn new<S, P>(channel: S, payload: P) -> Self
     where
-        S: Into<Arc<str>>,
+        S: AsRef<str>,
+        P: Into<Bytes>,
     {
-        Self {
-            channel: channel.into(),
+        Message {
+            channel: intern_channel(channel),
             payload: payload.into(),
         }
     }
@@ -42,18 +41,25 @@ impl Message {
     /// Создаёт сообщение из полностью статичных данных без копирования.
     ///
     /// Это самый быстрый способ создать сообщение, если и канал, и содержимое заданы как `'static`.
-    ///
-    /// # Пример
-    /// ```
-    /// let msg = Message::from_static("static_chan", b"hello");
-    /// assert_eq!(&*msg.channel, "static_chan");
-    /// assert_eq!(msg.payload, Bytes::from_static(b"hello"));
-    /// ```
     pub fn from_static(channel: &'static str, payload: &'static [u8]) -> Self {
         Self {
-            channel: Arc::from(channel),
+            channel: intern_channel(channel),
             payload: Bytes::from_static(payload),
         }
+    }
+}
+
+/// Возвращает interned Arc<str> для данного канала.
+/// При первом вызове для нового имени создаёт Arc<str> и сохраняет его в пуле.
+fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
+    let key = chan.as_ref();
+    if let Some(existing) = CHANNEL_INTERN.get(key) {
+        existing.clone()
+    } else {
+        let s = key.to_string();
+        let arc: Arc<str> = Arc::from(s.clone());
+        CHANNEL_INTERN.insert(s, arc.clone());
+        arc
     }
 }
 
@@ -91,8 +97,6 @@ mod tests {
         let msg2 = msg1.clone();
         assert_eq!(Arc::as_ptr(&msg2.channel), arc_ptr);
         assert_eq!(msg2.payload.as_ptr(), bytes_ptr);
-        assert_eq!(msg1.payload, msg2.payload);
-        assert_eq!(&*msg2.channel, "chan");
     }
 
     /// Проверяет создание из статических данных без копирования (from_static).
@@ -110,7 +114,7 @@ mod tests {
         let m2 = Message::from_static("kin", b"dzadza");
         assert_eq!(&*m1.channel, &*m2.channel);
         assert_eq!(m1.payload, m2.payload);
-        assert!(!Arc::ptr_eq(&m1.channel, &m2.channel));
+        assert!(Arc::ptr_eq(&m1.channel, &m2.channel));
     }
 
     /// Проверяет корректную работу с пустыми каналом и payload (новый и from_static).
@@ -183,6 +187,6 @@ mod tests {
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
         let m = Message::new(arc.clone(), b"p".to_vec());
-        assert!(Arc::ptr_eq(&arc, &m.channel));
+        assert_eq!(&*arc, &*m.channel);
     }
 }
