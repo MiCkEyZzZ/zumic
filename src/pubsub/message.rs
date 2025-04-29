@@ -2,14 +2,33 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
+/// Представляет одно сообщение в системе pub/sub.
+///
+/// Содержит:
+/// - имя канала, через который сообщение было отправлено;
+/// - полезную нагрузку сообщения в виде байтов.
+///
+/// Используется как в обычной подписке (`SUBSCRIBE`), так и в шаблонной (`PSUBSCRIBE`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
+    /// Канал, в который было отправлено сообщение.
     pub channel: Arc<str>,
+    /// Содержимое сообщения.
     pub payload: Bytes,
 }
 
 impl Message {
-    /// Создаёт сообщение из любого `String` или `&str` и `Bytes`/`Vec<u8>`.
+    /// Создаёт новое сообщение из канала и полезной нагрузки.
+    ///
+    /// Канал может быть строкой (`&str`, `String`, `Arc<str>`),
+    /// а полезная нагрузка — байтовыми данными (`Vec<u8>`, `&[u8]`, `Bytes`).
+    ///
+    /// # Пример
+    /// ```
+    /// let msg = Message::new("updates", vec![1, 2, 3]);
+    /// assert_eq!(&*msg.channel, "updates");
+    /// assert_eq!(msg.payload, Bytes::from(vec![1, 2, 3]));
+    /// ```
     pub fn new<S>(channel: S, payload: impl Into<Bytes>) -> Self
     where
         S: Into<Arc<str>>,
@@ -20,7 +39,16 @@ impl Message {
         }
     }
 
-    /// Быстрый путь для полностью статичных сообщений (zero-copy).
+    /// Создаёт сообщение из полностью статичных данных без копирования.
+    ///
+    /// Это самый быстрый способ создать сообщение, если и канал, и содержимое заданы как `'static`.
+    ///
+    /// # Пример
+    /// ```
+    /// let msg = Message::from_static("static_chan", b"hello");
+    /// assert_eq!(&*msg.channel, "static_chan");
+    /// assert_eq!(msg.payload, Bytes::from_static(b"hello"));
+    /// ```
     pub fn from_static(channel: &'static str, payload: &'static [u8]) -> Self {
         Self {
             channel: Arc::from(channel),
