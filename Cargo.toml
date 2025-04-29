@@ -48,5 +48,5 @@ criterion = { version = "0.5", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-name = "message_benchmarks"
+name = "broker_benchmarks"
 harness = false
