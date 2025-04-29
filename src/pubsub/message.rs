@@ -33,6 +33,7 @@ impl Message {
 mod tests {
     use super::*;
 
+    /// Проверяет создание сообщения из строки и вектора: правильность канала и преобразование payload в Bytes.
     #[test]
     fn test_from_and_vec() {
         let ch = "news";
@@ -42,6 +43,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from(pl_vec));
     }
 
+    /// Проверяет создание из String и Bytes, включая совпадение ссылок и содержимого.
     #[test]
     fn new_from_string_and_bytes() {
         let ch_string = String::from("updates");
@@ -51,6 +53,7 @@ mod tests {
         assert_eq!(msg.payload, pl_bytes);
     }
 
+    /// Проверяет, что клон сохраняет указатели (Arc и Bytes) без копирования.
     #[test]
     fn clone_preserves_arc_and_bytes_zero_copy() {
         let msg1 = Message::new("chan", Bytes::from_static(b"x"));
@@ -58,35 +61,31 @@ mod tests {
         let bytes_ptr = msg1.payload.as_ptr();
 
         let msg2 = msg1.clone();
-        // Проверяем, что ptr канала совпадает с оригиналом
         assert_eq!(Arc::as_ptr(&msg2.channel), arc_ptr);
-        // Проверяем, что Bytes тоже не копирует данные
         assert_eq!(msg2.payload.as_ptr(), bytes_ptr);
         assert_eq!(msg1.payload, msg2.payload);
         assert_eq!(&*msg2.channel, "chan");
     }
 
+    /// Проверяет создание из статических данных без копирования (from_static).
     #[test]
     fn from_static_zero_copy() {
         let msg = Message::from_static("static_chan", b"data");
-        // channel is &'static str inside Arc
         assert_eq!(&*msg.channel, "static_chan");
-        // payload is from_static
         assert_eq!(msg.payload, Bytes::from_static(b"data"));
     }
 
+    /// Сравнивает поведение `new` и `from_static`: каналы равны по значению, но не по указателям.
     #[test]
     fn mix_new_and_from_static() {
         let m1 = Message::new("kin", b"dzadza".to_vec());
         let m2 = Message::from_static("kin", b"dzadza");
-        // channel strings equal
         assert_eq!(&*m1.channel, &*m2.channel);
-        // payloads equal
         assert_eq!(m1.payload, m2.payload);
-        // but Arc pointers likely differ
         assert!(!Arc::ptr_eq(&m1.channel, &m2.channel));
     }
 
+    /// Проверяет корректную работу с пустыми каналом и payload (новый и from_static).
     #[test]
     fn empty_channel_and_payload() {
         let m = Message::new("", Vec::<u8>::new());
@@ -98,21 +97,20 @@ mod tests {
         assert!(m_static.payload.is_empty());
     }
 
+    /// Проверяет создание сообщения из среза и Bytes, сравнивает payload.
     #[test]
     fn new_from_slice_and_bytes_clone() {
         let slice = b"slice_data";
         let bytes = Bytes::from_static(b"bytes_data");
 
-        // &[u8] → Bytes через impl From<&[u8]>
         let m1 = Message::new("chan1", slice as &[u8]);
-
-        // для Bytes нужно передавать сам объект или его клон
         let m2 = Message::new("chan2", bytes.clone());
 
         assert_eq!(m1.payload, Bytes::from_static(slice));
         assert_eq!(m2.payload, bytes);
     }
 
+    /// Проверяет создание из вектора и среза байтов, сравнивает payload с ожидаемым.
     #[test]
     fn new_from_vec_and_static() {
         let v = vec![9u8; 10];
@@ -123,6 +121,7 @@ mod tests {
         assert_eq!(m2.payload, Bytes::from_static(s));
     }
 
+    /// Проверяет, что два сообщения с одинаковыми каналами и payload равны.
     #[test]
     fn message_equality() {
         let a = Message::new("a", b"x".to_vec());
@@ -130,6 +129,7 @@ mod tests {
         assert_eq!(a, b);
     }
 
+    /// Проверяет, что формат Debug содержит канал и payload.
     #[test]
     fn debug_contains_channel_and_payload() {
         let m = Message::new("dbg", b"z".to_vec());
@@ -139,6 +139,7 @@ mod tests {
         assert!(s.contains("dbg"));
     }
 
+    /// Проверяет, что клон большого payload не копирует данные (zero-copy).
     #[test]
     fn large_payload_clone_zero_copy() {
         let big = vec![0u8; 1_000_000];
@@ -149,6 +150,7 @@ mod tests {
         assert_eq!(m2.payload.len(), big.len());
     }
 
+    /// Проверяет, что при создании из Arc<str> указатель сохраняется.
     #[test]
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
