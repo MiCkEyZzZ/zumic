@@ -163,11 +163,8 @@ impl CommandExecute for FlushDbCommand {
 #[cfg(test)]
 mod tests {
     use crate::{
-        {
-            CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, RenameCommand,
-            RenameNxCommand, SetNxCommand,
-        },
-        {InMemoryStore, StorageEngine}, {Sds, Value},
+        CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, InMemoryStore,
+        RenameCommand, RenameNxCommand, Sds, SetNxCommand, StorageEngine, Value,
     };
 
     use super::{MGetCommand, MSetCommand, SetCommand};

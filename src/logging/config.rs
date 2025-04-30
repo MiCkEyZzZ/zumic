@@ -1,5 +1,6 @@
-use crate::logging::{filters, formatter, sinks};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
+
+use super::{filters, formatter, sinks};
 
 pub fn init_logging() {
     let env_filter = filters::build_filter();

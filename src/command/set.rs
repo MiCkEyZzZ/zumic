@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
+use crate::{QuickList, Sds, StorageEngine, StoreError, Value};
+
+use super::CommandExecute;
 
 #[derive(Debug)]
 pub struct SAddCommand {

@@ -50,5 +50,5 @@ opt-level = 3
 [[bench]]
 # name = "message_benchmarks"
 # name = "subscription_benchmarks"
-name = "broker_benchmarks"
+name = "subscription_benchmarks"
 harness = false

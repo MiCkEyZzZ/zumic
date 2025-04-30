@@ -7,7 +7,7 @@ use super::{lookup_cmd_idx, parse_category};
 use super::{
     Acl, ServerConfig, {hash_password, verify_password},
 };
-use crate::{AclError, AclPort, AuthError, PasswordError};
+use crate::{AclError, AuthError, PasswordError};
 
 /// Максимальное количество неудачных попыток входа перед временной блокировкой.
 const MAX_FAILS: u8 = 5;

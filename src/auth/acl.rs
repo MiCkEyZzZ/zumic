@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
-use crate::{AclError, AclPort};
+use crate::AclError;
 
 /// Глобальный "всегда разрешающий" паттерн.
 static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());
@@ -149,7 +149,7 @@ impl AclUser {
         Ok(u)
     }
 
-    fn rebuild_globset(patterns: &[Glob]) -> Result<GlobSet, AclError> {
+    pub fn rebuild_globset(patterns: &[Glob]) -> Result<GlobSet, AclError> {
         let mut b = GlobSetBuilder::new();
         for g in patterns {
             b.add(g.clone());
@@ -158,13 +158,13 @@ impl AclUser {
             .map_err(|_| AclError::InvalidAclRule("globset build".into()))
     }
 
-    fn rebuild_all_patterns(&mut self) -> Result<(), AclError> {
+    pub fn rebuild_all_patterns(&mut self) -> Result<(), AclError> {
         self.key_patterns = Self::rebuild_globset(&self.raw_key_patterns)?;
         self.channel_patterns = Self::rebuild_globset(&self.raw_channel_patterns)?;
         Ok(())
     }
 
-    fn rebuild_all_deny_patterns(&mut self) -> Result<(), AclError> {
+    pub fn rebuild_all_deny_patterns(&mut self) -> Result<(), AclError> {
         self.deny_key_patterns = Self::rebuild_globset(&self.raw_deny_key_patterns)?;
         self.deny_channel_patterns = Self::rebuild_globset(&self.raw_deny_channel_patterns)?;
         Ok(())
@@ -276,9 +276,9 @@ impl AclUser {
     }
 }
 
-impl AclPort for Acl {
+impl Acl {
     /// Устанавливает или обновляет пользователя с набором правил ACL.
-    fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
+    pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
         // Сначала парсим все строки-правила в enum-значения
         let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
@@ -318,12 +318,12 @@ impl AclPort for Acl {
     }
 
     /// Возвращает копию данных пользователя ACL по его имени.
-    fn acl_getuser(&self, username: &str) -> Option<AclUser> {
+    pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
         self.users.get(username).map(|u| u.read().unwrap().clone())
     }
 
     /// Удаляет пользователя ACL по его имени.
-    fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
+    pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
         self.users
             .remove(username)
             .map(|_| ())
@@ -331,7 +331,7 @@ impl AclPort for Acl {
     }
 
     /// Возвращает список имен всех зарегистрированных пользователей ACL.
-    fn acl_users(&self) -> Vec<String> {
+    pub fn acl_users(&self) -> Vec<String> {
         self.users.iter().map(|e| e.key().clone()).collect()
     }
 }

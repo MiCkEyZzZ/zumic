@@ -1,8 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use zumic::{
-    auth::acl::{lookup_cmd_idx, parse_category, Acl},
-    AclPort,
-};
+use zumic::auth::acl::{lookup_cmd_idx, parse_category, Acl};
 
 fn bench_check_permission(c: &mut Criterion) {
     let mut group = c.benchmark_group("check_idx");

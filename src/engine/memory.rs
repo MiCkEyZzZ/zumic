@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use crate::{Sds, StoragePort, StoreError, StoreResult, Value};
+use crate::{Sds, Storage, StoreError, StoreResult, Value};
 
 /// `InMemoryStore` — потокобезопасное хранилище ключей и значений
 /// с использованием `DashMap` и `Arc`.
@@ -18,7 +18,7 @@ impl InMemoryStore {
     }
 }
 
-impl StoragePort for InMemoryStore {
+impl Storage for InMemoryStore {
     fn set(&mut self, key: Sds, value: Value) -> StoreResult<()> {
         self.data.insert(key, value);
         Ok(())

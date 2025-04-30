@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use zumic::{Broker, PubSubPort, Subscription, SubscriptionPort};
+use zumic::{Broker, Subscription};
 
 // Подставьте здесь ваше имя крайта и пути к модулям:
 
