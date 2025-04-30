@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
-use super::intern::intern_channel;
+use super::intern_channel;
 
 /// Представляет одно сообщение в системе pub/sub.
 ///

@@ -9,7 +9,8 @@ static CHANNEL_INTERN: Lazy<DashMap<String, Arc<str>>> = Lazy::new(DashMap::new)
 
 /// Возвращает interned Arc<str> для данного канала.
 /// При первом вызове для нового имени создаёт Arc<str> и сохраняет его в пуле.
-pub fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
+#[inline(always)]
+pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
     let key = chan.as_ref();
     if let Some(existing) = CHANNEL_INTERN.get(key) {
         existing.clone()
