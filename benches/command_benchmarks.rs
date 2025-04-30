@@ -1,8 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use zumic::{
-    command::{CommandExecute, DelCommand, GetCommand, MGetCommand, MSetCommand, SetCommand},
+    command::{DelCommand, GetCommand, MGetCommand, MSetCommand, SetCommand},
     database::{Sds, Value},
     engine::{engine::StorageEngine, memory::InMemoryStore},
+    CommandExecute,
 };
 
 fn bench_set_command(c: &mut Criterion) {

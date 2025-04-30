@@ -8,6 +8,8 @@ use dashmap::DashMap;
 use globset::Glob;
 use tokio::sync::broadcast;
 
+use crate::PubSubPort;
+
 use super::{intern_channel, Message, PatternSubscription, Subscription};
 
 type ChannelKey = Arc<str>;
@@ -44,11 +46,13 @@ impl Broker {
             send_error_count: AtomicUsize::new(0),
         }
     }
+}
 
+impl PubSubPort for Broker {
     /// Подписка по шаблону (glob), например `"kin.*"` или `"a?c"`.
     ///
     /// Повторная подписка на тот же шаблон получит тот же `Sender`.
-    pub fn psubscribe(&self, pattern: &str) -> Result<PatternSubscription, globset::Error> {
+    fn psubscribe(&self, pattern: &str) -> Result<PatternSubscription, globset::Error> {
         let glob = Glob::new(pattern)?;
         let tx = self
             .patterns
@@ -62,7 +66,7 @@ impl Broker {
     }
 
     /// Отписка от шаблона. Удаляет соответствующий `Sender`.
-    pub fn punsubscribe(&self, pattern: &str) -> Result<(), globset::Error> {
+    fn punsubscribe(&self, pattern: &str) -> Result<(), globset::Error> {
         let glob = Glob::new(pattern)?;
         self.patterns.remove(&glob);
         Ok(())
@@ -71,7 +75,7 @@ impl Broker {
     /// Подписка на конкретный канал (точное совпадение).
     ///
     /// Создаёт `Arc<str>` ключ при первой подписке.
-    pub fn subscribe(&self, channel: &str) -> Subscription {
+    fn subscribe(&self, channel: &str) -> Subscription {
         let key: Arc<str> = intern_channel(channel);
         let tx = self
             .channels
@@ -92,7 +96,7 @@ impl Broker {
     ///
     /// Если в точном канале нет подписчиков — увеличивает `send_error_count`
     /// и удаляет канал.
-    pub fn publish(&self, channel: &str, payload: Bytes) {
+    fn publish(&self, channel: &str, payload: Bytes) {
         self.publish_count.fetch_add(1, Ordering::Relaxed);
 
         // 1) точное совпадение
@@ -123,13 +127,15 @@ impl Broker {
     /// Удаляет все подписки на указанный канал (и сам канал).
     ///
     /// Следующая `publish` не создаст канал заново.
-    pub fn unsubscribe_all(&self, channel: &str) {
+    fn unsubscribe_all(&self, channel: &str) {
         self.channels.remove(channel);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::SubscriptionPort;
+
     use super::*;
     use bytes::Bytes;
     use tokio::sync::broadcast::error::RecvError;

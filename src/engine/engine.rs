@@ -4,10 +4,10 @@ use tracing::info;
 
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    StoreResult, {Sds, Value},
+    Sds, Storage, StoreResult, Value,
 };
 
-use super::{InMemoryStore, Storage};
+use super::InMemoryStore;
 
 pub enum StorageEngine {
     InMemory(InMemoryStore),

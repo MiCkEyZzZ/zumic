@@ -1,8 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use zumic::{
-    command::{CommandExecute, DecrByCommand, DecrCommand, IncrByCommand, IncrCommand},
+    command::{DecrByCommand, DecrCommand, IncrByCommand, IncrCommand},
     database::{Sds, Value},
     engine::{engine::StorageEngine, memory::InMemoryStore},
+    CommandExecute,
 };
 
 fn key(data: &str) -> Sds {

@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use super::Storage;
-use crate::{
-    {Sds, Value}, {StoreError, StoreResult},
-};
+use crate::{Sds, Storage, StoreError, StoreResult, Value};
 
 /// `InMemoryStore` — потокобезопасное хранилище ключей и значений
 /// с использованием `DashMap` и `Arc`.

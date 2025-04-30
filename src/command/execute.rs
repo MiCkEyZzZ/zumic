@@ -1,4 +1,4 @@
-use crate::{StorageEngine, StoreError, Value};
+use crate::{CommandExecute, StorageEngine, StoreError, Value};
 
 use super::{
     AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
@@ -9,10 +9,6 @@ use super::{
     SRemCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand,
     ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
-
-pub trait CommandExecute: std::fmt::Debug {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError>;
-}
 
 #[derive(Debug)]
 pub enum Command {

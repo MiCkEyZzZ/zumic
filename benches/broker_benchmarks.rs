@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use zumic::{Broker, Subscription};
+use zumic::{Broker, PubSubPort, Subscription};
 
 fn bench_subscribe(c: &mut Criterion) {
     let broker = Broker::new(100);

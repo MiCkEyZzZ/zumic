@@ -1,6 +1,4 @@
-use crate::{Sds, StorageEngine, StoreError, Value};
-
-use super::CommandExecute;
+use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct AuthCommand {

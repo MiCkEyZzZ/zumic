@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::{
-    command::{
-        list::{LLenCommand, LPopCommand, LPushCommand, LRangeCommand, RPopCommand, RPushCommand},
-        CommandExecute,
+    command::list::{
+        LLenCommand, LPopCommand, LPushCommand, LRangeCommand, RPopCommand, RPushCommand,
     },
     engine::{engine::StorageEngine, memory::InMemoryStore},
+    CommandExecute,
 };
 
 fn bench_lpush(c: &mut Criterion) {

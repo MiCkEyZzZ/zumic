@@ -1,8 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::{
-    command::{AppendCommand, CommandExecute, GetRangeCommand, StrLenCommand},
+    command::{AppendCommand, GetRangeCommand, StrLenCommand},
     database::{Sds, Value},
     engine::{engine::StorageEngine, memory::InMemoryStore},
+    CommandExecute,
 };
 
 fn setup_store_with_str(key: &str, value: &str) -> StorageEngine {

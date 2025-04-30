@@ -4,6 +4,7 @@ use globset::Glob;
 use tokio::sync::broadcast;
 
 use super::Message;
+use crate::SubscriptionPort;
 
 /// Подписка на конкретный канал pub/sub.
 ///
@@ -31,32 +32,32 @@ pub struct PatternSubscription {
     pub inner: broadcast::Receiver<Message>,
 }
 
-impl Subscription {
+impl SubscriptionPort for Subscription {
     /// Возвращает изменяемую ссылку на внутренний [`broadcast::Receiver`],
     /// с помощью которой можно вызывать `.recv().await`.
-    pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
+    fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
 
     /// Явная отписка от канала. Эквивалентна `drop(self)`.
     ///
     /// После вызова перестаёт получать сообщения.
-    pub fn unsubscribe(self) {
+    fn unsubscribe(self) {
         // ничего не нужно делать: при дропе inner Receiver убирается из broadcast
     }
 }
 
-impl PatternSubscription {
+impl SubscriptionPort for PatternSubscription {
     /// Возвращает изменяемую ссылку на внутренний [`broadcast::Receiver`],
     /// с помощью которой можно вызывать `.recv().await`.
-    pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
+    fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
 
     /// Явная отписка от шаблонной подписки.
     ///
     /// После вызова перестаёт получать сообщения по соответствующему шаблону.
-    pub fn unsubscribe(self) {
+    fn unsubscribe(self) {
         // дропаем — broadcast уберёт Receiver
     }
 }
@@ -69,9 +70,7 @@ mod tests {
     use globset::Glob;
     use tokio::{sync::broadcast, time::timeout};
 
-    use crate::{pubsub::PatternSubscription, Subscription};
-
-    use super::super::Broker;
+    use crate::{pubsub::PatternSubscription, Broker, PubSubPort, Subscription, SubscriptionPort};
 
     /// Проверяет, что подписка сохраняет правильное имя канала.
     #[tokio::test]

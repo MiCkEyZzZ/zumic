@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::Storage;
+use crate::Storage;
 
 #[derive(Clone)]
 pub struct ClusterStore {

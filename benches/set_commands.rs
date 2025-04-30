@@ -1,10 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::{
-    command::{
-        set::{SAddCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
-        CommandExecute,
-    },
+    command::set::{SAddCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
     engine::{engine::StorageEngine, memory::InMemoryStore},
+    CommandExecute,
 };
 
 fn bench_sadd(c: &mut Criterion) {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use zumic::zsp::frame::{decoder::ZSPDecoder, encoder::ZSPEncoder, zsp_types::ZSPFrame};
+use zumic::zsp::frame::{ZSPDecoder, ZSPEncoder, ZSPFrame};
 
 #[test]
 fn test_roundtrip_inline_string() {
