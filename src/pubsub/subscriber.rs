@@ -34,12 +34,6 @@ pub struct PatternSubscription {
 impl Subscription {
     /// Возвращает изменяемую ссылку на внутренний [`broadcast::Receiver`],
     /// с помощью которой можно вызывать `.recv().await`.
-    ///
-    /// # Пример
-    /// ```
-    /// let mut sub = broker.subscribe("channel");
-    /// let msg = sub.receiver().recv().await?;
-    /// ```
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
@@ -55,12 +49,6 @@ impl Subscription {
 impl PatternSubscription {
     /// Возвращает изменяемую ссылку на внутренний [`broadcast::Receiver`],
     /// с помощью которой можно вызывать `.recv().await`.
-    ///
-    /// # Пример
-    /// ```
-    /// let mut psub = broker.psubscribe("kin*");
-    /// let msg = psub.receiver().recv().await?;
-    /// ```
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }

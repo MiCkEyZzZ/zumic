@@ -1,4 +1,5 @@
 pub mod broker;
+pub mod intern;
 pub mod message;
 pub mod subscriber;
 

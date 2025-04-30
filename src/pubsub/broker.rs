@@ -8,7 +8,7 @@ use dashmap::DashMap;
 use globset::Glob;
 use tokio::sync::broadcast;
 
-use super::{Message, PatternSubscription, Subscription};
+use super::{intern::intern_channel, Message, PatternSubscription, Subscription};
 
 type ChannelKey = Arc<str>;
 type PatternKey = Glob;
@@ -72,7 +72,7 @@ impl Broker {
     ///
     /// Создаёт `Arc<str>` ключ при первой подписке.
     pub fn subscribe(&self, channel: &str) -> Subscription {
-        let key: Arc<str> = Arc::from(channel);
+        let key: Arc<str> = intern_channel(channel);
         let tx = self
             .channels
             .entry(key.clone())
