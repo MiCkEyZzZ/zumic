@@ -172,4 +172,28 @@ mod tests {
         let m = Message::new(arc.clone(), b"p".to_vec());
         assert_eq!(&*arc, &*m.channel);
     }
+
+    /// Проверяет, что вызовы `from_static` с одинаковым именем канала
+    /// возвращают один и тот же `Arc<str>`, несмотря на разные payload.
+    #[test]
+    fn static_messages_share_pointer() {
+        let m1 = Message::from_static("stat", b"1");
+        let m2 = Message::from_static("stat", b"2"); // payload отличается, но канал один и тот же
+        assert!(
+            Arc::ptr_eq(&m1.channel, &m2.channel),
+            "Одинаковые статичные каналы должны интернироваться в один Arc"
+        );
+    }
+
+    /// Проверяет, что `Message::new` и `Message::from_static` с одинаковым именем
+    /// используют один и тот же interned `Arc<str>` для канала.
+    #[test]
+    fn new_and_from_static_share_pointer() {
+        let m1 = Message::new("mix", b"kin".to_vec());
+        let m2 = Message::from_static("mix", b"dza");
+        assert!(
+            Arc::ptr_eq(&m1.channel, &m2.channel),
+            "new и from_static с одинаковым именем должны возвращать один Arc"
+        );
+    }
 }

@@ -24,6 +24,8 @@ pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use super::*;
 
     /// Проверяет, что при первом вызове создаётся Arc<str> с правильным содержимым,
@@ -62,5 +64,27 @@ mod tests {
         let a1 = intern_channel(&s as &str);
         let a2 = intern_channel("hello");
         assert!(Arc::ptr_eq(&a1, &a2), "Arc должен выдаваться единообразно");
+    }
+
+    /// Проверяет, что при конкурентных вызовах `intern_channel`
+    /// для одинаковых строк в разных потоках возвращается один и тот же `Arc<str>`.
+    #[test]
+    fn intern_concurrent() {
+        let keys = ["a", "b", "a", "c", "b", "a"];
+        let handles: Vec<_> = keys
+            .iter()
+            .map(|&k| thread::spawn(move || intern_channel(k)))
+            .collect();
+
+        let arcs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+        // все "a" каналы должны указывать на один Arc.
+        let a1 = arcs[0].clone();
+        for arc in arcs.iter().filter(|&&ref x| &**x == "a") {
+            assert!(
+                Arc::ptr_eq(&a1, arc),
+                "Все interned для \"a\" должны ссылаться на один Arc"
+            );
+        }
     }
 }

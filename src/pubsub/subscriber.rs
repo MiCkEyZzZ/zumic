@@ -102,7 +102,8 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Проверяет, что при удалении подписки из канала, количество получателей уменьшается.
+    /// Проверяет, что при удалении подписки из канала, количество получателей
+    /// уменьшается.
     #[test]
     fn test_unsubscribe_drops_receiver() {
         // Создадим broadcast-канал вручную
@@ -119,7 +120,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что при явном вызове `unsubscribe` подписка удаляется корректно.
+    /// Проверяет, что при явном вызове `unsubscribe` подписка удаляется
+    /// корректно.
     #[test]
     fn test_explicit_unsubscribe_consumes_subscription() {
         let (tx, rx) = broadcast::channel(5);
@@ -134,7 +136,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что подписка по шаблону (`psubscribe`) корректно получает сообщения.
+    /// Проверяет, что подписка по шаблону (`psubscribe`) корректно
+    /// получает сообщения.
     #[tokio::test]
     async fn test_pattern_subscription_receives_message() {
         let broker = Broker::new(10);
@@ -151,7 +154,8 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"xyz"));
     }
 
-    /// Проверяет, что после отписки от шаблона, больше не приходит сообщений.
+    /// Проверяет, что после отписки от шаблона, больше не приходит
+    /// сообщений.
     #[tokio::test]
     async fn test_pattern_unsubscribe_stops_reception() {
         let broker = Broker::new(10);
@@ -169,7 +173,8 @@ mod tests {
         );
     }
 
-    /// Проверяет, что несколько подписок по шаблону получают одно и то же сообщение.
+    /// Проверяет, что несколько подписок по шаблону получают одно
+    /// и то же сообщение.
     #[tokio::test]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
@@ -193,7 +198,8 @@ mod tests {
         assert_eq!(msg2.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Проверяет, что при удалении подписки по шаблону количество получателей уменьшается.
+    /// Проверяет, что при удалении подписки по шаблону количество
+    /// получателей уменьшается.
     #[test]
     fn test_pattern_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(3);
@@ -205,7 +211,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что при явном вызове `unsubscribe` для шаблона подписка удаляется корректно.
+    /// Проверяет, что при явном вызове `unsubscribe` для шаблона
+    /// подписка удаляется корректно.
     #[test]
     fn test_pattern_explicit_unsubscribe_consumes() {
         let (tx, rx) = broadcast::channel(3);
@@ -215,5 +222,41 @@ mod tests {
         assert_eq!(tx.receiver_count(), 1);
         psub.unsubscribe();
         assert_eq!(tx.receiver_count(), 0);
+    }
+
+    /// Проверяет, что при двух подписках на один и тот же канал
+    /// оба получателя получат каждое опубликованное сообщение.
+    #[tokio::test]
+    async fn test_double_subscribe_same_channel() {
+        let broker = Broker::new(5);
+        let mut a = broker.subscribe("dup");
+        let mut b = broker.subscribe("dup");
+        broker.publish("dup", Bytes::from_static(b"X"));
+        assert_eq!(
+            a.receiver().recv().await.unwrap().payload,
+            Bytes::from_static(b"X")
+        );
+        assert_eq!(
+            b.receiver().recv().await.unwrap().payload,
+            Bytes::from_static(b"X")
+        );
+    }
+
+    /// Проверяет, что отписка от несуществующего канала или шаблона
+    /// не приводит к панике и корректно возвращает управление.
+    #[test]
+    fn test_unsubscribe_nonexistent() {
+        let broker = Broker::new(5);
+        // оба должны просто вернуться без паники.
+        broker.unsubscribe_all("nochan");
+        broker.punsubscribe("no*pat").unwrap();
+    }
+
+    /// Проверяет, что при попытке подписаться по некорректному glob-шаблону
+    /// возвращается ошибка парсинга шаблона.
+    #[test]
+    fn test_invalid_glob_pattern() {
+        let broker = Broker::new(5);
+        assert!(broker.psubscribe("[invalid[").is_err());
     }
 }

@@ -1,18 +1,34 @@
+/// HTTP-админка: routes, handlers и состояние.
 pub mod admin;
+/// Аутентификация и ACL: пользователи, пароли, правила доступа.
 pub mod auth;
+/// Парсер и исполнение command-строк (SET, GET и т.д.).
 pub mod command;
+/// Загрузка конфигурации сервера.
 pub mod config;
+/// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
 pub mod database;
+/// Абстракция движка хранения и реализации (InMemory, Persistent, Cluster).
 pub mod engine;
+/// Общие ошибки: кодирование/декодирование, парсинг, хранилище.
 pub mod error;
+/// Гибкое логирование (форматирование, фильтры, sinks).
 pub mod logging;
+/// Сетевой стек: протокол ZSP и сервер на Tokio.
 pub mod network;
+/// Pub/Sub: Broker, Subscription, Message.
 pub mod pubsub;
 
+// -----------------------------------------------------------------------------
+//  Часто используемые публичные типы
+// -----------------------------------------------------------------------------
+
+/// Функции хеширования и проверки паролей, ACL-менеджер.
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
+/// Основные команды key-value: SET, GET, INCR, HSET, LPOP, ZADD и др.
 pub use command::{
     AppendCommand, AuthCommand, Command, CommandExecute, DecrByCommand, DecrByFloatCommand,
     DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, GetRangeCommand,
@@ -23,8 +39,13 @@ pub use command::{
     StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand,
     ZScoreCommand,
 };
+/// Типы данных: Dict, QuickList, SkipList, Sds и другие.
 pub use database::{Dict, QuickList, Sds, SkipList, SmartHash, Value};
+/// Движки хранения: InMemoryStore, PersistentStore, ClusterStore.
 pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
+/// Ошибки и результаты операций.
 pub use error::{DecodeError, EncodeError, NetworkError, ParseError, StoreError, StoreResult};
+/// Сетевой сервер и протокол.
 pub use network::{server, zsp};
+/// API Pub/Sub.
 pub use pubsub::{Broker, Message, Subscription};

@@ -132,6 +132,7 @@ impl Broker {
 mod tests {
     use super::*;
     use bytes::Bytes;
+    use tokio::sync::broadcast::error::RecvError;
     use tokio::time::{timeout, Duration};
 
     /// Helper: создаёт брокер и сразу подписывается, возвращая (broker, receiver)
@@ -270,5 +271,90 @@ mod tests {
         let res = psub.receiver().recv().await;
         use tokio::sync::broadcast::error::RecvError;
         assert!(matches!(res, Err(RecvError::Closed)));
+    }
+
+    /// Проверяет, что два разных подписчика на один и тот же канал
+    /// оба получают каждое опубликованное сообщение.
+    #[tokio::test]
+    async fn test_multiple_subscribe_same_channel() {
+        let broker = Broker::new(5);
+
+        let mut sub1 = broker.subscribe("dup");
+        let mut sub2 = broker.subscribe("dup");
+        let rx1 = sub1.receiver();
+        let rx2 = sub2.receiver();
+
+        broker.publish("dup", Bytes::from_static(b"hi"));
+
+        let msg1 = rx1.recv().await.unwrap();
+        let msg2 = rx2.recv().await.unwrap();
+
+        assert_eq!(&*msg1.channel, "dup");
+        assert_eq!(&*msg2.channel, "dup");
+        assert_eq!(msg1.payload, Bytes::from_static(b"hi"));
+        assert_eq!(msg2.payload, Bytes::from_static(b"hi"));
+    }
+
+    /// Проверяет, что при дропе конкретного Subscription
+    /// количество активных Receiver в broadcast-сендере уменьшается до нуля.
+    #[tokio::test]
+    async fn test_drop_subscription_decrements_receiver_count() {
+        let broker = Broker::new(5);
+        let sub = broker.subscribe("tmp");
+        let key = Arc::clone(&sub.channel);
+        let sender = broker.channels.get(&*key).unwrap().clone();
+        assert_eq!(sender.receiver_count(), 1);
+        drop(sub);
+        // Give time for drop to propagate
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(sender.receiver_count(), 0);
+    }
+
+    /// Проверяет поведение broadcast при переполнении буфера:
+    /// старое сообщение отбрасывается, и recv() возвращает `Lagged(1)`.
+    #[tokio::test]
+    async fn test_broadcast_overwrites_when_buffer_full() {
+        let broker = Broker::new(1); // буфер на 1 сообщение
+
+        // Сохраняем Subscription, чтобы он не был временным
+        let mut subscription = broker.subscribe("overflow");
+        let sub = subscription.receiver();
+
+        // Отправим первое сообщение
+        broker.publish("overflow", Bytes::from_static(b"first"));
+        // Отправим второе сообщение — оно вытеснит первое
+        broker.publish("overflow", Bytes::from_static(b"second"));
+
+        // Попытка получить сообщение приведёт к Err(Lagged(1)),
+        // потому что первое сообщение было пропущено.
+        let err = sub.recv().await.unwrap_err();
+        assert!(
+            matches!(err, RecvError::Lagged(1)),
+            "Ожидаем Lagged(1), получили: {:?}",
+            err
+        );
+    }
+
+    /// Проверяет, что при неверном glob-шаблоне psubscribe возвращает ошибку.
+    #[tokio::test]
+    async fn test_psubscribe_invalid_pattern() {
+        let broker = Broker::new(5);
+        let res = broker.psubscribe("[invalid");
+        assert!(res.is_err());
+    }
+
+    /// Проверяет, что после unsubscribe_all канал не создаётся заново
+    /// и статистика публикаций/ошибок ведётся корректно.
+    #[tokio::test]
+    async fn test_publish_after_unsubscribe_all_does_not_create_channel() {
+        let broker = Broker::new(5);
+        let _ = broker.subscribe("vanish");
+        broker.unsubscribe_all("vanish");
+        assert!(!broker.channels.contains_key("vanish"));
+
+        broker.publish("vanish", Bytes::from_static(b"y"));
+        assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
+        assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
+        assert!(!broker.channels.contains_key("vanish")); // channel shouldn't be re-created
     }
 }
