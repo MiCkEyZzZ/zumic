@@ -26,6 +26,8 @@ pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
 mod tests {
     use super::*;
 
+    /// Проверяет, что при первом вызове создаётся Arc<str> с правильным содержимым,
+    /// а при повторном — возвращается тот же самый объект (zero-copy).
     #[test]
     fn intern_new_and_repeats() {
         // первый раз создаётся Arc<str> с нужным текстом.
@@ -40,6 +42,7 @@ mod tests {
         );
     }
 
+    /// Проверяет, что для разных имён каналов создаются разные Arc<str>.
     #[test]
     fn intern_different_keys() {
         // дава разных имени - разные Arc
@@ -50,6 +53,8 @@ mod tests {
         assert!(!Arc::ptr_eq(&a1, &a2), "Разные ключи - разные Arc");
     }
 
+    /// Проверяет, что строка из String и строковый литерал с одинаковым содержимым
+    /// интернируются в один Arc<str>.
     #[test]
     fn intern_mixed_static_and_string() {
         // строковый и статичный вариант при одинаковом тексте.
