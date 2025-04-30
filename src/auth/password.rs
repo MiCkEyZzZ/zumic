@@ -6,7 +6,7 @@ use num_cpus;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 
-use super::errors::PasswordError;
+use crate::PasswordError;
 
 /// Параметры Argon2 (KiB, итерации)
 const MEMORY_COST_KIB: u32 = 64 * 1024; // 64 MiB

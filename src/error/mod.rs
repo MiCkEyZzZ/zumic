@@ -1,8 +1,10 @@
+pub mod auth;
 pub mod decode;
 pub mod encode;
 pub mod parser;
 pub mod system;
 
+pub use auth::{AclError, AuthError, ConfigError, PasswordError};
 pub use decode::DecodeError;
 pub use encode::EncodeError;
 pub use parser::ParseError;

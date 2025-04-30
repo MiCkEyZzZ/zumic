@@ -24,7 +24,7 @@ pub mod pubsub;
 //  Часто используемые публичные типы
 // -----------------------------------------------------------------------------
 
-pub use application::{CommandExecute, PubSubPort, Storage, SubscriptionPort};
+pub use application::{AclPort, CommandExecute, PubSubPort, Storage, SubscriptionPort};
 /// Функции хеширования и проверки паролей, ACL-менеджер.
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
@@ -45,7 +45,10 @@ pub use database::{Dict, QuickList, Sds, SkipList, SmartHash, Value};
 /// Движки хранения: InMemoryStore, PersistentStore, ClusterStore.
 pub use engine::{ClusterStore, InMemoryStore, PersistentStore, StorageEngine};
 /// Ошибки и результаты операций.
-pub use error::{DecodeError, EncodeError, NetworkError, ParseError, StoreError, StoreResult};
+pub use error::{
+    AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
+    PasswordError, StoreError, StoreResult,
+};
 /// Сетевой сервер и протокол.
 pub use network::{server, zsp};
 /// API Pub/Sub.

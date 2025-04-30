@@ -8,9 +8,8 @@ use dashmap::DashMap;
 use globset::Glob;
 use tokio::sync::broadcast;
 
-use crate::PubSubPort;
-
 use super::{intern_channel, Message, PatternSubscription, Subscription};
+use crate::PubSubPort;
 
 type ChannelKey = Arc<str>;
 type PatternKey = Glob;

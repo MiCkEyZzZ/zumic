@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
-use super::errors::AclError;
+use crate::{AclError, AclPort};
 
 /// Глобальный "всегда разрешающий" паттерн.
 static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());
@@ -276,9 +276,9 @@ impl AclUser {
     }
 }
 
-impl Acl {
+impl AclPort for Acl {
     /// Устанавливает или обновляет пользователя с набором правил ACL.
-    pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
+    fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
         // Сначала парсим все строки-правила в enum-значения
         let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
@@ -318,12 +318,12 @@ impl Acl {
     }
 
     /// Возвращает копию данных пользователя ACL по его имени.
-    pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
+    fn acl_getuser(&self, username: &str) -> Option<AclUser> {
         self.users.get(username).map(|u| u.read().unwrap().clone())
     }
 
     /// Удаляет пользователя ACL по его имени.
-    pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
+    fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
         self.users
             .remove(username)
             .map(|_| ())
@@ -331,7 +331,7 @@ impl Acl {
     }
 
     /// Возвращает список имен всех зарегистрированных пользователей ACL.
-    pub fn acl_users(&self) -> Vec<String> {
+    fn acl_users(&self) -> Vec<String> {
         self.users.iter().map(|e| e.key().clone()).collect()
     }
 }

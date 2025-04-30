@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use super::errors::ConfigError;
+use crate::ConfigError;
 
 #[derive(Debug, Default)]
 pub struct ServerConfig {

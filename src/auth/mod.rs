@@ -1,6 +1,5 @@
 pub mod acl;
 pub mod config;
-pub mod errors;
 pub mod manager;
 pub mod password;
 
