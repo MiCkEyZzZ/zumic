@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    Sds, Storage, StoreResult, Value,
+    Sds, StoragePort, StoreResult, Value,
 };
 
 use super::InMemoryStore;
@@ -77,12 +77,12 @@ impl StorageEngine {
     }
 
     /// Получает ссылку на конкретное хранилище через общий трейт `Storage`
-    pub fn get_store(&self) -> &dyn Storage {
+    pub fn get_store(&self) -> &dyn StoragePort {
         match self {
             Self::InMemory(store) => store,
         }
     }
-    pub fn get_store_mut(&mut self) -> &mut dyn Storage {
+    pub fn get_store_mut(&mut self) -> &mut dyn StoragePort {
         match self {
             Self::InMemory(store) => store,
         }

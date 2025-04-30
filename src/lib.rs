@@ -24,7 +24,7 @@ pub mod pubsub;
 //  Часто используемые публичные типы
 // -----------------------------------------------------------------------------
 
-pub use application::{AclPort, CommandExecute, PubSubPort, Storage, SubscriptionPort};
+pub use application::{AclPort, CommandExecute, PubSubPort, StoragePort, SubscriptionPort};
 /// Функции хеширования и проверки паролей, ACL-менеджер.
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,

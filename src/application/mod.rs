@@ -1,11 +1,11 @@
-pub mod acl;
-pub mod command;
-pub mod pubsub;
-pub mod storage;
-pub mod subscription;
+pub mod acl_port;
+pub mod command_port;
+pub mod pubsub_port;
+pub mod storage_port;
+pub mod subscription_port;
 
-pub use acl::AclPort;
-pub use command::CommandExecute;
-pub use pubsub::PubSubPort;
-pub use storage::Storage;
-pub use subscription::SubscriptionPort;
+pub use acl_port::AclPort;
+pub use command_port::CommandExecute;
+pub use pubsub_port::PubSubPort;
+pub use storage_port::StoragePort;
+pub use subscription_port::SubscriptionPort;
