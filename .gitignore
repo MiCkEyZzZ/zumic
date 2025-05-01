@@ -5,6 +5,7 @@
 .trunk
 docs
 book
+Flamegraph
 
 /target
 
