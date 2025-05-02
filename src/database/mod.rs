@@ -9,6 +9,7 @@ pub mod smart_hash;
 pub mod types;
 
 pub use dict::Dict;
+pub use list_pack::ListPack;
 pub use quicklist::QuickList;
 pub use sds::Sds;
 pub use skip_list::SkipList;

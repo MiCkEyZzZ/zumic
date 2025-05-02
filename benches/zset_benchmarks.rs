@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::{
-    command::zset::{ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZScoreCommand},
-    engine::{engine::StorageEngine, memory::InMemoryStore},
-    CommandExecute,
+    CommandExecute, {InMemoryStore, StorageEngine},
+    {ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZScoreCommand},
 };
 
 fn bench_zadd(c: &mut Criterion) {

@@ -19,14 +19,15 @@ impl InMemoryStore {
 }
 
 impl Storage for InMemoryStore {
-    fn set(&mut self, key: Sds, value: Value) -> StoreResult<()> {
+    fn set(&self, key: Sds, value: Value) -> StoreResult<()> {
         self.data.insert(key, value);
         Ok(())
     }
 
-    fn get(&mut self, key: Sds) -> StoreResult<Option<Value>> {
-        Ok(self.data.get(&key).map(|entry| entry.clone()))
+    fn get(&self, key: Sds) -> StoreResult<Option<Value>> {
+        Ok(self.data.get(&key).map(|entry| entry.value().clone()))
     }
+
     fn del(&self, key: Sds) -> StoreResult<i64> {
         if self.data.remove(&key).is_some() {
             Ok(1)
@@ -34,12 +35,14 @@ impl Storage for InMemoryStore {
             Ok(0)
         }
     }
-    fn mset(&mut self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
+
+    fn mset(&self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
         for (key, value) in entries {
             self.data.insert(key, value);
         }
         Ok(())
     }
+
     fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
         let result = keys
             .iter()
@@ -47,7 +50,8 @@ impl Storage for InMemoryStore {
             .collect();
         Ok(result)
     }
-    fn rename(&mut self, from: Sds, to: Sds) -> StoreResult<()> {
+
+    fn rename(&self, from: Sds, to: Sds) -> StoreResult<()> {
         if let Some((_, value)) = self.data.remove(&from) {
             self.data.insert(to, value);
             Ok(())
@@ -55,7 +59,8 @@ impl Storage for InMemoryStore {
             Err(StoreError::KeyNotFound)
         }
     }
-    fn renamenx(&mut self, from: Sds, to: Sds) -> StoreResult<bool> {
+
+    fn renamenx(&self, from: Sds, to: Sds) -> StoreResult<bool> {
         if self.data.contains_key(&to) {
             return Ok(false);
         }
@@ -66,7 +71,8 @@ impl Storage for InMemoryStore {
             Err(StoreError::KeyNotFound)
         }
     }
-    fn flushdb(&mut self) -> StoreResult<()> {
+
+    fn flushdb(&self) -> StoreResult<()> {
         self.data.clear();
         Ok(())
     }
@@ -89,7 +95,7 @@ mod tests {
     /// Основной тест для проверки установки и последующего получения значения.
     #[test]
     fn test_set_and_get() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let k = key("hello");
         let v = Value::Str(Sds::from_str("world"));
 
@@ -102,7 +108,7 @@ mod tests {
     /// перезаписывает старое значение.
     #[test]
     fn test_overwrite_value() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let k = key("overwrite");
         let v1 = Value::Str(Sds::from_str("one"));
         let v2 = Value::Str(Sds::from_str("two"));
@@ -117,7 +123,7 @@ mod tests {
     /// Проверяет, что ключ можно удалить, и после этого он недоступен для получения.
     #[test]
     fn test_delete() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let k = key("key_to_delete");
         let v = Value::Str(Sds::from_str("some_value"));
 
@@ -131,7 +137,7 @@ mod tests {
     /// Проверяет, что получение значения по несуществующему ключу возвращает None.
     #[test]
     fn test_get_nonexistent_key() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let got = store.get(key("missing")).unwrap();
         assert_eq!(got, None);
     }
@@ -148,7 +154,7 @@ mod tests {
     /// Проверяет корректность получения существующих и несуществующих ключей.
     #[test]
     fn test_mset_and_mget() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let entries = vec![
             (key("key1"), Value::Int(1)),
             (key("key2"), Value::Int(2)),
@@ -173,7 +179,7 @@ mod tests {
     /// Проверяет, что переименование существующего ключа происходит корректно.
     #[test]
     fn test_rename() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         store.set(key("old"), Value::Int(123)).unwrap();
 
         store.rename(key("old"), key("new")).unwrap();
@@ -185,7 +191,7 @@ mod tests {
     /// с кодом KeyNotFound.
     #[test]
     fn test_rename_nonexistent_key() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         let result = store.rename(key("does_not_exist"), key("whatever"));
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
@@ -194,7 +200,7 @@ mod tests {
     /// если целевой ключ отсутствует.
     #[test]
     fn test_renamenx_success() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         store
             .set(key("old"), Value::Str(Sds::from_str("val")))
             .unwrap();
@@ -211,7 +217,7 @@ mod tests {
     /// Проверяет, что renamenx не выполняется, если целевой ключ уже существует.
     #[test]
     fn test_renamenx_existing_target() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         store.set(key("old"), Value::Int(1)).unwrap();
         store.set(key("new"), Value::Int(2)).unwrap();
 
@@ -224,7 +230,7 @@ mod tests {
     /// Проверяет, что метод flushdb очищает хранилище от всех ключей и значений.
     #[test]
     fn test_flushdb() {
-        let mut store = InMemoryStore::new();
+        let store = InMemoryStore::new();
         store.set(key("one"), Value::Int(1)).unwrap();
         store.set(key("two"), Value::Int(2)).unwrap();
 

@@ -38,7 +38,7 @@ pub use command::{
     ZScoreCommand,
 };
 /// Типы данных: Dict, QuickList, SkipList, Sds и другие.
-pub use database::{Dict, QuickList, Sds, SkipList, SmartHash, Value};
+pub use database::{Dict, ListPack, QuickList, Sds, SkipList, SmartHash, Value};
 /// Движки хранения: InMemoryStore, PersistentStore, ClusterStore.
 pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
 /// Ошибки и результаты операций.

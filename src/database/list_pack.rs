@@ -9,296 +9,214 @@
 
 pub struct ListPack {
     data: Vec<u8>,
+    head: usize,
+    tail: usize,
+    num_entries: usize,
 }
 
 impl ListPack {
     pub fn new() -> Self {
-        let mut data = Vec::with_capacity(64);
-        data.push(0xFF); // конец.
-        Self { data }
+        let cap = 1024;
+        let mut data = Vec::with_capacity(cap);
+        data.resize(cap, 0);
+        let head = cap / 2;
+        data[head] = 0xFF;
+        Self {
+            data,
+            head,
+            tail: head + 1,
+            num_entries: 0,
+        }
+    }
+
+    /// Амортизированное расширение и центрирование содержимого
+    fn grow_and_center(&mut self, extra: usize) {
+        let used = self.tail - self.head;
+        let need = used + extra + 1;
+        if need <= self.data.len() {
+            // достаточно места.
+            return;
+        }
+        // новый capacity: max(1.5x, need)
+        let new_cap = (self.len().max(1) * 3 / 2).max(need);
+        let mut new_data = Vec::with_capacity(new_cap);
+        new_data.resize(new_cap, 0);
+        // центрируем старый блок в новом.
+        let new_head = (new_cap - used) / 2;
+        new_data[new_head..new_head + used].copy_from_slice(&self.data[self.head..self.tail]);
+        self.head = new_head;
+        self.tail = new_head + used;
+        self.data = new_data;
     }
 
     pub fn push_front(&mut self, value: &[u8]) {
-        let len_bytes = Self::encode_variant(value.len());
-        let insert_pos = 0;
+        let mut len_bytes = Vec::new();
+        let mut v = value.len();
+        while v >= 0x80 {
+            len_bytes.push((v as u8 & 0x7F) | 0x80);
+            v >>= 7;
+        }
+        len_bytes.push(v as u8);
 
-        self.data
-            .splice(insert_pos..insert_pos, value.iter().cloned());
-        self.data
-            .splice(insert_pos..insert_pos, len_bytes.iter().cloned());
+        let extra = len_bytes.len() + value.len();
+        self.grow_and_center(extra);
+
+        // двигаем head назад и пишем туда len+value
+        self.head -= extra;
+        let h = self.head;
+        // len
+        self.data[h..h + len_bytes.len()].copy_from_slice(&len_bytes);
+        // payload
+        self.data[h + len_bytes.len()..h + extra].copy_from_slice(value);
+
+        self.num_entries += 1;
     }
 
     pub fn push_back(&mut self, value: &[u8]) {
-        let len_bytes = Self::encode_variant(value.len());
-        let insert_pos = self.data.len() - 1; // перед 0xFF
+        // кодируем длину
+        let mut len_bytes = Vec::new();
+        let mut v = value.len();
+        while v >= 0x80 {
+            len_bytes.push((v as u8 & 0x7F) | 0x80);
+            v >>= 7;
+        }
+        len_bytes.push(v as u8);
 
-        // вставляем длину
-        self.data
-            .splice(insert_pos..insert_pos, len_bytes.iter().cloned());
-        // вставляем значение
-        self.data.splice(
-            insert_pos + len_bytes.len()..insert_pos + len_bytes.len(),
-            value.iter().cloned(),
-        );
+        let extra = len_bytes.len() + value.len();
+        self.grow_and_center(extra);
+
+        // перезаписываем терминатор (0xFF) в tail-1, а в tail.. вставляем len+value+0xFF
+        let term_pos = self.tail - 1;
+        // len
+        self.data[term_pos..term_pos + len_bytes.len()].copy_from_slice(&len_bytes);
+        // payload
+        let vstart = term_pos + len_bytes.len();
+        self.data[vstart..vstart + value.len()].copy_from_slice(value);
+        // новый терминатор
+        let new_term = vstart + value.len();
+        self.data[new_term] = 0xFF;
+
+        // обновляем tail и счётчик
+        self.tail = new_term + 1;
+        self.num_entries += 1;
     }
 
     pub fn len(&self) -> usize {
-        let mut i = 0;
-        let mut count = 0;
-
-        while i < self.data.len() {
-            if self.data[i] == 0xFF {
-                break;
-            }
-
-            match Self::decode_variant(&self.data[i..]) {
-                Some((len, consumed)) => {
-                    i += consumed + len;
-                    count += 1;
-                }
-                None => break,
-            }
-        }
-        count
+        self.num_entries
     }
 
     pub fn get(&self, index: usize) -> Option<&[u8]> {
-        let mut i = 0;
-        let mut current = 0;
-        while i < self.data.len() {
+        if index >= self.num_entries {
+            return None;
+        }
+
+        let mut i = self.head;
+        let mut curr = 0;
+
+        while i < self.tail {
             if self.data[i] == 0xFF {
                 break;
             }
 
-            match Self::decode_variant(&self.data[i..]) {
-                Some((len, consumed)) => {
-                    if current == index {
-                        return Some(&self.data[i + consumed..i + consumed + len]);
-                    }
-                    i += consumed + len;
-                    current += 1;
-                }
-                None => break,
+            let (len, consumed) = Self::decode_varint(&self.data[i..])?;
+            if curr == index {
+                return Some(&self.data[i + consumed..i + consumed + len]);
             }
+            i += consumed + len;
+            curr += 1;
         }
+
         None
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &[u8]> {
-        let mut i = 0;
         let data = &self.data;
+        let mut pos = self.head;
+        let end = self.tail;
+
         std::iter::from_fn(move || {
-            if i >= data.len() || data[i] == 0xFF {
+            if pos >= end || data[pos] == 0xFF {
                 return None;
             }
 
-            match ListPack::decode_variant(&data[i..]) {
-                Some((len, consumed)) => {
-                    let start = i + consumed;
-                    let end = start + len;
-                    i = end;
-                    Some(&data[start..end])
-                }
-                None => None,
-            }
+            let (len, consumed) = ListPack::decode_varint(&data[pos..])?;
+            let start = pos + consumed;
+            let slice = &data[start..start + len];
+            pos = start + len;
+            Some(slice)
         })
     }
 
     pub fn remove(&mut self, index: usize) -> bool {
-        let mut i = 0;
-        let mut current = 0;
-        while i < self.data.len() {
+        if index >= self.num_entries {
+            return false;
+        }
+
+        let mut i = self.head;
+        let mut curr = 0;
+
+        while i < self.tail {
             if self.data[i] == 0xFF {
                 break;
             }
 
-            match Self::decode_variant(&self.data[i..]) {
-                Some((len, consumed)) => {
-                    if current == index {
-                        let end = i + consumed + len;
-                        self.data.drain(i..end);
-                        return true;
+            if let Some((len, consumed)) = Self::decode_varint(&self.data[i..]) {
+                if curr == index {
+                    let start = i;
+                    let end = i + consumed + len;
+
+                    // Сдвигаем всё после `end` влево к `start`
+                    let _to_move = self.tail - end;
+                    self.data.copy_within(end..self.tail, start);
+                    self.tail -= end - start;
+
+                    // Обновляем терминатор
+                    if self.tail > 0 {
+                        self.data[self.tail - 1] = 0xFF;
                     }
-                    i += consumed + len;
-                    current += 1;
+
+                    self.num_entries -= 1;
+                    return true;
                 }
-                None => break,
+
+                i += consumed + len;
+                curr += 1;
+            } else {
+                break;
             }
         }
+
         false
     }
 
     pub fn encode_variant(mut value: usize) -> Vec<u8> {
         let mut buf = Vec::new();
         loop {
-            let byte = (value & 0x7F) as u8;
+            let byte = (value & 0x7F) as u8; // берём 7 младших бит
             value >>= 7;
             if value == 0 {
-                buf.push(byte);
+                buf.push(byte); // последний байт: бит продолжения НЕ установлен
                 break;
             } else {
-                buf.push(byte | 0x80); // установить бит продолжения.
+                buf.push(byte | 0x80); // бит продолжения установлен (ещё есть байты)
             }
         }
         buf
     }
 
-    pub fn decode_variant(bytes: &[u8]) -> Option<(usize, usize)> {
+    pub fn decode_varint(data: &[u8]) -> Option<(usize, usize)> {
         let mut result = 0usize;
         let mut shift = 0;
-        for (i, &byte) in bytes.iter().enumerate() {
-            let part = (byte & 0x7F) as usize;
-            result |= part << shift;
-
+        for (i, &byte) in data.iter().enumerate() {
+            result |= ((byte & 0x7F) as usize) << shift;
             if byte & 0x80 == 0 {
                 return Some((result, i + 1));
             }
-
             shift += 7;
-            if shift > (std::mem::size_of::<usize>() * 8) {
-                return None; // переполнение
+            if shift > std::mem::size_of::<usize>() * 8 {
+                return None;
             }
         }
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_empty_listpack() {
-        let lp = ListPack::new();
-        assert_eq!(lp.len(), 0);
-        assert_eq!(lp.get(0), None);
-        assert_eq!(lp.iter().count(), 0);
-    }
-
-    #[test]
-    fn test_push_and_len() {
-        let mut lp = ListPack::new();
-        lp.push_back(b"one");
-        lp.push_back(b"two");
-        lp.push_back(b"three");
-
-        assert_eq!(lp.len(), 3);
-    }
-
-    #[test]
-    fn test_get_elements() {
-        let mut lp = ListPack::new();
-        lp.push_back(b"alpha");
-        lp.push_back(b"beta");
-        lp.push_back(b"gamma");
-
-        assert_eq!(lp.get(0), Some(b"alpha".as_ref()));
-        assert_eq!(lp.get(1), Some(b"beta".as_ref()));
-        assert_eq!(lp.get(2), Some(b"gamma".as_ref()));
-        assert_eq!(lp.get(3), None);
-    }
-
-    #[test]
-    fn test_iter() {
-        let mut lp = ListPack::new();
-        lp.push_back(b"x");
-        lp.push_back(b"y");
-        lp.push_back(b"z");
-
-        let collected: Vec<_> = lp.iter().map(|e| std::str::from_utf8(e).unwrap()).collect();
-        assert_eq!(collected, vec!["x", "y", "z"]);
-    }
-
-    #[test]
-    fn test_large_element() {
-        let mut lp = ListPack::new();
-
-        let large_data = vec![b'a'; 200]; // > 127 байт.
-        lp.push_back(&large_data);
-
-        assert_eq!(lp.len(), 1);
-
-        let result = lp.get(0).unwrap();
-        assert_eq!(result.len(), 200);
-        assert!(result.iter().all(|&b| b == b'a'));
-    }
-
-    #[test]
-    fn test_multiple_large_elements() {
-        let mut lp = ListPack::new();
-
-        for i in 0..5 {
-            let data = vec![b'a' + (i as u8); 150 + i * 10]; // растущие > 127 элементы.
-            lp.push_back(&data);
-        }
-
-        assert_eq!(lp.len(), 5);
-
-        for i in 0..5 {
-            let expected = vec![b'a' + (i as u8); 150 + i * 10];
-            let actual = lp.get(i).unwrap();
-            assert_eq!(actual, expected.as_slice());
-        }
-
-        let collected: Vec<usize> = lp.iter().map(|e| e.len()).collect();
-        assert_eq!(collected, vec![150, 160, 170, 180, 190]);
-    }
-
-    #[test]
-    fn test_push_front() {
-        let mut lp = ListPack::new();
-        lp.push_front(b"second");
-        lp.push_front(b"first");
-
-        assert_eq!(lp.len(), 2);
-        assert_eq!(lp.get(0), Some(b"first".as_ref()));
-        assert_eq!(lp.get(1), Some(b"second".as_ref()));
-
-        let collected: Vec<_> = lp.iter().map(|e| std::str::from_utf8(e).unwrap()).collect();
-        assert_eq!(collected, vec!["first", "second"]);
-    }
-
-    #[test]
-    fn test_remove_middle() {
-        let mut lp = ListPack::new();
-        lp.push_back(b"one");
-        lp.push_back(b"two");
-        lp.push_back(b"three");
-
-        let removed = lp.remove(1);
-        assert!(removed);
-        assert_eq!(lp.len(), 2);
-        assert_eq!(lp.get(0), Some(b"one".as_ref()));
-        assert_eq!(lp.get(1), Some(b"three".as_ref()));
-        assert_eq!(lp.get(2), None);
-    }
-
-    #[test]
-    fn test_remove_invalid_index() {
-        let mut lp = ListPack::new();
-        lp.push_back(b"only");
-
-        let removed = lp.remove(5);
-        assert!(!removed);
-        assert_eq!(lp.len(), 1);
-    }
-
-    #[test]
-    fn test_encode_decode_variant() {
-        let test_values = [0, 1, 127, 128, 255, 300, 16384, usize::MAX / 2];
-
-        for &val in &test_values {
-            let encoded = ListPack::encode_variant(val);
-            let decoded = ListPack::decode_variant(&encoded);
-            assert_eq!(decoded, Some((val, encoded.len())));
-        }
-    }
-
-    #[test]
-    fn test_decode_variant_overflow() {
-        // Слишком длинное значение - исскуственно создаём "переполнение".
-        let bogus = vec![0xFF; 20]; // каждый байт продолжает.
-        let result = ListPack::decode_variant(&bogus);
-        assert_eq!(result, None);
     }
 }

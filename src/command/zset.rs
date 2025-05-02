@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use ordered_float::OrderedFloat;
 
-use crate::{QuickList, Sds, SkipList, StorageEngine, StoreError, Value};
+use crate::{Dict, QuickList, Sds, SkipList, StorageEngine, StoreError, Value};
 
 use super::CommandExecute;
 
@@ -22,22 +20,24 @@ impl CommandExecute for ZAddCommand {
         let (mut dict, mut sorted) = match store.get(key.clone())? {
             Some(Value::ZSet { dict, sorted }) => (dict, sorted),
             Some(_) => return Err(StoreError::InvalidType),
-            None => (HashMap::new(), SkipList::new()),
+            None => (Dict::new(), SkipList::new()),
         };
 
-        // Вставить новый балл, возвращая старое значение, если оно было.
-        let previous = dict.insert(member.clone(), self.score);
-        let is_new = previous.is_none();
+        // Сохраняем старый score (если есть) перед вставкой
+        let previous_score = dict.get(&member).cloned();
 
-        // Если элемент уже был, удалить старую запись в skiplist с его старым баллом
-        if let Some(old_score) = previous {
+        // Вставляем новый score; Dict::insert вернёт true, если элемент был новым
+        let is_new = dict.insert(member.clone(), self.score);
+
+        // Если был старый score — удаляем его из skiplist
+        if let Some(old_score) = previous_score {
             sorted.remove(&OrderedFloat(old_score));
         }
 
-        // Вставить новую запись: ключ — это OrderedFloat(балл), а значение — член.
+        // Вставляем в skiplist новую пару (score → member)
         sorted.insert(OrderedFloat(self.score), member.clone());
 
-        // Сохранить обновленный ZSet.
+        // Сохраняем обновлённый ZSet
         store.set(key, Value::ZSet { dict, sorted })?;
         Ok(Value::Int(if is_new { 1 } else { 0 }))
     }
@@ -54,19 +54,28 @@ impl CommandExecute for ZRemCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
+        // Получаем ZSet, если он есть
         if let Some(Value::ZSet { dict, sorted }) = store.get(key.clone())? {
             let mut dict = dict;
             let mut sorted = sorted;
-            if let Some(old_score) = dict.remove(&member) {
-                // Удалить из skiplist по баллу.
+
+            // Сначала получаем старый score
+            let old_score_opt = dict.get(&member).cloned();
+            if let Some(old_score) = old_score_opt {
+                // Удаляем из dict
+                dict.remove(&member);
+                // Удаляем из skiplist по баллу
                 sorted.remove(&OrderedFloat(old_score));
+                // Сохраняем обратно
                 store.set(key, Value::ZSet { dict, sorted })?;
                 return Ok(Value::Int(1));
+            } else {
+                // Элемент не найден
+                return Ok(Value::Int(0));
             }
-            // Элемент не найден.
-            return Ok(Value::Int(0));
         }
-        // Нет такого ключа или тип не совпадает.
+
+        // Ключа нет или тип не ZSet
         Ok(Value::Int(0))
     }
 }
@@ -83,7 +92,8 @@ impl CommandExecute for ZScoreCommand {
         let member = Sds::from_str(&self.member);
 
         match store.get(key)? {
-            Some(Value::ZSet { dict, .. }) => {
+            // Захватываем `dict` как mutable, чтобы уметь вызвать `dict.get(&member)`
+            Some(Value::ZSet { mut dict, .. }) => {
                 if let Some(&score) = dict.get(&member) {
                     Ok(Value::Float(score))
                 } else {
@@ -197,9 +207,9 @@ impl CommandExecute for ZRevRangeCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::{InMemoryStore, Sds};
-
     use super::*;
+
+    use crate::InMemoryStore;
 
     fn create_store() -> StorageEngine {
         StorageEngine::InMemory(InMemoryStore::new())

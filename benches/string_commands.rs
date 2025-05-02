@@ -1,13 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
 use zumic::{
-    command::{AppendCommand, GetRangeCommand, StrLenCommand},
-    database::{Sds, Value},
-    engine::{engine::StorageEngine, memory::InMemoryStore},
-    CommandExecute,
+    CommandExecute, {AppendCommand, GetRangeCommand, StrLenCommand},
+    {InMemoryStore, StorageEngine}, {Sds, Value},
 };
 
 fn setup_store_with_str(key: &str, value: &str) -> StorageEngine {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let store = StorageEngine::InMemory(InMemoryStore::new());
     store
         .set(Sds::from_str(key), Value::Str(Sds::from_str(value)))
         .unwrap();

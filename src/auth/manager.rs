@@ -165,7 +165,14 @@ impl AuthManager {
                 "+@all".into(),
             ];
             let refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
-            acl.acl_setuser("default", &refs)?;
+
+            if acl.acl_getuser("default").is_some() {
+                // Если пользователь существует, обновляем его настройки
+                acl.acl_setuser("default", &refs)?;
+            } else {
+                // Если пользователь не существует, создаём его
+                acl.acl_setuser("default", &refs)?;
+            }
         }
 
         // Пользователи из конфига

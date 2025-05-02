@@ -14,28 +14,28 @@ pub enum StorageEngine {
 }
 
 impl StorageEngine {
-    pub fn set(&mut self, key: Sds, value: Value) -> StoreResult<()> {
+    pub fn set(&self, key: Sds, value: Value) -> StoreResult<()> {
         info!("Setting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.set(key, value),
         }
     }
 
-    pub fn get(&mut self, key: Sds) -> StoreResult<Option<Value>> {
+    pub fn get(&self, key: Sds) -> StoreResult<Option<Value>> {
         info!("Getting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.get(key),
         }
     }
 
-    pub fn del(&mut self, key: Sds) -> StoreResult<i64> {
+    pub fn del(&self, key: Sds) -> StoreResult<i64> {
         info!("Deleting key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.del(key),
         }
     }
 
-    pub fn mset(&mut self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
+    pub fn mset(&self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
         info!("MSET {} leys", entries.len());
         match self {
             StorageEngine::InMemory(store) => store.mset(entries),
@@ -49,21 +49,21 @@ impl StorageEngine {
         }
     }
 
-    pub fn rename(&mut self, from: Sds, to: Sds) -> StoreResult<()> {
+    pub fn rename(&self, from: Sds, to: Sds) -> StoreResult<()> {
         info!("Renaming key: {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.rename(from, to),
         }
     }
 
-    pub fn renamenx(&mut self, from: Sds, to: Sds) -> StoreResult<bool> {
+    pub fn renamenx(&self, from: Sds, to: Sds) -> StoreResult<bool> {
         info!("Renaming key (NX): {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.renamenx(from, to),
         }
     }
 
-    pub fn flushdb(&mut self) -> StoreResult<()> {
+    pub fn flushdb(&self) -> StoreResult<()> {
         info!("Flushing database");
         match self {
             StorageEngine::InMemory(store) => store.flushdb(),
@@ -100,7 +100,7 @@ mod tests {
     /// Тестирует, что установка значения, а затем его получение возвращают то же значение.
     #[test]
     fn test_engine_set_and_get() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("foo");
         let v = Value::Str(Sds::from_str("bar"));
 
@@ -112,7 +112,7 @@ mod tests {
     /// Проверяет, что получение значения по несуществующему ключу возвращает None.
     #[test]
     fn test_engine_get_nonexistent_key() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("not_found");
 
         let got = engine.get(k).unwrap();
@@ -122,7 +122,7 @@ mod tests {
     /// Проверяет, что удаление существующего ключа удаляет его из хранилища.
     #[test]
     fn test_engine_delete() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("hello");
         let v = Value::Str(Sds::from_str("world"));
 
@@ -136,7 +136,7 @@ mod tests {
     /// Проверяет, что удаление несуществующего ключа не приводит к ошибке.
     #[test]
     fn test_engine_delete_nonexistent_key() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("ghost");
 
         // Удаление не должно вызывать панику или ошибку.
@@ -147,7 +147,7 @@ mod tests {
     /// Тестирует установку нескольких пар ключ-значение с помощью mset.
     #[test]
     fn test_engine_mset() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let entries = vec![
             (key("kin1"), Value::Str(Sds::from_str("dza1"))),
             (key("kin2"), Value::Str(Sds::from_str("dza2"))),
@@ -164,7 +164,7 @@ mod tests {
     /// Проверяет, что mget возвращает значения в корректном порядке для нескольких ключей.
     #[test]
     fn test_engine_mget() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("kin1");
         let k2 = key("kin2");
         let v1 = Value::Str(Sds::from_str("dza1"));
@@ -180,7 +180,7 @@ mod tests {
     /// Проверяет, что ключ успешно переименовывается.
     #[test]
     fn test_engine_rename() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
@@ -195,7 +195,7 @@ mod tests {
     /// Проверяет, что переименование несуществующего ключа приводит к ошибке.
     #[test]
     fn test_engine_rename_nonexistent_key() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
 
@@ -208,7 +208,7 @@ mod tests {
     /// ключ отсутствует.
     #[test]
     fn test_engine_renamenx() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
@@ -229,7 +229,7 @@ mod tests {
     /// Тестирует, что flushdb очищает все данные из хранилища.
     #[test]
     fn test_engine_flushdb() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::InMemory(InMemoryStore::new());
         engine
             .set(key("a"), Value::Str(Sds::from_str("x")))
             .unwrap();

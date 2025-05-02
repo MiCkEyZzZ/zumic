@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{QuickList, Sds, SkipList, SmartHash};
+use super::{Dict, QuickList, Sds, SkipList, SmartHash};
 
 /// Представляет обобщённое значение в движке хранения данных.
 ///
@@ -31,7 +31,7 @@ pub enum Value {
     /// а `sorted` поддерживает упорядоченный список ключей по оценкам.
     ZSet {
         /// Соответствие элемента его оценке.
-        dict: HashMap<Sds, f64>,
+        dict: Dict<Sds, f64>,
         /// Список элементов, упорядоченных по оценкам.
         sorted: SkipList<OrderedFloat<f64>, Sds>,
     },

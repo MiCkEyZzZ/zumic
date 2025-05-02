@@ -11,7 +11,7 @@ use std::convert::TryFrom;
 
 use tracing::{debug, warn};
 
-use crate::{QuickList, Sds, SmartHash, Value};
+use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
 /// Типы фреймов, поддерживаемые протоколом ZSP.
 ///
@@ -131,16 +131,14 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, Stri
 }
 
 #[inline]
-pub fn convert_zset<'a>(dict: HashMap<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
-    debug!("Converting HashMap (ZSet) to ZSPFrame::ZSet");
-    let pairs = dict
-        .into_iter()
-        .map(|(k, score)| {
-            let key =
-                String::from_utf8(k.to_vec()).map_err(|e| format!("ZSet key error: {}", e))?;
-            Ok((key, score))
-        })
-        .collect::<Result<Vec<(String, f64)>, String>>()?;
+pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
+    debug!("Converting Dict (ZSet) to ZSPFrame::ZSet");
+    let mut pairs = Vec::with_capacity(dict.len());
+    for (k_sds, &score) in dict.iter() {
+        let key =
+            String::from_utf8(k_sds.to_vec()).map_err(|e| format!("ZSet key error: {}", e))?;
+        pairs.push((key, score));
+    }
     Ok(ZSPFrame::ZSet(pairs))
 }
 
@@ -249,7 +247,7 @@ mod tests {
     /// Тестирует преобразование ZSet (HashMap<Sds, f64>) в ZSPFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
-        let mut zs = HashMap::new();
+        let mut zs = Dict::new();
         zs.insert(Sds::from_str("foo"), 1.1);
         zs.insert(Sds::from_str("bar"), 2.2);
 
@@ -317,7 +315,7 @@ mod tests {
     /// Проверьте, что преобразование ZSet с недопустимым ключом UTF-8 возвращает ошибку.
     #[test]
     fn convert_zset_with_invalid_utf8_key() {
-        let mut zs = HashMap::new();
+        let mut zs = Dict::new();
         zs.insert(Sds::from_vec(vec![0xFF]), 1.0);
 
         let err = convert_zset(zs).unwrap_err();

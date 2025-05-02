@@ -48,7 +48,5 @@ criterion = { version = "0.5", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-# name = "message_benchmarks"
-# name = "subscription_benchmarks"
-name = "intset_benchmarks"
+name = "listpack_benchmarks"
 harness = false

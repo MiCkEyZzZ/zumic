@@ -54,12 +54,12 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
         Value::ZSet { dict, .. } => {
             let pairs = dict
                 .into_iter()
-                .map(|(k, score)| {
-                    let key =
-                        String::from_utf8(k.to_vec()).unwrap_or_else(|_| "<invalid utf8>".into());
-                    (key, score)
+                .map(|(k_sds, &score)| {
+                    let key = String::from_utf8(k_sds.to_vec())
+                        .unwrap_or_else(|_| "<invalid utf8>".into());
+                    (key, score) // score уже f64
                 })
-                .collect();
+                .collect::<Vec<(String, f64)>>(); // теперь тип правильно совпадает
             ZSPFrame::ZSet(pairs)
         }
 
@@ -83,7 +83,10 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::database::{skip_list::SkipList, QuickList, Sds};
+    use crate::{
+        database::{skip_list::SkipList, QuickList, Sds},
+        Dict,
+    };
 
     use super::*;
 
@@ -198,7 +201,7 @@ mod tests {
     /// Проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZSPFrame::ZSet`
     #[test]
     fn test_serialize_zset() {
-        let mut dict = HashMap::new();
+        let mut dict = Dict::new();
         let mut sorted = SkipList::new();
 
         let key = Sds::from_str("one");

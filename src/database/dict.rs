@@ -7,10 +7,13 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+use serde::{Deserialize, Serialize};
+
 const INITIAL_SIZE: usize = 4;
 const REHASH_BATCH: usize = 1;
 
 /// Один элемент в цепочке коллизий.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Entry<K, V> {
     key: K,
     val: V,
@@ -18,6 +21,7 @@ struct Entry<K, V> {
 }
 
 /// Одна таблица: вектор бакетов, маска размера и число занятых элементов.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct HashTable<K, V> {
     buckets: Vec<Option<Box<Entry<K, V>>>>,
     size_mask: usize,
@@ -25,6 +29,7 @@ struct HashTable<K, V> {
 }
 
 /// Основной словарь с двумя таблицами для реhash'а.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Dict<K, V> {
     ht: [HashTable<K, V>; 2],
     rehash_idx: isize, // -1 = нет реhash, иначе индекс в ht[0]
@@ -293,6 +298,19 @@ impl<'a, K, V> Iterator for DictIter<'a, K, V> {
             self.current_entry = self.tables[self.table_idx].buckets[self.bucket_idx].as_deref();
             self.bucket_idx += 1;
         }
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a Dict<K, V>
+where
+    K: Hash + Eq,
+{
+    type Item = (&'a K, &'a V);
+    type IntoIter = DictIter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        // Теперь .iter() точно существует, потому что K: Hash + Eq
+        self.iter()
     }
 }
 

@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use zumic::{
     database::{skip_list::SkipList, QuickList, Value},
     network::zsp::protocol::{command::Response, serializer::serialize_response},
-    Sds, SmartHash,
+    Dict, Sds, SmartHash,
 };
 
 /// Бенчмарк для сериализации Response::Ok
@@ -73,7 +73,7 @@ fn bench_serialize_hash(c: &mut Criterion) {
 
 /// Бенчмарк для сериализации Value::ZSet
 fn bench_serialize_zset(c: &mut Criterion) {
-    let mut dict = HashMap::new();
+    let mut dict = Dict::new();
     let mut sorted = SkipList::new();
 
     let key = Sds::from_str("one");

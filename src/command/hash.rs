@@ -207,7 +207,6 @@ mod tests {
     fn test_hgetall_command() {
         let mut store = create_store();
 
-        // Устанавливаем два поля в хэше
         let hset_cmd1 = HSetCommand {
             key: "hash".to_string(),
             field: "field1".to_string(),
@@ -221,26 +220,33 @@ mod tests {
         hset_cmd1.execute(&mut store).unwrap();
         hset_cmd2.execute(&mut store).unwrap();
 
-        // Получаем все поля и значения через HGetAllCommand
         let hgetall_cmd = HGetAllCommand {
             key: "hash".to_string(),
         };
         let result = hgetall_cmd.execute(&mut store).unwrap();
 
-        // Ожидаем Value::List с QuickList из ArcBytes.
-        // Каждый элемент должен быть в формате "поле: значение"
         if let Value::List(quicklist) = result {
-            // Преобразуем QuickList в Vec для удобства анализа
             let items: Vec<String> = quicklist
                 .iter()
                 .map(|ab| ab.as_str().unwrap_or("").to_string())
                 .collect();
-            // Порядок в QuickList может быть не детерминирован, поэтому сортируем
-            let mut sorted_items = items.clone();
-            sorted_items.sort();
+
+            // Собираем пары
+            let mut pairs = vec![];
+            for chunk in items.chunks(2) {
+                if let [key, val] = chunk {
+                    pairs.push((key.clone(), val.clone()));
+                }
+            }
+
+            pairs.sort();
+
             assert_eq!(
-                sorted_items,
-                vec!["field1: value1".to_string(), "field2: value2".to_string()]
+                pairs,
+                vec![
+                    ("field1".to_string(), "value1".to_string()),
+                    ("field2".to_string(), "value2".to_string())
+                ]
             );
         } else {
             panic!("Expected Value::List from HGetAllCommand");
