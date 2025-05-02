@@ -79,7 +79,7 @@ fn bench_serialize_zset(c: &mut Criterion) {
     let key = Sds::from_str("one");
     let score = 1.0;
     dict.insert(key.clone(), score);
-    sorted.insert(ordered_float::OrderedFloat(score), Sds::from(key));
+    sorted.insert(ordered_float::OrderedFloat(score), key);
 
     let value = Value::ZSet { dict, sorted };
     c.bench_function("serialize ZSet", |b| {

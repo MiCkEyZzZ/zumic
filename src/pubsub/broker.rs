@@ -116,7 +116,7 @@ impl Broker {
             let matcher = entry.key().compile_matcher();
             if matcher.is_match(channel) {
                 let tx = entry.value().clone();
-                let msg = Message::new(channel.to_string(), payload.clone());
+                let msg = Message::new(channel, payload.clone());
                 let _ = tx.send(msg);
             }
         }

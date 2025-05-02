@@ -17,8 +17,9 @@ fn bench_unsubscribe_all(c: &mut Criterion) {
     let _ = broker.subscribe("chan");
     c.bench_function("broker_unsubscribe_all", |b| {
         b.iter(|| {
-            black_box(broker.unsubscribe_all("chan"));
-        })
+            broker.unsubscribe_all("chan");
+            black_box(())
+        });
     });
 }
 

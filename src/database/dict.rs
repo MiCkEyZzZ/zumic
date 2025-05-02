@@ -70,6 +70,15 @@ impl<K, V> HashTable<K, V> {
     }
 }
 
+impl<K, V> Default for Dict<K, V>
+where
+    K: Hash + Eq,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> Dict<K, V>
 where
     K: Hash + Eq,
@@ -180,6 +189,11 @@ where
             total += self.ht[1].used;
         }
         total
+    }
+
+    /// Returns `true` if the dictionary has no elements.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Полностью очистить и сбросить реhash.

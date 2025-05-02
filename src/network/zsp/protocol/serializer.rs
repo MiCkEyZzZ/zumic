@@ -207,7 +207,7 @@ mod tests {
         let key = Sds::from_str("one");
         let score = 1.0;
         dict.insert(key.clone(), score);
-        sorted.insert(ordered_float::OrderedFloat(score), Sds::from(key));
+        sorted.insert(ordered_float::OrderedFloat(score), key);
 
         let value = Value::ZSet { dict, sorted };
         let frame = serialize_response(Response::Value(value));

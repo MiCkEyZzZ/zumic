@@ -9,8 +9,6 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
-use tracing::{debug, warn};
-
 use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
 /// Типы фреймов, поддерживаемые протоколом ZSP.
@@ -39,53 +37,24 @@ impl<'a> TryFrom<Value> for ZSPFrame<'a> {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        debug!("Attempting to convert Value to ZSPFrame: {:?}", value);
         match value {
-            Value::Str(s) => {
-                debug!("Converting Value::Str to ZSPFrame::InlineString");
-                convert_sds_to_frame(s)
-            }
-            Value::Int(i) => {
-                debug!("Converting Value::Int to ZSPFrame::Integer: {}", i);
-                Ok(Self::Integer(i))
-            }
-            Value::Float(f) => {
-                debug!("Converting Value::Float to ZSPFrame::Float: {}", f);
-                Ok(Self::Float(f))
-            }
-            Value::List(list) => {
-                debug!("Converting Value::List to ZSPFrame::Array");
-                convert_quicklist(list)
-            }
-            Value::Set(set) => {
-                debug!("Converting Value::Set to ZSPFrame::Array");
-                convert_hashset(set)
-            }
+            Value::Str(s) => convert_sds_to_frame(s),
+            Value::Int(i) => Ok(Self::Integer(i)),
+            Value::Float(f) => Ok(Self::Float(f)),
+            Value::List(list) => convert_quicklist(list),
+            Value::Set(set) => convert_hashset(set),
             // Теперь Value::Hash сохраняет SmartHash, поэтому вызываем новую конвертацию.
-            Value::Hash(smart_hash) => {
-                debug!("Converting Value::Hash (SmartHash) to ZSPFrame::Dictionary");
-                convert_smart_hash(smart_hash)
-            }
-            Value::ZSet { dict, .. } => {
-                debug!("Converting Value::ZSet to ZSPFrame::ZSet");
-                convert_zset(dict)
-            }
-            Value::Null => {
-                debug!("Converting Value::Null to ZSPFrame::Null");
-                Ok(ZSPFrame::Null)
-            }
+            Value::Hash(smart_hash) => convert_smart_hash(smart_hash),
+            Value::ZSet { dict, .. } => convert_zset(dict),
+            Value::Null => Ok(ZSPFrame::Null),
             // Игнорировать неподдерживаемые типы
-            Value::HyperLogLog(_) | Value::SStream(_) => {
-                warn!("Unsupported data type encountered during conversion");
-                Err("Unsupported data type".into())
-            }
+            Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
         }
     }
 }
 
 impl<'a> From<Sds> for ZSPFrame<'a> {
     fn from(value: Sds) -> Self {
-        debug!("Converting Sds to ZSPFrame::BinaryString");
         ZSPFrame::BinaryString(Some(value.to_vec()))
     }
 }
@@ -107,7 +76,6 @@ pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZSPFrame<'a>, Strin
 }
 
 pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZSPFrame<'a>, String> {
-    debug!("Converting HashSet<Sds> to ZSPFrame::Array");
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
         frames.push(convert_sds_to_frame(item)?);
@@ -118,7 +86,6 @@ pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZSPFrame<'a>, String> {
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
 #[inline]
 pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, String> {
-    debug!("Converting SmartHash to ZSPFrame::Dictionary");
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
     for (k, v) in smart.iter() {
@@ -132,7 +99,6 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, Stri
 
 #[inline]
 pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
-    debug!("Converting Dict (ZSet) to ZSPFrame::ZSet");
     let mut pairs = Vec::with_capacity(dict.len());
     for (k_sds, &score) in dict.iter() {
         let key =
@@ -298,7 +264,8 @@ mod tests {
     #[test]
     fn convert_empty_hashmap() {
         let hm: HashMap<Sds, Sds> = HashMap::new();
-        let zsp = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap();
+        let zsp = convert_smart_hash(SmartHash::from_iter(hm)).unwrap();
+        assert_eq!(zsp, ZSPFrame::Dictionary(HashMap::new()));
         assert_eq!(zsp, ZSPFrame::Dictionary(HashMap::new()));
     }
 
@@ -308,7 +275,7 @@ mod tests {
         let mut hm = HashMap::new();
         hm.insert(Sds::from_vec(vec![0xFF]), Sds::from_str("val"));
 
-        let err = convert_smart_hash(SmartHash::from_iter(hm.into_iter())).unwrap_err();
+        let err = convert_smart_hash(SmartHash::from_iter(hm)).unwrap_err();
         assert!(err.contains("Invalid hash key"));
     }
 
@@ -326,7 +293,7 @@ mod tests {
     #[test]
     fn arcbytes_into_binarytring() {
         let arc = Sds::from_str("hello");
-        let frame: ZSPFrame = arc.clone().into();
+        let frame: ZSPFrame<'_> = arc.clone().into();
         assert_eq!(frame, ZSPFrame::BinaryString(Some(arc.to_vec())));
     }
 }

@@ -28,6 +28,12 @@ pub struct AuthManager {
     failures: Arc<RwLock<HashMap<String, (u8, Instant)>>>,
 }
 
+impl Default for AuthManager {
+    fn default() -> Self {
+        Self::new() // Using the existing `new()` method as the default constructor
+    }
+}
+
 impl AuthManager {
     /// Создаёт нового `AuthManager` без «pepper».
     pub fn new() -> Self {
@@ -158,7 +164,7 @@ impl AuthManager {
         // Глобальный пароль
         if let Some(pass) = &config.requirepass {
             let hash = hash_password(pass, pepper.as_deref())?;
-            let rules = vec![
+            let rules = [
                 format!(">{}", hash),
                 "on".into(),
                 "~*".into(),
@@ -317,17 +323,18 @@ mod tests {
     /// Тест проверяет корректную инициализацию менеджера авторизации из конфигурации.
     #[tokio::test]
     async fn test_from_config() {
-        let mut cfg = ServerConfig::default();
-        cfg.requirepass = Some("master".into()); // глобальный пароль
-        cfg.auth_pepper = Some("pep".into()); // соль
-        cfg.users.push(UserConfig {
-            username: "u1".into(),
-            enabled: true,
-            nopass: false,
-            password: Some("p1".into()),
-            keys: vec!["~kin:*".into()],
-            permissions: vec!["+@read".into()],
-        });
+        let cfg = ServerConfig {
+            requirepass: Some("master".into()), // глобальный пароль
+            auth_pepper: Some("pep".into()),    // соль
+            users: vec![UserConfig {
+                username: "u1".into(),
+                enabled: true,
+                nopass: false,
+                password: Some("p1".into()),
+                keys: vec!["~kin:*".into()],
+                permissions: vec!["+@read".into()],
+            }],
+        };
 
         // Инициализация из конфига.
         let manager = AuthManager::from_config(&cfg).await.unwrap();

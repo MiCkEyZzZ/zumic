@@ -175,7 +175,7 @@ fn parse_from_str_command(cmd: &str, items: &[ZSPFrame]) -> Result<ZSPCommand, P
                         pass,
                     })
                 }
-                _ => return Err(ParseError::WrongArgCount("AUTH", 1)),
+                _ => Err(ParseError::WrongArgCount("AUTH", 1)),
             }
         }
         _ => Err(ParseError::UnknownCommand),

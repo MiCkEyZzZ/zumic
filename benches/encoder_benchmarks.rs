@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, f64::consts::PI};
 use zumic::network::zsp::frame::{encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
 fn bench_inline_string(c: &mut Criterion) {
@@ -28,7 +28,7 @@ fn bench_array(c: &mut Criterion) {
     let frame = ZSPFrame::Array(vec![
         ZSPFrame::InlineString(Cow::Owned("a".repeat(10))),
         ZSPFrame::Integer(123),
-        ZSPFrame::Float(3.1415),
+        ZSPFrame::Float(PI),
     ]);
     c.bench_function("encode_small_array", |b| {
         b.iter(|| ZSPEncoder::encode(black_box(&frame)).unwrap())

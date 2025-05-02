@@ -505,7 +505,7 @@ mod tests {
     fn test_deref_mut() {
         let mut s = Sds::from_str("Hello");
         let slice: &mut [u8] = &mut s; // С использование DerefMut
-        slice[0] = b'J'; // Изменяем первый исмвол.
+        slice[0] = b'J'; // Изменяем первый символ.
         assert_eq!(s.as_str().unwrap(), "Jello");
     }
 

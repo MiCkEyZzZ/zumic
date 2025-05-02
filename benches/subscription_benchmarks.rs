@@ -18,10 +18,10 @@ fn bench_unsubscribe(c: &mut Criterion) {
     let broker = Broker::new(100);
     c.bench_function("unsubscribe", |b| {
         b.iter(|| {
-            // создаём подписку, а потом сразу её отпускаем
             let sub = broker.subscribe("chan");
-            black_box(sub.unsubscribe());
-        })
+            sub.unsubscribe();
+            black_box(());
+        });
     });
 }
 

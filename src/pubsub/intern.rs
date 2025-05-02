@@ -24,8 +24,6 @@ pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-
     use super::*;
 
     /// Проверяет, что при первом вызове создаётся Arc<str> с правильным содержимым,
@@ -47,7 +45,7 @@ mod tests {
     /// Проверяет, что для разных имён каналов создаются разные Arc<str>.
     #[test]
     fn intern_different_keys() {
-        // дава разных имени - разные Arc
+        // два разных имени - разные Arc
         let a1 = intern_channel("dzadza");
         let a2 = intern_channel("maz");
         assert_eq!(&*a1, "dzadza");
@@ -73,14 +71,16 @@ mod tests {
         let keys = ["a", "b", "a", "c", "b", "a"];
         let handles: Vec<_> = keys
             .iter()
-            .map(|&k| thread::spawn(move || intern_channel(k)))
+            .map(|&k| std::thread::spawn(move || intern_channel(k)))
             .collect();
 
         let arcs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
         // все "a" каналы должны указывать на один Arc.
         let a1 = arcs[0].clone();
-        for arc in arcs.iter().filter(|&&ref x| &**x == "a") {
+
+        // `arc` is an `&Arc<str>` here, so `(*arc).as_ref()` yields `&str`.
+        for arc in arcs.iter().filter(|arc| (*arc).as_ref() == "a") {
             assert!(
                 Arc::ptr_eq(&a1, arc),
                 "Все interned для \"a\" должны ссылаться на один Arc"
