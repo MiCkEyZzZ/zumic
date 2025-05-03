@@ -45,7 +45,7 @@ pub enum StoreError {
     #[error("Connection error: {0}")]
     Connection(String),
 
-    #[error("Cluster state error: {0}")]
+    #[error("Cluster error: {0}")]
     Cluster(String),
 
     // ==== PubSub ====
@@ -67,4 +67,7 @@ pub enum StoreError {
 
     #[error("File processing error")]
     FileError,
+
+    #[error("Operation not allowed across shards (key slot mismatch)")]
+    WrongShard,
 }
