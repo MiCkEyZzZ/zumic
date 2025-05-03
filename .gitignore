@@ -1,20 +1,28 @@
-.DS_Store
-.idea
-.zed
-.vscode
-.trunk
-docs
-book
-Flamegraph
-
-/target
-
-doc**/*
-logs/
-
+# Артефакты сборки Rust
+target/
 **/cargo-target
 
-*.wasm
-.env
+# IDE и редакторы
+.idea/
+.vscode/
+.zed/
+.trunk
 
+# Системные файлы
+.DS_Store
+
+# Логи и профилировщики
+logs/
+Flamegraph/
+
+# Документация, читаемая генераторами
+/docs/
+book
+doc**/*
+
+# Секреты и окружение
+.env
 zumic.conf
+
+# Веб-артефакты
+*.wasm

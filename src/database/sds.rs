@@ -65,6 +65,10 @@ impl Sds {
         }
     }
 
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_slice()
+    }
+
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         match &mut self.0 {
             Repr::Inline { len, buf } => &mut buf[..*len as usize],
