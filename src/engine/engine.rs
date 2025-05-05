@@ -1,78 +1,89 @@
 use std::io::{self};
 
-use tracing::info;
-
 use crate::{
     config::settings::{StorageConfig, StorageType},
     Sds, Storage, StoreResult, Value,
 };
 
-use super::InMemoryStore;
+use super::{InClusterStore, InMemoryStore, InPersistentStore};
 
 pub enum StorageEngine {
     InMemory(InMemoryStore),
+    InCluster(InClusterStore),
+    InPersistent(InPersistentStore),
 }
 
 impl StorageEngine {
     pub fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
-        info!("Setting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.set(key, value),
+            StorageEngine::InCluster(store) => store.set(key, value),
+            StorageEngine::InPersistent(store) => store.set(key, value),
         }
     }
 
     pub fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
-        info!("Getting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.get(key),
+            StorageEngine::InCluster(store) => store.get(key),
+            StorageEngine::InPersistent(store) => store.get(key),
         }
     }
 
     pub fn del(&self, key: &Sds) -> StoreResult<i64> {
-        info!("Deleting key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.del(key),
+            StorageEngine::InCluster(store) => store.del(key),
+            StorageEngine::InPersistent(store) => store.del(key),
         }
     }
 
     pub fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
-        info!("MSET {} leys", entries.len());
         match self {
             StorageEngine::InMemory(store) => store.mset(entries),
+            StorageEngine::InCluster(store) => store.mset(entries),
+            StorageEngine::InPersistent(store) => store.mset(entries),
         }
     }
 
     pub fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
-        info!("MGET {} keys", keys.len());
         match self {
             StorageEngine::InMemory(store) => store.mget(keys),
+            StorageEngine::InCluster(store) => store.mget(keys),
+            StorageEngine::InPersistent(store) => store.mget(keys),
         }
     }
 
     pub fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
-        info!("Renaming key: {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.rename(from, to),
+            StorageEngine::InCluster(store) => store.rename(from, to),
+            StorageEngine::InPersistent(store) => store.rename(from, to),
         }
     }
 
     pub fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
-        info!("Renaming key (NX): {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.renamenx(from, to),
+            StorageEngine::InCluster(store) => store.renamenx(from, to),
+            StorageEngine::InPersistent(store) => store.renamenx(from, to),
         }
     }
 
     pub fn flushdb(&self) -> StoreResult<()> {
-        info!("Flushing database");
         match self {
             StorageEngine::InMemory(store) => store.flushdb(),
+            StorageEngine::InCluster(store) => store.flushdb(),
+            StorageEngine::InPersistent(store) => store.flushdb(),
         }
     }
+
     /// Инициализирует движок хранения на основе переданной конфигурации.
     pub fn initialize(config: &StorageConfig) -> io::Result<Self> {
         match &config.storage_type {
             StorageType::Memory => Ok(Self::InMemory(InMemoryStore::new())),
+            StorageType::Cluster => Ok(Self::InMemory(InMemoryStore::new())),
+            StorageType::Persistent => Ok(Self::InMemory(InMemoryStore::new())),
         }
     }
 
@@ -80,11 +91,16 @@ impl StorageEngine {
     pub fn get_store(&self) -> &dyn Storage {
         match self {
             Self::InMemory(store) => store,
+            Self::InCluster(store) => store,
+            Self::InPersistent(store) => store,
         }
     }
+
     pub fn get_store_mut(&mut self) -> &mut dyn Storage {
         match self {
             Self::InMemory(store) => store,
+            Self::InCluster(store) => store,
+            Self::InPersistent(store) => store,
         }
     }
 }

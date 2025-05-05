@@ -70,4 +70,7 @@ pub enum StoreError {
 
     #[error("Operation not allowed across shards (key slot mismatch)")]
     WrongShard,
+
+    #[error("Serialization or deserialization failed: {0}")]
+    SerdeError(String),
 }

@@ -39,8 +39,10 @@ pub use command::{
 };
 /// Data types: Dict, QuickList, SkipList, Sds, and others.
 pub use database::{Dict, ListPack, QuickList, Sds, SkipList, SmartHash, Value};
-/// Storage engines: InMemoryStore, PersistentStore, ClusterStore.
-pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
+/// Storage engines: InMemoryStore, InPersistentStore, InClusterStore.
+pub use engine::{
+    AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage, StorageEngine,
+};
 /// Operation errors and result types.
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,

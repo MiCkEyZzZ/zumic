@@ -6,12 +6,12 @@ use crate::{Sds, StoreError, StoreResult, Value};
 pub const SLOT_COUNT: usize = 16384;
 
 #[derive(Clone)]
-pub struct ClusterStore {
+pub struct InClusterStore {
     pub shards: Vec<Arc<dyn Storage>>,
     pub slots: Vec<usize>, // length: 16384, each slot maps to an index in `shards`
 }
 
-impl ClusterStore {
+impl InClusterStore {
     pub fn new(shards: Vec<Arc<dyn Storage>>) -> Self {
         let mut slots = vec![0; SLOT_COUNT];
         for i in 0..SLOT_COUNT {
@@ -47,7 +47,7 @@ impl ClusterStore {
     }
 }
 
-impl Storage for ClusterStore {
+impl Storage for InClusterStore {
     fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         self.get_shard(&key).set(key, value)
     }
@@ -113,16 +113,16 @@ mod tests {
     use super::*;
 
     // Helper: creates a cluster with two in-memory shards.
-    fn make_cluster() -> ClusterStore {
+    fn make_cluster() -> InClusterStore {
         let s1 = Arc::new(InMemoryStore::new());
         let s2 = Arc::new(InMemoryStore::new());
-        ClusterStore::new(vec![s1, s2])
+        InClusterStore::new(vec![s1, s2])
     }
 
     #[test]
     fn test_key_slot_range() {
         let key = Sds::from_str("kin");
-        let slot = ClusterStore::key_slot(&key);
+        let slot = InClusterStore::key_slot(&key);
         assert!(slot < SLOT_COUNT);
     }
 
@@ -151,7 +151,10 @@ mod tests {
         let from = Sds::from_str("{same}");
         let to = Sds::from_str("{same}new");
 
-        assert_eq!(ClusterStore::key_slot(&from), ClusterStore::key_slot(&to));
+        assert_eq!(
+            InClusterStore::key_slot(&from),
+            InClusterStore::key_slot(&to)
+        );
 
         cluster.set(&from, Value::Int(42)).unwrap();
         cluster.rename(&from, &to).unwrap();
@@ -168,8 +171,8 @@ mod tests {
         let a = Sds::from_str("a");
         let b = Sds::from_str("b");
 
-        let slot_a = ClusterStore::key_slot(&a);
-        let slot_b = ClusterStore::key_slot(&b);
+        let slot_a = InClusterStore::key_slot(&a);
+        let slot_b = InClusterStore::key_slot(&b);
         cluster.slots[slot_a] = 0;
         cluster.slots[slot_b] = 1;
 
@@ -186,7 +189,7 @@ mod tests {
         let a = Sds::from_str("{nx}");
         let b = Sds::from_str("{nx}alt");
 
-        assert_eq!(ClusterStore::key_slot(&a), ClusterStore::key_slot(&b));
+        assert_eq!(InClusterStore::key_slot(&a), InClusterStore::key_slot(&b));
 
         cluster.set(&a, Value::Int(1)).unwrap();
         assert_eq!(cluster.renamenx(&a, &b).unwrap(), true);
@@ -218,9 +221,9 @@ mod tests {
         let c = Sds::from_str("x{tag}kin");
 
         // All should hash the same due to identical tag inside '{}'
-        let sa = ClusterStore::key_slot(&a);
-        let sb = ClusterStore::key_slot(&b);
-        let sc = ClusterStore::key_slot(&c);
+        let sa = InClusterStore::key_slot(&a);
+        let sb = InClusterStore::key_slot(&b);
+        let sc = InClusterStore::key_slot(&c);
         assert_eq!(sa, sb);
         assert_eq!(sb, sc);
     }

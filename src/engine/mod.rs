@@ -15,8 +15,9 @@ pub mod memory;
 pub mod persistent;
 pub mod storage;
 
-pub use cluster::ClusterStore;
+pub use aof::AofLog;
+pub use cluster::InClusterStore;
 pub use engine::StorageEngine;
 pub use memory::InMemoryStore;
-pub use persistent::PersistentStore;
+pub use persistent::InPersistentStore;
 pub use storage::Storage;

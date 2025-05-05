@@ -5,6 +5,8 @@ use config::{Config, ConfigError, Environment};
 #[derive(Debug, Clone)]
 pub enum StorageType {
     Memory,
+    Cluster,
+    Persistent,
 }
 
 /// Storage Configuration.

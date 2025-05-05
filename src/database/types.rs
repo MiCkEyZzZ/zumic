@@ -3,6 +3,8 @@ use std::collections::{HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
+use crate::{StoreError, StoreResult};
+
 use super::{Dict, QuickList, Sds, SkipList, SmartHash};
 
 /// Представляет обобщённое значение в движке хранения данных.
@@ -57,4 +59,16 @@ pub struct StreamEntry {
 pub struct HLL {
     /// Внутренние регистры, используемые алгоритмом HyperLogLog.
     pub registers: Vec<u8>,
+}
+
+impl Value {
+    /// Сериализует `Value` в JSON-байты.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("Value serialization failed")
+    }
+
+    /// Десериализует `Value` из JSON-байтов.
+    pub fn from_bytes(bytes: &[u8]) -> StoreResult<Value> {
+        serde_json::from_slice(bytes).map_err(|e| StoreError::SerdeError(e.to_string()))
+    }
 }
