@@ -49,5 +49,5 @@ criterion = { version = "0.5", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-name = "listpack_benchmarks"
+name = "storage_engine_benchmark"
 harness = false

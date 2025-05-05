@@ -8,6 +8,7 @@
 //! - `engine`: facade for selecting and interacting with a specific storage backend.
 //! - `storage`: trait that defines a unified interface for all storage implementations.
 
+pub mod aof;
 pub mod cluster;
 pub mod engine;
 pub mod memory;
