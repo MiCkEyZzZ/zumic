@@ -8,7 +8,7 @@ pub struct SetCommand {
 
 impl CommandExecute for SetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        store.set(Sds::from_str(self.key.as_str()), self.value.clone())?;
+        store.set(&Sds::from_str(self.key.as_str()), self.value.clone())?;
         Ok(Value::Null)
     }
 }
@@ -20,7 +20,7 @@ pub struct GetCommand {
 
 impl CommandExecute for GetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let result = store.get(Sds::from_str(self.key.as_str()));
+        let result = store.get(&Sds::from_str(self.key.as_str()));
         match result {
             Ok(Some(value)) => Ok(value),
             Ok(None) => Ok(Value::Null),
@@ -36,7 +36,7 @@ pub struct DelCommand {
 
 impl CommandExecute for DelCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let deleted = store.del(Sds::from_str(&self.key))?;
+        let deleted = store.del(&Sds::from_str(&self.key))?;
         Ok(Value::Int(deleted))
     }
 }
@@ -52,7 +52,7 @@ impl CommandExecute for ExistsCommand {
             .keys
             .iter()
             .map(|key| Sds::from_str(key))
-            .filter_map(|key| store.get(key).ok())
+            .filter_map(|key| store.get(&key).ok())
             .filter(|value| value.is_some())
             .count();
 
@@ -68,9 +68,9 @@ pub struct SetNxCommand {
 
 impl CommandExecute for SetNxCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let exists = store.get(Sds::from_str(&self.key))?.is_some();
+        let exists = store.get(&Sds::from_str(&self.key))?.is_some();
         if !exists {
-            store.set(Sds::from_str(&self.key), self.value.clone())?;
+            store.set(&Sds::from_str(&self.key), self.value.clone())?;
             Ok(Value::Int(1))
         } else {
             Ok(Value::Int(0))
@@ -85,11 +85,15 @@ pub struct MSetCommand {
 
 impl CommandExecute for MSetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let converted = self
-            .entries
+        let mut keys: Vec<Sds> = Vec::with_capacity(self.entries.len());
+        for (k, _) in &self.entries {
+            keys.push(Sds::from_str(k));
+        }
+        let converted: Vec<(&Sds, Value)> = keys
             .iter()
-            .map(|(k, v)| (Sds::from_str(k), v.clone()))
+            .zip(self.entries.iter().map(|(_, v)| v.clone()))
             .collect();
+
         store.mset(converted)?;
         Ok(Value::Null)
     }
@@ -102,19 +106,27 @@ pub struct MGetCommand {
 
 impl CommandExecute for MGetCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+        // 1. Сначала переводим все String → Sds и храним их,
+        //    чтобы ссылки на них были валидны
         let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
 
-        let values = store.mget(&converted_keys)?;
+        // 2. Собираем Vec<&Sds> из уже существующих Sds
+        let key_refs: Vec<&Sds> = converted_keys.iter().collect();
 
+        // 3. Вызываем mget, передавая &[&Sds]
+        let values = store.mget(&key_refs)?;
+
+        // 4. Преобразуем Vec<Option<Value>> → Vec<Sds>, обрабатывая None/ошибки
         let vec: Vec<Sds> = values
             .into_iter()
             .map(|opt| match opt {
                 Some(Value::Str(s)) => Ok(s),
-                Some(_) => Err(StoreError::WrongType("Неверный тип".to_string())),
+                Some(_) => Err(StoreError::WrongType("Неверный тип".into())),
                 None => Ok(Sds::from_str("")), // пустая строка для None
             })
             .collect::<Result<_, _>>()?;
 
+        // 5. Упаковываем в QuickList
         let mut list = QuickList::new(64);
         for item in vec {
             list.push_back(item);
@@ -132,7 +144,7 @@ pub struct RenameCommand {
 
 impl CommandExecute for RenameCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        store.rename(Sds::from_str(&self.from), Sds::from_str(&self.to))?;
+        store.rename(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Str(Sds::from_str("")))
     }
 }
@@ -145,7 +157,7 @@ pub struct RenameNxCommand {
 
 impl CommandExecute for RenameNxCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
-        let success = store.renamenx(Sds::from_str(&self.from), Sds::from_str(&self.to))?;
+        let success = store.renamenx(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Int(if success { 1 } else { 0 }))
     }
 }

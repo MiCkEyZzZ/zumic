@@ -12,7 +12,7 @@ fn key(data: &str) -> Sds {
 
 fn int_commands_benchmark(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
-    store.set(key("key"), Value::Int(0)).unwrap();
+    store.set(&key("key"), Value::Int(0)).unwrap();
 
     c.bench_function("incr command", |b| {
         b.iter(|| {

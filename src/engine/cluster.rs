@@ -48,51 +48,51 @@ impl ClusterStore {
 }
 
 impl Storage for ClusterStore {
-    fn set(&self, key: Sds, value: Value) -> StoreResult<()> {
+    fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         self.get_shard(&key).set(key, value)
     }
 
-    fn get(&self, key: Sds) -> StoreResult<Option<Value>> {
+    fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
         self.get_shard(&key).get(key)
     }
 
-    fn del(&self, key: Sds) -> StoreResult<i64> {
+    fn del(&self, key: &Sds) -> StoreResult<i64> {
         self.get_shard(&key).del(key)
     }
 
-    fn mset(&self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
+    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         for (k, v) in entries {
             self.set(k, v)?;
         }
         Ok(())
     }
 
-    fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
-        keys.iter().map(|key| self.get(key.clone())).collect()
+    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
+        keys.iter().map(|key| self.get(key)).collect()
     }
 
-    fn rename(&self, from: Sds, to: Sds) -> StoreResult<()> {
-        let from_shard = self.get_shard(&from);
-        let to_shard = self.get_shard(&to);
+    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
+        let from_shard = self.get_shard(from);
+        let to_shard = self.get_shard(to);
         if !Arc::ptr_eq(&from_shard, &to_shard) {
             return Err(StoreError::WrongShard);
         }
-        let val = self.get(from.clone())?.ok_or(StoreError::KeyNotFound)?;
+        let val = self.get(from)?.ok_or(StoreError::KeyNotFound)?;
         self.del(from)?;
         self.set(to, val)?;
         Ok(())
     }
 
-    fn renamenx(&self, from: Sds, to: Sds) -> StoreResult<bool> {
-        let from_shard = self.get_shard(&from);
-        let to_shard = self.get_shard(&to);
+    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
+        let from_shard = self.get_shard(from);
+        let to_shard = self.get_shard(to);
         if !Arc::ptr_eq(&from_shard, &to_shard) {
             return Err(StoreError::WrongShard);
         }
-        if self.get(to.clone())?.is_some() {
+        if self.get(to)?.is_some() {
             return Ok(false);
         }
-        let val = self.get(from.clone())?.ok_or(StoreError::KeyNotFound)?;
+        let val = self.get(from)?.ok_or(StoreError::KeyNotFound)?;
         self.del(from)?;
         self.set(to, val)?;
         Ok(true)
@@ -136,12 +136,12 @@ mod tests {
         let v2 = Value::Str(Sds::from_str("B"));
 
         // Записываем два разных ключа.
-        cluster.set(k1.clone(), v1.clone()).unwrap();
-        cluster.set(k2.clone(), v2.clone()).unwrap();
+        cluster.set(&k1, v1.clone()).unwrap();
+        cluster.set(&k2, v2.clone()).unwrap();
 
         // Проверяем, что get врнёт именно те ключи.
-        assert_eq!(cluster.get(k1.clone()).unwrap(), Some(v1));
-        assert_eq!(cluster.get(k2.clone()).unwrap(), Some(v2));
+        assert_eq!(cluster.get(&k1).unwrap(), Some(v1));
+        assert_eq!(cluster.get(&k2).unwrap(), Some(v2));
     }
 
     #[test]
@@ -153,11 +153,11 @@ mod tests {
 
         assert_eq!(ClusterStore::key_slot(&from), ClusterStore::key_slot(&to));
 
-        cluster.set(from.clone(), Value::Int(42)).unwrap();
-        cluster.rename(from.clone(), to.clone()).unwrap();
+        cluster.set(&from, Value::Int(42)).unwrap();
+        cluster.rename(&from, &to).unwrap();
 
-        assert_eq!(cluster.get(from).unwrap(), None);
-        assert_eq!(cluster.get(to).unwrap(), Some(Value::Int(42)));
+        assert_eq!(cluster.get(&from).unwrap(), None);
+        assert_eq!(cluster.get(&to).unwrap(), Some(Value::Int(42)));
     }
 
     #[test]
@@ -174,8 +174,8 @@ mod tests {
         cluster.slots[slot_a] = 0;
         cluster.slots[slot_b] = 1;
 
-        cluster.set(a.clone(), Value::Int(7)).unwrap();
-        let err = cluster.rename(a, b).unwrap_err();
+        cluster.set(&a, Value::Int(7)).unwrap();
+        let err = cluster.rename(&a, &b).unwrap_err();
         assert!(matches!(err, StoreError::WrongShard));
     }
 
@@ -189,27 +189,27 @@ mod tests {
 
         assert_eq!(ClusterStore::key_slot(&a), ClusterStore::key_slot(&b));
 
-        cluster.set(a.clone(), Value::Int(1)).unwrap();
-        assert_eq!(cluster.renamenx(a.clone(), b.clone()).unwrap(), true);
-        assert_eq!(cluster.get(a.clone()).unwrap(), None);
-        assert_eq!(cluster.get(b.clone()).unwrap(), Some(Value::Int(1)));
+        cluster.set(&a, Value::Int(1)).unwrap();
+        assert_eq!(cluster.renamenx(&a, &b).unwrap(), true);
+        assert_eq!(cluster.get(&a).unwrap(), None);
+        assert_eq!(cluster.get(&b).unwrap(), Some(Value::Int(1)));
         // Повторный renamenx — на новом ключе уже есть значение
-        assert_eq!(cluster.renamenx(a.clone(), b.clone()).unwrap(), false);
+        assert_eq!(cluster.renamenx(&a, &b).unwrap(), false);
     }
 
     #[test]
     fn test_flushdb_clears_all_shards() {
         let cluster = make_cluster();
-        cluster.set(Sds::from_str("one"), Value::Int(1)).unwrap();
-        cluster.set(Sds::from_str("two"), Value::Int(2)).unwrap();
+        cluster.set(&Sds::from_str("one"), Value::Int(1)).unwrap();
+        cluster.set(&Sds::from_str("two"), Value::Int(2)).unwrap();
 
-        assert!(cluster.get(Sds::from_str("one")).unwrap().is_some());
-        assert!(cluster.get(Sds::from_str("two")).unwrap().is_some());
+        assert!(cluster.get(&Sds::from_str("one")).unwrap().is_some());
+        assert!(cluster.get(&Sds::from_str("two")).unwrap().is_some());
 
         cluster.flushdb().unwrap();
 
-        assert_eq!(cluster.get(Sds::from_str("one")).unwrap(), None);
-        assert_eq!(cluster.get(Sds::from_str("two")).unwrap(), None);
+        assert_eq!(cluster.get(&Sds::from_str("one")).unwrap(), None);
+        assert_eq!(cluster.get(&Sds::from_str("two")).unwrap(), None);
     }
 
     #[test]

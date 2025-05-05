@@ -11,15 +11,15 @@ impl CommandExecute for IncrCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
-        match store.get(key_bytes.clone())? {
+        match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
                 let new_value = current + 1;
-                store.set(key_bytes, Value::Int(new_value))?;
+                store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(key_bytes, Value::Int(1))?;
+                store.set(&key_bytes, Value::Int(1))?;
                 Ok(Value::Int(1))
             }
         }
@@ -36,15 +36,15 @@ impl CommandExecute for IncrByCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let keys_bytes = Sds::from_str(&self.key);
 
-        match store.get(keys_bytes.clone())? {
+        match store.get(&keys_bytes)? {
             Some(Value::Int(current)) => {
                 let new_value = current + self.increment;
-                store.set(keys_bytes, Value::Int(new_value))?;
+                store.set(&keys_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(keys_bytes, Value::Int(self.increment))?;
+                store.set(&keys_bytes, Value::Int(self.increment))?;
                 Ok(Value::Int(self.increment))
             }
         }
@@ -60,15 +60,15 @@ impl CommandExecute for DecrCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
-        match store.get(key_bytes.clone())? {
+        match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
                 let new_value = current - 1;
-                store.set(key_bytes, Value::Int(new_value))?;
+                store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(key_bytes, Value::Int(-1))?;
+                store.set(&key_bytes, Value::Int(-1))?;
                 Ok(Value::Int(-1)) // Если ключ не существует, установите его равным -1
             }
         }
@@ -85,15 +85,15 @@ impl CommandExecute for DecrByCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
-        match store.get(key_bytes.clone())? {
+        match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
                 let new_value = current - self.decrement;
-                store.set(key_bytes, Value::Int(new_value))?;
+                store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(key_bytes, Value::Int(-self.decrement))?;
+                store.set(&key_bytes, Value::Int(-self.decrement))?;
                 Ok(Value::Int(-self.decrement))
             }
         }
@@ -195,7 +195,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
             .set(
-                Sds::from_str("counter"),
+                &Sds::from_str("counter"),
                 Value::Str(Sds::from_str("string")),
             )
             .unwrap();
@@ -215,7 +215,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
             .set(
-                Sds::from_str("counter"),
+                &Sds::from_str("counter"),
                 Value::Str(Sds::from_str("string")),
             )
             .unwrap();

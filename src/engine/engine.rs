@@ -14,49 +14,49 @@ pub enum StorageEngine {
 }
 
 impl StorageEngine {
-    pub fn set(&self, key: Sds, value: Value) -> StoreResult<()> {
+    pub fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         info!("Setting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.set(key, value),
         }
     }
 
-    pub fn get(&self, key: Sds) -> StoreResult<Option<Value>> {
+    pub fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
         info!("Getting value for key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.get(key),
         }
     }
 
-    pub fn del(&self, key: Sds) -> StoreResult<i64> {
+    pub fn del(&self, key: &Sds) -> StoreResult<i64> {
         info!("Deleting key: {:?}", key);
         match self {
             StorageEngine::InMemory(store) => store.del(key),
         }
     }
 
-    pub fn mset(&self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
+    pub fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         info!("MSET {} leys", entries.len());
         match self {
             StorageEngine::InMemory(store) => store.mset(entries),
         }
     }
 
-    pub fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
+    pub fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
         info!("MGET {} keys", keys.len());
         match self {
             StorageEngine::InMemory(store) => store.mget(keys),
         }
     }
 
-    pub fn rename(&self, from: Sds, to: Sds) -> StoreResult<()> {
+    pub fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
         info!("Renaming key: {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.rename(from, to),
         }
     }
 
-    pub fn renamenx(&self, from: Sds, to: Sds) -> StoreResult<bool> {
+    pub fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
         info!("Renaming key (NX): {:?} to {:?}", from, to);
         match self {
             StorageEngine::InMemory(store) => store.renamenx(from, to),
@@ -104,8 +104,8 @@ mod tests {
         let k = key("foo");
         let v = Value::Str(Sds::from_str("bar"));
 
-        engine.set(k.clone(), v.clone()).unwrap();
-        let got = engine.get(k.clone()).unwrap();
+        engine.set(&k, v.clone()).unwrap();
+        let got = engine.get(&k).unwrap();
         assert_eq!(got, Some(v));
     }
 
@@ -115,7 +115,7 @@ mod tests {
         let engine = StorageEngine::InMemory(InMemoryStore::new());
         let k = key("not_found");
 
-        let got = engine.get(k).unwrap();
+        let got = engine.get(&k).unwrap();
         assert_eq!(got, None);
     }
 
@@ -126,10 +126,10 @@ mod tests {
         let k = key("hello");
         let v = Value::Str(Sds::from_str("world"));
 
-        engine.set(k.clone(), v).unwrap();
-        engine.del(k.clone()).unwrap();
+        engine.set(&k, v).unwrap();
+        engine.del(&k).unwrap();
 
-        let got = engine.get(k.clone()).unwrap();
+        let got = engine.get(&k).unwrap();
         assert_eq!(got, None)
     }
 
@@ -140,7 +140,7 @@ mod tests {
         let k = key("ghost");
 
         // Удаление не должно вызывать панику или ошибку.
-        let result = engine.del(k);
+        let result = engine.del(&k);
         assert!(result.is_ok());
     }
 
@@ -148,17 +148,20 @@ mod tests {
     #[test]
     fn test_engine_mset() {
         let engine = StorageEngine::InMemory(InMemoryStore::new());
-        let entries = vec![
-            (key("kin1"), Value::Str(Sds::from_str("dza1"))),
-            (key("kin2"), Value::Str(Sds::from_str("dza2"))),
-        ];
 
-        engine.mset(entries.clone()).unwrap();
+        // Живые переменные, чтобы ссылки были валидны до конца функции
+        let k1 = key("kin1");
+        let k2 = key("kin2");
+        let v1 = Value::Str(Sds::from_str("dza1"));
+        let v2 = Value::Str(Sds::from_str("dza2"));
 
-        for (k, v) in entries {
-            let got = engine.get(k).unwrap();
-            assert_eq!(got, Some(v));
-        }
+        // Собираем Vec<(&Sds, Value)>
+        let entries = vec![(&k1, v1.clone()), (&k2, v2.clone())];
+        engine.mset(entries).unwrap();
+
+        // Проверяем, что положилось
+        assert_eq!(engine.get(&k1).unwrap(), Some(v1));
+        assert_eq!(engine.get(&k2).unwrap(), Some(v2));
     }
 
     /// Проверяет, что mget возвращает значения в корректном порядке для нескольких ключей.
@@ -170,10 +173,10 @@ mod tests {
         let v1 = Value::Str(Sds::from_str("dza1"));
         let v2 = Value::Str(Sds::from_str("dza2"));
 
-        engine.set(k1.clone(), v1.clone()).unwrap();
-        engine.set(k2.clone(), v2.clone()).unwrap();
+        engine.set(&k1, v1.clone()).unwrap();
+        engine.set(&k2, v2.clone()).unwrap();
 
-        let got = engine.mget(&[k1, k2]).unwrap();
+        let got = engine.mget(&[&k1, &k2]).unwrap();
         assert_eq!(got, vec![Some(v1), Some(v2)]);
     }
 
@@ -185,10 +188,10 @@ mod tests {
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
 
-        engine.set(k1.clone(), v.clone()).unwrap();
-        engine.rename(k1.clone(), k2.clone()).unwrap();
+        engine.set(&k1, v.clone()).unwrap();
+        engine.rename(&k1, &k2).unwrap();
 
-        let got = engine.get(k2.clone()).unwrap();
+        let got = engine.get(&k2).unwrap();
         assert_eq!(got, Some(v));
     }
 
@@ -200,7 +203,7 @@ mod tests {
         let k2 = key("new_key");
 
         // Должна возвращаться ошибка при попытке переименовать несуществующий ключ.
-        let result = engine.rename(k1.clone(), k2.clone());
+        let result = engine.rename(&k1, &k2);
         assert!(result.is_err());
     }
 
@@ -213,16 +216,16 @@ mod tests {
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
 
-        engine.set(k1.clone(), v.clone()).unwrap();
-        let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
+        engine.set(&k1, v.clone()).unwrap();
+        let result = engine.renamenx(&k1, &k2).unwrap();
         assert!(result);
 
         // Проверяем, что старый ключ удалён, а новый присутствует.
-        let got = engine.get(k2.clone()).unwrap();
+        let got = engine.get(&k2).unwrap();
         assert_eq!(got, Some(v));
 
         // Повторная попытка переименования должна не выполниться, так как новый ключ уже существует.
-        let result = engine.renamenx(k1.clone(), k2.clone()).unwrap();
+        let result = engine.renamenx(&k1, &k2).unwrap();
         assert!(!result);
     }
 
@@ -231,16 +234,16 @@ mod tests {
     fn test_engine_flushdb() {
         let engine = StorageEngine::InMemory(InMemoryStore::new());
         engine
-            .set(key("a"), Value::Str(Sds::from_str("x")))
+            .set(&key("a"), Value::Str(Sds::from_str("x")))
             .unwrap();
         engine
-            .set(key("b"), Value::Str(Sds::from_str("y")))
+            .set(&key("b"), Value::Str(Sds::from_str("y")))
             .unwrap();
 
         engine.flushdb().unwrap();
 
-        let a = engine.get(key("a")).unwrap();
-        let b = engine.get(key("b")).unwrap();
+        let a = engine.get(&key("a")).unwrap();
+        let b = engine.get(&key("b")).unwrap();
         assert_eq!(a, None);
         assert_eq!(b, None);
     }
@@ -271,9 +274,9 @@ mod tests {
     fn test_engine_get_store_mut() {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         let store_mut = engine.get_store_mut();
-        assert!(store_mut.set(key("x"), Value::Int(42)).is_ok());
+        assert!(store_mut.set(&key("x"), Value::Int(42)).is_ok());
 
-        let got = store_mut.get(key("x")).unwrap();
+        let got = store_mut.get(&key("x")).unwrap();
         assert_eq!(got, Some(Value::Int(42)));
     }
 }

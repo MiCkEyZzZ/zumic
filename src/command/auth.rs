@@ -11,7 +11,7 @@ pub struct AuthCommand {
 impl CommandExecute for AuthCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let user_key = Sds::from_str(&format!("user:{}", self.user));
-        match store.get(user_key)? {
+        match store.get(&user_key)? {
             Some(Value::Str(ref stored_password)) => {
                 let stored_password = stored_password
                     .as_str()
@@ -43,7 +43,7 @@ mod tests {
         let mut store = create_store();
         store
             .set(
-                Sds::from_str("user:admin"),
+                &Sds::from_str("user:admin"),
                 Value::Str(Sds::from_str("secret")),
             )
             .unwrap();
@@ -61,7 +61,7 @@ mod tests {
         let mut store = create_store();
         store
             .set(
-                Sds::from_str("user:admin"),
+                &Sds::from_str("user:admin"),
                 Value::Str(Sds::from_str("secret")),
             )
             .unwrap();
@@ -90,7 +90,7 @@ mod tests {
     fn test_auth_invalid_type() {
         let mut store = create_store();
         store
-            .set(Sds::from_str("user:admin"), Value::Int(42))
+            .set(&Sds::from_str("user:admin"), Value::Int(42))
             .unwrap(); // должно быть строка
 
         let cmd = AuthCommand {

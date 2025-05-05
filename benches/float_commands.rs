@@ -26,7 +26,7 @@ fn bench_set_float(c: &mut Criterion) {
 
 fn bench_incr_float(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
-    store.set(key("floatkey"), Value::Float(10.0)).unwrap();
+    store.set(&key("floatkey"), Value::Float(10.0)).unwrap();
 
     c.bench_function("incr_by_float command", |b| {
         b.iter(|| {
@@ -41,7 +41,7 @@ fn bench_incr_float(c: &mut Criterion) {
 
 fn bench_decr_float(c: &mut Criterion) {
     let mut store = StorageEngine::InMemory(InMemoryStore::new());
-    store.set(key("floatkey"), Value::Float(10.0)).unwrap();
+    store.set(&key("floatkey"), Value::Float(10.0)).unwrap();
 
     c.bench_function("decr_by_float command", |b| {
         b.iter(|| {

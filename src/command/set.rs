@@ -15,16 +15,16 @@ impl CommandExecute for SAddCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        match store.get(key.clone())? {
+        match store.get(&key)? {
             Some(Value::Set(mut set)) => {
                 let inserted = set.insert(member.clone());
-                store.set(key.clone(), Value::Set(set))?;
+                store.set(&key, Value::Set(set))?;
                 Ok(Value::Int(inserted as i64))
             }
             Some(Value::Null) | None => {
                 let mut set = HashSet::new();
                 set.insert(member);
-                store.set(key, Value::Set(set))?;
+                store.set(&key, Value::Set(set))?;
                 Ok(Value::Int(1))
             }
             _ => Err(StoreError::InvalidType),
@@ -43,9 +43,9 @@ impl CommandExecute for SRemCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        if let Some(Value::Set(mut set)) = store.get(key.clone())? {
+        if let Some(Value::Set(mut set)) = store.get(&key)? {
             let removed = set.remove(&member);
-            store.set(key, Value::Set(set))?;
+            store.set(&key, Value::Set(set))?;
             Ok(Value::Int(removed as i64))
         } else {
             Ok(Value::Int(0))
@@ -64,7 +64,7 @@ impl CommandExecute for SIsMemberCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        if let Some(Value::Set(set)) = store.get(key)? {
+        if let Some(Value::Set(set)) = store.get(&key)? {
             Ok(Value::Int(set.contains(&member) as i64))
         } else {
             Ok(Value::Int(0))
@@ -81,7 +81,7 @@ impl CommandExecute for SMembersCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        if let Some(Value::Set(set)) = store.get(key)? {
+        if let Some(Value::Set(set)) = store.get(&key)? {
             let list = QuickList::from_iter(set.iter().cloned(), 64);
             Ok(Value::List(list))
         } else {
@@ -99,7 +99,7 @@ impl CommandExecute for SCardCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::Set(set)) => Ok(Value::Int(set.len() as i64)),
             Some(Value::Null) | None => Ok(Value::Int(0)),
             _ => Err(StoreError::InvalidType),

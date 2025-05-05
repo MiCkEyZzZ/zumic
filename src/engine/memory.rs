@@ -19,31 +19,31 @@ impl InMemoryStore {
 }
 
 impl Storage for InMemoryStore {
-    fn set(&self, key: Sds, value: Value) -> StoreResult<()> {
-        self.data.insert(key, value);
+    fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
+        self.data.insert(key.clone(), value);
         Ok(())
     }
 
-    fn get(&self, key: Sds) -> StoreResult<Option<Value>> {
-        Ok(self.data.get(&key).map(|entry| entry.value().clone()))
+    fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
+        Ok(self.data.get(key).map(|entry| entry.value().clone()))
     }
 
-    fn del(&self, key: Sds) -> StoreResult<i64> {
-        if self.data.remove(&key).is_some() {
+    fn del(&self, key: &Sds) -> StoreResult<i64> {
+        if self.data.remove(key).is_some() {
             Ok(1)
         } else {
             Ok(0)
         }
     }
 
-    fn mset(&self, entries: Vec<(Sds, Value)>) -> StoreResult<()> {
+    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         for (key, value) in entries {
-            self.data.insert(key, value);
+            self.data.insert(key.clone(), value);
         }
         Ok(())
     }
 
-    fn mget(&self, keys: &[Sds]) -> StoreResult<Vec<Option<Value>>> {
+    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
         let result = keys
             .iter()
             .map(|key| self.data.get(key).map(|entry| entry.clone()))
@@ -51,21 +51,21 @@ impl Storage for InMemoryStore {
         Ok(result)
     }
 
-    fn rename(&self, from: Sds, to: Sds) -> StoreResult<()> {
+    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
         if let Some((_, value)) = self.data.remove(&from) {
-            self.data.insert(to, value);
+            self.data.insert(to.clone(), value);
             Ok(())
         } else {
             Err(StoreError::KeyNotFound)
         }
     }
 
-    fn renamenx(&self, from: Sds, to: Sds) -> StoreResult<bool> {
+    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
         if self.data.contains_key(&to) {
             return Ok(false);
         }
         if let Some((_, value)) = self.data.remove(&from) {
-            self.data.insert(to, value);
+            self.data.insert(to.clone(), value);
             Ok(true)
         } else {
             Err(StoreError::KeyNotFound)
@@ -99,8 +99,8 @@ mod tests {
         let k = key("hello");
         let v = Value::Str(Sds::from_str("world"));
 
-        store.set(k.clone(), v.clone()).unwrap();
-        let got = store.get(k.clone()).unwrap();
+        store.set(&k, v.clone()).unwrap();
+        let got = store.get(&k).unwrap();
         assert_eq!(got, Some(v));
     }
 
@@ -110,14 +110,14 @@ mod tests {
     fn test_overwrite_value() {
         let store = InMemoryStore::new();
         let k = key("overwrite");
-        let v1 = Value::Str(Sds::from_str("one"));
-        let v2 = Value::Str(Sds::from_str("two"));
 
-        store.set(k.clone(), v1.clone()).unwrap();
-        store.set(k.clone(), v2.clone()).unwrap();
+        store.set(&k, Value::Str(Sds::from_str("one"))).unwrap();
+        store.set(&k, Value::Str(Sds::from_str("two"))).unwrap();
 
-        let got = store.get(k.clone()).unwrap();
-        assert_eq!(got, Some(v2));
+        // Сравниваем с таким же «новым» значением,
+        // без клонирования заранее сохранённого v2:
+        let got = store.get(&k).unwrap();
+        assert_eq!(got, Some(Value::Str(Sds::from_str("two"))));
     }
 
     /// Проверяет, что ключ можно удалить, и после этого он недоступен для получения.
@@ -127,10 +127,10 @@ mod tests {
         let k = key("key_to_delete");
         let v = Value::Str(Sds::from_str("some_value"));
 
-        store.set(k.clone(), v).unwrap();
-        store.del(k.clone()).unwrap();
+        store.set(&k, v).unwrap();
+        store.del(&k).unwrap();
 
-        let got = store.get(k.clone()).unwrap();
+        let got = store.get(&k).unwrap();
         assert_eq!(got, None);
     }
 
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_get_nonexistent_key() {
         let store = InMemoryStore::new();
-        let got = store.get(key("missing")).unwrap();
+        let got = store.get(&key("missing")).unwrap();
         assert_eq!(got, None);
     }
 
@@ -147,7 +147,7 @@ mod tests {
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
         // Удаление несуществующего ключа не должно вызывать ошибку.
-        assert!(store.del(key("nope")).is_ok());
+        assert!(store.del(&key("nope")).is_ok());
     }
 
     /// Тестирует функциональность массовой установки и массового получения значений.
@@ -155,14 +155,23 @@ mod tests {
     #[test]
     fn test_mset_and_mget() {
         let store = InMemoryStore::new();
-        let entries = vec![
-            (key("key1"), Value::Int(1)),
-            (key("key2"), Value::Int(2)),
-            (key("key3"), Value::Int(3)),
-        ];
-        store.mset(entries.clone()).unwrap();
 
-        let keys = vec![key("key1"), key("key2"), key("key3"), key("missing")];
+        // Заводим переменные, чтобы ссылки были валидны
+        let k1 = key("key1");
+        let k2 = key("key2");
+        let k3 = key("key3");
+        let kmissing = key("missing");
+
+        // Элементы для mset — ссылки на эти переменные
+        let entries = vec![
+            (&k1, Value::Int(1)),
+            (&k2, Value::Int(2)),
+            (&k3, Value::Int(3)),
+        ];
+        store.mset(entries).unwrap();
+
+        // Срез ключей для mget — тоже ссылки на переменные
+        let keys: Vec<&Sds> = vec![&k1, &k2, &k3, &kmissing];
         let result = store.mget(&keys).unwrap();
 
         assert_eq!(
@@ -180,11 +189,11 @@ mod tests {
     #[test]
     fn test_rename() {
         let store = InMemoryStore::new();
-        store.set(key("old"), Value::Int(123)).unwrap();
+        store.set(&key("old"), Value::Int(123)).unwrap();
 
-        store.rename(key("old"), key("new")).unwrap();
-        assert!(store.get(key("old")).unwrap().is_none());
-        assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(123)));
+        store.rename(&key("old"), &key("new")).unwrap();
+        assert!(store.get(&key("old")).unwrap().is_none());
+        assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(123)));
     }
 
     /// Проверяет, что попытка переименования несуществующего ключа приводит к ошибке
@@ -192,7 +201,7 @@ mod tests {
     #[test]
     fn test_rename_nonexistent_key() {
         let store = InMemoryStore::new();
-        let result = store.rename(key("does_not_exist"), key("whatever"));
+        let result = store.rename(&key("does_not_exist"), &key("whatever"));
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
@@ -202,14 +211,14 @@ mod tests {
     fn test_renamenx_success() {
         let store = InMemoryStore::new();
         store
-            .set(key("old"), Value::Str(Sds::from_str("val")))
+            .set(&key("old"), Value::Str(Sds::from_str("val")))
             .unwrap();
 
-        let ok = store.renamenx(key("old"), key("new")).unwrap();
+        let ok = store.renamenx(&key("old"), &key("new")).unwrap();
         assert!(ok);
-        assert!(store.get(key("old")).unwrap().is_none());
+        assert!(store.get(&key("old")).unwrap().is_none());
         assert_eq!(
-            store.get(key("new")).unwrap(),
+            store.get(&key("new")).unwrap(),
             Some(Value::Str(Sds::from_str("val")))
         );
     }
@@ -218,25 +227,25 @@ mod tests {
     #[test]
     fn test_renamenx_existing_target() {
         let store = InMemoryStore::new();
-        store.set(key("old"), Value::Int(1)).unwrap();
-        store.set(key("new"), Value::Int(2)).unwrap();
+        store.set(&key("old"), Value::Int(1)).unwrap();
+        store.set(&key("new"), Value::Int(2)).unwrap();
 
-        let ok = store.renamenx(key("old"), key("new")).unwrap();
+        let ok = store.renamenx(&key("old"), &key("new")).unwrap();
         assert!(!ok); // Ожидается false, так как целевой ключ уже существует.
-        assert_eq!(store.get(key("old")).unwrap(), Some(Value::Int(1)));
-        assert_eq!(store.get(key("new")).unwrap(), Some(Value::Int(2)));
+        assert_eq!(store.get(&key("old")).unwrap(), Some(Value::Int(1)));
+        assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(2)));
     }
 
     /// Проверяет, что метод flushdb очищает хранилище от всех ключей и значений.
     #[test]
     fn test_flushdb() {
         let store = InMemoryStore::new();
-        store.set(key("one"), Value::Int(1)).unwrap();
-        store.set(key("two"), Value::Int(2)).unwrap();
+        store.set(&key("one"), Value::Int(1)).unwrap();
+        store.set(&key("two"), Value::Int(2)).unwrap();
 
         store.flushdb().unwrap();
 
-        assert!(store.get(key("one")).unwrap().is_none());
-        assert!(store.get(key("two")).unwrap().is_none());
+        assert!(store.get(&key("one")).unwrap().is_none());
+        assert!(store.get(&key("two")).unwrap().is_none());
     }
 }

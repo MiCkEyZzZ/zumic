@@ -10,7 +10,7 @@ pub struct StrLenCommand {
 impl CommandExecute for StrLenCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        if let Some(value) = store.get(key)? {
+        if let Some(value) = store.get(&key)? {
             if let Value::Str(ref s) = value {
                 Ok(Value::Int(s.len() as i64))
             } else {
@@ -33,21 +33,21 @@ impl CommandExecute for AppendCommand {
         let key = Sds::from_str(&self.key);
         let append_data = self.value.as_bytes();
 
-        match store.get(key.clone())? {
+        match store.get(&key)? {
             Some(Value::Str(ref s)) => {
                 let mut result = Vec::with_capacity(s.len() + append_data.len());
                 result.extend_from_slice(s);
                 result.extend_from_slice(append_data);
 
                 let result = Sds::from_vec(result);
-                store.set(key, Value::Str(result.clone()))?;
+                store.set(&key, Value::Str(result.clone()))?;
 
                 Ok(Value::Int(result.len() as i64))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
                 let new_value = Sds::from_vec(append_data.to_vec());
-                store.set(key, Value::Str(new_value.clone()))?;
+                store.set(&key, Value::Str(new_value.clone()))?;
                 Ok(Value::Int(new_value.len() as i64))
             }
         }
@@ -64,7 +64,7 @@ pub struct GetRangeCommand {
 impl CommandExecute for GetRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        if let Some(value) = store.get(key)? {
+        if let Some(value) = store.get(&key)? {
             if let Value::Str(ref s) = value {
                 // Получаем результат из s.as_str() и обрабатываем возможную ошибку
                 let s = s.as_str().map_err(|_| StoreError::InvalidType)?; // Преобразуем ошибку в StoreError
@@ -114,7 +114,7 @@ mod tests {
         let mut store = create_store();
 
         store
-            .set(Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
+            .set(&Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
             .unwrap();
 
         let strlen_cmd = StrLenCommand {
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn test_append_command_invalid_type() {
         let mut store = create_store();
-        store.set(Sds::from_str("test"), Value::Int(42)).unwrap();
+        store.set(&Sds::from_str("test"), Value::Int(42)).unwrap();
 
         let cmd = AppendCommand {
             key: "test".to_string(),
@@ -170,7 +170,7 @@ mod tests {
         let mut store = create_store();
 
         store
-            .set(Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
+            .set(&Sds::from_str("anton"), Value::Str(Sds::from_str("hello")))
             .unwrap();
 
         let command = AppendCommand {
@@ -205,7 +205,7 @@ mod tests {
 
         store
             .set(
-                Sds::from_str("anton"),
+                &Sds::from_str("anton"),
                 Value::Str(Sds::from_str("hello world")),
             )
             .unwrap();
@@ -242,7 +242,7 @@ mod tests {
         let mut store = create_store();
 
         // Добавляем строку с числовым значением в хранилище
-        store.set(Sds::from_str("anton"), Value::Int(42)).unwrap();
+        store.set(&Sds::from_str("anton"), Value::Int(42)).unwrap();
 
         let command = GetRangeCommand {
             key: "anton".to_string(),

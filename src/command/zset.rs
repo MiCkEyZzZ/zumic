@@ -17,7 +17,7 @@ impl CommandExecute for ZAddCommand {
         let member = Sds::from_str(&self.member);
 
         // Получить существующий ZSet или создать новый
-        let (mut dict, mut sorted) = match store.get(key.clone())? {
+        let (mut dict, mut sorted) = match store.get(&key)? {
             Some(Value::ZSet { dict, sorted }) => (dict, sorted),
             Some(_) => return Err(StoreError::InvalidType),
             None => (Dict::new(), SkipList::new()),
@@ -38,7 +38,7 @@ impl CommandExecute for ZAddCommand {
         sorted.insert(OrderedFloat(self.score), member.clone());
 
         // Сохраняем обновлённый ZSet
-        store.set(key, Value::ZSet { dict, sorted })?;
+        store.set(&key, Value::ZSet { dict, sorted })?;
         Ok(Value::Int(if is_new { 1 } else { 0 }))
     }
 }
@@ -55,7 +55,7 @@ impl CommandExecute for ZRemCommand {
         let member = Sds::from_str(&self.member);
 
         // Получаем ZSet, если он есть
-        if let Some(Value::ZSet { dict, sorted }) = store.get(key.clone())? {
+        if let Some(Value::ZSet { dict, sorted }) = store.get(&key)? {
             let mut dict = dict;
             let mut sorted = sorted;
 
@@ -67,7 +67,7 @@ impl CommandExecute for ZRemCommand {
                 // Удаляем из skiplist по баллу
                 sorted.remove(&OrderedFloat(old_score));
                 // Сохраняем обратно
-                store.set(key, Value::ZSet { dict, sorted })?;
+                store.set(&key, Value::ZSet { dict, sorted })?;
                 return Ok(Value::Int(1));
             } else {
                 // Элемент не найден
@@ -91,7 +91,7 @@ impl CommandExecute for ZScoreCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        match store.get(key)? {
+        match store.get(&key)? {
             // Захватываем `dict` как mutable, чтобы уметь вызвать `dict.get(&member)`
             Some(Value::ZSet { mut dict, .. }) => {
                 if let Some(&score) = dict.get(&member) {
@@ -114,7 +114,7 @@ pub struct ZCardCommand {
 impl CommandExecute for ZCardCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::ZSet { dict, .. }) => Ok(Value::Int(dict.len() as i64)),
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Int(0)),
@@ -133,7 +133,7 @@ impl CommandExecute for ZRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::ZSet { sorted, .. }) => {
                 // Собрать члены в порядке возрастания балла.
                 let all: Vec<Sds> = sorted.iter().map(|(_, member)| member.clone()).collect();
@@ -173,7 +173,7 @@ impl CommandExecute for ZRevRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::ZSet { sorted, .. }) => {
                 // Собрать члены в обратном порядке по баллу.
                 let all: Vec<Sds> = sorted

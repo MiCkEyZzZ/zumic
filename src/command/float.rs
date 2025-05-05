@@ -12,15 +12,15 @@ impl CommandExecute for IncrByFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
-        match store.get(key_bytes.clone())? {
+        match store.get(&key_bytes)? {
             Some(Value::Float(current)) => {
                 let new_value = current + self.increment;
-                store.set(key_bytes, Value::Float(new_value))?;
+                store.set(&key_bytes, Value::Float(new_value))?;
                 Ok(Value::Float(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(key_bytes, Value::Float(self.increment))?;
+                store.set(&key_bytes, Value::Float(self.increment))?;
                 Ok(Value::Float(self.increment))
             }
         }
@@ -37,15 +37,15 @@ impl CommandExecute for DecrByFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
-        match store.get(key_bytes.clone())? {
+        match store.get(&key_bytes)? {
             Some(Value::Float(current)) => {
                 let new_value = current - self.decrement;
-                store.set(key_bytes, Value::Float(new_value))?;
+                store.set(&key_bytes, Value::Float(new_value))?;
                 Ok(Value::Float(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                store.set(key_bytes, Value::Float(-self.decrement))?;
+                store.set(&key_bytes, Value::Float(-self.decrement))?;
                 Ok(Value::Float(-self.decrement))
             }
         }
@@ -61,7 +61,7 @@ pub struct SetFloatCommand {
 impl CommandExecute for SetFloatCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
-        store.set(key_bytes, Value::Float(self.value))?;
+        store.set(&key_bytes, Value::Float(self.value))?;
         Ok(Value::Float(self.value))
     }
 }
@@ -78,7 +78,7 @@ mod tests {
     fn test_incr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
-            .set(Sds::from_str("key1"), Value::Float(10.0))
+            .set(&Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
 
         let cmd = IncrByFloatCommand {
@@ -95,7 +95,7 @@ mod tests {
     fn test_decr_by_float() {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
         store
-            .set(Sds::from_str("key1"), Value::Float(10.0))
+            .set(&Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
 
         let cmd = DecrByFloatCommand {

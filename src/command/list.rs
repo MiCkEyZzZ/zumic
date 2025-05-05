@@ -13,7 +13,7 @@ impl CommandExecute for LPushCommand {
         let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
-        let mut list = match store.get(key.clone())? {
+        let mut list = match store.get(&key)? {
             Some(Value::List(list)) => list,
             Some(_) => return Err(StoreError::InvalidType),
             None => QuickList::new(64),
@@ -21,7 +21,7 @@ impl CommandExecute for LPushCommand {
 
         list.push_front(element);
         let len = list.len() as i64;
-        store.set(key, Value::List(list))?;
+        store.set(&key, Value::List(list))?;
         Ok(Value::Int(len))
     }
 }
@@ -37,7 +37,7 @@ impl CommandExecute for RPushCommand {
         let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
-        let mut list = match store.get(key.clone())? {
+        let mut list = match store.get(&key)? {
             Some(Value::List(list)) => list,
             Some(_) => return Err(StoreError::InvalidType),
             None => QuickList::new(64),
@@ -45,7 +45,7 @@ impl CommandExecute for RPushCommand {
 
         list.push_back(element);
         let len = list.len() as i64;
-        store.set(key, Value::List(list))?;
+        store.set(&key, Value::List(list))?;
         Ok(Value::Int(len))
     }
 }
@@ -59,10 +59,10 @@ impl CommandExecute for LPopCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        match store.get(key.clone())? {
+        match store.get(&key)? {
             Some(Value::List(mut list)) => {
                 if let Some(elem) = list.pop_front() {
-                    store.set(key, Value::List(list))?;
+                    store.set(&key, Value::List(list))?;
                     Ok(Value::Str(elem))
                 } else {
                     Ok(Value::Null)
@@ -83,10 +83,10 @@ impl CommandExecute for RPopCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        match store.get(key.clone())? {
+        match store.get(&key)? {
             Some(Value::List(mut list)) => {
                 if let Some(elem) = list.pop_back() {
-                    store.set(key, Value::List(list))?;
+                    store.set(&key, Value::List(list))?;
                     Ok(Value::Str(elem))
                 } else {
                     Ok(Value::Null)
@@ -106,7 +106,7 @@ pub struct LLenCommand {
 impl CommandExecute for LLenCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::List(list)) => Ok(Value::Int(list.len() as i64)),
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Int(0)),
@@ -124,7 +124,7 @@ pub struct LRangeCommand {
 impl CommandExecute for LRangeCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        match store.get(key)? {
+        match store.get(&key)? {
             Some(Value::List(list)) => {
                 let len = list.len() as i64;
                 let s = if self.start < 0 {
@@ -285,7 +285,7 @@ mod tests {
         );
 
         // Если ключ существует, но это не список, то LPush должен вернуть ошибку InvalidType.
-        store.set(Sds::from_str("k"), Value::Int(5)).unwrap();
+        store.set(&Sds::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {
                 key: "k".into(),

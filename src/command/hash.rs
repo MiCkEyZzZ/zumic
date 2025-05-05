@@ -15,17 +15,17 @@ impl CommandExecute for HSetCommand {
         let field = Sds::from_str(&self.field);
         let value = Sds::from_str(&self.value);
 
-        match store.get(key.clone())? {
+        match store.get(&key)? {
             Some(Value::Hash(mut smart_hash)) => {
                 smart_hash.insert(field.clone(), value.clone());
-                store.set(key, Value::Hash(smart_hash))?;
+                store.set(&key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
                 let mut smart_hash = SmartHash::new();
                 smart_hash.insert(field.clone(), value.clone());
-                store.set(key, Value::Hash(smart_hash))?;
+                store.set(&key, Value::Hash(smart_hash))?;
                 Ok(Value::Int(1))
             }
         }
@@ -43,7 +43,7 @@ impl CommandExecute for HGetCommand {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
-        if let Some(Value::Hash(ref mut smart_hash)) = store.get(key.clone())? {
+        if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {
             if let Some(value) = smart_hash.get(&field) {
                 return Ok(Value::Str(value.clone()));
             } else {
@@ -65,10 +65,10 @@ impl CommandExecute for HDelCommand {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
-        if let Some(Value::Hash(mut smart_hash)) = store.get(key.clone())? {
+        if let Some(Value::Hash(mut smart_hash)) = store.get(&key)? {
             let removed = smart_hash.remove(&field);
             if removed {
-                store.set(key, Value::Hash(smart_hash))?;
+                store.set(&key, Value::Hash(smart_hash))?;
                 return Ok(Value::Int(1));
             }
             return Ok(Value::Int(0));
@@ -86,7 +86,7 @@ impl CommandExecute for HGetAllCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        if let Some(Value::Hash(ref mut smart_hash)) = store.get(key)? {
+        if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {
             let result: QuickList<Sds> = QuickList::from_iter(
                 smart_hash
                     .iter()
