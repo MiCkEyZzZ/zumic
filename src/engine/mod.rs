@@ -1,3 +1,13 @@
+//! Storage engine modules.
+//!
+//! This module defines various implementations and abstractions for key-value storage:
+//!
+//! - `memory`: in-memory store for fast, ephemeral data access.
+//! - `persistent`: persistent store for durable storage (e.g., on disk).
+//! - `cluster`: distributed key-value store for clustered setups.
+//! - `engine`: facade for selecting and interacting with a specific storage backend.
+//! - `storage`: trait that defines a unified interface for all storage implementations.
+
 pub mod cluster;
 pub mod engine;
 pub mod memory;

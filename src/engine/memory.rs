@@ -4,8 +4,8 @@ use dashmap::DashMap;
 
 use crate::{Sds, Storage, StoreError, StoreResult, Value};
 
-/// `InMemoryStore` — потокобезопасное хранилище ключей и значений
-/// с использованием `DashMap` и `Arc`.
+/// `InMemoryStore` - a thread-safe key-value store
+/// using `DashMap` and `Arc`.
 pub struct InMemoryStore {
     pub data: Arc<DashMap<Sds, Value>>,
 }
@@ -92,7 +92,8 @@ mod tests {
         Sds::from(data.as_bytes())
     }
 
-    /// Основной тест для проверки установки и последующего получения значения.
+    /// Main test to check setting and getting a value.
+    /// This test ensures that values can be correctly set and retrieved from the store.
     #[test]
     fn test_set_and_get() {
         let store = InMemoryStore::new();
@@ -104,8 +105,9 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Проверяет, что повторная установка значения для одного и того же ключа
-    /// перезаписывает старое значение.
+    /// Checks that re-setting the value for the same key
+    /// overwrites the old value.
+    /// This test ensures that calling `set` on an existing key updates the value.
     #[test]
     fn test_overwrite_value() {
         let store = InMemoryStore::new();
@@ -114,13 +116,12 @@ mod tests {
         store.set(&k, Value::Str(Sds::from_str("one"))).unwrap();
         store.set(&k, Value::Str(Sds::from_str("two"))).unwrap();
 
-        // Сравниваем с таким же «новым» значением,
-        // без клонирования заранее сохранённого v2:
         let got = store.get(&k).unwrap();
         assert_eq!(got, Some(Value::Str(Sds::from_str("two"))));
     }
 
-    /// Проверяет, что ключ можно удалить, и после этого он недоступен для получения.
+    /// Checks that a key can be deleted, and after that, it is inaccessible.
+    /// This test ensures that after calling `del` on a key, it is no longer retrievable.
     #[test]
     fn test_delete() {
         let store = InMemoryStore::new();
@@ -134,7 +135,8 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Проверяет, что получение значения по несуществующему ключу возвращает None.
+    /// Checks that getting a value for a non-existent key returns None.
+    /// This test ensures that attempting to get a key that doesn't exist results in `None`.
     #[test]
     fn test_get_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -142,27 +144,27 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Проверяет, что удаление несуществующего ключа не приводит к ошибке.
+    /// Checks that deleting a non-existent key does not result in an error.
+    /// This test ensures that calling `del` on a non-existent key doesn't cause an error.
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
-        // Удаление несуществующего ключа не должно вызывать ошибку.
+        // Deleting a non-existent key should not cause an error.
         assert!(store.del(&key("nope")).is_ok());
     }
 
-    /// Тестирует функциональность массовой установки и массового получения значений.
-    /// Проверяет корректность получения существующих и несуществующих ключей.
+    /// Tests bulk setting and getting values.
+    /// This test checks that multiple key-value pairs can be set and retrieved at once,
+    /// and that missing keys return `None`.
     #[test]
     fn test_mset_and_mget() {
         let store = InMemoryStore::new();
 
-        // Заводим переменные, чтобы ссылки были валидны
         let k1 = key("key1");
         let k2 = key("key2");
         let k3 = key("key3");
         let kmissing = key("missing");
 
-        // Элементы для mset — ссылки на эти переменные
         let entries = vec![
             (&k1, Value::Int(1)),
             (&k2, Value::Int(2)),
@@ -170,7 +172,6 @@ mod tests {
         ];
         store.mset(entries).unwrap();
 
-        // Срез ключей для mget — тоже ссылки на переменные
         let keys: Vec<&Sds> = vec![&k1, &k2, &k3, &kmissing];
         let result = store.mget(&keys).unwrap();
 
@@ -185,7 +186,8 @@ mod tests {
         );
     }
 
-    /// Проверяет, что переименование существующего ключа происходит корректно.
+    /// Checks that renaming an existing key works correctly.
+    /// This test ensures that the key is moved to the new name and the old key is no longer accessible.
     #[test]
     fn test_rename() {
         let store = InMemoryStore::new();
@@ -196,8 +198,9 @@ mod tests {
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(123)));
     }
 
-    /// Проверяет, что попытка переименования несуществующего ключа приводит к ошибке
-    /// с кодом KeyNotFound.
+    /// Checks that attempting to rename a non-existent key results in an error
+    /// with the KeyNotFound code.
+    /// This test ensures that trying to rename a key that doesn't exist returns an error.
     #[test]
     fn test_rename_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -205,8 +208,9 @@ mod tests {
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
-    /// Тестирует работу метода renamenx: переименование происходит только
-    /// если целевой ключ отсутствует.
+    /// Tests the renamenx method: renaming happens only
+    /// if the target key does not exist.
+    /// This test ensures that renaming a key only works if the target doesn't already exist.
     #[test]
     fn test_renamenx_success() {
         let store = InMemoryStore::new();
@@ -223,7 +227,8 @@ mod tests {
         );
     }
 
-    /// Проверяет, что renamenx не выполняется, если целевой ключ уже существует.
+    /// Checks that renamenx does not proceed if the target key already exists.
+    /// This test ensures that renaming a key fails if the target already exists.
     #[test]
     fn test_renamenx_existing_target() {
         let store = InMemoryStore::new();
@@ -231,12 +236,13 @@ mod tests {
         store.set(&key("new"), Value::Int(2)).unwrap();
 
         let ok = store.renamenx(&key("old"), &key("new")).unwrap();
-        assert!(!ok); // Ожидается false, так как целевой ключ уже существует.
+        assert!(!ok); // Expects false since the target key already exists.
         assert_eq!(store.get(&key("old")).unwrap(), Some(Value::Int(1)));
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(2)));
     }
 
-    /// Проверяет, что метод flushdb очищает хранилище от всех ключей и значений.
+    /// Checks that the flushdb method clears all keys and values from the store.
+    /// This test ensures that calling `flushdb` removes all data from the store.
     #[test]
     fn test_flushdb() {
         let store = InMemoryStore::new();
@@ -247,5 +253,27 @@ mod tests {
 
         assert!(store.get(&key("one")).unwrap().is_none());
         assert!(store.get(&key("two")).unwrap().is_none());
+    }
+
+    /// Tests that an empty key is handled correctly.
+    /// This test ensures that an empty key can be set and retrieved from the store.
+    #[test]
+    fn test_empty_key() {
+        let store = InMemoryStore::new();
+        let empty = key("");
+        store.set(&empty, Value::Int(42)).unwrap();
+        assert_eq!(store.get(&empty).unwrap(), Some(Value::Int(42)));
+    }
+
+    /// Tests handling of very long keys and values.
+    /// This test ensures that the store can handle keys and values of arbitrary size.
+    #[test]
+    fn test_very_long_key_and_value() {
+        let store = InMemoryStore::new();
+        let long_key = key(&"k".repeat(10_000));
+        let long_value = Value::Str(Sds::from("v".repeat(100_000).as_bytes()));
+
+        store.set(&long_key, long_value.clone()).unwrap();
+        assert_eq!(store.get(&long_key).unwrap(), Some(long_value));
     }
 }

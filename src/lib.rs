@@ -1,32 +1,32 @@
-/// Аутентификация и ACL: пользователи, пароли, правила доступа.
+/// Authentication and ACL: users, passwords, access control rules.
 pub mod auth;
-/// Парсер и исполнение command-строк (SET, GET и т.д.).
+/// Command-line parsing and execution (SET, GET, etc.).
 pub mod command;
-/// Загрузка конфигурации сервера.
+/// Server configuration loading.
 pub mod config;
-/// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
+/// Built-in data structures (Dict, SkipList, QuickList, SDS).
 pub mod database;
-/// Абстракция движка хранения и реализации (InMemory, Persistent, Cluster).
+/// Storage engine abstraction and implementations (InMemory, Persistent, Cluster).
 pub mod engine;
-/// Общие ошибки: кодирование/декодирование, парсинг, хранилище.
+/// Common error types: encoding/decoding, parsing, storage.
 pub mod error;
-/// Гибкое логирование (форматирование, фильтры, sinks).
+/// Flexible logging (formatting, filters, sinks).
 pub mod logging;
-/// Сетевой стек: протокол ZSP и сервер на Tokio.
+/// Network stack: ZSP protocol and Tokio-based server.
 pub mod network;
 /// Pub/Sub: Broker, Subscription, Message.
 pub mod pubsub;
 
 // -----------------------------------------------------------------------------
-//  Часто используемые публичные типы
+//  Frequently used public types
 // -----------------------------------------------------------------------------
 
-/// Функции хеширования и проверки паролей, ACL-менеджер.
+/// Password hashing and verification functions, ACL manager.
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
-/// Основные команды key-value: SET, GET, INCR, HSET, LPOP, ZADD и др.
+/// Core key-value commands: SET, GET, INCR, HSET, LPOP, ZADD, etc.
 pub use command::{
     AppendCommand, AuthCommand, Command, CommandExecute, DecrByCommand, DecrByFloatCommand,
     DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, GetRangeCommand,
@@ -37,16 +37,16 @@ pub use command::{
     StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand,
     ZScoreCommand,
 };
-/// Типы данных: Dict, QuickList, SkipList, Sds и другие.
+/// Data types: Dict, QuickList, SkipList, Sds, and others.
 pub use database::{Dict, ListPack, QuickList, Sds, SkipList, SmartHash, Value};
-/// Движки хранения: InMemoryStore, PersistentStore, ClusterStore.
+/// Storage engines: InMemoryStore, PersistentStore, ClusterStore.
 pub use engine::{ClusterStore, InMemoryStore, PersistentStore, Storage, StorageEngine};
-/// Ошибки и результаты операций.
+/// Operation errors and result types.
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
     PasswordError, StoreError, StoreResult,
 };
-/// Сетевой сервер и протокол.
+/// Network server and protocol.
 pub use network::{server, zsp};
-/// API Pub/Sub.
+/// Pub/Sub API.
 pub use pubsub::{Broker, Message, PatternSubscription, Subscription};

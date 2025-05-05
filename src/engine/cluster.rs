@@ -8,7 +8,7 @@ pub const SLOT_COUNT: usize = 16384;
 #[derive(Clone)]
 pub struct ClusterStore {
     pub shards: Vec<Arc<dyn Storage>>,
-    pub slots: Vec<usize>, // длина: 16384, каждый слот указывает на индекс в `shards`
+    pub slots: Vec<usize>, // length: 16384, each slot maps to an index in `shards`
 }
 
 impl ClusterStore {
@@ -26,7 +26,7 @@ impl ClusterStore {
 
         let bytes = key.as_bytes();
 
-        // Поиск подстроки между '{' и '}', если есть
+        // Look for a substring between '{' and '}', if present
         if let Some(start) = bytes.iter().position(|&b| b == b'{') {
             if let Some(end) = bytes[start + 1..].iter().position(|&b| b == b'}') {
                 let tag = &bytes[start + 1..start + 1 + end];
@@ -35,7 +35,7 @@ impl ClusterStore {
             }
         }
 
-        // Иначе хешируем всю строку
+        // Otherwise, hash the entire key
         let hash = State::<XMODEM>::calculate(bytes);
         (hash as usize) % SLOT_COUNT
     }
@@ -112,7 +112,7 @@ mod tests {
 
     use super::*;
 
-    // Helper: для in-memory шарда и кластер над ним.
+    // Helper: creates a cluster with two in-memory shards.
     fn make_cluster() -> ClusterStore {
         let s1 = Arc::new(InMemoryStore::new());
         let s2 = Arc::new(InMemoryStore::new());
@@ -135,11 +135,11 @@ mod tests {
         let k2 = Sds::from_str("beta");
         let v2 = Value::Str(Sds::from_str("B"));
 
-        // Записываем два разных ключа.
+        // Set two different keys
         cluster.set(&k1, v1.clone()).unwrap();
         cluster.set(&k2, v2.clone()).unwrap();
 
-        // Проверяем, что get врнёт именно те ключи.
+        // Verify that `get` returns the correct values
         assert_eq!(cluster.get(&k1).unwrap(), Some(v1));
         assert_eq!(cluster.get(&k2).unwrap(), Some(v2));
     }
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn test_rename_same_shard_succeeds() {
         let cluster = make_cluster();
-        // Используем hash tag "{kin}" и "{kin}dza" — оба в одном слоте
+        // Use hash tags "{same}" and "{same}new" to ensure both go to the same slot
         let from = Sds::from_str("{same}");
         let to = Sds::from_str("{same}new");
 
@@ -164,8 +164,7 @@ mod tests {
     fn test_rename_different_shards_errors() {
         let mut cluster = make_cluster();
 
-        // Принудительно заставим два слота вести на разные шарды
-        // Например, 'a' и 'b'
+        // Manually force different slots to point to different shards
         let a = Sds::from_str("a");
         let b = Sds::from_str("b");
 
@@ -183,7 +182,7 @@ mod tests {
     fn test_renamenx_behaviour() {
         let cluster = make_cluster();
 
-        // Опять же используем hash tags для гарантии одного слота:
+        // Use hash tags to ensure same slot
         let a = Sds::from_str("{nx}");
         let b = Sds::from_str("{nx}alt");
 
@@ -193,7 +192,7 @@ mod tests {
         assert_eq!(cluster.renamenx(&a, &b).unwrap(), true);
         assert_eq!(cluster.get(&a).unwrap(), None);
         assert_eq!(cluster.get(&b).unwrap(), Some(Value::Int(1)));
-        // Повторный renamenx — на новом ключе уже есть значение
+        // Second renamenx should fail since the destination already exists
         assert_eq!(cluster.renamenx(&a, &b).unwrap(), false);
     }
 
@@ -217,7 +216,8 @@ mod tests {
         let a = Sds::from_str("{tag}");
         let b = Sds::from_str("{tag}kin");
         let c = Sds::from_str("x{tag}kin");
-        // Всё, что внутри {tag}, хешируется одинаково
+
+        // All should hash the same due to identical tag inside '{}'
         let sa = ClusterStore::key_slot(&a);
         let sb = ClusterStore::key_slot(&b);
         let sc = ClusterStore::key_slot(&c);
