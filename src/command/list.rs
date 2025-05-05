@@ -1,6 +1,4 @@
-use crate::{QuickList, Sds, StorageEngine, StoreError, Value};
-
-use super::CommandExecute;
+use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct LPushCommand {

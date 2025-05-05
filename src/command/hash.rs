@@ -1,6 +1,4 @@
-use crate::{QuickList, Sds, SmartHash, StorageEngine, StoreError, Value};
-
-use super::CommandExecute;
+use crate::{CommandExecute, QuickList, Sds, SmartHash, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct HSetCommand {

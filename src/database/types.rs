@@ -3,71 +3,70 @@ use std::collections::{HashMap, HashSet};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
+use super::{Dict, QuickList, Sds, SkipList, SmartHash};
 use crate::{StoreError, StoreResult};
 
-use super::{Dict, QuickList, Sds, SkipList, SmartHash};
-
-/// Представляет обобщённое значение в движке хранения данных.
+/// Represents a generic value in the storage engine.
 ///
-/// Используется как основной контейнер для различных поддерживаемых типов
-/// данных: строк, целых чисел, чисел с плавающей точкой, `null`, коллекций
-/// (списки, множества, хэши, упорядоченные множества), а также более сложных
-/// структур, таких как HyperLogLog и потоки.
+/// This serves as the primary container for various supported data types:
+/// strings, integers, floating-point numbers, `null`, collections (lists,
+/// sets, hashes, sorted sets), as well as more complex structures like
+/// HyperLogLog and streams.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Value {
-    /// Двоично-безопасная строка.
+    /// A binary-safe string.
     Str(Sds),
-    /// Знаковое 64-битное целое число.
+    /// A 64-bit floating-point number.
     Int(i64),
-    /// 64-битное число с плавающей точкой.
+    /// A 64-bit floating-point number.
     Float(f64),
-    /// Тип `null` (используется как маркер отсутствия значения или удаления).
+    /// A `null` type (used to represent absence of value or deletion).
     Null,
-    /// Список двоичных строк, реализованный через `QuickList`.
+    /// A list of binary strings, implemented using `QuickList`.
     List(QuickList<Sds>),
-    /// Хэш-карта (словарь), хранимая как `SmartHash`.
+    /// A hash map (dictionary), stored as `SmartHash`.
     Hash(SmartHash),
-    /// Упорядоченное множество с сортировкой по оценке (`score`).
+    /// A sorted set with score-based ordering.
     ///
-    /// Поле `dict` сопоставляет каждый элемент со значением оценки,
-    /// а `sorted` поддерживает упорядоченный список ключей по оценкам.
+    /// The `dict` field maps each element to its score,
+    /// while `sorted` maintains the order of elements by score.
     ZSet {
-        /// Соответствие элемента его оценке.
+        /// Maps each element to its score.
         dict: Dict<Sds, f64>,
-        /// Список элементов, упорядоченных по оценкам.
+        /// Maintains elements ordered by their score.
         sorted: SkipList<OrderedFloat<f64>, Sds>,
     },
-    /// Множество уникальных строковых элементов.
+    /// A set of unique string elements.
     Set(HashSet<Sds>),
-    /// Структура HyperLogLog для приближённого подсчёта количества уникальных элементов.
+    /// A HyperLogLog structure for approximate cardinality estimation.
     HyperLogLog(HLL),
-    /// Поток записей, каждая запись имеет идентификатор и набор полей.
+    /// A stream of entries, each identified by an ID and a set of fields.
     SStream(Vec<StreamEntry>),
 }
 
-/// Запись потока данных.
+/// A single entry in a data stream.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StreamEntry {
-    /// Уникальный идентификатор записи в потоке.
+    /// Unique identifier of the stream entry.
     pub id: u64,
-    /// Поля записи и их значения.
+    /// Fields and their corresponding values.
     pub data: HashMap<String, Value>,
 }
 
-/// Структура HyperLogLog для приближённого уникального счётчика.
+/// A HyperLogLog structure for approximate distinct counting.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HLL {
-    /// Внутренние регистры, используемые алгоритмом HyperLogLog.
+    /// Internal registers used by the HyperLogLog algorithm.
     pub registers: Vec<u8>,
 }
 
 impl Value {
-    /// Сериализует `Value` в JSON-байты.
+    /// Serializes the `Value` into JSON bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).expect("Value serialization failed")
     }
 
-    /// Десериализует `Value` из JSON-байтов.
+    /// Deserializes a `Value` from JSON bytes.
     pub fn from_bytes(bytes: &[u8]) -> StoreResult<Value> {
         serde_json::from_slice(bytes).map_err(|e| StoreError::SerdeError(e.to_string()))
     }

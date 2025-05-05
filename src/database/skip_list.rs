@@ -4,9 +4,10 @@
 //! альтернативы сбалансированным деревьям, обеспечивающей
 //! логарифмическое время операций вставки, поиска и удаления.
 
+use std::{fmt::Debug, marker::PhantomData, ptr::NonNull};
+
 use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fmt::Debug, marker::PhantomData, ptr::NonNull};
 
 /// Максимальный уровень пропускного списка.
 const MAX_LEVEL: usize = 16; // В дальнейшем этот параметр можно сделать настраиваемым

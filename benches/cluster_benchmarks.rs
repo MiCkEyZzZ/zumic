@@ -1,11 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::sync::Arc;
-use zumic::{ClusterStore, InMemoryStore, Sds, Storage, Value}; // замени `your_crate` на имя твоего крейта
+use zumic::{InClusterStore, InMemoryStore, Sds, Storage, Value}; // замени `your_crate` на имя твоего крейта
 
-fn make_cluster() -> ClusterStore {
+fn make_cluster() -> InClusterStore {
     let s1 = Arc::new(InMemoryStore::new());
     let s2 = Arc::new(InMemoryStore::new());
-    ClusterStore::new(vec![s1, s2])
+    InClusterStore::new(vec![s1, s2])
 }
 
 fn bench_set_get(c: &mut Criterion) {

@@ -37,6 +37,8 @@ pub use command::{
     StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand,
     ZScoreCommand,
 };
+/// config
+pub use config::{Settings, StorageConfig, StorageType};
 /// Data types: Dict, QuickList, SkipList, Sds, and others.
 pub use database::{Dict, ListPack, QuickList, Sds, SkipList, SmartHash, Value};
 /// Storage engines: InMemoryStore, InPersistentStore, InClusterStore.

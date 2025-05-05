@@ -13,7 +13,7 @@ impl InPersistentStore {
         let mut aof = AofLog::open(path)?;
         let mut index = HashMap::new();
 
-        // восстановление in-memory из AOF
+        // in-memory restore from AOF
         aof.replay(|op, key, val| match op {
             1 => {
                 if let Some(value) = val {
@@ -128,7 +128,7 @@ impl Storage for InPersistentStore {
     fn flushdb(&self) -> StoreResult<()> {
         let mut map = self.index.lock().unwrap();
         map.clear();
-        // можно реализовать AOF truncate или просто удалить файл - пока опускаем.
+        // can implement AOF truncate or just delete the file - we'll skip that for now.
         Ok(())
     }
 }
