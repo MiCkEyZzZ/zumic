@@ -81,5 +81,60 @@ fn bench_replay(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_append_set, bench_append_del, bench_replay);
+/// Benchmark rewrite performance for N entries.
+fn bench_rewrite(c: &mut Criterion) {
+    let mut group = c.benchmark_group("rewrite");
+    for count in [100usize, 1_000, 10_000].iter() {
+        group.bench_with_input(format!("count_{}", count), count, |b, &n| {
+            let temp = NamedTempFile::new().unwrap();
+            let path = temp.path().to_path_buf();
+
+            // Запись начального AOF с множеством set и del
+            {
+                let mut log = AofLog::open(&path, SyncPolicy::No).unwrap();
+                for i in 0..n {
+                    let key = format!("key{}", i).into_bytes();
+                    let value = format!("value{}", i).into_bytes();
+                    log.append_set(&key, &value).unwrap();
+                    // Для некоторых ключей делаем DEL, чтобы имитировать "устаревание"
+                    if i % 5 == 0 {
+                        log.append_del(&key).unwrap();
+                    }
+                }
+            }
+
+            // Собираем "живое" состояние
+            let mut live_map = std::collections::HashMap::new();
+            {
+                let mut log = AofLog::open(&path, SyncPolicy::No).unwrap();
+                log.replay(|op, key, val| match op {
+                    AofOp::Set => {
+                        live_map.insert(key, val.unwrap());
+                    }
+                    AofOp::Del => {
+                        live_map.remove(&key);
+                    }
+                })
+                .unwrap();
+            }
+
+            // Измеряем rewrite
+            b.iter(|| {
+                let mut log = AofLog::open(&path, SyncPolicy::No).unwrap();
+                log.rewrite(&path, live_map.clone().into_iter()).unwrap();
+            });
+
+            let _ = remove_file(path);
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_append_set,
+    bench_append_del,
+    bench_replay,
+    bench_rewrite
+);
 criterion_main!(benches);

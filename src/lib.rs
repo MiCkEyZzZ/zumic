@@ -43,7 +43,8 @@ pub use config::{Settings, StorageConfig, StorageType};
 pub use database::{Dict, ListPack, QuickList, Sds, SkipList, SmartHash, Value};
 /// Storage engines: InMemoryStore, InPersistentStore, InClusterStore.
 pub use engine::{
-    AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage, StorageEngine,
+    load_from_zdb, save_to_zdb, AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage,
+    StorageEngine,
 };
 /// Operation errors and result types.
 pub use error::{

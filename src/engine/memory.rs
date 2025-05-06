@@ -16,6 +16,12 @@ impl InMemoryStore {
             data: Arc::new(DashMap::new()),
         }
     }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (Sds, Value)> + 'a {
+        self.data
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+    }
 }
 
 impl Storage for InMemoryStore {

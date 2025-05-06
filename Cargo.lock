@@ -2131,6 +2131,7 @@ dependencies = [
  "async-trait",
  "bcrypt",
  "bitflags",
+ "byteorder",
  "bytes",
  "config",
  "crc16",
