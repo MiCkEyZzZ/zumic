@@ -42,6 +42,22 @@ impl Sds {
         }
     }
 
+    pub fn from_bytes<B: AsRef<[u8]>>(bytes: B) -> Self {
+        let slice = bytes.as_ref();
+        if slice.len() <= Self::INLINE_CAP {
+            let mut buf = [0u8; Self::INLINE_CAP];
+            buf[..slice.len()].copy_from_slice(slice);
+            Sds(Repr::Inline {
+                len: slice.len() as u8,
+                buf,
+            })
+        } else {
+            let vec = slice.to_vec();
+            let len = vec.len();
+            Sds(Repr::Heap { buf: vec, len })
+        }
+    }
+
     pub fn from_str(s: &str) -> Self {
         let bytes = s.as_bytes();
         if bytes.len() <= Self::INLINE_CAP {
