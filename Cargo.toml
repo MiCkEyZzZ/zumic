@@ -49,5 +49,5 @@ criterion = { version = "0.5", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-name = "aof_benchmarks"
+name = "persistent_benchmarks"
 harness = false

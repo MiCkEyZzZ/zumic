@@ -6,6 +6,8 @@ use std::{
     time::Duration,
 };
 
+use tempfile::NamedTempFile;
+
 /// 4-byte magic header for the AOF file format (version identifier).
 const MAGIC: &[u8; 4] = b"AOF1";
 
@@ -18,7 +20,7 @@ pub enum AofOp {
 }
 
 /// How often to flush the AOF buffer to disk.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
     /// fsync/flush after every command (max durability, lowest, throughput).
     Always,
@@ -169,15 +171,48 @@ impl AofLog {
         Ok(())
     }
 
-    /// Placeholder for a future AOF compaction/rewrite feature.
-    /// Accepts an iterator of live key-value pairs to write into a new compacted file.
-    pub fn rewrite<I>(&mut self, _live: I) -> io::Result<()>
+    /// Compacts the AOF by writing only the latest SET for each key from `live`
+    /// into a new temporary file and atomically swapping it with the current one.
+    pub fn rewrite<I, P>(&mut self, path: P, live: I) -> io::Result<()>
     where
         I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+        P: AsRef<Path>,
     {
-        // TODO: create a new file, write the MAGIC header and only the latest SET entries from `live`,
-        // then atomically replace the old AOF file.
-        unimplemented!()
+        let path = path.as_ref();
+
+        // 1. Создаём временный файл, в той же директории.
+        let mut tmp = NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?;
+
+        // 2. Записываем MAGIC
+        tmp.write_all(MAGIC)?;
+        tmp.flush()?;
+
+        // 3. Записываем только SET-операции для каждого живого key/value.
+        for (key, value) in live {
+            tmp.write_all(&[AofOp::Set as u8])?;
+            Self::write_32(&mut tmp, key.len() as u32)?;
+            tmp.write_all(&key)?;
+            Self::write_32(&mut tmp, value.len() as u32)?;
+            tmp.write_all(&value)?;
+        }
+        tmp.flush()?;
+
+        // Atomically replace старые файлы.
+        tmp.persist(path)?;
+
+        // После замены - нужно обновить writer и reader в AofLog:
+        // Закрываем текущие дескрипторы, открываем новый файл.
+        let mut file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(path)?;
+        file.seek(io::SeekFrom::Start(0))?;
+        self.reader = file;
+        let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
+        self.writer = BufWriter::new(writer_file);
+
+        Ok(())
     }
 
     /// Helper to write a u32 in big-endian format.
@@ -303,5 +338,54 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Tests that `rewrite()` compacts the AOF by keeping only the latest SET operations
+    /// and removing overwritten or deleted keys.
+    #[test]
+    fn test_rewrite_compacts_log() -> io::Result<()> {
+        // Create AOF with duplicate keys and deletions
+        let temp = NamedTempFile::new()?;
+        let path = temp.path().to_path_buf();
+        let mut log = AofLog::open(&path, SyncPolicy::Always)?;
+        log.append_set(b"k1", b"v1")?;
+        log.append_set(b"k2", b"v2")?;
+        log.append_set(b"k1", b"v1_new")?;
+        log.append_del(b"k2")?;
+        log.append_set(b"k3", b"v3")?;
+        drop(log);
+
+        // Collect in-memory "live" pairs, as in Storage::new
+        let mut live_map = std::collections::HashMap::new();
+        {
+            let mut rlog = AofLog::open(&path, SyncPolicy::Always)?;
+            rlog.replay(|op, key, val| match op {
+                AofOp::Set => {
+                    live_map.insert(key, val.unwrap());
+                }
+                AofOp::Del => {
+                    live_map.remove(&key);
+                }
+            })?;
+        }
+
+        // Call rewrite
+        let mut clog = AofLog::open(&path, SyncPolicy::Always)?;
+        clog.rewrite(&path, live_map.clone().into_iter())?;
+
+        // After rewrite the log should contain only the actual SET for each key
+        let mut seq = Vec::new();
+        let mut rlog2 = AofLog::open(&path, SyncPolicy::Always)?;
+        rlog2.replay(|op, key, val| seq.push((op, key, val)))?;
+
+        // Check that the order can be any, but the values must match
+        let mut seen = std::collections::HashMap::new();
+        for (op, key, val) in seq {
+            assert_eq!(op, AofOp::Set);
+            seen.insert(key, val.unwrap());
+        }
+        assert_eq!(seen, live_map);
+
+        Ok(())
     }
 }
