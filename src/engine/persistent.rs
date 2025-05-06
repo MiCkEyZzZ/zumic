@@ -1,6 +1,9 @@
 use std::{collections::HashMap, path::Path, sync::Mutex};
 
-use super::{aof::AofOp, AofLog, Storage};
+use super::{
+    aof::{AofOp, SyncPolicy},
+    AofLog, Storage,
+};
 use crate::{Sds, StoreError, StoreResult, Value};
 
 pub struct InPersistentStore {
@@ -10,7 +13,7 @@ pub struct InPersistentStore {
 
 impl InPersistentStore {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, StoreError> {
-        let mut aof = AofLog::open(path)?;
+        let mut aof = AofLog::open(path, SyncPolicy::Always)?;
         let mut index = HashMap::new();
 
         // in-memory restore from AOF

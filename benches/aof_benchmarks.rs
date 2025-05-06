@@ -2,7 +2,10 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use std::fs::remove_file;
 use tempfile::NamedTempFile;
 
-use zumic::{engine::aof::AofOp, AofLog};
+use zumic::{
+    engine::aof::{AofOp, SyncPolicy},
+    AofLog,
+};
 
 /// Benchmark append_set performance for varying key/value sizes.
 fn bench_append_set(c: &mut Criterion) {
@@ -11,7 +14,7 @@ fn bench_append_set(c: &mut Criterion) {
         group.bench_with_input(format!("size_{}", size), size, |b, &s| {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path().to_path_buf();
-            let mut log = AofLog::open(&path).unwrap();
+            let mut log = AofLog::open(&path, SyncPolicy::Always).unwrap();
             let key = vec![b'k'; s];
             let value = vec![b'v'; s];
             b.iter(|| {
@@ -31,7 +34,7 @@ fn bench_append_del(c: &mut Criterion) {
         group.bench_with_input(format!("size_{}", size), size, |b, &s| {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path().to_path_buf();
-            let mut log = AofLog::open(&path).unwrap();
+            let mut log = AofLog::open(&path, SyncPolicy::Always).unwrap();
             let key = vec![b'k'; s];
             b.iter(|| {
                 log.append_del(&key).unwrap();
@@ -51,14 +54,14 @@ fn bench_replay(c: &mut Criterion) {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path().to_path_buf();
             {
-                let mut log = AofLog::open(&path).unwrap();
+                let mut log = AofLog::open(&path, SyncPolicy::Always).unwrap();
                 for i in 0..n {
                     let key = format!("key{}", i).into_bytes();
                     let value = format!("value{}", i).into_bytes();
                     log.append_set(&key, &value).unwrap();
                 }
             }
-            let mut log = AofLog::open(&path).unwrap();
+            let mut log = AofLog::open(&path, SyncPolicy::Always).unwrap();
             b.iter(|| {
                 // unwrap the Result from replay to avoid unused Result warning
                 log.replay(|op, _key, _val| {

@@ -2,6 +2,8 @@ use std::{
     fs::{File, OpenOptions},
     io::{self, BufWriter, Read, Seek, Write},
     path::Path,
+    thread,
+    time::Duration,
 };
 
 /// 4-byte magic header for the AOF file format (version identifier).
@@ -15,15 +17,28 @@ pub enum AofOp {
     Del = 2,
 }
 
+/// How often to flush the AOF buffer to disk.
+#[derive(Clone, Copy)]
+pub enum SyncPolicy {
+    /// fsync/flush after every command (max durability, lowest, throughput).
+    Always,
+    /// flush in background once per second.
+    EverySec,
+    /// never explicity flush (leave to OS).
+    No,
+}
+
 /// Append-Only File (AOF) log with buffered writing and safe replay functionality.
 pub struct AofLog {
     writer: BufWriter<File>,
     reader: File,
+    policy: SyncPolicy,
 }
 
 impl AofLog {
-    /// Opens (or creates) the AOF file and verifies or writes the magic header.
-    pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    /// Opens (or creates) the AOF file with the given sync policy,
+    /// and verifies or writes the magic header.
+    pub fn open<P: AsRef<Path>>(path: P, policy: SyncPolicy) -> io::Result<Self> {
         // Open the file for reading and appending.
         let mut file = OpenOptions::new()
             .create(true)
@@ -52,14 +67,28 @@ impl AofLog {
 
         // Reset the file cursor to the beginning for reading.
         file.seek(io::SeekFrom::Start(0))?;
-
         // Create a separate buffered writer.
-        let writer = BufWriter::new(OpenOptions::new().create(true).append(true).open(path)?);
+        let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
 
-        Ok(AofLog {
-            writer,
+        let log = AofLog {
+            writer: BufWriter::new(writer_file),
             reader: file,
-        })
+            policy,
+        };
+
+        // If EverySec, spawn background flisher.
+        if let SyncPolicy::EverySec = log.policy {
+            let writer_clone = log.writer.get_ref().try_clone()?;
+            thread::spawn(move || {
+                let mut bufm = BufWriter::new(writer_clone);
+                loop {
+                    thread::sleep(Duration::from_secs(1));
+                    let _ = bufm.flush();
+                }
+            });
+        }
+
+        Ok(log)
     }
 
     /// Appends a SET operation to the AOF log.
@@ -69,7 +98,7 @@ impl AofLog {
         self.writer.write_all(key)?;
         Self::write_32(&mut self.writer, value.len() as u32)?;
         self.writer.write_all(value)?;
-        self.writer.flush()?; // Ensure durability
+        self.maybe_flush()?;
         Ok(())
     }
 
@@ -78,7 +107,7 @@ impl AofLog {
         self.writer.write_all(&[AofOp::Del as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
         self.writer.write_all(key)?;
-        self.writer.flush()?; // Ensure durability
+        self.maybe_flush()?;
         Ok(())
     }
 
@@ -171,6 +200,15 @@ impl AofLog {
         *pos += 4;
         Ok(u32::from_be_bytes(arr))
     }
+
+    /// Flush helper: obeys sync policy.
+    fn maybe_flush(&mut self) -> io::Result<()> {
+        match self.policy {
+            SyncPolicy::Always => self.writer.flush(),
+            SyncPolicy::EverySec => Ok(()),
+            SyncPolicy::No => Ok(()), // background thread will flush
+        }
+    }
 }
 
 impl TryFrom<u8> for AofOp {
@@ -189,26 +227,22 @@ impl TryFrom<u8> for AofOp {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use tempfile::NamedTempFile;
 
-    use super::*;
-
-    /// This test checks the addition of SET and DEL operations to the AOF log
-    /// and their subsequent replay.
-    #[test]
-    fn test_append_and_replay_set_and_del() -> io::Result<()> {
-        // Create a temporary file for the test
+    /// Helper function to test append_set and append_del followed by replay under a given sync policy.
+    fn run_append_replay(policy: SyncPolicy) -> io::Result<()> {
         let temp_file = NamedTempFile::new()?;
         let path = temp_file.path();
 
         {
-            let mut log = AofLog::open(path)?;
+            let mut log = AofLog::open(path, policy.clone())?;
             log.append_set(b"kin", b"dzadza")?;
             log.append_del(b"kin")?;
         }
 
         {
-            let mut log = AofLog::open(path)?;
+            let mut log = AofLog::open(path, policy)?;
             let mut seq = Vec::new();
             log.replay(|op, key, val| seq.push((op, key, val)))?;
 
@@ -224,35 +258,50 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks the addition of multiple SET operations to the AOF log
-    /// and their subsequent replay.
+    /// Verifies append and replay behavior with SyncPolicy::Always
     #[test]
-    fn test_append_multiple_set() -> io::Result<()> {
-        let temp = NamedTempFile::new()?;
-        let path = temp.path();
+    fn test_always_policy() {
+        run_append_replay(SyncPolicy::Always).unwrap();
+    }
 
-        {
-            let mut log = AofLog::open(path)?;
-            log.append_set(b"k1", b"v1")?;
-            log.append_set(b"k2", b"v2")?;
-            log.append_set(b"k3", b"v3")?;
-        }
+    /// Verifies append and replay behavior with SyncPolicy::EverySec
+    #[test]
+    fn test_everysec_policy() {
+        run_append_replay(SyncPolicy::EverySec).unwrap();
+    }
 
-        {
-            let mut log = AofLog::open(path)?;
-            let mut seq = Vec::new();
-            log.replay(|op, key, val| seq.push((op, key, val)))?;
-            assert_eq!(seq.len(), 3);
-            for (i, (k, v)) in [("k1", "v1"), ("k2", "v2"), ("k3", "v3")]
-                .iter()
-                .enumerate()
+    /// Verifies append and replay behavior with SyncPolicy::No
+    #[test]
+    fn test_no_policy() {
+        run_append_replay(SyncPolicy::No).unwrap();
+    }
+
+    /// Tests multiple SET operations under all sync policies and verifies replay order.
+    #[test]
+    fn test_append_multiple_set_under_all_policies() {
+        for policy in &[SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No] {
+            let temp = NamedTempFile::new().unwrap();
+            let path = temp.path();
             {
-                assert_eq!(seq[i].0, AofOp::Set);
-                assert_eq!(&seq[i].1, k.as_bytes());
-                assert_eq!(seq[i].2.as_deref(), Some(v.as_bytes()));
+                let mut log = AofLog::open(path, policy.clone()).unwrap();
+                log.append_set(b"k1", b"v1").unwrap();
+                log.append_set(b"k2", b"v2").unwrap();
+                log.append_set(b"k3", b"v3").unwrap();
+            }
+            {
+                let mut log = AofLog::open(path, policy.clone()).unwrap();
+                let mut seq = Vec::new();
+                log.replay(|op, key, val| seq.push((op, key, val))).unwrap();
+                assert_eq!(seq.len(), 3);
+                for (i, (k, v)) in [("k1", "v1"), ("k2", "v2"), ("k3", "v3")]
+                    .iter()
+                    .enumerate()
+                {
+                    assert_eq!(seq[i].0, AofOp::Set);
+                    assert_eq!(&seq[i].1, k.as_bytes());
+                    assert_eq!(seq[i].2.as_deref(), Some(v.as_bytes()));
+                }
             }
         }
-
-        Ok(())
     }
 }
