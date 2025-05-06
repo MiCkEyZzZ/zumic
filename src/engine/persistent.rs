@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::Mutex};
 
-use super::{AofLog, Storage};
+use super::{aof::AofOp, AofLog, Storage};
 use crate::{Sds, StoreError, StoreResult, Value};
 
 pub struct InPersistentStore {
@@ -15,15 +15,14 @@ impl InPersistentStore {
 
         // in-memory restore from AOF
         aof.replay(|op, key, val| match op {
-            1 => {
+            AofOp::Set => {
                 if let Some(value) = val {
                     index.insert(key, value);
                 }
             }
-            2 => {
+            AofOp::Del => {
                 index.remove(&key);
             }
-            _ => {}
         })?;
 
         Ok(Self {

@@ -1,73 +1,188 @@
 use std::{
     fs::{File, OpenOptions},
-    io::{self, Read, Seek, Write},
+    io::{self, BufWriter, Read, Seek, Write},
     path::Path,
 };
 
+/// 4-байтовая сигнатура AOF-файла (версия формата).
+const MAGIC: &[u8; 4] = b"AOF1";
+
+/// Код операции в AOF.
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum AofOp {
+    Set = 1,
+    Del = 2,
+}
+
+/// AOF-лог с буферизированной записью и безопасным чтением.
 pub struct AofLog {
-    file: File,
+    writer: BufWriter<File>,
+    reader: File,
 }
 
 impl AofLog {
-    /// Open (or create) AOF file.
+    /// Открыть (или создать) AOF-файл, проверить/записать сигнатуру.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        // Открываем файл для чтения + дозаписи.
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .append(true)
-            .open(path)?;
-        // Move to the brginning for replay
+            .open(&path)?;
+        // Проверяем или записываем сигнатуру.
+        {
+            let mut header = [0u8; 4];
+            let n = file.read(&mut header)?;
+            if n == 4 {
+                if &header != MAGIC {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Invalid AOF magic header",
+                    ));
+                }
+            } else {
+                // Пустой файл - пишем сигнатуру.
+                file.seek(io::SeekFrom::Start(0))?;
+                file.write_all(MAGIC)?;
+                file.flush()?;
+            }
+        }
+
+        // Для чтения открываем указатель в начало.
         file.seek(io::SeekFrom::Start(0))?;
-        Ok(AofLog { file })
+
+        // Создаём отдельный writer.
+        let writer = BufWriter::new(OpenOptions::new().create(true).append(true).open(path)?);
+
+        Ok(AofLog {
+            writer,
+            reader: file,
+        })
     }
 
     /// Add SET entry
     pub fn append_set(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
-        self.file.write_all(&[1])?;
-        self.file.write_all(&(key.len() as u32).to_be_bytes())?;
-        self.file.write_all(key)?;
-        self.file.write_all(&(value.len() as u32).to_be_bytes())?;
-        self.file.write_all(value)?;
-        self.file.flush()?;
+        self.writer.write_all(&[AofOp::Set as u8])?;
+        Self::write_32(&mut self.writer, key.len() as u32)?;
+        self.writer.write_all(key)?;
+        Self::write_32(&mut self.writer, value.len() as u32)?;
+        self.writer.write_all(value)?;
+        // Для максимальной надёжности можно здесь же flush:
+        self.writer.flush()?;
         Ok(())
     }
 
     /// Add DEL entry
     pub fn append_del(&mut self, key: &[u8]) -> io::Result<()> {
-        self.file.write_all(&[2])?;
-        self.file.write_all(&(key.len() as u32).to_be_bytes())?;
-        self.file.write_all(key)?;
-        self.file.flush()?;
+        self.writer.write_all(&[AofOp::Del as u8])?;
+        Self::write_32(&mut self.writer, key.len() as u32)?;
+        self.writer.write_all(key)?;
+        self.writer.flush()?;
         Ok(())
     }
 
     /// Read the entire log and replay operations in the callback
     pub fn replay<F>(&mut self, mut f: F) -> io::Result<()>
     where
-        F: FnMut(u8, Vec<u8>, Option<Vec<u8>>),
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        self.file.seek(io::SeekFrom::Start(0))?;
+        // Откатываемся к началу.
+        self.reader.seek(io::SeekFrom::Start(0))?;
+        // Считываем заголовок.
+        let mut header = [0u8; 4];
+        self.reader.read_exact(&mut header)?;
+        if &header != MAGIC {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
+        }
+
+        // Читаем всё тело.
         let mut buf = Vec::new();
-        self.file.read_to_end(&mut buf)?;
+        self.reader.read_to_end(&mut buf)?;
         let mut pos = 0;
+
         while pos < buf.len() {
-            let op = buf[pos];
+            // 1) код операции
+            let op = AofOp::try_from(buf[pos])?;
             pos += 1;
-            let key_len = u32::from_be_bytes(buf[pos..pos + 4].try_into().unwrap()) as usize;
-            pos += 4;
+
+            // длина ключа.
+            let key_len = Self::read_u32(&buf, &mut pos)? as usize;
+            if pos + key_len > buf.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Key truncated",
+                ));
+            }
             let key = buf[pos..pos + key_len].to_vec();
             pos += key_len;
-            if op == 1 {
-                let val_len = u32::from_be_bytes(buf[pos..pos + 4].try_into().unwrap()) as usize;
-                pos += 4;
-                let val = buf[pos..pos + val_len].to_vec();
-                pos += val_len;
-                f(op, key, Some(val));
+
+            // если SET - читаем значение.
+            let val = if op == AofOp::Set {
+                let vlen = Self::read_u32(&buf, &mut pos)? as usize;
+                if pos + vlen > buf.len() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "Value truncated",
+                    ));
+                }
+                let v = buf[pos..pos + vlen].to_vec();
+                pos += vlen;
+                Some(v)
             } else {
-                f(op, key, None);
-            }
+                None
+            };
+
+            f(op, key, val);
         }
+
         Ok(())
+    }
+
+    /// Заглушка для будущей `перезаписи` AOF (compaction/rewrite).
+    /// На вход - итератор по `живым` парам. (key, value).
+    pub fn rewrite<I>(&mut self, _live: I) -> io::Result<()>
+    where
+        I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+    {
+        // TODO: создать новый файл, записать MAGIC и только последние SET из live,
+        // затем atomically заменить старый AOF.
+        unimplemented!()
+    }
+
+    /// Вспомогательная ф-я для записи big-endian u32.
+    #[inline]
+    fn write_32<W: Write>(w: &mut W, v: u32) -> io::Result<()> {
+        w.write_all(&v.to_be_bytes())
+    }
+
+    /// Безопасное чтение big-endian u32 с проверкой границ.
+    #[inline]
+    fn read_u32(buf: &[u8], pos: &mut usize) -> io::Result<u32> {
+        if *pos + 4 > buf.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF while reading u32",
+            ));
+        }
+        let mut arr = [0u8; 4];
+        arr.copy_from_slice(&buf[*pos..*pos + 4]);
+        *pos += 4;
+        Ok(u32::from_be_bytes(arr))
+    }
+}
+
+impl TryFrom<u8> for AofOp {
+    type Error = io::Error;
+    fn try_from(v: u8) -> io::Result<Self> {
+        match v {
+            1 => Ok(AofOp::Set),
+            2 => Ok(AofOp::Del),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unknown AOF op: {}", v),
+            )),
+        }
     }
 }
 
@@ -83,38 +198,26 @@ mod tests {
     fn test_append_and_replay_set_and_del() -> io::Result<()> {
         // Create a temporary file for the test
         let temp_file = NamedTempFile::new()?;
-        let path = temp_file.path().to_path_buf();
+        let path = temp_file.path();
 
-        // Open the log
         {
-            let mut log = AofLog::open(&path)?;
-
-            // Add operations
+            let mut log = AofLog::open(path)?;
             log.append_set(b"kin", b"dzadza")?;
             log.append_del(b"kin")?;
         }
 
-        // Reopen the log and check the replay
         {
-            let mut log = AofLog::open(&path)?;
-            let mut entries = Vec::new();
+            let mut log = AofLog::open(path)?;
+            let mut seq = Vec::new();
+            log.replay(|op, key, val| seq.push((op, key, val)))?;
 
-            log.replay(|op, key, val| {
-                entries.push((op, key, val));
-            })?;
-
-            // Check the entries
-            assert_eq!(entries.len(), 2);
-
-            // Check SET operation
-            assert_eq!(entries[0].0, 1);
-            assert_eq!(entries[0].1, b"kin");
-            assert_eq!(entries[0].2.as_deref(), Some(b"dzadza".as_ref()));
-
-            // Check DEL operation
-            assert_eq!(entries[1].0, 2);
-            assert_eq!(entries[1].1, b"kin");
-            assert_eq!(entries[1].2, None);
+            assert_eq!(seq.len(), 2);
+            assert_eq!(seq[0].0, AofOp::Set);
+            assert_eq!(&seq[0].1, b"kin");
+            assert_eq!(seq[0].2.as_deref(), Some(b"dzadza".as_ref()));
+            assert_eq!(seq[1].0, AofOp::Del);
+            assert_eq!(&seq[1].1, b"kin");
+            assert!(seq[1].2.is_none());
         }
 
         Ok(())
@@ -124,33 +227,28 @@ mod tests {
     /// and their subsequent replay.
     #[test]
     fn test_append_multiple_set() -> io::Result<()> {
-        let temp_file = NamedTempFile::new()?;
-        let path = temp_file.path().to_path_buf();
+        let temp = NamedTempFile::new()?;
+        let path = temp.path();
 
         {
-            let mut log = AofLog::open(&path)?;
+            let mut log = AofLog::open(path)?;
             log.append_set(b"k1", b"v1")?;
             log.append_set(b"k2", b"v2")?;
             log.append_set(b"k3", b"v3")?;
         }
 
         {
-            let mut log = AofLog::open(&path)?;
-            let mut entries = Vec::new();
-
-            log.replay(|op, key, val| {
-                entries.push((op, key, val));
-            })?;
-
-            // Verify that 3 operations have been replayed
-            assert_eq!(entries.len(), 3);
+            let mut log = AofLog::open(path)?;
+            let mut seq = Vec::new();
+            log.replay(|op, key, val| seq.push((op, key, val)))?;
+            assert_eq!(seq.len(), 3);
             for (i, (k, v)) in [("k1", "v1"), ("k2", "v2"), ("k3", "v3")]
                 .iter()
                 .enumerate()
             {
-                assert_eq!(entries[i].0, 1); // Check if operation is SET (1)
-                assert_eq!(entries[i].1, k.as_bytes());
-                assert_eq!(entries[i].2.as_deref(), Some(v.as_bytes()));
+                assert_eq!(seq[i].0, AofOp::Set);
+                assert_eq!(&seq[i].1, k.as_bytes());
+                assert_eq!(seq[i].2.as_deref(), Some(v.as_bytes()));
             }
         }
 
