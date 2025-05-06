@@ -4,10 +4,10 @@ use std::{
     path::Path,
 };
 
-/// 4-байтовая сигнатура AOF-файла (версия формата).
+/// 4-byte magic header for the AOF file format (version identifier).
 const MAGIC: &[u8; 4] = b"AOF1";
 
-/// Код операции в AOF.
+/// Operation code used in AOF log.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AofOp {
@@ -15,22 +15,23 @@ pub enum AofOp {
     Del = 2,
 }
 
-/// AOF-лог с буферизированной записью и безопасным чтением.
+/// Append-Only File (AOF) log with buffered writing and safe replay functionality.
 pub struct AofLog {
     writer: BufWriter<File>,
     reader: File,
 }
 
 impl AofLog {
-    /// Открыть (или создать) AOF-файл, проверить/записать сигнатуру.
+    /// Opens (or creates) the AOF file and verifies or writes the magic header.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        // Открываем файл для чтения + дозаписи.
+        // Open the file for reading and appending.
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .append(true)
             .open(&path)?;
-        // Проверяем или записываем сигнатуру.
+
+        // Read or initialize the magic header.
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
@@ -42,17 +43,17 @@ impl AofLog {
                     ));
                 }
             } else {
-                // Пустой файл - пишем сигнатуру.
+                // Empty file - write the header.
                 file.seek(io::SeekFrom::Start(0))?;
                 file.write_all(MAGIC)?;
                 file.flush()?;
             }
         }
 
-        // Для чтения открываем указатель в начало.
+        // Reset the file cursor to the beginning for reading.
         file.seek(io::SeekFrom::Start(0))?;
 
-        // Создаём отдельный writer.
+        // Create a separate buffered writer.
         let writer = BufWriter::new(OpenOptions::new().create(true).append(true).open(path)?);
 
         Ok(AofLog {
@@ -61,52 +62,52 @@ impl AofLog {
         })
     }
 
-    /// Add SET entry
+    /// Appends a SET operation to the AOF log.
     pub fn append_set(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Set as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
         self.writer.write_all(key)?;
         Self::write_32(&mut self.writer, value.len() as u32)?;
         self.writer.write_all(value)?;
-        // Для максимальной надёжности можно здесь же flush:
-        self.writer.flush()?;
+        self.writer.flush()?; // Ensure durability
         Ok(())
     }
 
-    /// Add DEL entry
+    /// Appends a DEL operation to the AOF log.
     pub fn append_del(&mut self, key: &[u8]) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Del as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
         self.writer.write_all(key)?;
-        self.writer.flush()?;
+        self.writer.flush()?; // Ensure durability
         Ok(())
     }
 
-    /// Read the entire log and replay operations in the callback
+    /// Replays all operations in the log by calling the provided callback for each entry.
     pub fn replay<F>(&mut self, mut f: F) -> io::Result<()>
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        // Откатываемся к началу.
+        // Reset reader to the beginning.
         self.reader.seek(io::SeekFrom::Start(0))?;
-        // Считываем заголовок.
+
+        // Read and validate the magic header.
         let mut header = [0u8; 4];
         self.reader.read_exact(&mut header)?;
         if &header != MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
         }
 
-        // Читаем всё тело.
+        // Read the full log contents into memory.
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
         let mut pos = 0;
 
         while pos < buf.len() {
-            // 1) код операции
+            // Read operation code.
             let op = AofOp::try_from(buf[pos])?;
             pos += 1;
 
-            // длина ключа.
+            // Read key.
             let key_len = Self::read_u32(&buf, &mut pos)? as usize;
             if pos + key_len > buf.len() {
                 return Err(io::Error::new(
@@ -117,7 +118,7 @@ impl AofLog {
             let key = buf[pos..pos + key_len].to_vec();
             pos += key_len;
 
-            // если SET - читаем значение.
+            // If SET, read value.
             let val = if op == AofOp::Set {
                 let vlen = Self::read_u32(&buf, &mut pos)? as usize;
                 if pos + vlen > buf.len() {
@@ -139,24 +140,24 @@ impl AofLog {
         Ok(())
     }
 
-    /// Заглушка для будущей `перезаписи` AOF (compaction/rewrite).
-    /// На вход - итератор по `живым` парам. (key, value).
+    /// Placeholder for a future AOF compaction/rewrite feature.
+    /// Accepts an iterator of live key-value pairs to write into a new compacted file.
     pub fn rewrite<I>(&mut self, _live: I) -> io::Result<()>
     where
         I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
     {
-        // TODO: создать новый файл, записать MAGIC и только последние SET из live,
-        // затем atomically заменить старый AOF.
+        // TODO: create a new file, write the MAGIC header and only the latest SET entries from `live`,
+        // then atomically replace the old AOF file.
         unimplemented!()
     }
 
-    /// Вспомогательная ф-я для записи big-endian u32.
+    /// Helper to write a u32 in big-endian format.
     #[inline]
     fn write_32<W: Write>(w: &mut W, v: u32) -> io::Result<()> {
         w.write_all(&v.to_be_bytes())
     }
 
-    /// Безопасное чтение big-endian u32 с проверкой границ.
+    /// Safely reads a u32 in big-endian format from a buffer with bounds checking.
     #[inline]
     fn read_u32(buf: &[u8], pos: &mut usize) -> io::Result<u32> {
         if *pos + 4 > buf.len() {
