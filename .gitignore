@@ -1,28 +1,28 @@
-# Артефакты сборки Rust
+# Rust build artifacts
 target/
 **/cargo-target
 
-# IDE и редакторы
+# IDE and editors
 .idea/
 .vscode/
 .zed/
 .trunk
 
-# Системные файлы
+# System files
 .DS_Store
 
-# Логи и профилировщики
+# Logs and profilers
 logs/
 Flamegraph/
 
-# Документация, читаемая генераторами
+# Documentation readable by generators
 /docs/
 book
 doc**/*
 
-# Секреты и окружение
+# Secrets and enviroment
 .env
 zumic.conf
 
-# Веб-артефакты
+# Web artifacts
 *.wasm

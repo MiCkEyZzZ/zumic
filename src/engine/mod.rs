@@ -1,12 +1,17 @@
-//! Storage engine modules.
+//! Database primitives and data structures.
 //!
-//! This module defines various implementations and abstractions for key-value storage:
+//! This module provides core data types and abstractions for
+//! implementing an in-memory database:
 //!
-//! - `memory`: in-memory store for fast, ephemeral data access.
-//! - `persistent`: persistent store for durable storage (e.g., on disk).
-//! - `cluster`: distributed key-value store for clustered setups.
-//! - `engine`: facade for selecting and interacting with a specific storage backend.
-//! - `storage`: trait that defines a unified interface for all storage implementations.
+//! - `dict`: generic key-value hash map with support for custom key types.
+//! - `int_set`: compact set for storing integers efficiently.
+//! - `list_pack`: compact serialization format for storing small lists of elements.
+//! - `lua`: support for running embedded Lua scripts.
+//! - `quicklist`: memory-efficient doubly linked list supporting compression.
+//! - `sds`: simple dynamic string type optimized for performance.
+//! - `skip_list`: sorted data structure with logarithmic operations.
+//! - `smart_hash`: hybrid hash table optimized for memory and speed.
+//! - `types`: definitions for supported value types in the database.
 
 pub mod aof;
 pub mod cluster;
