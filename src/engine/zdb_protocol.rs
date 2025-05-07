@@ -116,7 +116,7 @@ mod tests {
     /// Проверяем, что пустой файл не приводит к ошибке (просто ничего не загружается).
     #[test]
     fn test_load_empty_file() {
-        let path = std::env::temp_dir().join("test_zdb_empty.rdb");
+        let path = std::env::temp_dir().join("dump.rdb");
         std::fs::File::create(&path).unwrap(); // пустой файл
 
         let mut store: InMemoryStore = InMemoryStore::new();

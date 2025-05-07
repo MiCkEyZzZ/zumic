@@ -35,6 +35,7 @@ pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
             }
             Ok(())
         }
+
         Value::Hash(hmap) => {
             w.write_u8(TAG_HASH)?;
             w.write_u32::<BigEndian>(hmap.len() as u32)?;
