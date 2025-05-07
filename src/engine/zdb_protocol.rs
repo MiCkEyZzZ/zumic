@@ -6,7 +6,7 @@ use std::{
 use crate::Value;
 
 use super::{
-    zdb::{decode::read_value, encode::write_value},
+    zdb::{read_value, write_value},
     InMemoryStore, Storage,
 };
 
