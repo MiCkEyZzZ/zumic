@@ -6,6 +6,7 @@ use crate::{Sds, Storage, StoreError, StoreResult, Value};
 
 /// `InMemoryStore` - a thread-safe key-value store
 /// using `DashMap` and `Arc`.
+#[derive(Debug)]
 pub struct InMemoryStore {
     pub data: Arc<DashMap<Sds, Value>>,
 }

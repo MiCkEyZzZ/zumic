@@ -1,6 +1,7 @@
 pub mod decode;
 pub mod encode;
-mod tags;
+pub mod tags;
 
 pub use decode::*;
 pub use encode::*;
+pub use tags::*;

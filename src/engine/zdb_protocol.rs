@@ -53,3 +53,78 @@ pub fn load_from_zdb(store: &mut InMemoryStore, path: &str) -> std::io::Result<(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use byteorder::{BigEndian, WriteBytesExt};
+    use std::io::BufWriter;
+    use std::io::Write;
+
+    use crate::{engine::TAG_INT, Sds};
+
+    use super::*;
+
+    /// Проверяем, что сохранение и загрузка работают корректно для непустого хранилища.
+    #[test]
+    fn test_save_and_load_zdb() {
+        let store: InMemoryStore = InMemoryStore::new();
+        store.set(&Sds::from_str("k1"), Value::Int(123)).unwrap();
+        store
+            .set(&Sds::from_str("k2"), Value::Str(Sds::from_str("v2")))
+            .unwrap();
+
+        let path = std::env::temp_dir().join("dump.zdb");
+        let path_str = path.to_str().unwrap();
+
+        // сохраняем
+        save_to_zdb(&store, path_str).expect("save_to_zdb failed");
+
+        // загрузка в новый store
+        let mut loaded: InMemoryStore = InMemoryStore::new();
+        load_from_zdb(&mut loaded, path_str).expect("load_from_zdb failed");
+
+        // проверка содержимого
+        let got1 = loaded.get(&Sds::from_str("k1")).unwrap();
+        assert_eq!(got1, Some(Value::Int(123)));
+
+        let got2 = loaded.get(&Sds::from_str("k2")).unwrap();
+        assert_eq!(got2, Some(Value::Str(Sds::from_str("v2"))));
+
+        // чистим файл
+        std::fs::remove_file(path).unwrap();
+    }
+
+    /// Проверяем, что при наличии не-Str тега в ключе возвращается ошибка InvalidData.
+    #[test]
+    fn test_load_invalid_key_type() {
+        // Создаём файл, где первый записан TAG_IN вместо TAG_STR.
+        let path = std::env::temp_dir().join("dump.zdb");
+        let mut file = BufWriter::new(std::fs::File::create(&path).unwrap());
+
+        // Запишем TAG_INT вместо Str для ключа
+        file.write_u8(TAG_INT).unwrap();
+        file.write_i64::<BigEndian>(42).unwrap();
+        file.flush().unwrap();
+
+        let mut store: InMemoryStore = InMemoryStore::new();
+        let err = load_from_zdb(&mut store, path.to_str().unwrap()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+
+        std::fs::remove_file(path).unwrap();
+    }
+
+    /// Проверяем, что пустой файл не приводит к ошибке (просто ничего не загружается).
+    #[test]
+    fn test_load_empty_file() {
+        let path = std::env::temp_dir().join("test_zdb_empty.rdb");
+        std::fs::File::create(&path).unwrap(); // пустой файл
+
+        let mut store: InMemoryStore = InMemoryStore::new();
+        load_from_zdb(&mut store, path.to_str().unwrap()).expect("loading empty should not error");
+
+        // Проверяем, что итератор сразу вернул None (нет элементов)
+        assert!(store.iter().next().is_none());
+
+        std::fs::remove_file(path).unwrap();
+    }
+}
