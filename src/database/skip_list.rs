@@ -622,5 +622,6 @@ mod tests {
         assert!(list.is_empty());
         assert_eq!(list.search(&1), None);
         assert_eq!(list.search(&2), None);
+        assert_eq!(list.search(&4), None);
     }
 }

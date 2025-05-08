@@ -14,6 +14,7 @@
 //! - `types`: defines `Value` types stored in the database.
 
 pub mod dict;
+pub mod geo;
 pub mod int_set;
 pub mod list_pack;
 pub mod lua;
@@ -23,10 +24,11 @@ pub mod skip_list;
 pub mod smart_hash;
 pub mod types;
 
-pub use dict::Dict;
-pub use list_pack::ListPack;
-pub use quicklist::QuickList;
-pub use sds::Sds;
-pub use skip_list::SkipList;
-pub use smart_hash::SmartHash;
-pub use types::Value;
+pub use dict::*;
+pub use geo::*;
+pub use list_pack::*;
+pub use quicklist::*;
+pub use sds::*;
+pub use skip_list::*;
+pub use smart_hash::*;
+pub use types::*;
