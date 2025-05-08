@@ -51,6 +51,7 @@ criterion = { version = "0.5", features = ["async"] }
 [profile.bench]
 opt-level = 3
 
-# [[bench]]
-# name = "aof/aof_benchmarks"
-# harness = false
+[[bench]]
+name = "aof"
+harness = false
+path = "aof_benchmarks.rs"
