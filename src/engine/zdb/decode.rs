@@ -9,10 +9,7 @@ use ordered_float::OrderedFloat;
 use super::tags::{
     TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
-use crate::{
-    database::types::{StreamEntry, HLL},
-    Dict, Sds, SkipList, SmartHash, Value,
-};
+use crate::{Dict, Sds, SkipList, SmartHash, StreamEntry, Value, HLL};
 
 /// Чтение Value из потока.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {

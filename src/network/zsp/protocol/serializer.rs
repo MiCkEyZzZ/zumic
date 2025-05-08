@@ -224,7 +224,7 @@ mod tests {
     /// Проверяет сериализацию `Value::HyperLogLog` в `ZSPFrame::InlineString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
-        let hll = crate::database::types::HLL {
+        let hll = crate::HLL {
             registers: vec![0; 128],
         };
         let value = Value::HyperLogLog(hll);

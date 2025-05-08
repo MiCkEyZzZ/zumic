@@ -41,7 +41,8 @@ pub use command::{
 pub use config::{Settings, StorageConfig, StorageType};
 /// Data types: Dict, QuickList, SkipList, Sds, and others.
 pub use database::{
-    Dict, GeoEntry, GeoPoint, GeoSet, ListPack, QuickList, Sds, SkipList, SmartHash, Value,
+    Dict, GeoEntry, GeoPoint, GeoSet, ListPack, QuickList, Sds, SkipList, SmartHash, StreamEntry,
+    Value, HLL,
 };
 /// Storage engines: InMemoryStore, InPersistentStore, InClusterStore.
 pub use engine::{

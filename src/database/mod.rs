@@ -15,6 +15,7 @@
 
 pub mod dict;
 pub mod geo;
+pub mod hll;
 pub mod int_set;
 pub mod list_pack;
 pub mod lua;
@@ -22,13 +23,16 @@ pub mod quicklist;
 pub mod sds;
 pub mod skip_list;
 pub mod smart_hash;
+pub mod stream;
 pub mod types;
 
 pub use dict::*;
 pub use geo::*;
+pub use hll::*;
 pub use list_pack::*;
 pub use quicklist::*;
 pub use sds::*;
 pub use skip_list::*;
 pub use smart_hash::*;
+pub use stream::*;
 pub use types::*;

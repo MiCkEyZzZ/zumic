@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{Dict, QuickList, Sds, SkipList, SmartHash};
+use super::{Dict, QuickList, Sds, SkipList, SmartHash, StreamEntry, HLL};
 use crate::{StoreError, StoreResult};
 
 /// Represents a generic value in the storage engine.
@@ -42,22 +42,6 @@ pub enum Value {
     HyperLogLog(HLL),
     /// A stream of entries, each identified by an ID and a set of fields.
     SStream(Vec<StreamEntry>),
-}
-
-/// A single entry in a data stream.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct StreamEntry {
-    /// Unique identifier of the stream entry.
-    pub id: u64,
-    /// Fields and their corresponding values.
-    pub data: HashMap<String, Value>,
-}
-
-/// A HyperLogLog structure for approximate distinct counting.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct HLL {
-    /// Internal registers used by the HyperLogLog algorithm.
-    pub registers: Vec<u8>,
 }
 
 impl Value {
