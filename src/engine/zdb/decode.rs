@@ -1,15 +1,13 @@
 use std::{
-    collections::{HashMap, HashSet},
-    io::{Error, ErrorKind, Read},
+    collections::HashSet,
+    io::{self, Error, ErrorKind, Read},
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
-use super::tags::{
-    TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR, TAG_ZSET,
-};
-use crate::{Dict, Sds, SkipList, SmartHash, StreamEntry, Value, HLL};
+use super::tags::{TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET};
+use crate::{database::DENSE_SIZE, Dict, Sds, SkipList, SmartHash, Value, HLL};
 
 /// Чтение Value из потока.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
@@ -84,29 +82,17 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
         }
         TAG_HLL => {
             let n = r.read_u32::<BigEndian>()? as usize;
-            let mut regs = vec![0; n];
-            r.read_exact(&mut regs)?;
-            Ok(Value::HyperLogLog(HLL { registers: regs }))
-        }
-        TAG_SSTREAM => {
-            let n = r.read_u32::<BigEndian>()? as usize;
-            let mut stream = Vec::with_capacity(n);
-            for _ in 0..n {
-                let id = r.read_u64::<BigEndian>()?;
-                let m = r.read_u32::<BigEndian>()? as usize;
-                let mut data = HashMap::new();
-                for _ in 0..m {
-                    let flen = r.read_u32::<BigEndian>()? as usize;
-                    let mut fb = vec![0; flen];
-                    r.read_exact(&mut fb)?;
-                    let field = String::from_utf8(fb).unwrap();
-                    let val = read_value(r)?;
-                    data.insert(field, val);
-                }
-                stream.push(StreamEntry { id, data });
+            if n != DENSE_SIZE {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid HLL length {}, expected {}", n, DENSE_SIZE),
+                ));
             }
-            Ok(Value::SStream(stream))
+            let mut regs = [0u8; DENSE_SIZE];
+            r.read_exact(&mut regs)?;
+            Ok(Value::HyperLogLog(HLL { data: regs }))
         }
+
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("Unknown tag {}", other),
@@ -210,35 +196,11 @@ mod tests {
             panic!("Expected Set");
         }
         // HLL
-        if let Value::HyperLogLog(HLL { registers }) = read_value(&mut cursor).unwrap() {
-            assert_eq!(registers, vec![3, 7]);
+        if let Value::HyperLogLog(HLL { data }) = read_value(&mut cursor).unwrap() {
+            // only check the first two registers that we wrote
+            assert_eq!(&data[..2], &[3, 7]);
         } else {
             panic!("Expected HLL");
-        }
-    }
-
-    #[test]
-    fn test_read_sstream() {
-        let mut buf = Vec::new();
-        buf.write_u8(TAG_SSTREAM).unwrap();
-        buf.write_u32::<BigEndian>(1).unwrap(); // one entry
-                                                // entry id
-        buf.write_u64::<BigEndian>(12345).unwrap();
-        buf.write_u32::<BigEndian>(1).unwrap(); // one field
-        buf.write_u32::<BigEndian>(5).unwrap();
-        buf.extend_from_slice(b"field");
-        // field value: TAG_INT 99
-        buf.write_u8(TAG_INT).unwrap();
-        buf.write_i64::<BigEndian>(99).unwrap();
-
-        let mut cursor = Cursor::new(buf);
-        if let Value::SStream(entries) = read_value(&mut cursor).unwrap() {
-            assert_eq!(entries.len(), 1);
-            let StreamEntry { id, data } = &entries[0];
-            assert_eq!(*id, 12345);
-            assert_eq!(data.get("field").unwrap(), &Value::Int(99));
-        } else {
-            panic!("Expected SStream");
         }
     }
 

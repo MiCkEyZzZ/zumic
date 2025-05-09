@@ -78,16 +78,17 @@ pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
         }
         Value::HyperLogLog(hll) => {
             w.write_u8(TAG_HLL)?;
-            w.write_u32::<BigEndian>(hll.registers.len() as u32)?;
-            w.write_all(&hll.registers)
+            w.write_u32::<BigEndian>(hll.data.len() as u32)?;
+            w.write_all(&hll.data)
         }
         Value::SStream(entries) => {
             w.write_u8(TAG_SSTREAM)?;
             w.write_u32::<BigEndian>(entries.len() as u32)?;
             for entry in entries {
-                // id
-                w.write_u64::<BigEndian>(entry.id)?;
-                // поля map<String,Value>
+                // id — теперь два поля: ms_time и sequence
+                w.write_u64::<BigEndian>(entry.id.ms_time)?;
+                w.write_u64::<BigEndian>(entry.id.sequence)?;
+                // поля map<String, Value>
                 w.write_u32::<BigEndian>(entry.data.len() as u32)?;
                 for (field, val) in entry.data.iter() {
                     // поле — строка

@@ -5,12 +5,12 @@ use serde_big_array::BigArray;
 
 const NUM_REGISTERS: usize = 16_384;
 const REGISTER_BITS: usize = 6;
-const DENSE_SIZE: usize = NUM_REGISTERS * REGISTER_BITS / 8; // 12288 байт
+pub const DENSE_SIZE: usize = NUM_REGISTERS * REGISTER_BITS / 8; // 12288 байт
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HLL {
     #[serde(with = "BigArray")]
-    data: [u8; DENSE_SIZE],
+    pub data: [u8; DENSE_SIZE],
 }
 
 impl HLL {

@@ -1,11 +1,10 @@
-//! Модуль `ListPack` реализует компактную структуру хранения
-//! элементов с переменной длиной, оптимизированную для
-//! минимального использования памяти и сериализации.
+//! The `ListPack` module implements a compact structure for storing
+//! variable-length elements, optimized for minimal memory usage and serialization.
 //!
-//! `ListPack` — это структура данных, аналогичная, хранящая
-//! последовательность байтовых элементов. Каждый элемент
-//! предваряется длиной, закодированной в формате с переменной
-//! длиной (varint), и завершается специальным байтом 0xFF.
+//! `ListPack` is a data structure similar to Redis ListPacks, storing
+//! a sequence of byte elements. Each element is prefixed with its length
+//! encoded as a variable-length integer (varint) and the entire list is
+//! terminated with a special byte 0xFF.
 
 pub struct ListPack {
     data: Vec<u8>,
@@ -15,6 +14,8 @@ pub struct ListPack {
 }
 
 impl ListPack {
+    /// Creates a new empty `ListPack` with preallocated capacity and
+    /// a terminator at the center.
     pub fn new() -> Self {
         let cap = 1024;
         let mut data = Vec::with_capacity(cap);
@@ -29,19 +30,20 @@ impl ListPack {
         }
     }
 
-    /// Амортизированное расширение и центрирование содержимого
+    /// Amortized expansion and centering of the internal buffer if needed.
+    /// Ensures there is enough space to insert `extra` bytes.
     fn grow_and_center(&mut self, extra: usize) {
         let used = self.tail - self.head;
         let need = used + extra + 1;
         if need <= self.data.len() {
-            // достаточно места.
+            // Already enough space.
             return;
         }
-        // новый capacity: max(1.5x, need)
+        // New capacity: max(1.5x, need)
         let new_cap = (self.len().max(1) * 3 / 2).max(need);
         let mut new_data = Vec::with_capacity(new_cap);
         new_data.resize(new_cap, 0);
-        // центрируем старый блок в новом.
+        // Center the current content in the new buffer.
         let new_head = (new_cap - used) / 2;
         new_data[new_head..new_head + used].copy_from_slice(&self.data[self.head..self.tail]);
         self.head = new_head;
@@ -49,6 +51,7 @@ impl ListPack {
         self.data = new_data;
     }
 
+    /// Inserts a value at the front of the list.
     pub fn push_front(&mut self, value: &[u8]) {
         let mut len_bytes = Vec::new();
         let mut v = value.len();
@@ -61,7 +64,7 @@ impl ListPack {
         let extra = len_bytes.len() + value.len();
         self.grow_and_center(extra);
 
-        // двигаем head назад и пишем туда len+value
+        // Move head backward and write len + value
         self.head -= extra;
         let h = self.head;
         // len
@@ -72,8 +75,9 @@ impl ListPack {
         self.num_entries += 1;
     }
 
+    /// Inserts a value at the back of the list.
     pub fn push_back(&mut self, value: &[u8]) {
-        // кодируем длину
+        // Encode the length as varint
         let mut len_bytes = Vec::new();
         let mut v = value.len();
         while v >= 0x80 {
@@ -85,26 +89,28 @@ impl ListPack {
         let extra = len_bytes.len() + value.len();
         self.grow_and_center(extra);
 
-        // перезаписываем терминатор (0xFF) в tail-1, а в tail.. вставляем len+value+0xFF
+        // Overwrite the current terminator (0xFF) at tail - 1,
+        // then write len + value + new 0xFF
         let term_pos = self.tail - 1;
         // len
         self.data[term_pos..term_pos + len_bytes.len()].copy_from_slice(&len_bytes);
         // payload
         let vstart = term_pos + len_bytes.len();
         self.data[vstart..vstart + value.len()].copy_from_slice(value);
-        // новый терминатор
+        // New terminator
         let new_term = vstart + value.len();
         self.data[new_term] = 0xFF;
 
-        // обновляем tail и счётчик
         self.tail = new_term + 1;
         self.num_entries += 1;
     }
 
+    /// Returns the number of entries in the list.
     pub fn len(&self) -> usize {
         self.num_entries
     }
 
+    /// Returns a reference to the element at the specified index, if it exists.
     pub fn get(&self, index: usize) -> Option<&[u8]> {
         if index >= self.num_entries {
             return None;
@@ -129,6 +135,7 @@ impl ListPack {
         None
     }
 
+    /// Returns an iterator over all elements in the list.
     pub fn iter(&self) -> impl Iterator<Item = &[u8]> {
         let data = &self.data;
         let mut pos = self.head;
@@ -147,6 +154,7 @@ impl ListPack {
         })
     }
 
+    /// Removes the element at the specified index. Returns true if successful.
     pub fn remove(&mut self, index: usize) -> bool {
         if index >= self.num_entries {
             return false;
@@ -165,12 +173,12 @@ impl ListPack {
                     let start = i;
                     let end = i + consumed + len;
 
-                    // Сдвигаем всё после `end` влево к `start`
+                    // Shift everything after `end` left to `start`
                     let _to_move = self.tail - end;
                     self.data.copy_within(end..self.tail, start);
                     self.tail -= end - start;
 
-                    // Обновляем терминатор
+                    // Update the terminator
                     if self.tail > 0 {
                         self.data[self.tail - 1] = 0xFF;
                     }
@@ -189,21 +197,24 @@ impl ListPack {
         false
     }
 
+    /// Encodes a `usize` value as a variable-length integer (varint).
     pub fn encode_variant(mut value: usize) -> Vec<u8> {
         let mut buf = Vec::new();
         loop {
-            let byte = (value & 0x7F) as u8; // берём 7 младших бит
+            let byte = (value & 0x7F) as u8; // Take lowest 7 bits
             value >>= 7;
             if value == 0 {
-                buf.push(byte); // последний байт: бит продолжения НЕ установлен
+                buf.push(byte); // Last byte: continuation bit is not set
                 break;
             } else {
-                buf.push(byte | 0x80); // бит продолжения установлен (ещё есть байты)
+                buf.push(byte | 0x80); // Set continuation bit (more bytes follow)
             }
         }
         buf
     }
 
+    /// Decodes a variable-length integer (varint) from the given slice.
+    /// Returns the decoded value and the number of bytes consumed.
     pub fn decode_varint(data: &[u8]) -> Option<(usize, usize)> {
         let mut result = 0usize;
         let mut shift = 0;

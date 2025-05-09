@@ -1,21 +1,19 @@
-//! `IntSet` — компактное множество целых чисел с автоматическим выбором
-//! размера хранения.
+//! `IntSet` is a compact set for storing unique integers with
+//! adaptive internal encoding.
 //!
-//! Хранит уникальные целые числа в отсортированном виде,
-//! используя минимально необходимое количество байт: `i16`, `i32` или
-//! `i64`,
-//! в зависимости от наибольшего вставленного значения. При необходимости
-//! кодировка
-//! автоматически расширяется (upcast) в большую: с `i16` на `i32`, и с `i32`
-//! на `i64`.
+//! The set maintains elements in sorted order and uses the
+//! smallest possible integer type (`i16`, `i32`, or `i64`)
+//! depending on the range of inserted values.
+//! If a newly inserted value exceeds the current encoding's range,
+//! the internal representation is automatically upgraded to a wider
+//! type.
 //!
-//! Структура поддерживает операции вставки, удаления, проверки наличия элемента,
-//! а также итерацию по элементам в отсортированном порядке. Множество эффективно
-//! использует память, автоматически адаптируя тип данных под размер хранимых
-//! значений.
+//! The set supports insertion, removal, membership checking, and
+//! iteration over the elements in sorted order. It is optimized for
+//! memory efficiency by dynamically choosing the most appropriate
+//! storage type.
 
-/// Перечисление, определяющее доступные кодировки для хранения
-/// значений в множестве.
+/// Represents the available encodings for storing values in the set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Encoding {
     Int16,
@@ -23,9 +21,9 @@ enum Encoding {
     Int64,
 }
 
-/// Структура множества, хранящего уникальные значения в отсортированном виде.
-/// Множество поддерживает три возможных кодировки данных: `Int16`, `Int32`, и `Int64`.
-/// В зависимости от значения, структура может автоматически изменять свою кодировку.
+/// A sorted set of unique integers with adaptive encoding.
+///
+/// The internal storage is upgraded automatically when larger values are inserted.
 pub struct IntSet {
     enc: Encoding,
     data16: Vec<i16>,
@@ -34,7 +32,7 @@ pub struct IntSet {
 }
 
 impl IntSet {
-    /// Создает новое пустое множество с кодировкой `Int16`.
+    /// Creates a new, empty `IntSet` using `i16` encoding.
     pub fn new() -> Self {
         Self {
             enc: Encoding::Int16,
@@ -44,7 +42,7 @@ impl IntSet {
         }
     }
 
-    /// Возвращает количество элементов в множестве.
+    /// Returns the number of elements in the set.
     pub fn len(&self) -> usize {
         match self.enc {
             Encoding::Int16 => self.data16.len(),
@@ -53,7 +51,7 @@ impl IntSet {
         }
     }
 
-    /// Проверяет, содержится ли значение в множестве.
+    /// Checks whether the set contains the given value.
     pub fn contains(&self, v: i64) -> bool {
         match self.enc {
             Encoding::Int16 => {
@@ -68,10 +66,9 @@ impl IntSet {
         }
     }
 
-    /// Вставляет значение в множество. Если значение уже существует, не
-    /// происходит добавления.
+    /// Inserts a value into the set. Returns `true` if the value was added,
+    /// or `false` if it was already present.
     pub fn insert(&mut self, v: i64) -> bool {
-        // 1) Определяем нужную кодировку
         let need = if v >= i16::MIN as i64 && v <= i16::MAX as i64 {
             Encoding::Int16
         } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
@@ -80,12 +77,10 @@ impl IntSet {
             Encoding::Int64
         };
 
-        // 2) Если нужно расширить, мигрируем
         if (need as u8) > (self.enc as u8) {
             self.upgrade(need);
         }
 
-        // 3) Вставляем через binary_search + Vec::insert
         match self.enc {
             Encoding::Int16 => {
                 let x = v as i16;
@@ -117,8 +112,7 @@ impl IntSet {
         }
     }
 
-    /// Обновляет кодировку множества, если это необходимо, чтобы поддерживать
-    /// большее значение.
+    /// Upgrades the internal encoding to support larger values.
     fn upgrade(&mut self, new_enc: Encoding) {
         match (self.enc, new_enc) {
             (Encoding::Int16, Encoding::Int32) => {
@@ -135,7 +129,7 @@ impl IntSet {
         self.enc = new_enc;
     }
 
-    /// Удаляет значение из множества.
+    /// Removes a value from the set. Returns `true` if the value was present.
     pub fn remove(&mut self, v: i64) -> bool {
         match self.enc {
             Encoding::Int16 => {
@@ -167,8 +161,7 @@ impl IntSet {
         }
     }
 
-    /// Возвращает итератор по элементам множества.
-    /// Элементы возвращаются в отсортированном порядке.
+    /// Returns an iterator over the set in sorted order.
     pub fn iter(&self) -> impl Iterator<Item = i64> + '_ {
         match self.enc {
             Encoding::Int16 => self
@@ -192,8 +185,7 @@ impl IntSet {
 mod tests {
     use super::*;
 
-    /// Проверяет вставку значения в диапазоне i16,
-    /// работу contains и правильное определение длины
+    /// Inserts a value within the i16 range, checks presence and length.
     #[test]
     fn test_insert_and_contains_i16() {
         let mut set = IntSet::new();
@@ -202,8 +194,7 @@ mod tests {
         assert_eq!(set.len(), 1);
     }
 
-    /// Проверяет вставку значения, выходящего за i16,
-    /// должно произойти расширение до i32
+    /// Inserts a value just beyond i16 range; encoding should upgrade to i32.
     #[test]
     fn test_insert_and_contains_i32() {
         let mut set = IntSet::new();
@@ -214,8 +205,7 @@ mod tests {
         assert_eq!(set.enc, Encoding::Int32);
     }
 
-    /// Проверяет вставку значения, выходящего за i32,
-    /// должно произойти расширение до i64
+    /// Inserts a value just beyond i32 range; encoding should upgrade to i64.
     #[test]
     fn test_insert_and_contains_i64() {
         let mut set = IntSet::new();
@@ -226,8 +216,7 @@ mod tests {
         assert_eq!(set.enc, Encoding::Int64);
     }
 
-    /// Проверяет цепочку апгрейдов кодировки:
-    /// Int16 -> Int32 -> Int64
+    /// Tests sequential upgrade: Int16 -> Int32 -> Int64.
     #[test]
     fn test_encoding_upgrade_chain() {
         let mut set = IntSet::new();
@@ -243,7 +232,7 @@ mod tests {
         assert_eq!(set.len(), 3);
     }
 
-    /// Проверяет удаление существующего и несуществующего значения
+    /// Removes an existing value and checks that it’s gone.
     #[test]
     fn test_remove() {
         let mut set = IntSet::new();
@@ -253,19 +242,19 @@ mod tests {
         assert!(!set.contains(100));
         assert_eq!(set.len(), 1);
 
-        assert!(!set.remove(999)); // не было
+        assert!(!set.remove(999)); // not present
     }
 
-    /// Проверяет, что дубликаты не вставляются второй раз
+    /// Ensures duplicates are not inserted again.
     #[test]
     fn test_insert_duplicates() {
         let mut set = IntSet::new();
         assert!(set.insert(50));
-        assert!(!set.insert(50)); // уже есть
+        assert!(!set.insert(50));
         assert_eq!(set.len(), 1);
     }
 
-    /// Проверяет, что итератор возвращает элементы в отсортированном порядке
+    /// Checks that elements are returned in sorted order.
     #[test]
     fn test_iter_ordered() {
         let mut set = IntSet::new();
@@ -276,7 +265,7 @@ mod tests {
         assert_eq!(items, vec![1, 2, 3]);
     }
 
-    /// Проверяет итерацию по множеству с несколькими элементами (i64)
+    /// Tests iteration over a larger set using i64 values.
     #[test]
     fn test_iter_large() {
         let mut set = IntSet::new();
@@ -290,7 +279,7 @@ mod tests {
         );
     }
 
-    /// Проверяет поведение пустого множества
+    /// Tests behavior of an empty set.
     #[test]
     fn test_empty_set() {
         let set = IntSet::new();
@@ -299,7 +288,7 @@ mod tests {
         assert_eq!(set.iter().count(), 0);
     }
 
-    /// Проверяет вставку крайних значений для i16, i32, i64
+    /// Inserts boundary values of i16, i32, and i64.
     #[test]
     fn test_insert_max_min_edges() {
         let mut set = IntSet::new();

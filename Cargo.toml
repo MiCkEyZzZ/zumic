@@ -55,4 +55,4 @@ opt-level = 3
 [[bench]]
 name = "aof"
 harness = false
-path = "aof_benchmarks.rs"
+path = "listpack_benchmarks.rs"

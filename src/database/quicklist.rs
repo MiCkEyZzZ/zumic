@@ -1,44 +1,43 @@
-//! QuickList — это сегментированная структура списка, оптимизированная
-//! для операций добавления/удаления элементов с начала/конца и
-//! адаптивного управления памятью.
+//! QuickList is a segmented list structure optimized
+//! for operations involving adding/removing elements at both ends and
+//! adaptive memory management.
 //!
-//! Она содержит вектор сегментов типа `VecDeque<T>`, что позволяет
-//! эффективно выполнять операции `push_front`, `push_back`, `pop_front`
-//! и `pop_back`.
+//! It contains a vector of segments of type `VecDeque<T>`, which allows
+//! for efficient operations like `push_front`, `push_back`, `pop_front`
+//! and `pop_back`.
 //!
-//! Каждый сегмент имеет максимальный размер (`max_segment_size`), что
-//! уменьшает накладные расходы на выделение памяти и фрагментацию. При
-//! перерастании или избыточном разрежении сегментов список может быть
-//! перераспределён с помощью методов `optimize()` или `auto_optimize()`.
+//! Each segment has a maximum size (`max_segment_size`), which reduces
+//! overhead from memory allocation and fragmentation. If the segments grow
+//! too large or become excessively sparse, the list can be reallocated
+//! using the `optimize()` or `auto_optimize()` methods.
 //!
-//! QuickList хорошо подходит для рабочих нагрузок с частыми
-//! добавлениями/удалениями с обоих концов и редким произвольным доступом
-//! к элементам.
+//! QuickList is well-suited for workloads with frequent
+//! additions/removals from both ends and rare random access to elements.
 
 use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-/// Сегментированная структура списка с ограниченными сегментами и оптимизированным
-/// доступом.
+/// A segmented list structure with capped segments and optimized
+/// access.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct QuickList<T> {
-    /// Сегменты списка; каждый сегмент — это `VecDeque` с ограниченным размером.
+    /// The list segments; each segment is a `VecDeque` with a capped size.
     segments: Vec<VecDeque<T>>,
 
-    /// Максимальное количество элементов в одном сегменте.
+    /// The maximum number of elements in one segment.
     max_segment_size: usize,
 
-    /// Общее количество элементов во всех сегментах.
+    /// The total number of elements across all segments.
     len: usize,
 
-    /// Опциональная карта индексов от логического индекса до индекса сегмента.
+    /// An optional map of indices from the logical index to the segment index.
     #[serde(skip)]
     index: HashMap<usize, usize>,
 }
 
 impl<T> QuickList<T> {
-    /// Создаёт новый пустой `QuickList` с указанным размером сегмента.
+    /// Creates a new empty `QuickList` with the specified segment size.
     pub fn new(max_segment_size: usize) -> Self {
         Self {
             segments: Vec::new(),
@@ -48,17 +47,17 @@ impl<T> QuickList<T> {
         }
     }
 
-    /// Возвращает общее количество элементов в списке.
+    /// Returns the total number of elements in the list.
     pub fn len(&self) -> usize {
         self.len
     }
 
-    /// Возвращает `true`, если список пуст.
+    /// Returns `true` if the list is empty.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
-    /// Возвращает ссылку на элемент по заданному логическому индексу, если он существует.
+    /// Returns a reference to the element at the given logical index, if it exists.
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len {
             return None;
@@ -74,7 +73,7 @@ impl<T> QuickList<T> {
         })
     }
 
-    /// Возвращает изменяемую ссылку на элемент по заданному логическому индексу, если он существует.
+    /// Returns a mutable reference to the element at the given logical index, if it exists.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         if index >= self.len {
             return None;
@@ -90,7 +89,7 @@ impl<T> QuickList<T> {
         })
     }
 
-    /// Вставляет элемент в начало списка.
+    /// Inserts an element at the front of the list.
     pub fn push_front(&mut self, item: T) {
         if self.segments.is_empty() || self.segments[0].len() >= self.max_segment_size {
             self.segments
@@ -102,7 +101,7 @@ impl<T> QuickList<T> {
         self.rebuild_index();
     }
 
-    /// Вставляет элемент в конец списка.
+    /// Inserts an element at the back of the list.
     pub fn push_back(&mut self, item: T) {
         if self.segments.is_empty() || self.segments.last().unwrap().len() >= self.max_segment_size
         {
@@ -115,7 +114,7 @@ impl<T> QuickList<T> {
         self.rebuild_index();
     }
 
-    /// Удаляет и возвращает первый элемент списка, если он существует.
+    /// Removes and returns the first element of the list, if it exists.
     pub fn pop_front(&mut self) -> Option<T> {
         if self.segments.is_empty() {
             return None;
@@ -132,7 +131,7 @@ impl<T> QuickList<T> {
         item
     }
 
-    /// Удаляет и возвращает последний элемент списка, если он существует.
+    /// Removes and returns the last element of the list, if it exists.
     pub fn pop_back(&mut self) -> Option<T> {
         if self.segments.is_empty() {
             return None;
@@ -150,21 +149,21 @@ impl<T> QuickList<T> {
         item
     }
 
-    /// Возвращает итератор по всем элементам списка.
+    /// Returns an iterator over all elements in the list.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.segments.iter().flat_map(|seg| seg.iter())
     }
 
-    /// Очищает список, удаляя все элементы.
+    /// Clears the list by removing all elements.
     pub fn clear(&mut self) {
         self.segments.clear();
         self.index.clear();
         self.len = 0;
     }
 
-    /// Проверяет внутреннюю консистентность списка.
-    /// Возвращает `Err`, если какой-либо сегмент превышает допустимую емкость
-    /// или если внутренний счётчик длины некорректен.
+    /// Checks the internal consistency of the list.
+    /// Returns `Err` if any segment exceeds the allowable capacity
+    /// or if the internal length counter is incorrect.
     pub fn validate(&self) -> Result<(), &'static str> {
         let mut total_len = 0;
 
@@ -181,8 +180,8 @@ impl<T> QuickList<T> {
         Ok(())
     }
 
-    /// Компактирует и реорганизует сегменты для поддержания баланса.
-    /// Объединяет недозаполненные сегменты и удаляет пустые.
+    /// Compacts and reorganizes segments to maintain balance.
+    /// Merges underfilled segments and removes empty ones.
     pub fn optimize(&mut self) {
         let mut new_segments = Vec::new();
         let mut current_segment = VecDeque::with_capacity(self.max_segment_size);
@@ -204,7 +203,7 @@ impl<T> QuickList<T> {
         self.segments = new_segments;
     }
 
-    /// Создаёт `QuickList` из одного `VecDeque`.
+    /// Creates a `QuickList` from a single `VecDeque`.
     pub fn from_vecdeque(items: VecDeque<T>, max_segment_size: usize) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in items {
@@ -213,7 +212,7 @@ impl<T> QuickList<T> {
         qlist
     }
 
-    /// Преобразует `QuickList` в один `VecDeque` элементов.
+    /// Converts the `QuickList` into a single `VecDeque` of elements.
     pub fn into_vecdeque(self) -> VecDeque<T> {
         let mut result = VecDeque::with_capacity(self.len);
         for mut segment in self.segments {
@@ -222,7 +221,7 @@ impl<T> QuickList<T> {
         result
     }
 
-    /// Создаёт `QuickList` из любого итерируемого набора элементов.
+    /// Creates a `QuickList` from any iterable set of elements.
     pub fn from_iter<I: IntoIterator<Item = T>>(iter: I, max_segment_size: usize) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in iter {
@@ -231,10 +230,10 @@ impl<T> QuickList<T> {
         qlist
     }
 
-    /// Автоматически оптимизирует список, если выполнены определённые условия.
+    /// Automatically optimizes the list if certain conditions are met.
     ///
-    /// Оптимизация срабатывает, если сегментов слишком много
-    /// или если сегменты значительно недозаполнены.
+    /// Optimization triggers if there are too many segments
+    /// or if segments are significantly underfilled.
     pub fn auto_optimize(&mut self) {
         if self.segments.len() > 5
             || self
@@ -246,16 +245,16 @@ impl<T> QuickList<T> {
         }
     }
 
-    /// Сжимает каждый сегмент до его текущего размера.
+    /// Shrinks each segment to fit its current size.
     pub fn shrink_to_fit(&mut self) {
         for segment in &mut self.segments {
             segment.shrink_to_fit();
         }
     }
 
-    /// Оценивает использование памяти списком в байтах.
+    /// Estimates the memory usage of the list in bytes.
     ///
-    /// Расчёт основывается на ёмкости сегментов и размере типа `T`.
+    /// The calculation is based on the segment capacities and the size of type `T`.
     pub fn memory_usage(&self) -> usize {
         self.segments
             .iter()
@@ -263,9 +262,9 @@ impl<T> QuickList<T> {
             .sum()
     }
 
-    /// Перестраивает внутренний индекс, отображающий логические индексы на номера сегментов.
+    /// Rebuilds the internal index, mapping logical indices to segment numbers.
     ///
-    /// Используется для ускоренного доступа по индексам или отладки.
+    /// Used for fast index access or debugging.
     pub fn rebuild_index(&mut self) {
         self.index.clear();
         let mut global_index = 0;
@@ -295,9 +294,9 @@ impl<T> IntoIterator for QuickList<T> {
 mod tests {
     use super::*;
 
-    /// Тестирует методы `push_front` и `pop_front`.
-    /// Проверяет, что при добавлении элементов в начало и последующем их извлечении
-    /// порядок и количество элементов сохраняются корректно.
+    /// Tests the `push_front` and `pop_front` methods.
+    /// Verifies that when adding elements to the front and subsequently removing them,
+    /// the order and the number of elements are preserved correctly.
     #[test]
     fn test_push_front_and_pop_front() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -314,9 +313,9 @@ mod tests {
         assert_eq!(list.len(), 2);
     }
 
-    /// Тестирует методы `push_back` и `pop_back`.
-    /// Проверяет, что при добавлении элементов в конец и извлечении
-    /// сохраняется правильный порядок и количество элементов.
+    /// Tests the `push_back` and `pop_back` methods.
+    /// Verifies that when adding elements to the end and removing them,
+    /// the order and the number of elements are correctly maintained.
     #[test]
     fn test_push_back_and_pop_back() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -333,9 +332,9 @@ mod tests {
         assert_eq!(list.len(), 2);
     }
 
-    /// Тестирует методы `get` и `get_mut`.
-    /// Проверяет, что можно корректно получить доступ к элементу по индексу
-    /// и изменить его значение.
+    /// Tests the `get` and `get_mut` methods.
+    /// Verifies that it is possible to access an element by index
+    /// and modify its value.
     #[test]
     fn test_get_and_get_mut() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -353,8 +352,8 @@ mod tests {
         assert_eq!(list.get(1), Some(&25));
     }
 
-    /// Тестирует метод `clear`.
-    /// Проверяет, что после очистки список становится пустым.
+    /// Tests the `clear` method.
+    /// Verifies that after clearing, the list becomes empty.
     #[test]
     fn test_clear() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -369,8 +368,8 @@ mod tests {
         assert_eq!(list.len(), 0);
     }
 
-    /// Тестирует метод `validate`.
-    /// Проверяет, что список проходит валидацию, а также вызывает ошибку при нарушении ограничений сегмента.
+    /// Tests the `validate` method.
+    /// Verifies that the list passes validation and triggers an error when segment constraints are violated.
     #[test]
     fn test_validate() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -385,9 +384,9 @@ mod tests {
         assert!(list.validate().is_err());
     }
 
-    /// Тестирует метод `auto_optimize`.
-    /// Проверяет, что оптимизация производится, если количество сегментов слишком
-    /// елико или сегменты недозаполнены.
+    /// Tests the `auto_optimize` method.
+    /// Verifies that optimization occurs if the number of segments is too high
+    /// or if segments are underfilled.
     #[test]
     fn test_auto_optimize() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -406,8 +405,8 @@ mod tests {
         assert_eq!(list.len(), 5);
     }
 
-    /// Тестирует метод `from_vecdeque`.
-    /// Проверяет, что список можно создать из `VecDeque` и элементы корректно вставляются.
+    /// Tests the `from_vecdeque` method.
+    /// Verifies that a list can be created from a `VecDeque` and elements are correctly inserted.
     #[test]
     fn test_from_vecdeque() {
         let items: VecDeque<i32> = VecDeque::from(vec![1, 2, 3]);
@@ -419,8 +418,8 @@ mod tests {
         assert_eq!(list.get(2), Some(&3));
     }
 
-    /// Тестирует метод `into_vecdeque`.
-    /// Проверяет, что список корректно преобразуется в `VecDeque` с правильной последовательностью элементов.
+    /// Tests the `into_vecdeque` method.
+    /// Verifies that the list correctly converts into a `VecDeque` with the proper element sequence.
     #[test]
     fn test_into_vecdeque() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -432,8 +431,8 @@ mod tests {
         assert_eq!(vecdeque, VecDeque::from(vec![10, 20, 30]));
     }
 
-    /// Тестирует метод `shrink_to_fit`.
-    /// Проверяет, что ёмкость сегментов уменьшена до текущего размера данных.
+    /// Tests the `shrink_to_fit` method.
+    /// Verifies that the capacity of the segments is reduced to the current data size.
     #[test]
     fn test_shrink_to_fit() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -443,12 +442,12 @@ mod tests {
         list.push_back(3);
 
         list.shrink_to_fit();
-        // Проверяем, что ёмкость каждого сегмента не меньше его длины.
+        // Verifying that the capacity of each segment is not less than its length.
         assert!(list.segments.iter().all(|seg| seg.capacity() >= seg.len()));
     }
 
-    /// Тестирует метод `memory_usage`.
-    /// Проверяет, что использование памяти списка вычисляется корректно с учётом емкости сегментов и размера типа.
+    /// Tests the `memory_usage` method.
+    /// Verifies that the memory usage of the list is calculated correctly, considering segment capacity and element size.
     #[test]
     fn test_memory_usage() {
         let mut list: QuickList<i32> = QuickList::new(3);
@@ -458,7 +457,7 @@ mod tests {
         list.push_back(3);
 
         let memory_usage = list.memory_usage();
-        // Проверяем, что использование памяти больше нуля (с учётом размера сегментов)
+        // Verifying that memory usage is greater than zero (considering segment sizes).
         assert!(memory_usage > 0);
     }
 }
