@@ -8,7 +8,7 @@ pub const SLOT_COUNT: usize = 16384;
 #[derive(Clone)]
 pub struct InClusterStore {
     pub shards: Vec<Arc<dyn Storage>>,
-    pub slots: Vec<usize>, // length: 16384, each slot maps to an index in `shards`
+    pub slots:  Vec<usize>, // length: 16384, each slot maps to an index in `shards`
 }
 
 impl InClusterStore {
@@ -108,9 +108,8 @@ impl Storage for InClusterStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::InMemoryStore;
-
     use super::*;
+    use crate::InMemoryStore;
 
     // Helper: creates a cluster with two in-memory shards.
     fn make_cluster() -> InClusterStore {

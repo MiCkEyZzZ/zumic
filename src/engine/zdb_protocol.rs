@@ -3,12 +3,11 @@ use std::{
     io::{BufReader, BufWriter},
 };
 
-use crate::Value;
-
 use super::{
     zdb::{read_value, write_value},
     InMemoryStore, Storage,
 };
+use crate::Value;
 
 pub fn save_to_zdb(store: &InMemoryStore, path: &str) -> std::io::Result<()> {
     let mut file = BufWriter::new(File::create(path)?);
@@ -56,13 +55,13 @@ pub fn load_from_zdb(store: &mut InMemoryStore, path: &str) -> std::io::Result<(
 
 #[cfg(test)]
 mod tests {
-    use byteorder::{BigEndian, WriteBytesExt};
     use std::io::BufWriter;
     use std::io::Write;
 
-    use crate::{engine::TAG_INT, Sds};
+    use byteorder::{BigEndian, WriteBytesExt};
 
     use super::*;
+    use crate::{engine::TAG_INT, Sds};
 
     /// Проверяем, что сохранение и загрузка работают корректно для непустого хранилища.
     #[test]

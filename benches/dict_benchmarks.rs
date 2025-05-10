@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::database::Dict;
 
 fn bench_insert(c: &mut Criterion) {

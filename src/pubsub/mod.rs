@@ -19,7 +19,6 @@ pub mod message;
 pub mod subscriber;
 
 pub use broker::*;
+pub(crate) use intern::intern_channel;
 pub use message::*;
 pub use subscriber::*;
-
-pub(crate) use intern::intern_channel;

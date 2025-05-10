@@ -9,7 +9,6 @@ pub use decode::DecodeError;
 pub use encode::EncodeError;
 pub use parser::ParseError;
 pub use system::{StoreError, StoreResult};
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]

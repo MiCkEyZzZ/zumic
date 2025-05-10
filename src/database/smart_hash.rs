@@ -44,7 +44,7 @@ impl SmartHash {
     /// Создаёт пустой SmartHash (начинаем в Zip‑режиме).
     pub fn new() -> Self {
         SmartHash {
-            repr: Repr::Zip(Vec::new()),
+            repr:              Repr::Zip(Vec::new()),
             pending_downgrade: false,
         }
     }

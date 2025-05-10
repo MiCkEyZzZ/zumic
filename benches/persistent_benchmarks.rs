@@ -1,7 +1,7 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use std::fs::remove_file;
-use tempfile::NamedTempFile;
 
+use criterion::{criterion_group, criterion_main, Criterion};
+use tempfile::NamedTempFile;
 use zumic::{InPersistentStore, Sds, Storage, Value};
 
 fn bench_set(c: &mut Criterion) {

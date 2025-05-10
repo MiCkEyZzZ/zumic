@@ -24,9 +24,9 @@ const P: f64 = 0.5;
 /// - backward: Указатель на предыдущий узел (используется для обратной итерации).
 #[derive(Debug, PartialEq, Clone)]
 pub struct Node<K, V> {
-    key: K,
-    value: V,
-    forward: Vec<Option<NonNull<Node<K, V>>>>,
+    key:      K,
+    value:    V,
+    forward:  Vec<Option<NonNull<Node<K, V>>>>,
     backward: Option<NonNull<Node<K, V>>>,
 }
 
@@ -52,14 +52,14 @@ pub struct SkipListIter<'a, K, V> {
 /// Итератор по узлам списка в обратном порядке.
 pub struct ReverseIter<'a, K, V> {
     current: Option<NonNull<Node<K, V>>>,
-    head: *const Node<K, V>,
+    head:    *const Node<K, V>,
     _marker: PhantomData<&'a Node<K, V>>,
 }
 
 /// Итератор по диапазону в SkipList.
 pub struct RangeIter<'a, K, V> {
     current: Option<NonNull<Node<K, V>>>,
-    end: Option<K>, // Конечный (не включается) ключ диапазона
+    end:     Option<K>, // Конечный (не включается) ключ диапазона
     _marker: PhantomData<&'a Node<K, V>>,
 }
 
@@ -259,7 +259,7 @@ where
         // Определяем хвост, используя метод last_node()
         ReverseIter {
             current: self.last_node(),
-            head: self.head.as_ref() as *const Node<K, V>,
+            head:    self.head.as_ref() as *const Node<K, V>,
             _marker: PhantomData,
         }
     }
@@ -282,7 +282,7 @@ where
             let start_ptr = current.forward[0];
             RangeIter {
                 current: start_ptr,
-                end: Some(end.clone()),
+                end:     Some(end.clone()),
                 _marker: std::marker::PhantomData,
             }
         }

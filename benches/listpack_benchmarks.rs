@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
 use zumic::database::ListPack;
 
 fn bench_push_back(c: &mut Criterion) {

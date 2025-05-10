@@ -1,4 +1,4 @@
-use crate::{StorageEngine, StoreError, Value};
+// Copyright 2025 Zumic
 
 use super::{
     AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
@@ -9,6 +9,7 @@ use super::{
     SRemCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand,
     ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
+use crate::{StorageEngine, StoreError, Value};
 
 pub trait CommandExecute: std::fmt::Debug {
     /// Выполнить команду с доступом к хранилищу.

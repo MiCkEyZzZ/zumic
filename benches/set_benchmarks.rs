@@ -12,7 +12,7 @@ fn bench_sadd(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..1000 {
                 let cmd = SAddCommand {
-                    key: "myset".into(),
+                    key:    "myset".into(),
                     member: format!("member{}", i),
                 };
                 let _ = cmd.execute(black_box(&mut store));
@@ -27,7 +27,7 @@ fn bench_sismember(c: &mut Criterion) {
     // Предварительно заполним множество
     for i in 0..1000 {
         let cmd = SAddCommand {
-            key: "myset".into(),
+            key:    "myset".into(),
             member: format!("member{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -37,7 +37,7 @@ fn bench_sismember(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..1000 {
                 let cmd = SIsMemberCommand {
-                    key: "myset".into(),
+                    key:    "myset".into(),
                     member: format!("member{}", i),
                 };
                 let _ = cmd.execute(black_box(&mut store));
@@ -51,7 +51,7 @@ fn bench_srem(c: &mut Criterion) {
 
     for i in 0..1000 {
         let cmd = SAddCommand {
-            key: "myset".into(),
+            key:    "myset".into(),
             member: format!("member{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -61,7 +61,7 @@ fn bench_srem(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..1000 {
                 let cmd = SRemCommand {
-                    key: "myset".into(),
+                    key:    "myset".into(),
                     member: format!("member{}", i),
                 };
                 let _ = cmd.execute(black_box(&mut store));
@@ -75,7 +75,7 @@ fn bench_smembers(c: &mut Criterion) {
 
     for i in 0..1000 {
         let cmd = SAddCommand {
-            key: "myset".into(),
+            key:    "myset".into(),
             member: format!("member{}", i),
         };
         let _ = cmd.execute(&mut store);

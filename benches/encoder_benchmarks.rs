@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::{borrow::Cow, collections::HashMap, f64::consts::PI};
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::network::zsp::frame::{encoder::ZSPEncoder, zsp_types::ZSPFrame};
 
 fn bench_inline_string(c: &mut Criterion) {

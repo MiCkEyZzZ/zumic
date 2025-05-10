@@ -1,10 +1,9 @@
 use std::io::{self};
 
+use super::{InClusterStore, InMemoryStore, InPersistentStore};
 use crate::{
     Sds, Storage, StoreResult, Value, {StorageConfig, StorageType},
 };
-
-use super::{InClusterStore, InMemoryStore, InPersistentStore};
 
 pub enum StorageEngine {
     InMemory(InMemoryStore),

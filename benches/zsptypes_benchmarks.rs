@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
 use zumic::{
     database::{QuickList, Value},
     network::zsp::frame::zsp_types::{

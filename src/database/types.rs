@@ -32,7 +32,7 @@ pub enum Value {
     /// while `sorted` maintains the order of elements by score.
     ZSet {
         /// Maps each element to its score.
-        dict: Dict<Sds, f64>,
+        dict:   Dict<Sds, f64>,
         /// Maintains elements ordered by their score.
         sorted: SkipList<OrderedFloat<f64>, Sds>,
     },

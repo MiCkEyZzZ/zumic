@@ -10,13 +10,13 @@
 //! словари. Каждый тип фрейма имеет свои особенности в
 //! декодировании, которые обрабатываются в отдельных методах.
 
-use bytes::Buf;
-use memchr::memchr;
 use std::{borrow::Cow, collections::HashMap};
 
-use crate::DecodeError;
+use bytes::Buf;
+use memchr::memchr;
 
 use super::ZSPFrame;
+use crate::DecodeError;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///
@@ -41,12 +41,12 @@ pub const MAX_ARRAY_DEPTH: usize = 32;
 pub enum ZSPDecodeState<'a> {
     Initial,
     PartialBinaryString {
-        len: usize,
+        len:  usize,
         data: Vec<u8>,
     },
     PartialArray {
-        len: usize,
-        items: Vec<ZSPFrame<'a>>,
+        len:       usize,
+        items:     Vec<ZSPFrame<'a>>,
         remaining: usize,
     },
 }
@@ -336,7 +336,6 @@ impl<'a> ZSPDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::network::zsp::frame::encoder::ZSPEncoder;
 
     // Тест для строк в формате inline

@@ -7,9 +7,9 @@
 //! terminated with a special byte 0xFF.
 
 pub struct ListPack {
-    data: Vec<u8>,
-    head: usize,
-    tail: usize,
+    data:        Vec<u8>,
+    head:        usize,
+    tail:        usize,
     num_entries: usize,
 }
 

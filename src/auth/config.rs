@@ -9,16 +9,16 @@ use crate::ConfigError;
 pub struct ServerConfig {
     pub requirepass: Option<String>,
     pub auth_pepper: Option<String>,
-    pub users: Vec<UserConfig>,
+    pub users:       Vec<UserConfig>,
 }
 
 #[derive(Debug)]
 pub struct UserConfig {
-    pub username: String,
-    pub enabled: bool,
-    pub nopass: bool,
-    pub password: Option<String>,
-    pub keys: Vec<String>,
+    pub username:    String,
+    pub enabled:     bool,
+    pub nopass:      bool,
+    pub password:    Option<String>,
+    pub keys:        Vec<String>,
     pub permissions: Vec<String>,
 }
 
@@ -57,11 +57,11 @@ impl ServerConfig {
         }
 
         let mut user = UserConfig {
-            username: parts[0].to_string(),
-            enabled: false,
-            nopass: false,
-            password: None,
-            keys: Vec::new(),
+            username:    parts[0].to_string(),
+            enabled:     false,
+            nopass:      false,
+            password:    None,
+            keys:        Vec::new(),
             permissions: Vec::new(),
         };
 

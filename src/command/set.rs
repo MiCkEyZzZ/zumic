@@ -1,10 +1,12 @@
+// Copyright 2025 Zumic
+
 use std::collections::HashSet;
 
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct SAddCommand {
-    pub key: String,
+    pub key:    String,
     pub member: String,
 }
 
@@ -32,7 +34,7 @@ impl CommandExecute for SAddCommand {
 
 #[derive(Debug)]
 pub struct SRemCommand {
-    pub key: String,
+    pub key:    String,
     pub member: String,
 }
 
@@ -53,7 +55,7 @@ impl CommandExecute for SRemCommand {
 
 #[derive(Debug)]
 pub struct SIsMemberCommand {
-    pub key: String,
+    pub key:    String,
     pub member: String,
 }
 
@@ -107,9 +109,8 @@ impl CommandExecute for SCardCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::InMemoryStore;
-
     use super::*;
+    use crate::InMemoryStore;
 
     // Вспомогательная функция для создания нового хранилища в памяти.
     fn create_store() -> StorageEngine {
@@ -124,7 +125,7 @@ mod tests {
         let mut store = create_store();
 
         let sadd = SAddCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "one".to_string(),
         };
 
@@ -143,11 +144,11 @@ mod tests {
         let mut store = create_store();
 
         let sadd1 = SAddCommand {
-            key: "numbers".to_string(),
+            key:    "numbers".to_string(),
             member: "one".to_string(),
         };
         let sadd2 = SAddCommand {
-            key: "numbers".to_string(),
+            key:    "numbers".to_string(),
             member: "two".to_string(),
         };
 
@@ -180,20 +181,20 @@ mod tests {
         let mut store = create_store();
 
         let sadd = SAddCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "one".to_string(),
         };
         sadd.execute(&mut store).unwrap();
 
         let srem = SRemCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "one".to_string(),
         };
         let result = srem.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(1));
 
         let srem_again = SRemCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "one".to_string(),
         };
         let result = srem_again.execute(&mut store).unwrap();
@@ -208,20 +209,20 @@ mod tests {
         let mut store = create_store();
 
         let sadd = SAddCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "alpha".to_string(),
         };
         sadd.execute(&mut store).unwrap();
 
         let sismember = SIsMemberCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "alpha".to_string(),
         };
         let result = sismember.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(1));
 
         let not_member = SIsMemberCommand {
-            key: "myset".to_string(),
+            key:    "myset".to_string(),
             member: "beta".to_string(),
         };
         let result = not_member.execute(&mut store).unwrap();
@@ -235,11 +236,11 @@ mod tests {
         let mut store = create_store();
 
         let sadd1 = SAddCommand {
-            key: "tags".to_string(),
+            key:    "tags".to_string(),
             member: "a".to_string(),
         };
         let sadd2 = SAddCommand {
-            key: "tags".to_string(),
+            key:    "tags".to_string(),
             member: "b".to_string(),
         };
         sadd1.execute(&mut store).unwrap();

@@ -15,30 +15,30 @@ const REHASH_BATCH: usize = 1;
 /// One element in a collision chain.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Entry<K, V> {
-    key: K,
-    val: V,
+    key:  K,
+    val:  V,
     next: Option<Box<Entry<K, V>>>,
 }
 
 /// One hash table: vector of buckets, size mask, and number of used elements.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct HashTable<K, V> {
-    buckets: Vec<Option<Box<Entry<K, V>>>>,
+    buckets:   Vec<Option<Box<Entry<K, V>>>>,
     size_mask: usize,
-    used: usize,
+    used:      usize,
 }
 
 /// Main dictionary with two hash tables for rehashing.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Dict<K, V> {
-    ht: [HashTable<K, V>; 2],
+    ht:         [HashTable<K, V>; 2],
     rehash_idx: isize, // -1 = no rehashing, otherwise index in ht[0]
 }
 
 pub struct DictIter<'a, K, V> {
-    tables: [&'a HashTable<K, V>; 2],
-    table_idx: usize,
-    bucket_idx: usize,
+    tables:        [&'a HashTable<K, V>; 2],
+    table_idx:     usize,
+    bucket_idx:    usize,
     current_entry: Option<&'a Entry<K, V>>,
 }
 
@@ -86,7 +86,7 @@ where
     /// Creates a new empty dictionary.
     pub fn new() -> Self {
         Dict {
-            ht: [HashTable::with_capacity(0), HashTable::with_capacity(0)],
+            ht:         [HashTable::with_capacity(0), HashTable::with_capacity(0)],
             rehash_idx: -1,
         }
     }
@@ -202,9 +202,9 @@ where
 
     pub fn iter(&self) -> DictIter<K, V> {
         DictIter {
-            tables: [&self.ht[0], &self.ht[1]],
-            table_idx: 0,
-            bucket_idx: 0,
+            tables:        [&self.ht[0], &self.ht[1]],
+            table_idx:     0,
+            bucket_idx:    0,
             current_entry: None,
         }
     }

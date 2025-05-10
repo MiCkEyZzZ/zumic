@@ -9,8 +9,8 @@ pub struct GeoPoint {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeoEntry {
     pub member: String,
-    pub point: GeoPoint,
-    pub score: u64, // 52-битный interleaved hash
+    pub point:  GeoPoint,
+    pub score:  u64, // 52-битный interleaved hash
 }
 
 /// Основная структура для хранения GEO-объектов.
@@ -204,14 +204,14 @@ mod tests {
             gs.get("A").unwrap(),
             GeoPoint {
                 lon: 10.0,
-                lat: 20.0
+                lat: 20.0,
             }
         );
         assert_eq!(
             gs.get("B").unwrap(),
             GeoPoint {
                 lon: -5.5,
-                lat: 42.1
+                lat: 42.1,
             }
         );
         assert!(gs.get("C").is_none());

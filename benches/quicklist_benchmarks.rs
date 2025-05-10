@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::collections::VecDeque;
+
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::database::QuickList;
 
 /// Размеры для теста

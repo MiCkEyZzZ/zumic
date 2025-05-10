@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use config::{Config, ConfigError, Environment};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub enum StorageType {
@@ -19,8 +18,8 @@ pub struct StorageConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
-    pub listen_add: String,
-    pub aof_path: Option<String>,
+    pub listen_add:      String,
+    pub aof_path:        Option<String>,
     pub max_connections: usize,
 }
 

@@ -1,5 +1,4 @@
 use tracing_subscriber::{fmt, EnvFilter};
-
 use zumic::auth::ServerConfig;
 
 fn main() {

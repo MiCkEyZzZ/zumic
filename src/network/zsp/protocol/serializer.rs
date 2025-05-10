@@ -83,12 +83,11 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
 mod tests {
     use std::collections::HashSet;
 
+    use super::*;
     use crate::{
         database::{skip_list::SkipList, QuickList, Sds},
         Dict,
     };
-
-    use super::*;
 
     /// Проверяет сериализацию `Response::Ok` в `ZSPFrame::InlineString("OK")`
     #[test]

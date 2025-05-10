@@ -1,11 +1,11 @@
 // Copyright 2025 Zumic
 
+use std::str::FromStr;
+use std::sync::{Arc, RwLock};
+
 use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
-
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
 
 use crate::AclError;
 
@@ -87,33 +87,33 @@ pub enum AclRule {
 #[derive(Debug, Clone)]
 pub struct AclUser {
     /// Имя пользователя.
-    pub username: String,
+    pub username:           String,
     /// Флаг, обозначающий, включён ли пользователь.
-    pub enabled: bool,
+    pub enabled:            bool,
     /// Список хэшей паролей для поддержки ротации.
-    pub password_hashes: Vec<String>,
+    pub password_hashes:    Vec<String>,
     /// Разрешённые категории команд.
     pub allowed_categories: CmdCategory,
     /// Разрешённые конкретные команды.
-    pub allowed_commands: u128,
+    pub allowed_commands:   u128,
     /// Запрещённые конкретные команды (например, `-flushall`).
-    pub denied_commands: u128,
+    pub denied_commands:    u128,
 
     /// "Сырые" шаблоны ключей в виде `Glob`.
-    raw_key_patterns: Vec<Glob>,
+    raw_key_patterns:          Vec<Glob>,
     /// "Сырые" шаблоны запрещённых ключей в виде `Glob`.
-    raw_deny_key_patterns: Vec<Glob>,
+    raw_deny_key_patterns:     Vec<Glob>,
     /// "Сырые" шаблоны каналов в виде `Glob`.
-    raw_channel_patterns: Vec<Glob>,
+    raw_channel_patterns:      Vec<Glob>,
     /// "Сырые" шаблоны запрещённых каналов в виде `Glob`.
     raw_deny_channel_patterns: Vec<Glob>,
 
     /// Скомпилированный набор шаблонов ключей.
-    pub key_patterns: GlobSet,
+    pub key_patterns:          GlobSet,
     /// Скомпилированный набор запрещённых ключей.
-    pub deny_key_patterns: GlobSet,
+    pub deny_key_patterns:     GlobSet,
     /// Скомпилированный набор шаблонов каналов.
-    pub channel_patterns: GlobSet,
+    pub channel_patterns:      GlobSet,
     /// Скомпилированный набор запрещённых каналов.
     pub deny_channel_patterns: GlobSet,
 }
@@ -129,20 +129,20 @@ impl AclUser {
     pub fn new(username: &str) -> Result<Self, AclError> {
         let default_glob = DEFAULT_GLOB.clone();
         let mut u = AclUser {
-            username: username.to_string(),
-            enabled: true,
-            password_hashes: Vec::new(),
-            allowed_categories: CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
-            allowed_commands: 0,
-            denied_commands: 0,
-            raw_key_patterns: vec![default_glob.clone()],
-            raw_deny_key_patterns: Vec::new(),
-            raw_channel_patterns: vec![default_glob.clone()],
+            username:                  username.to_string(),
+            enabled:                   true,
+            password_hashes:           Vec::new(),
+            allowed_categories:        CmdCategory::READ | CmdCategory::WRITE | CmdCategory::ADMIN,
+            allowed_commands:          0,
+            denied_commands:           0,
+            raw_key_patterns:          vec![default_glob.clone()],
+            raw_deny_key_patterns:     Vec::new(),
+            raw_channel_patterns:      vec![default_glob.clone()],
             raw_deny_channel_patterns: Vec::new(),
-            key_patterns: GlobSet::empty(),
-            deny_key_patterns: GlobSet::empty(),
-            channel_patterns: GlobSet::empty(),
-            deny_channel_patterns: GlobSet::empty(),
+            key_patterns:              GlobSet::empty(),
+            deny_key_patterns:         GlobSet::empty(),
+            channel_patterns:          GlobSet::empty(),
+            deny_channel_patterns:     GlobSet::empty(),
         };
 
         u.rebuild_all_patterns()?;
@@ -453,7 +453,7 @@ mod tests {
         let rules = vec![
             "on",
             "~data:*", // разрешаем ключи, начинающиеся с "data:"
-            "&chan?",  // разрешаем каналы, соответствующие шаблону "chan?" (например, chan1, chanA)
+            "&chan?", // разрешаем каналы, соответствующие шаблону "chan?" (например, chan1, chanA)
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();

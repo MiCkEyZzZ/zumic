@@ -114,9 +114,8 @@ mod tests {
     use byteorder::ReadBytesExt;
     use ordered_float::OrderedFloat;
 
-    use crate::{Dict, QuickList, Sds, SkipList, SmartHash};
-
     use super::*;
+    use crate::{Dict, QuickList, Sds, SkipList, SmartHash};
 
     fn create_quicklist_from_vec(vec: Vec<String>, max_segment_size: usize) -> QuickList<Sds> {
         let sds_vec: Vec<Sds> = vec.into_iter().map(|s| Sds::from_str(&s)).collect();

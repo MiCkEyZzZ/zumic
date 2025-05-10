@@ -262,8 +262,9 @@ impl TryFrom<u8> for AofOp {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     /// Helper function to test append_set and append_del followed by replay under a given sync policy.
     fn run_append_replay(policy: SyncPolicy) -> io::Result<()> {

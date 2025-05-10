@@ -110,11 +110,10 @@ pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::database::Sds;
+    use std::collections::{HashMap, HashSet};
 
     use super::*;
-
-    use std::collections::{HashMap, HashSet};
+    use crate::database::Sds;
 
     /// Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
     #[test]
