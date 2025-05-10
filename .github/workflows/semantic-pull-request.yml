@@ -1,0 +1,31 @@
+name: Semantic Pull Request
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # предположим, что у вас в .github/actions/setup-cyborg лежит действие,
+      # которое устанавливает node и tsx
+      - uses: ./.github/actions/setup-cyborg
+
+      - name: Check Pull Request
+        working-directory: cyborg
+        run: pnpm tsx bin/check-pull-request.ts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

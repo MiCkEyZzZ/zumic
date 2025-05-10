@@ -1,0 +1,31 @@
+name: Check Dependencies
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust@v1
+
+      - name: Generate dependency list
+        run: cargo tree --prefix none | awk '{print $1}' > deps.txt
+
+      - name: Check for blacklisted crates
+        run: |
+          while read -r crate; do
+            if grep -Fxq "$crate" .github/cargo-blacklist.txt; then
+              echo "❌ Blacklisted crate found: $crate"
+              exit 1
+            fi
+          done < deps.txt
+          echo "✅ No blacklisted crates found."
