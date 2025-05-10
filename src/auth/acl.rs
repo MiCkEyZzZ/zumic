@@ -1,3 +1,5 @@
+// Copyright 2025 Zumic
+
 use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;

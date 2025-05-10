@@ -1,3 +1,5 @@
+// Copyright 2025 Zumic
+
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]

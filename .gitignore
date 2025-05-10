@@ -7,12 +7,15 @@ target/
 .vscode/
 .zed/
 .trunk
+*.iml
 
 # System files
 .DS_Store
 
+debug/
+
 # Logs and profilers
-logs/
+/logs
 Flamegraph/
 
 # Documentation readable by generators
@@ -23,6 +26,9 @@ doc**/*
 # Secrets and enviroment
 .env
 zumic.conf
+
+# Vscode workspace
+*.code-workspace
 
 # Web artifacts
 *.wasm

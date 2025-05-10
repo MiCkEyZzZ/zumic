@@ -5,6 +5,7 @@ authors = ["Mikhail <zedmfix@gmail.com>"]
 repository = "https://github.com/MiCkEyZzZ/zumic"
 readme = "README.md"
 edition = "2021"
+license = "Apache-2.0"
 
 [dependencies]
 bytes = { version = "1.10.1", features = ["serde"] }
@@ -53,6 +54,5 @@ criterion = { version = "0.5", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-name = "aof"
+name = "sds_benchmarks"
 harness = false
-path = "listpack_benchmarks.rs"
