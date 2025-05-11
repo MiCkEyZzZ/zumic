@@ -3,10 +3,10 @@ name: Development Build
 on:
   push:
     branches:
-      - master # поменяли с main на master
+      - master
   pull_request:
     branches:
-      - master # поменяли с main на master
+      - master
 
 jobs:
   build-and-test:
@@ -19,7 +19,9 @@ jobs:
         run: echo "Current branch is $(git rev-parse --abbrev-ref HEAD)"
 
       - name: Set up Rust
-        uses: actions-rust-lang/setup-rust@v1
+        uses: actions-rust-lang/setup-rust@v1.6
+        with:
+          rust-version: stable # Можно указать stable или другую версию Rust, которая вам нужна
 
       - name: Build project
         run: cargo build --release
