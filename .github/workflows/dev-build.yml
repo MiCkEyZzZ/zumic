@@ -1,6 +1,9 @@
 name: Development Build
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       skip_tests:
@@ -10,7 +13,10 @@ on:
       profile:
         description: "Cargo profile (dev, release, nightly)"
         type: choice
-        options: [dev, release, nightly]
+        options:
+          - dev
+          - release
+          - nightly
         default: dev
 
 jobs:
@@ -25,7 +31,6 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ inputs.profile }}
-          profile: ${{ inputs.profile }}
           override: true
 
       - name: Check formatting
