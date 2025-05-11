@@ -1,9 +1,6 @@
 name: Development Build
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
     inputs:
       skip_tests:
@@ -11,7 +8,7 @@ on:
         type: boolean
         default: true
       profile:
-        description: "Cargo profile"
+        description: "Cargo profile (dev, release, nightly)"
         type: choice
         options: [dev, release, nightly]
         default: dev
@@ -19,21 +16,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        # По умолчанию проверяет текущий коммит, ref указывать не нужно
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust@v1
-        with:
-          profile: ${{ inputs.profile }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          profile: ${{ inputs.profile }}
           toolchain: ${{ inputs.profile }}
+          profile: ${{ inputs.profile }}
           override: true
 
       - name: Check formatting
@@ -43,8 +35,22 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
-        run: cargo build --${{ inputs.profile }}
+        run: |
+          if [ "${{ inputs.profile }}" = "release" ]; then
+            cargo build --release
+          elif [ "${{ inputs.profile }}" = "nightly" ]; then
+            cargo +nightly build
+          else
+            cargo build
+          fi
 
       - name: Run tests
         if: ${{ !inputs.skip_tests }}
-        run: cargo test --${{ inputs.profile }}
+        run: |
+          if [ "${{ inputs.profile }}" = "release" ]; then
+            cargo test --release
+          elif [ "${{ inputs.profile }}" = "nightly" ]; then
+            cargo +nightly test
+          else
+            cargo test
+          fi
