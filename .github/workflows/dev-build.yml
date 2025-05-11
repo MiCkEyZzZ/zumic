@@ -3,10 +3,10 @@ name: Development Build
 on:
   push:
     branches:
-      - main
+      - master # поменяли с main на master
   pull_request:
     branches:
-      - main
+      - master # поменяли с main на master
 
 jobs:
   build-and-test:
@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Display current branch
+        run: echo "Current branch is $(git rev-parse --abbrev-ref HEAD)"
 
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust@v1
