@@ -25,21 +25,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: master
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ inputs.profile }}
-          profile: ${{ inputs.profile }}
+          # Если профиль nightly — ставим nightly, иначе — stable
+          toolchain: ${{ inputs.profile == 'nightly' && 'nightly' || 'stable' }}
           override: true
 
       - name: Check formatting
         run: cargo fmt -- --check
 
       - name: Lint with Clippy
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build
         run: |
@@ -49,17 +47,6 @@ jobs:
             cargo +nightly build
           else
             cargo build
-          fi
-
-      - name: Run tests
-        if: ${{ !inputs.skip_tests }}
-        run: |
-          if [ "${{ inputs.profile }}" = "release" ]; then
-            cargo test --release
-          elif [ "${{ inputs.profile }}" = "nightly" ]; then
-            cargo +nightly test
-          else
-            cargo test
           fi
 
       - name: Run tests
