@@ -23,9 +23,9 @@ const BLOCK_DURATION: Duration = Duration::from_secs(60);
 #[derive(Debug)]
 pub struct AuthManager {
     /// Ссылка на ACL-систему для проверки прав доступа.
-    acl:      Arc<RwLock<Acl>>,
+    acl: Arc<RwLock<Acl>>,
     /// Опциональная «pepper»-строка, добавляемая к паролям перед хешированием.
-    pepper:   Option<String>,
+    pepper: Option<String>,
     /// Счётчик неудачных попыток входа: имя пользователя → (кол-во, время первой неудачи).
     failures: Arc<RwLock<HashMap<String, (u8, Instant)>>>,
 }
@@ -40,8 +40,8 @@ impl AuthManager {
     /// Создаёт нового `AuthManager` без «pepper».
     pub fn new() -> Self {
         Self {
-            acl:      Arc::new(RwLock::new(Acl::default())),
-            pepper:   None,
+            acl: Arc::new(RwLock::new(Acl::default())),
+            pepper: None,
             failures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -49,8 +49,8 @@ impl AuthManager {
     /// Создаёт новый `AuthManager` с заданной «pepper»-строкой для хеширования.
     pub fn with_pepper(pepper: impl Into<String>) -> Self {
         Self {
-            acl:      Arc::new(RwLock::new(Acl::default())),
-            pepper:   Some(pepper.into()),
+            acl: Arc::new(RwLock::new(Acl::default())),
+            pepper: Some(pepper.into()),
             failures: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -224,8 +224,8 @@ impl AuthManager {
 impl Clone for AuthManager {
     fn clone(&self) -> Self {
         Self {
-            acl:      Arc::clone(&self.acl),
-            pepper:   self.pepper.clone(),
+            acl: Arc::clone(&self.acl),
+            pepper: self.pepper.clone(),
             failures: Arc::clone(&self.failures),
         }
     }
@@ -327,12 +327,12 @@ mod tests {
         let cfg = ServerConfig {
             requirepass: Some("master".into()), // глобальный пароль
             auth_pepper: Some("pep".into()),    // соль
-            users:       vec![UserConfig {
-                username:    "u1".into(),
-                enabled:     true,
-                nopass:      false,
-                password:    Some("p1".into()),
-                keys:        vec!["~kin:*".into()],
+            users: vec![UserConfig {
+                username: "u1".into(),
+                enabled: true,
+                nopass: false,
+                password: Some("p1".into()),
+                keys: vec!["~kin:*".into()],
                 permissions: vec!["+@read".into()],
             }],
         };
@@ -426,11 +426,11 @@ mod tests {
     async fn test_from_config_nopass_user() {
         let mut cfg = ServerConfig::default();
         cfg.users.push(UserConfig {
-            username:    "nop".into(),
-            enabled:     true,
-            nopass:      true,
-            password:    None,
-            keys:        vec![],
+            username: "nop".into(),
+            enabled: true,
+            nopass: true,
+            password: None,
+            keys: vec![],
             permissions: vec!["+@all".into()],
         });
         let manager = AuthManager::from_config(&cfg).await.unwrap();

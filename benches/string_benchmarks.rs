@@ -26,7 +26,7 @@ fn bench_strlen(c: &mut Criterion) {
 fn bench_append(c: &mut Criterion) {
     let mut store = setup_store_with_str("foo", "hello");
     let cmd = AppendCommand {
-        key:   "foo".into(),
+        key: "foo".into(),
         value: " world".into(),
     };
 
@@ -40,9 +40,9 @@ fn bench_append(c: &mut Criterion) {
 fn bench_getrange(c: &mut Criterion) {
     let mut store = setup_store_with_str("foo", "hello world");
     let cmd = GetRangeCommand {
-        key:   "foo".into(),
+        key: "foo".into(),
         start: 0,
-        end:   5,
+        end: 5,
     };
 
     c.bench_function("GetRange", |b| {

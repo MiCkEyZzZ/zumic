@@ -14,7 +14,7 @@ fn bench_lpush(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..100 {
                 let cmd = LPushCommand {
-                    key:   "mylist".into(),
+                    key: "mylist".into(),
                     value: format!("val{}", i),
                 };
                 let _ = cmd.execute(black_box(&mut store));
@@ -30,7 +30,7 @@ fn bench_rpush(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..100 {
                 let cmd = RPushCommand {
-                    key:   "mylist".into(),
+                    key: "mylist".into(),
                     value: format!("val{}", i),
                 };
                 let _ = cmd.execute(black_box(&mut store));
@@ -44,7 +44,7 @@ fn bench_lpop(c: &mut Criterion) {
 
     for i in 0..100 {
         let cmd = LPushCommand {
-            key:   "mylist".into(),
+            key: "mylist".into(),
             value: format!("val{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -67,7 +67,7 @@ fn bench_rpop(c: &mut Criterion) {
 
     for i in 0..100 {
         let cmd = RPushCommand {
-            key:   "mylist".into(),
+            key: "mylist".into(),
             value: format!("val{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -90,7 +90,7 @@ fn bench_llen(c: &mut Criterion) {
 
     for i in 0..100 {
         let cmd = LPushCommand {
-            key:   "mylist".into(),
+            key: "mylist".into(),
             value: format!("val{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -111,7 +111,7 @@ fn bench_lrange(c: &mut Criterion) {
 
     for i in 0..100 {
         let cmd = RPushCommand {
-            key:   "mylist".into(),
+            key: "mylist".into(),
             value: format!("val{}", i),
         };
         let _ = cmd.execute(&mut store);
@@ -120,9 +120,9 @@ fn bench_lrange(c: &mut Criterion) {
     c.bench_function("LRangeCommand - range [100..200]", |b| {
         b.iter(|| {
             let cmd = LRangeCommand {
-                key:   "mylist".into(),
+                key: "mylist".into(),
                 start: 100,
-                stop:  200,
+                stop: 200,
             };
             let _ = cmd.execute(black_box(&mut store));
         });

@@ -8,7 +8,7 @@ use crate::{Sds, StoreError, StoreResult, Value};
 
 pub struct InPersistentStore {
     index: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
-    aof:   Mutex<AofLog>,
+    aof: Mutex<AofLog>,
 }
 
 impl InPersistentStore {
@@ -30,7 +30,7 @@ impl InPersistentStore {
 
         Ok(Self {
             index: Mutex::new(index),
-            aof:   Mutex::new(aof),
+            aof: Mutex::new(aof),
         })
     }
 }

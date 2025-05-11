@@ -4,7 +4,7 @@ use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct LPushCommand {
-    pub key:   String,
+    pub key: String,
     pub value: String,
 }
 
@@ -28,7 +28,7 @@ impl CommandExecute for LPushCommand {
 
 #[derive(Debug)]
 pub struct RPushCommand {
-    pub key:   String,
+    pub key: String,
     pub value: String,
 }
 
@@ -116,9 +116,9 @@ impl CommandExecute for LLenCommand {
 
 #[derive(Debug)]
 pub struct LRangeCommand {
-    pub key:   String,
+    pub key: String,
     pub start: i64,
-    pub stop:  i64,
+    pub stop: i64,
 }
 
 impl CommandExecute for LRangeCommand {
@@ -169,13 +169,13 @@ mod tests {
         let mut store = create_store();
 
         let cmd = LPushCommand {
-            key:   "l".into(),
+            key: "l".into(),
             value: "one".into(),
         };
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(1));
 
         let cmd2 = LPushCommand {
-            key:   "l".into(),
+            key: "l".into(),
             value: "two".into(),
         };
         assert_eq!(cmd2.execute(&mut store).unwrap(), Value::Int(2));
@@ -201,12 +201,12 @@ mod tests {
         let mut store = create_store();
 
         let cmd = RPushCommand {
-            key:   "r".into(),
+            key: "r".into(),
             value: "a".into(),
         };
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(1));
         let cmd2 = RPushCommand {
-            key:   "r".into(),
+            key: "r".into(),
             value: "b".into(),
         };
         assert_eq!(cmd2.execute(&mut store).unwrap(), Value::Int(2));
@@ -229,7 +229,7 @@ mod tests {
         let mut store = create_store();
         for v in &["x", "y", "z"] {
             RPushCommand {
-                key:   "lr".into(),
+                key: "lr".into(),
                 value: v.to_string(),
             }
             .execute(&mut store)
@@ -238,9 +238,9 @@ mod tests {
 
         // Извлечение полного диапазона с start=0 и stop=-1.
         let range = LRangeCommand {
-            key:   "lr".into(),
+            key: "lr".into(),
             start: 0,
-            stop:  -1,
+            stop: -1,
         };
         let list = match range.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -253,9 +253,9 @@ mod tests {
 
         // Извлечение только элемента с индексом 1.
         let range2 = LRangeCommand {
-            key:   "lr".into(),
+            key: "lr".into(),
             start: 1,
-            stop:  1,
+            stop: 1,
         };
         let list2 = match range2.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -288,7 +288,7 @@ mod tests {
         store.set(&Sds::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {
-                key:   "k".into(),
+                key: "k".into(),
                 value: "v".into(),
             }
             .execute(&mut store),

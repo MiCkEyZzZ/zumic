@@ -25,7 +25,7 @@ enum Encoding {
 ///
 /// The internal storage is upgraded automatically when larger values are inserted.
 pub struct IntSet {
-    enc:    Encoding,
+    enc: Encoding,
     data16: Vec<i16>,
     data32: Vec<i32>,
     data64: Vec<i64>,
@@ -35,7 +35,7 @@ impl IntSet {
     /// Creates a new, empty `IntSet` using `i16` encoding.
     pub fn new() -> Self {
         Self {
-            enc:    Encoding::Int16,
+            enc: Encoding::Int16,
             data16: Vec::new(),
             data32: Vec::new(),
             data64: Vec::new(),

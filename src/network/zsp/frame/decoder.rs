@@ -41,12 +41,12 @@ pub const MAX_ARRAY_DEPTH: usize = 32;
 pub enum ZSPDecodeState<'a> {
     Initial,
     PartialBinaryString {
-        len:  usize,
+        len: usize,
         data: Vec<u8>,
     },
     PartialArray {
-        len:       usize,
-        items:     Vec<ZSPFrame<'a>>,
+        len: usize,
+        items: Vec<ZSPFrame<'a>>,
         remaining: usize,
     },
 }

@@ -9,8 +9,8 @@ pub struct GeoPoint {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeoEntry {
     pub member: String,
-    pub point:  GeoPoint,
-    pub score:  u64, // 52-битный interleaved hash
+    pub point: GeoPoint,
+    pub score: u64, // 52-битный interleaved hash
 }
 
 /// Основная структура для хранения GEO-объектов.

@@ -4,7 +4,7 @@ use crate::{CommandExecute, QuickList, Sds, SmartHash, StorageEngine, StoreError
 
 #[derive(Debug)]
 pub struct HSetCommand {
-    pub key:   String,
+    pub key: String,
     pub field: String,
     pub value: String,
 }
@@ -34,7 +34,7 @@ impl CommandExecute for HSetCommand {
 
 #[derive(Debug)]
 pub struct HGetCommand {
-    pub key:   String,
+    pub key: String,
     pub field: String,
 }
 
@@ -56,7 +56,7 @@ impl CommandExecute for HGetCommand {
 
 #[derive(Debug)]
 pub struct HDelCommand {
-    pub key:   String,
+    pub key: String,
     pub field: String,
 }
 
@@ -116,7 +116,7 @@ mod tests {
 
         // Устанавливаем поле хэша с помощью HSetCommand.
         let hset_cmd = HSetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
             value: "value1".to_string(),
         };
@@ -127,7 +127,7 @@ mod tests {
 
         // Получаем значение этого поля.
         let hget_cmd = HGetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
         };
 
@@ -146,7 +146,7 @@ mod tests {
 
         // Сначала установим одно поле
         let hset_cmd = HSetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
             value: "value1".to_string(),
         };
@@ -154,7 +154,7 @@ mod tests {
 
         // Пытаемся получить значение несуществующего поля
         let hget_cmd = HGetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "nonexistent".to_string(),
         };
         let get_result = hget_cmd.execute(&mut store);
@@ -172,7 +172,7 @@ mod tests {
 
         // Сначала установим одно поле
         let hset_cmd = HSetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
             value: "value1".to_string(),
         };
@@ -180,7 +180,7 @@ mod tests {
 
         // Удаляем это поле
         let hdel_cmd = HDelCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
         };
         let del_result = hdel_cmd.execute(&mut store);
@@ -191,7 +191,7 @@ mod tests {
 
         // Проверяем, что поле действительно удалено
         let hget_cmd = HGetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
         };
         let get_result = hget_cmd.execute(&mut store);
@@ -207,12 +207,12 @@ mod tests {
         let mut store = create_store();
 
         let hset_cmd1 = HSetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field1".to_string(),
             value: "value1".to_string(),
         };
         let hset_cmd2 = HSetCommand {
-            key:   "hash".to_string(),
+            key: "hash".to_string(),
             field: "field2".to_string(),
             value: "value2".to_string(),
         };

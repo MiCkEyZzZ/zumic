@@ -4,7 +4,7 @@ use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct SetCommand {
-    pub key:   String,
+    pub key: String,
     pub value: Value,
 }
 
@@ -64,7 +64,7 @@ impl CommandExecute for ExistsCommand {
 
 #[derive(Debug)]
 pub struct SetNxCommand {
-    pub key:   String,
+    pub key: String,
     pub value: Value,
 }
 
@@ -141,7 +141,7 @@ impl CommandExecute for MGetCommand {
 #[derive(Debug)]
 pub struct RenameCommand {
     pub from: String,
-    pub to:   String,
+    pub to: String,
 }
 
 impl CommandExecute for RenameCommand {
@@ -154,7 +154,7 @@ impl CommandExecute for RenameCommand {
 #[derive(Debug)]
 pub struct RenameNxCommand {
     pub from: String,
-    pub to:   String,
+    pub to: String,
 }
 
 impl CommandExecute for RenameNxCommand {
@@ -190,7 +190,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
-            key:   "test_key".to_string(),
+            key: "test_key".to_string(),
             value: Value::Str(Sds::from_str("test_value")),
         };
 
@@ -230,7 +230,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
-            key:   "test_key".to_string(),
+            key: "test_key".to_string(),
             value: Value::Str(Sds::from_str("test_value")),
         };
 
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Int(0));
 
         let set_cmd = SetCommand {
-            key:   "test_key1".to_string(),
+            key: "test_key1".to_string(),
             value: Value::Str(Sds::from_str("value")),
         };
         set_cmd.execute(&mut store).unwrap();
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Int(1));
 
         let set_cmd2 = SetCommand {
-            key:   "test_key2".to_string(),
+            key: "test_key2".to_string(),
             value: Value::Str(Sds::from_str("another")),
         };
         set_cmd2.execute(&mut store).unwrap();
@@ -322,7 +322,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let setnx_cmd = SetNxCommand {
-            key:   "new_key".to_string(),
+            key: "new_key".to_string(),
             value: Value::Str(Sds::from_str("new_value")),
         };
 
@@ -346,14 +346,14 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetNxCommand {
-            key:   "existing_key".to_string(),
+            key: "existing_key".to_string(),
             value: Value::Str(Sds::from_str("value")),
         };
 
         let _ = set_cmd.execute(&mut store);
 
         let setnx_cmd = SetNxCommand {
-            key:   "existing_key".to_string(),
+            key: "existing_key".to_string(),
             value: Value::Str(Sds::from_str("new_value")),
         };
 
@@ -445,14 +445,14 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
-            key:   "key1".to_string(),
+            key: "key1".to_string(),
             value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
         let rename_cmd = RenameCommand {
             from: "key1".to_string(),
-            to:   "key2".to_string(),
+            to: "key2".to_string(),
         };
 
         let result = rename_cmd.execute(&mut store);
@@ -486,14 +486,14 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
-            key:   "key1".to_string(),
+            key: "key1".to_string(),
             value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
         let rename_cmd = RenameNxCommand {
             from: "key1".to_string(),
-            to:   "key2".to_string(),
+            to: "key2".to_string(),
         };
 
         let result = rename_cmd.execute(&mut store);
@@ -527,14 +527,14 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
-            key:   "key1".to_string(),
+            key: "key1".to_string(),
             value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd.execute(&mut store).unwrap();
 
         let rename_nx_cmd = RenameNxCommand {
             from: "key1".to_string(),
-            to:   "key2".to_string(),
+            to: "key2".to_string(),
         };
 
         let result = rename_nx_cmd.execute(&mut store);
@@ -567,13 +567,13 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let set_cmd1 = SetCommand {
-            key:   "key1".to_string(),
+            key: "key1".to_string(),
             value: Value::Str(Sds::from_str("value1")),
         };
         set_cmd1.execute(&mut store).unwrap();
 
         let set_cmd2 = SetCommand {
-            key:   "key2".to_string(),
+            key: "key2".to_string(),
             value: Value::Str(Sds::from_str("value2")),
         };
         set_cmd2.execute(&mut store).unwrap();

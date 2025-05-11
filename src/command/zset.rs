@@ -6,9 +6,9 @@ use crate::{CommandExecute, Dict, QuickList, Sds, SkipList, StorageEngine, Store
 
 #[derive(Debug)]
 pub struct ZAddCommand {
-    pub key:    String,
+    pub key: String,
     pub member: String,
-    pub score:  f64,
+    pub score: f64,
 }
 
 impl CommandExecute for ZAddCommand {
@@ -45,7 +45,7 @@ impl CommandExecute for ZAddCommand {
 
 #[derive(Debug)]
 pub struct ZRemCommand {
-    pub key:    String,
+    pub key: String,
     pub member: String,
 }
 
@@ -82,7 +82,7 @@ impl CommandExecute for ZRemCommand {
 
 #[derive(Debug)]
 pub struct ZScoreCommand {
-    pub key:    String,
+    pub key: String,
     pub member: String,
 }
 
@@ -124,9 +124,9 @@ impl CommandExecute for ZCardCommand {
 
 #[derive(Debug)]
 pub struct ZRangeCommand {
-    pub key:   String,
+    pub key: String,
     pub start: i64,
-    pub stop:  i64,
+    pub stop: i64,
 }
 
 impl CommandExecute for ZRangeCommand {
@@ -164,9 +164,9 @@ impl CommandExecute for ZRangeCommand {
 
 #[derive(Debug)]
 pub struct ZRevRangeCommand {
-    pub key:   String,
+    pub key: String,
     pub start: i64,
-    pub stop:  i64,
+    pub stop: i64,
 }
 
 impl CommandExecute for ZRevRangeCommand {
@@ -222,15 +222,15 @@ mod tests {
 
         // Добавляем нового участника.
         let add = ZAddCommand {
-            key:    "anton".to_string(),
+            key: "anton".to_string(),
             member: "a".to_string(),
-            score:  1.5,
+            score: 1.5,
         };
         assert_eq!(add.execute(&mut store).unwrap(), Value::Int(1));
 
         // ZSCORE должен вернуть 1.5.
         let score = ZScoreCommand {
-            key:    "anton".to_string(),
+            key: "anton".to_string(),
             member: "a".to_string(),
         };
         assert_eq!(score.execute(&mut store).unwrap(), Value::Float(1.5));
@@ -249,24 +249,24 @@ mod tests {
     fn test_zadd_update_existing() {
         let mut store = create_store();
         let add1 = ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
-            score:  1.0,
+            score: 1.0,
         };
         add1.execute(&mut store).unwrap();
 
         // Обновляем score для "a".
         let add2 = ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
-            score:  2.0,
+            score: 2.0,
         };
         // Ожидаем возврат 0, так как элемент уже присутствует.
         assert_eq!(add2.execute(&mut store).unwrap(), Value::Int(0));
 
         // ZSCORE теперь должен вернуть 2.0.
         let score = ZScoreCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
         };
         assert_eq!(score.execute(&mut store).unwrap(), Value::Float(2.0));
@@ -284,28 +284,28 @@ mod tests {
     fn test_zrem_and_score_and_card() {
         let mut store = create_store();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
-            score:  1.0,
+            score: 1.0,
         }
         .execute(&mut store)
         .unwrap();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "b".into(),
-            score:  2.0,
+            score: 2.0,
         }
         .execute(&mut store)
         .unwrap();
 
         let rem = ZRemCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
         };
         assert_eq!(rem.execute(&mut store).unwrap(), Value::Int(1));
 
         let score_a = ZScoreCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
         };
         assert_eq!(score_a.execute(&mut store).unwrap(), Value::Null);
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(card.execute(&mut store).unwrap(), Value::Int(1));
 
         let rem2 = ZRemCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "c".into(),
         };
         assert_eq!(rem2.execute(&mut store).unwrap(), Value::Int(0));
@@ -329,32 +329,32 @@ mod tests {
         let mut store = create_store();
         // Добавляем элементы: a:1, b:2, c:3.
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
-            score:  1.0,
+            score: 1.0,
         }
         .execute(&mut store)
         .unwrap();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "b".into(),
-            score:  2.0,
+            score: 2.0,
         }
         .execute(&mut store)
         .unwrap();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "c".into(),
-            score:  3.0,
+            score: 3.0,
         }
         .execute(&mut store)
         .unwrap();
 
         // полный диапазон
         let zr = ZRangeCommand {
-            key:   "anton".into(),
+            key: "anton".into(),
             start: 0,
-            stop:  -1,
+            stop: -1,
         };
         let list = match zr.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -366,9 +366,9 @@ mod tests {
         );
 
         let zr2 = ZRangeCommand {
-            key:   "anton".into(),
+            key: "anton".into(),
             start: 1,
-            stop:  2,
+            stop: 2,
         };
         let list2 = match zr2.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -378,9 +378,9 @@ mod tests {
 
         // отрицательные индексы: последние два
         let zr3 = ZRangeCommand {
-            key:   "anton".into(),
+            key: "anton".into(),
             start: -2,
-            stop:  -1,
+            stop: -1,
         };
         let list3 = match zr3.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -397,32 +397,32 @@ mod tests {
         let mut store = create_store();
         // a:1, b:2, c:3
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "a".into(),
-            score:  1.0,
+            score: 1.0,
         }
         .execute(&mut store)
         .unwrap();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "b".into(),
-            score:  2.0,
+            score: 2.0,
         }
         .execute(&mut store)
         .unwrap();
         ZAddCommand {
-            key:    "anton".into(),
+            key: "anton".into(),
             member: "c".into(),
-            score:  3.0,
+            score: 3.0,
         }
         .execute(&mut store)
         .unwrap();
 
         // полный диапазон
         let zr = ZRevRangeCommand {
-            key:   "anton".into(),
+            key: "anton".into(),
             start: 0,
-            stop:  -1,
+            stop: -1,
         };
         let list = match zr.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -435,9 +435,9 @@ mod tests {
 
         // отрицательные индексы: первые два в реверсе
         let zr2 = ZRevRangeCommand {
-            key:   "anton".into(),
+            key: "anton".into(),
             start: 0,
-            stop:  1,
+            stop: 1,
         };
         let list2 = match zr2.execute(&mut store).unwrap() {
             Value::List(l) => l.into_iter().collect::<Vec<_>>(),
@@ -453,28 +453,28 @@ mod tests {
         let mut store = create_store();
         // на несуществующем ключе ZRANGE и ZREVRANGE возвращают Null
         let zr = ZRangeCommand {
-            key:   "no".into(),
+            key: "no".into(),
             start: 0,
-            stop:  -1,
+            stop: -1,
         };
         assert_eq!(zr.execute(&mut store).unwrap(), Value::Null);
 
         let zr2 = ZRevRangeCommand {
-            key:   "no".into(),
+            key: "no".into(),
             start: 0,
-            stop:  -1,
+            stop: -1,
         };
         assert_eq!(zr2.execute(&mut store).unwrap(), Value::Null);
 
         // ZSCORE и ZREM на несуществующем — Null и Int(0)
         let zs = ZScoreCommand {
-            key:    "no".into(),
+            key: "no".into(),
             member: "m".into(),
         };
         assert_eq!(zs.execute(&mut store).unwrap(), Value::Null);
 
         let zr = ZRemCommand {
-            key:    "no".into(),
+            key: "no".into(),
             member: "m".into(),
         };
         assert_eq!(zr.execute(&mut store).unwrap(), Value::Int(0));

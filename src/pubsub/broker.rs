@@ -22,13 +22,13 @@ type PatternKey = Glob;
 /// - Statistics tracking for publishes and send errors
 pub struct Broker {
     /// Exact channel → `Sender`
-    channels:             Arc<DashMap<ChannelKey, broadcast::Sender<Message>>>,
+    channels: Arc<DashMap<ChannelKey, broadcast::Sender<Message>>>,
     /// Pattern (glob) → `Sender`
-    patterns:             Arc<DashMap<PatternKey, broadcast::Sender<Message>>>,
+    patterns: Arc<DashMap<PatternKey, broadcast::Sender<Message>>>,
     /// Buffer size for each `broadcast::channel`
-    default_capacity:     usize,
+    default_capacity: usize,
     /// Total number of `publish` calls
-    pub publish_count:    AtomicUsize,
+    pub publish_count: AtomicUsize,
     /// Number of failed `send` operations (no subscribers)
     pub send_error_count: AtomicUsize,
 }
@@ -59,7 +59,7 @@ impl Broker {
             .clone();
         Ok(PatternSubscription {
             pattern: glob,
-            inner:   tx.subscribe(),
+            inner: tx.subscribe(),
         })
     }
 
@@ -82,7 +82,7 @@ impl Broker {
             .clone();
         Subscription {
             channel: key,
-            inner:   tx.subscribe(),
+            inner: tx.subscribe(),
         }
     }
 

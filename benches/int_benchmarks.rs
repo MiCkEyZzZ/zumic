@@ -26,7 +26,7 @@ fn int_commands_benchmark(c: &mut Criterion) {
     c.bench_function("incrby command", |b| {
         b.iter(|| {
             let cmd = IncrByCommand {
-                key:       "key".to_string(),
+                key: "key".to_string(),
                 increment: 5,
             };
             cmd.execute(&mut store).unwrap();
@@ -45,7 +45,7 @@ fn int_commands_benchmark(c: &mut Criterion) {
     c.bench_function("decrby command", |b| {
         b.iter(|| {
             let cmd = DecrByCommand {
-                key:       "key".to_string(),
+                key: "key".to_string(),
                 decrement: 5,
             };
             cmd.execute(&mut store).unwrap();

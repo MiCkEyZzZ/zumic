@@ -4,7 +4,7 @@ use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 #[derive(Debug)]
 pub struct IncrByFloatCommand {
-    pub key:       String,
+    pub key: String,
     pub increment: f64,
 }
 
@@ -29,7 +29,7 @@ impl CommandExecute for IncrByFloatCommand {
 
 #[derive(Debug)]
 pub struct DecrByFloatCommand {
-    pub key:       String,
+    pub key: String,
     pub decrement: f64,
 }
 
@@ -54,7 +54,7 @@ impl CommandExecute for DecrByFloatCommand {
 
 #[derive(Debug)]
 pub struct SetFloatCommand {
-    pub key:   String,
+    pub key: String,
     pub value: f64,
 }
 
@@ -81,7 +81,7 @@ mod tests {
             .unwrap();
 
         let cmd = IncrByFloatCommand {
-            key:       "key1".to_string(),
+            key: "key1".to_string(),
             increment: 5.5,
         };
         let result = cmd.execute(&mut store);
@@ -98,7 +98,7 @@ mod tests {
             .unwrap();
 
         let cmd = DecrByFloatCommand {
-            key:       "key1".to_string(),
+            key: "key1".to_string(),
             decrement: 3.5,
         };
         let result = cmd.execute(&mut store);
@@ -112,7 +112,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let cmd = SetFloatCommand {
-            key:   "key1".to_string(),
+            key: "key1".to_string(),
             value: 20.5,
         };
         let result = cmd.execute(&mut store);

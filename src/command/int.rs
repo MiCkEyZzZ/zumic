@@ -28,7 +28,7 @@ impl CommandExecute for IncrCommand {
 
 #[derive(Debug)]
 pub struct IncrByCommand {
-    pub key:       String,
+    pub key: String,
     pub increment: i64,
 }
 
@@ -77,7 +77,7 @@ impl CommandExecute for DecrCommand {
 
 #[derive(Debug)]
 pub struct DecrByCommand {
-    pub key:       String,
+    pub key: String,
     pub decrement: i64,
 }
 
@@ -133,7 +133,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let incr_by_command = IncrByCommand {
-            key:       "counter".to_string(),
+            key: "counter".to_string(),
             increment: 5,
         };
 
@@ -174,7 +174,7 @@ mod tests {
         let mut store = StorageEngine::InMemory(InMemoryStore::new());
 
         let decr_by_command = DecrByCommand {
-            key:       "counter".to_string(),
+            key: "counter".to_string(),
             decrement: 3,
         };
 

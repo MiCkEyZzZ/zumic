@@ -24,7 +24,7 @@ impl CommandExecute for StrLenCommand {
 
 #[derive(Debug)]
 pub struct AppendCommand {
-    pub key:   String,
+    pub key: String,
     pub value: String,
 }
 
@@ -56,9 +56,9 @@ impl CommandExecute for AppendCommand {
 
 #[derive(Debug)]
 pub struct GetRangeCommand {
-    pub key:   String,
+    pub key: String,
     pub start: i64,
-    pub end:   i64,
+    pub end: i64,
 }
 
 impl CommandExecute for GetRangeCommand {
@@ -131,7 +131,7 @@ mod tests {
         store.set(&Sds::from_str("test"), Value::Int(42)).unwrap();
 
         let cmd = AppendCommand {
-            key:   "test".to_string(),
+            key: "test".to_string(),
             value: "oops".to_string(),
         };
         let result = cmd.execute(&mut store);
@@ -144,7 +144,7 @@ mod tests {
     fn test_append_empty_string() {
         let mut store = create_store();
         let cmd = AppendCommand {
-            key:   "empty".to_string(),
+            key: "empty".to_string(),
             value: "".to_string(),
         };
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
@@ -173,7 +173,7 @@ mod tests {
             .unwrap();
 
         let command = AppendCommand {
-            key:   "anton".to_string(),
+            key: "anton".to_string(),
             value: " world".to_string(),
         };
         let result = command.execute(&mut store).unwrap();
@@ -188,7 +188,7 @@ mod tests {
         let mut store = create_store();
 
         let command = AppendCommand {
-            key:   "non_existing_key".to_string(),
+            key: "non_existing_key".to_string(),
             value: "hello".to_string(),
         };
         let result = command.execute(&mut store).unwrap();
@@ -210,9 +210,9 @@ mod tests {
             .unwrap();
 
         let command = GetRangeCommand {
-            key:   "anton".to_string(),
+            key: "anton".to_string(),
             start: 0,
-            end:   5,
+            end: 5,
         };
         let result = command.execute(&mut store).unwrap();
 
@@ -225,9 +225,9 @@ mod tests {
         let mut store = create_store();
 
         let command = GetRangeCommand {
-            key:   "non_existing_key".to_string(),
+            key: "non_existing_key".to_string(),
             start: 0,
-            end:   5,
+            end: 5,
         };
         let result = command.execute(&mut store).unwrap();
 
@@ -244,9 +244,9 @@ mod tests {
         store.set(&Sds::from_str("anton"), Value::Int(42)).unwrap();
 
         let command = GetRangeCommand {
-            key:   "anton".to_string(),
+            key: "anton".to_string(),
             start: 0,
-            end:   5,
+            end: 5,
         };
         let result = command.execute(&mut store);
 

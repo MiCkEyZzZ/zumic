@@ -16,7 +16,7 @@ fn bench_set_float(c: &mut Criterion) {
     c.bench_function("set_float command", |b| {
         b.iter(|| {
             let cmd = SetFloatCommand {
-                key:   "floatkey".to_string(),
+                key: "floatkey".to_string(),
                 value: 42.42,
             };
             let _ = cmd.execute(&mut store);
@@ -31,7 +31,7 @@ fn bench_incr_float(c: &mut Criterion) {
     c.bench_function("incr_by_float command", |b| {
         b.iter(|| {
             let cmd = IncrByFloatCommand {
-                key:       "floatkey".to_string(),
+                key: "floatkey".to_string(),
                 increment: 1.1,
             };
             let _ = cmd.execute(&mut store);
@@ -46,7 +46,7 @@ fn bench_decr_float(c: &mut Criterion) {
     c.bench_function("decr_by_float command", |b| {
         b.iter(|| {
             let cmd = DecrByFloatCommand {
-                key:       "floatkey".to_string(),
+                key: "floatkey".to_string(),
                 decrement: 0.9,
             };
             let _ = cmd.execute(&mut store);

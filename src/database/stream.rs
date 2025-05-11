@@ -10,26 +10,26 @@ use super::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StreamId {
-    pub ms_time:  u64,
+    pub ms_time: u64,
     pub sequence: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StreamEntry {
-    pub id:   StreamId,
+    pub id: StreamId,
     pub data: HashMap<String, Value>,
 }
 
 #[derive(Debug, Default)]
 pub struct Stream {
-    entries:       VecDeque<StreamEntry>,
+    entries: VecDeque<StreamEntry>,
     next_sequence: AtomicU64,
 }
 
 impl Stream {
     pub fn new() -> Self {
         Self {
-            entries:       VecDeque::new(),
+            entries: VecDeque::new(),
             next_sequence: AtomicU64::new(1),
         }
     }
@@ -148,11 +148,11 @@ mod tests {
 
         // Range outside bounds should yield empty
         let before = StreamId {
-            ms_time:  0,
+            ms_time: 0,
             sequence: 0,
         };
         let after = StreamId {
-            ms_time:  u64::MAX,
+            ms_time: u64::MAX,
             sequence: u64::MAX,
         };
         let full = stream.range(&before, &after);

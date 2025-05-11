@@ -12,9 +12,9 @@ fn bench_zadd(c: &mut Criterion) {
             let mut engine = StorageEngine::InMemory(InMemoryStore::new());
             for i in 0..100 {
                 let cmd = ZAddCommand {
-                    key:    "myzset".to_string(),
+                    key: "myzset".to_string(),
                     member: format!("member{i}"),
-                    score:  i as f64,
+                    score: i as f64,
                 };
                 let _ = cmd.execute(&mut engine);
             }
@@ -31,15 +31,15 @@ fn bench_zrem(c: &mut Criterion) {
             let mut engine = StorageEngine::InMemory(InMemoryStore::new());
             for i in 0..100 {
                 let cmd = ZAddCommand {
-                    key:    "myzset".to_string(),
+                    key: "myzset".to_string(),
                     member: format!("member{i}"),
-                    score:  i as f64,
+                    score: i as f64,
                 };
                 let _ = cmd.execute(&mut engine);
             }
             for i in 0..100 {
                 let cmd = ZRemCommand {
-                    key:    "myzset".to_string(),
+                    key: "myzset".to_string(),
                     member: format!("member{i}"),
                 };
                 let _ = cmd.execute(&mut engine);
@@ -56,16 +56,16 @@ fn bench_zscore(c: &mut Criterion) {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         for i in 0..100 {
             let cmd = ZAddCommand {
-                key:    "myzset".to_string(),
+                key: "myzset".to_string(),
                 member: format!("member{i}"),
-                score:  i as f64,
+                score: i as f64,
             };
             let _ = cmd.execute(&mut engine);
         }
         b.iter(|| {
             for i in 0..100 {
                 let cmd = ZScoreCommand {
-                    key:    "myzset".to_string(),
+                    key: "myzset".to_string(),
                     member: format!("member{i}"),
                 };
                 let _ = cmd.execute(&mut engine);
@@ -82,16 +82,16 @@ fn bench_zrange(c: &mut Criterion) {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         for i in 0..300 {
             let cmd = ZAddCommand {
-                key:    "myzset".to_string(),
+                key: "myzset".to_string(),
                 member: format!("member{i}"),
-                score:  i as f64,
+                score: i as f64,
             };
             let _ = cmd.execute(&mut engine);
         }
         let cmd = ZRangeCommand {
-            key:   "myzset".to_string(),
+            key: "myzset".to_string(),
             start: 100,
-            stop:  200,
+            stop: 200,
         };
         b.iter(|| {
             let _ = cmd.execute(&mut engine);
@@ -107,9 +107,9 @@ fn bench_zcard(c: &mut Criterion) {
         let mut engine = StorageEngine::InMemory(InMemoryStore::new());
         for i in 0..300 {
             let cmd = ZAddCommand {
-                key:    "myzset".to_string(),
+                key: "myzset".to_string(),
                 member: format!("member{i}"),
-                score:  i as f64,
+                score: i as f64,
             };
             let _ = cmd.execute(&mut engine);
         }

@@ -15,7 +15,7 @@ pub struct Subscription {
     /// Имя канала, на который выполнена подписка.
     pub channel: Arc<str>,
     /// Внутренний `broadcast::Receiver`, через который приходят сообщения.
-    pub inner:   broadcast::Receiver<Message>,
+    pub inner: broadcast::Receiver<Message>,
 }
 
 /// Подписка на каналы по шаблону (pattern-matching).
@@ -28,7 +28,7 @@ pub struct PatternSubscription {
     /// Глоб-шаблон, используемый для сопоставления с именами каналов.
     pub pattern: Glob,
     /// Внутренний `broadcast::Receiver`, через который приходят сообщения.
-    pub inner:   broadcast::Receiver<Message>,
+    pub inner: broadcast::Receiver<Message>,
 }
 
 impl Subscription {
@@ -110,7 +110,7 @@ mod tests {
         // Создаем Subscription прямо
         let sub = Subscription {
             channel: channel_arc.clone(),
-            inner:   rx,
+            inner: rx,
         };
         assert_eq!(tx.receiver_count(), 1);
         // Drop subscription → receiver_count должно стать 0
@@ -126,7 +126,7 @@ mod tests {
         let channel_arc: Arc<str> = Arc::from("bar");
         let sub = Subscription {
             channel: channel_arc,
-            inner:   rx,
+            inner: rx,
         };
         assert_eq!(tx.receiver_count(), 1);
         // вызываем метод, который просто дропает self
