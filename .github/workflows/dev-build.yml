@@ -11,7 +11,7 @@ on:
         type: boolean
         default: true
       profile:
-        description: "Cargo profile (dev, release, nightly)"
+        description: "Cargo profile"
         type: choice
         options:
           - dev
@@ -22,7 +22,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,7 +29,8 @@ jobs:
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ inputs.profile }}
+          # Если профиль nightly — ставим nightly, иначе — stable
+          toolchain: ${{ inputs.profile == 'nightly' && 'nightly' || 'stable' }}
           override: true
 
       - name: Check formatting
