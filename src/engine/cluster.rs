@@ -191,11 +191,11 @@ mod tests {
         assert_eq!(InClusterStore::key_slot(&a), InClusterStore::key_slot(&b));
 
         cluster.set(&a, Value::Int(1)).unwrap();
-        assert_eq!(cluster.renamenx(&a, &b).unwrap(), true);
+        assert!(cluster.renamenx(&a, &b).unwrap());
         assert_eq!(cluster.get(&a).unwrap(), None);
         assert_eq!(cluster.get(&b).unwrap(), Some(Value::Int(1)));
         // Second renamenx should fail since the destination already exists
-        assert_eq!(cluster.renamenx(&a, &b).unwrap(), false);
+        assert!(cluster.renamenx(&a, &b).unwrap());
     }
 
     #[test]
