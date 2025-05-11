@@ -1,6 +1,9 @@
 name: Development Build
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       skip_tests:
@@ -8,9 +11,12 @@ on:
         type: boolean
         default: true
       profile:
-        description: "Cargo profile (dev, release, nightly)"
+        description: "Cargo profile"
         type: choice
-        options: [dev, release, nightly]
+        options:
+          - dev
+          - release
+          - nightly
         default: dev
 
 jobs:
@@ -43,6 +49,17 @@ jobs:
             cargo +nightly build
           else
             cargo build
+          fi
+
+      - name: Run tests
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          if [ "${{ inputs.profile }}" = "release" ]; then
+            cargo test --release
+          elif [ "${{ inputs.profile }}" = "nightly" ]; then
+            cargo +nightly test
+          else
+            cargo test
           fi
 
       - name: Run tests
