@@ -1,0 +1,24 @@
+name: Check Dependencies
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  check-crates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: List dependencies
+        run: cargo tree --prefix none | awk '{print $1}' > deps.txt
+
+      - name: Check blacklist
+        run: |
+          while read crate; do
+            if grep -qx "$crate" .github/cargo-blacklist.txt; then
+              echo "❌ Blacklisted crate: $crate"
+              exit 1
+            fi
+          done < deps.txt
+          echo "✅ OK"

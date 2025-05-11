@@ -1,0 +1,5 @@
+# Zumic CODEOWNERS
+
+/src/ @MiCkEyZzZ
+/src/auth/ @MiCkEyZzZ
+/.github/workflows/ @MiCkEyZzZ
