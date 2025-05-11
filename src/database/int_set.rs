@@ -51,6 +51,11 @@ impl IntSet {
         }
     }
 
+    /// Returns `true` if the set contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Checks whether the set contains the given value.
     pub fn contains(&self, v: i64) -> bool {
         match self.enc {

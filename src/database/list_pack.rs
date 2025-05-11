@@ -231,3 +231,9 @@ impl ListPack {
         None
     }
 }
+
+impl Default for ListPack {
+    fn default() -> Self {
+        Self::new()
+    }
+}

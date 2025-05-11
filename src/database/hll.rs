@@ -98,3 +98,9 @@ impl HLL {
         }
     }
 }
+
+impl Default for HLL {
+    fn default() -> Self {
+        Self::new()
+    }
+}

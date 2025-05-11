@@ -26,7 +26,7 @@ impl CommandExecute for GetCommand {
         match result {
             Ok(Some(value)) => Ok(value),
             Ok(None) => Ok(Value::Null),
-            Err(e) => Err(StoreError::from(e)),
+            Err(e) => Err(e),
         }
     }
 }
