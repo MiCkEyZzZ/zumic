@@ -29,6 +29,13 @@ jobs:
         with:
           profile: ${{ inputs.profile }}
 
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: ${{ inputs.profile }}
+          toolchain: ${{ inputs.profile }}
+          override: true
+
       - name: Check formatting
         run: cargo fmt -- --check
 
