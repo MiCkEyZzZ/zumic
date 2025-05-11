@@ -1,46 +1,25 @@
 name: Development Build
 
 on:
-  workflow_dispatch:
-    inputs:
-      skip_tests:
-        description: "Skip tests"
-        type: boolean
-        default: true
-      profile:
-        description: "Cargo profile"
-        type: choice
-        options:
-          - dev
-          - release
-          - nightly
-        default: dev
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust toolchain
+      - name: Set up Rust
         uses: actions-rust-lang/setup-rust@v1
-        with:
-          # nightly → installs nightly; release/dev just install stable
-          profile: ${{ inputs.profile }}
 
       - name: Build project
-        # “dev” → обычный `cargo build`, “release” → `cargo build --release`, “nightly” → `cargo +nightly build`
-        run: |
-          if   [ "${{ inputs.profile }}" = "release" ]; then cargo build --release;
-          elif [ "${{ inputs.profile }}" = "nightly" ]; then cargo +nightly build;
-          else cargo build;
-          fi
+        run: cargo build --release
 
       - name: Run tests
-        if: ${{ !inputs.skip_tests }}
-        run: |
-          if   [ "${{ inputs.profile }}" = "release" ]; then cargo test --release;
-          elif [ "${{ inputs.profile }}" = "nightly" ]; then cargo +nightly test;
-          else cargo test;
-          fi
+        run: cargo test
