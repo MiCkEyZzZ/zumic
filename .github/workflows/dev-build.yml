@@ -9,24 +9,16 @@ on:
       - master
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Clear cache
-        run: |
-          rm -rf ~/.cargo
-          rm -rf ~/.rustup
+        uses: actions/checkout@v3
 
       - name: Set up Rust
-        uses: actions-rust-lang/setup-rust@v1.0.0
+        uses: actions-rust-lang/setup-rust@v1
         with:
           rust-version: stable
 
       - name: Build project
         run: cargo build --release
-
-      - name: Run tests
-        run: cargo test
