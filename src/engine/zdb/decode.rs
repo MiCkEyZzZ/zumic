@@ -103,7 +103,7 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
 #[cfg(test)]
 mod tests {
 
-    use std::io::Cursor;
+    use std::{f64::consts::PI, io::Cursor};
 
     use byteorder::WriteBytesExt;
 
@@ -127,11 +127,11 @@ mod tests {
         buf.write_u8(TAG_INT).unwrap();
         buf.write_i64::<BigEndian>(-42).unwrap();
         buf.write_u8(TAG_FLOAT).unwrap();
-        buf.write_f64::<BigEndian>(3.14).unwrap();
+        buf.write_f64::<BigEndian>(PI).unwrap();
         buf.write_u8(TAG_NULL).unwrap();
         let mut cursor = Cursor::new(buf);
         assert_eq!(read_value(&mut cursor).unwrap(), Value::Int(-42));
-        assert_eq!(read_value(&mut cursor).unwrap(), Value::Float(3.14));
+        assert_eq!(read_value(&mut cursor).unwrap(), Value::Float(PI));
         assert_eq!(read_value(&mut cursor).unwrap(), Value::Null);
     }
 

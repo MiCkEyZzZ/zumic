@@ -108,6 +108,7 @@ pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
 mod tests {
     use std::{
         collections::HashSet,
+        f64::consts::PI,
         io::{Cursor, Read},
     };
 
@@ -155,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_write_float() {
-        let value = Value::Float(3.14);
+        let value = Value::Float(PI);
         let mut buf = Vec::new();
         write_value(&mut buf, &value).unwrap();
 
@@ -164,7 +165,7 @@ mod tests {
         assert_eq!(tag, TAG_FLOAT);
 
         let result = cursor.read_f64::<BigEndian>().unwrap();
-        assert_eq!(result, 3.14);
+        assert_eq!(result, PI);
     }
 
     #[test]
