@@ -18,8 +18,7 @@ impl ListPack {
     /// a terminator at the center.
     pub fn new() -> Self {
         let cap = 1024;
-        let mut data = Vec::with_capacity(cap);
-        data.resize(cap, 0);
+        let mut data = vec![0; cap];
         let head = cap / 2;
         data[head] = 0xFF;
         Self {
@@ -41,8 +40,7 @@ impl ListPack {
         }
         // New capacity: max(1.5x, need)
         let new_cap = (self.len().max(1) * 3 / 2).max(need);
-        let mut new_data = Vec::with_capacity(new_cap);
-        new_data.resize(new_cap, 0);
+        let mut new_data = vec![0; new_cap];
         // Center the current content in the new buffer.
         let new_head = (new_cap - used) / 2;
         new_data[new_head..new_head + used].copy_from_slice(&self.data[self.head..self.tail]);
@@ -108,6 +106,10 @@ impl ListPack {
     /// Returns the number of entries in the list.
     pub fn len(&self) -> usize {
         self.num_entries
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.num_entries == 0
     }
 
     /// Returns a reference to the element at the specified index, if it exists.

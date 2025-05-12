@@ -25,7 +25,7 @@ pub struct Subscription {
 ///
 /// Отписка также происходит автоматически при `Drop`, либо явно через [`PatternSubscription::unsubscribe`].
 pub struct PatternSubscription {
-    /// Глоб-шаблон, используемый для сопоставления с именами каналов.
+    /// Глобальный шаблон, используемый для сопоставления с именами каналов.
     pub pattern: Glob,
     /// Внутренний `broadcast::Receiver`, через который приходят сообщения.
     pub inner: broadcast::Receiver<Message>,

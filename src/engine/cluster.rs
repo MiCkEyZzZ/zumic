@@ -14,8 +14,8 @@ pub struct InClusterStore {
 impl InClusterStore {
     pub fn new(shards: Vec<Arc<dyn Storage>>) -> Self {
         let mut slots = vec![0; SLOT_COUNT];
-        for i in 0..SLOT_COUNT {
-            slots[i] = i % shards.len();
+        for (i, slot) in slots.iter_mut().enumerate() {
+            *slot = i % shards.len();
         }
         Self { shards, slots }
     }
@@ -49,15 +49,15 @@ impl InClusterStore {
 
 impl Storage for InClusterStore {
     fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
-        self.get_shard(&key).set(key, value)
+        self.get_shard(key).set(key, value)
     }
 
     fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
-        self.get_shard(&key).get(key)
+        self.get_shard(key).get(key)
     }
 
     fn del(&self, key: &Sds) -> StoreResult<i64> {
-        self.get_shard(&key).del(key)
+        self.get_shard(key).del(key)
     }
 
     fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {

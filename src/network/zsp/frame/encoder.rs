@@ -23,21 +23,21 @@ impl ZSPEncoder {
 
     fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
         if current_depth > MAX_ARRAY_DEPTH {
-            let err_msg = format!("Max array depth exceed ({})", MAX_ARRAY_DEPTH);
+            let err_msg = format!("Max array depth exceed ({MAX_ARRAY_DEPTH})");
             return Err(EncodeError::InvalidData(err_msg));
         }
 
         match frame {
             ZSPFrame::InlineString(s) => {
                 Self::validate_simple_string(s)?;
-                Ok(format!("+{}\r\n", s).into_bytes())
+                Ok(format!("+{s}\r\n").into_bytes())
             }
             ZSPFrame::FrameError(s) => {
                 Self::validate_error_string(s)?;
-                Ok(format!("-{}\r\n", s).into_bytes())
+                Ok(format!("-{s}\r\n").into_bytes())
             }
-            ZSPFrame::Integer(i) => Ok(format!(":{}\r\n", i).into_bytes()),
-            ZSPFrame::Float(f) => Ok(format!(":{}\r\n", f).into_bytes()),
+            ZSPFrame::Integer(i) => Ok(format!(":{i}\r\n").into_bytes()),
+            ZSPFrame::Float(f) => Ok(format!(":{f}\r\n").into_bytes()),
             ZSPFrame::BinaryString(Some(b)) => {
                 if b.len() > MAX_BINARY_LENGTH {
                     let err_msg = format!(
@@ -84,8 +84,8 @@ impl ZSPEncoder {
                 let mut out = format!("^{}\r\n", entries.len()).into_bytes();
                 for (member, score) in entries {
                     Self::validate_simple_string(member)?;
-                    out.extend(format!("+{}\r\n", member).into_bytes());
-                    out.extend(format!(":{}\r\n", score).into_bytes());
+                    out.extend(format!("+{member}\r\n").into_bytes());
+                    out.extend(format!(":{score}\r\n").into_bytes());
                 }
                 Ok(out)
             }

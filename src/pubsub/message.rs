@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn debug_contains_channel_and_payload() {
         let m = Message::new("dbg", b"z".to_vec());
-        let s = format!("{:?}", m);
+        let s = format!("{m:?}");
         assert!(s.contains("channel"));
         assert!(s.contains("payload"));
         assert!(s.contains("dbg"));

@@ -97,7 +97,7 @@ impl AuthManager {
         let hashes = user.password_hashes.clone();
         let password = password.to_owned();
 
-        // Если пустой список хэшей - пароль не требуется (nopass)
+        // Если пустой список хешей - пароль не требуется (nopass)
         let ok: bool = if hashes.is_empty() {
             true
         } else {
@@ -166,12 +166,7 @@ impl AuthManager {
         // Глобальный пароль
         if let Some(pass) = &config.requirepass {
             let hash = hash_password(pass, pepper.as_deref())?;
-            let rules = [
-                format!(">{}", hash),
-                "on".into(),
-                "~*".into(),
-                "+@all".into(),
-            ];
+            let rules = [format!(">{hash}"), "on".into(), "~*".into(), "+@all".into()];
             let refs: Vec<&str> = rules.iter().map(|s| s.as_str()).collect();
 
             if acl.acl_getuser("default").is_some() {
@@ -190,7 +185,7 @@ impl AuthManager {
             if !user_config.nopass {
                 if let Some(pass) = &user_config.password {
                     let hash = hash_password(pass, pepper.as_deref())?;
-                    rules.push(format!(">{}", hash));
+                    rules.push(format!(">{hash}"));
                 }
             }
 

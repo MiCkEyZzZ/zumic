@@ -1,0 +1,39 @@
+# Основной таргет для сборки на x86_64-unknown-linux-gnu
+[build]
+target = "x86_64-unknown-linux-gnu"
+
+# Поддержка кросс-компиляции для ARM64 (например, для Raspberry Pi или ARM серверов)
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+# Если планируешь собирать для ARM и использовать минималистичный линкер (musl)
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+
+# Для сборки с использованием musl, что полезно для создания статически слинкованных бинарников (например, для Docker)
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+
+# Настройки для алиасов — полезно, если часто используешь команды с флагами
+[alias]
+sqlness = "run --bin sqlness-runner --"
+
+# Оптимизация git-зависимостей, если активно работаешь с зависимостями через Git
+[unstable.git]
+shallow_index = true
+shallow_deps = true
+
+# Настройки для работы с Gitoxide (если проект использует Git внутри)
+[unstable.gitoxide]
+fetch = true
+checkout = true
+list_files = true
+internal_use_git2 = false
+
+# Настройки для профилирования или кросс-компиляции (опционально)
+[profile.dev]
+opt-level = 2  # Уровень оптимизаций для разработки
+
+[profile.release]
+opt-level = 3  # Высокий уровень оптимизаций для релиза
+lto = true      # Включение Link-Time Optimization для улучшения производительности

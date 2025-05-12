@@ -79,7 +79,7 @@ fn bench_array(c: &mut Criterion) {
     // Array of 100 integers
     let mut input = b"*100\r\n".to_vec();
     for i in 0..100 {
-        input.extend_from_slice(format!(":{}\r\n", i).as_bytes());
+        input.extend_from_slice(format!(":{i}\r\n").as_bytes());
     }
     let mut decoder = ZSPDecoder::new();
 
@@ -97,8 +97,8 @@ fn bench_dictionary(c: &mut Criterion) {
     // Dictionary of 50 inline string pairs
     let mut input = b"%50\r\n".to_vec();
     for i in 0..50 {
-        input.extend_from_slice(format!("+key{}\r\n", i).as_bytes());
-        input.extend_from_slice(format!("+val{}\r\n", i).as_bytes());
+        input.extend_from_slice(format!("+key{i}\r\n").as_bytes());
+        input.extend_from_slice(format!("+val{i}\r\n").as_bytes());
     }
     let mut decoder = ZSPDecoder::new();
 

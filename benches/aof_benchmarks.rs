@@ -11,9 +11,9 @@ use zumic::{
 fn bench_append_set(c: &mut Criterion) {
     let policies = [SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No];
     for &policy in &policies {
-        let mut group = c.benchmark_group(format!("append_set/{:?}", policy));
+        let mut group = c.benchmark_group(format!("append_set/{policy:?}"));
         for size in [10usize, 100, 1000, 10_000].iter() {
-            group.bench_with_input(format!("size_{}", size), size, |b, &s| {
+            group.bench_with_input(format!("size_{size}"), size, |b, &s| {
                 let temp = NamedTempFile::new().unwrap();
                 let path = temp.path().to_path_buf();
                 let mut log = AofLog::open(&path, policy).unwrap();
@@ -34,9 +34,9 @@ fn bench_append_set(c: &mut Criterion) {
 fn bench_append_del(c: &mut Criterion) {
     let policies = [SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No];
     for &policy in &policies {
-        let mut group = c.benchmark_group(format!("append_del/{:?}", policy));
+        let mut group = c.benchmark_group(format!("append_del/{policy:?}"));
         for size in [10usize, 100, 1000, 10_000].iter() {
-            group.bench_with_input(format!("size_{}", size), size, |b, &s| {
+            group.bench_with_input(format!("size_{size}"), size, |b, &s| {
                 let temp = NamedTempFile::new().unwrap();
                 let path = temp.path().to_path_buf();
                 let mut log = AofLog::open(&path, policy).unwrap();
@@ -56,16 +56,16 @@ fn bench_append_del(c: &mut Criterion) {
 fn bench_replay(c: &mut Criterion) {
     let policies = [SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No];
     for &policy in &policies {
-        let mut group = c.benchmark_group(format!("replay/{:?}", policy));
+        let mut group = c.benchmark_group(format!("replay/{policy:?}"));
         for count in [100usize, 1_000, 10_000].iter() {
-            group.bench_with_input(format!("count_{}", count), count, |b, &n| {
+            group.bench_with_input(format!("count_{count}"), count, |b, &n| {
                 let temp = NamedTempFile::new().unwrap();
                 let path = temp.path().to_path_buf();
                 {
                     let mut log = AofLog::open(&path, policy).unwrap();
                     for i in 0..n {
-                        let key = format!("key{}", i).into_bytes();
-                        let value = format!("value{}", i).into_bytes();
+                        let key = format!("key{i}").into_bytes();
+                        let value = format!("value{i}").into_bytes();
                         log.append_set(&key, &value).unwrap();
                     }
                 }
@@ -85,7 +85,7 @@ fn bench_replay(c: &mut Criterion) {
 fn bench_rewrite(c: &mut Criterion) {
     let mut group = c.benchmark_group("rewrite");
     for count in [100usize, 1_000, 10_000].iter() {
-        group.bench_with_input(format!("count_{}", count), count, |b, &n| {
+        group.bench_with_input(format!("count_{count}"), count, |b, &n| {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path().to_path_buf();
 
@@ -93,8 +93,8 @@ fn bench_rewrite(c: &mut Criterion) {
             {
                 let mut log = AofLog::open(&path, SyncPolicy::No).unwrap();
                 for i in 0..n {
-                    let key = format!("key{}", i).into_bytes();
-                    let value = format!("value{}", i).into_bytes();
+                    let key = format!("key{i}").into_bytes();
+                    let value = format!("value{i}").into_bytes();
                     log.append_set(&key, &value).unwrap();
                     // Для некоторых ключей делаем DEL, чтобы имитировать "устаревание"
                     if i % 5 == 0 {

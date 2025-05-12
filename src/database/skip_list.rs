@@ -115,7 +115,7 @@ where
         let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
         let mut current = self.head.as_ref() as *const Node<K, V> as *mut Node<K, V>;
         for i in (0..self.level).rev() {
-            while let Some(next) = (*current).forward[i] {
+            while let Some(next) = (&(*current).forward)[i] {
                 if (*next.as_ptr()).key < *key {
                     current = next.as_ptr();
                 } else {
@@ -123,7 +123,7 @@ where
                 }
             }
             update[i] = current;
-            debug_assert!(!update[i].is_null(), "update[{}] must not be null", i);
+            debug_assert!(!update[i].is_null(), "update[{i}] must not be null");
         }
         update
     }
@@ -134,7 +134,7 @@ where
         unsafe {
             let mut update = self.find_update(&key);
             // Проверяем наличие узла с тем же ключом в уровне 0.
-            if let Some(node_ptr) = (*update[0]).forward[0] {
+            if let Some(node_ptr) = (&(*update[0]).forward)[0] {
                 if (*node_ptr.as_ptr()).key == key {
                     (*node_ptr.as_ptr()).value = value;
                     return;
@@ -142,24 +142,32 @@ where
             }
             let new_level = Self::random_level();
             if new_level > self.level {
-                for i in self.level..new_level {
-                    update[i] = self.head.as_mut();
-                }
+                update
+                    .iter_mut()
+                    .take(new_level)
+                    .skip(self.level)
+                    .for_each(|slot| {
+                        *slot = self.head.as_mut();
+                    });
                 self.level = new_level;
             }
             let new_node = Node::new(key, value, new_level);
             let new_node_ptr = NonNull::new(Box::into_raw(new_node)).unwrap();
             // Обновляем forward-ссылки для уровней от 0 до new_level-1.
-            for i in 0..new_level {
-                let prev = update[i];
-                (*new_node_ptr.as_ptr()).forward[i] = (*prev).forward[i];
-                (*prev).forward[i] = Some(new_node_ptr);
-            }
+            update
+                .iter()
+                .enumerate()
+                .take(new_level)
+                .for_each(|(i, &prev)| {
+                    (&mut (*new_node_ptr.as_ptr()).forward)[i] = (&(*prev).forward)[i];
+                    (&mut (*prev).forward)[i] = Some(new_node_ptr);
+                });
+
             // Устанавливаем backward-ссылку для нового узла (уровень 0).
             // update[0] всегда указывает на узел перед позицией вставки.
             (*new_node_ptr.as_ptr()).backward = Some(NonNull::new_unchecked(update[0]));
             // Если новый узел не последний, обновляем backward следующего узла.
-            if let Some(next_ptr) = (*new_node_ptr.as_ptr()).forward[0] {
+            if let Some(next_ptr) = (&(*new_node_ptr.as_ptr()).forward)[0] {
                 (*next_ptr.as_ptr()).backward = Some(new_node_ptr);
             }
             self.length += 1;
@@ -195,7 +203,7 @@ where
     pub fn search_mut(&mut self, key: &K) -> Option<&mut V> {
         unsafe {
             let update = self.find_update(key);
-            if let Some(node_ptr) = (*update[0]).forward[0] {
+            if let Some(node_ptr) = (&(*update[0]).forward)[0] {
                 let node_ref = node_ptr.as_ptr();
                 if (*node_ref).key == *key {
                     return Some(&mut (*node_ref).value);
@@ -211,17 +219,21 @@ where
         unsafe {
             let mut update = self.find_update(key);
 
-            if let Some(node_ptr) = (*update[0]).forward[0] {
+            if let Some(node_ptr) = (&(*update[0]).forward)[0] {
                 let node_ref = node_ptr.as_ref();
                 if &node_ref.key == key {
                     // Сохраняем значение для возврата.
                     let result = node_ref.value.clone();
                     // Обновляем ссылки на всех уровнях.
-                    for i in 0..self.level {
-                        if (*update[i]).forward[i] == Some(node_ptr) {
-                            (*update[i]).forward[i] = node_ref.forward[i];
-                        }
-                    }
+                    update
+                        .iter_mut()
+                        .enumerate()
+                        .take(self.level)
+                        .for_each(|(i, &mut prev)| {
+                            if (&(*prev).forward)[i] == Some(node_ptr) {
+                                (&mut (*prev).forward)[i] = node_ref.forward[i];
+                            }
+                        });
                     // Если существует следующий узел на уровне 0,
                     // обновляем его baclward-ссылку.
                     if let Some(next_ptr) = node_ref.forward[0] {
@@ -397,7 +409,7 @@ impl<'a, K, V> Iterator for ReverseIter<'a, K, V> {
         unsafe {
             if let Some(node_ptr) = self.current {
                 // Если достигнут , итерация завершена.
-                if node_ptr.as_ptr() as *const Node<K, V> == self.head {
+                if std::ptr::eq(node_ptr.as_ptr(), self.head) {
                     None
                 } else {
                     let node = node_ptr.as_ref();
@@ -571,7 +583,7 @@ mod tests {
     fn test_range_iter() {
         let mut list = SkipList::new();
         for i in 1..=10 {
-            list.insert(i, format!("v{}", i));
+            list.insert(i, format!("v{i}"));
         }
         // Выберем диапазон [3, 7): должны получиться ключи 3,4,5,6.
         let items: Vec<_> = list.range(&3, &7).map(|(k, v)| (*k, v.clone())).collect();

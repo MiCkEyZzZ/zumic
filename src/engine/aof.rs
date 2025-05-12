@@ -26,7 +26,7 @@ pub enum SyncPolicy {
     Always,
     /// flush in background once per second.
     EverySec,
-    /// never explicity flush (leave to OS).
+    /// never explicitly flush (leave to OS).
     No,
 }
 
@@ -78,7 +78,7 @@ impl AofLog {
             policy,
         };
 
-        // If EverySec, spawn background flisher.
+        // If EverySec, spawn background flusher.
         if let SyncPolicy::EverySec = log.policy {
             let writer_clone = log.writer.get_ref().try_clone()?;
             thread::spawn(move || {
@@ -254,7 +254,7 @@ impl TryFrom<u8> for AofOp {
             2 => Ok(AofOp::Del),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Unknown AOF op: {}", v),
+                format!("Unknown AOF op: {v}"),
             )),
         }
     }
@@ -272,7 +272,7 @@ mod tests {
         let path = temp_file.path();
 
         {
-            let mut log = AofLog::open(path, policy.clone())?;
+            let mut log = AofLog::open(path, policy)?;
             log.append_set(b"kin", b"dzadza")?;
             log.append_del(b"kin")?;
         }
@@ -319,13 +319,13 @@ mod tests {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path();
             {
-                let mut log = AofLog::open(path, policy.clone()).unwrap();
+                let mut log = AofLog::open(path, *policy).unwrap();
                 log.append_set(b"k1", b"v1").unwrap();
                 log.append_set(b"k2", b"v2").unwrap();
                 log.append_set(b"k3", b"v3").unwrap();
             }
             {
-                let mut log = AofLog::open(path, policy.clone()).unwrap();
+                let mut log = AofLog::open(path, *policy).unwrap();
                 let mut seq = Vec::new();
                 log.replay(|op, key, val| seq.push((op, key, val))).unwrap();
                 assert_eq!(seq.len(), 3);

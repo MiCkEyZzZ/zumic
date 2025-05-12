@@ -1,7 +1,7 @@
-//! The `Sds` module implements a data structure that represents
-//! a string, with optimized storage for both small and large
-//! strings, using a stack for small strings and a heap for long
-//! strings.
+//! The Smart Dynamic String `Sds` module implements a data
+//! structure that represents a string, with optimized storage
+//! for both small and large strings, using a stack for small
+//! strings and a heap for long strings.
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -22,6 +22,14 @@ enum Repr {
 
 #[derive(Debug, Clone)]
 pub struct Sds(Repr);
+
+impl std::str::FromStr for Sds {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Sds::from_str(s))
+    }
+}
 
 impl Sds {
     /// Maximum string size at which the stack representation is used.

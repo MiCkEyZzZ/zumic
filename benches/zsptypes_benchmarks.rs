@@ -35,7 +35,7 @@ fn bench_convert_sds_heap(c: &mut Criterion) {
 fn bench_convert_quicklist(c: &mut Criterion) {
     let mut ql = QuickList::new(64);
     for i in 0..100 {
-        ql.push_back(Sds::from_str(&format!("item{}", i)));
+        ql.push_back(Sds::from_str(&format!("item{i}")));
     }
     c.bench_function("convert_quicklist (100 items)", |b| {
         b.iter(|| {
@@ -48,7 +48,7 @@ fn bench_convert_quicklist(c: &mut Criterion) {
 fn bench_convert_hashset(c: &mut Criterion) {
     let mut hs = HashSet::new();
     for i in 0..100 {
-        hs.insert(Sds::from_str(&format!("key{}", i)));
+        hs.insert(Sds::from_str(&format!("key{i}")));
     }
     c.bench_function("convert_hashset (100 items)", |b| {
         b.iter(|| {
@@ -62,8 +62,8 @@ fn bench_convert_smart_hash(c: &mut Criterion) {
     let mut sh = SmartHash::new();
     for i in 0..100 {
         sh.insert(
-            Sds::from_str(&format!("hk{}", i)),
-            Sds::from_str(&format!("hv{}", i)),
+            Sds::from_str(&format!("hk{i}")),
+            Sds::from_str(&format!("hv{i}")),
         );
     }
     c.bench_function("convert_smart_hash (100 entries)", |b| {
@@ -77,7 +77,7 @@ fn bench_convert_smart_hash(c: &mut Criterion) {
 fn bench_convert_zset(c: &mut Criterion) {
     let mut dict = Dict::new();
     for i in 0..100 {
-        dict.insert(Sds::from_str(&format!("member{}", i)), i as f64);
+        dict.insert(Sds::from_str(&format!("member{i}")), i as f64);
     }
     c.bench_function("convert_zset (100 entries)", |b| {
         b.iter(|| {
@@ -101,7 +101,7 @@ fn bench_tryfrom_value_str(c: &mut Criterion) {
 fn bench_tryfrom_value_list(c: &mut Criterion) {
     let mut ql = QuickList::new(32);
     for i in 0..50 {
-        ql.push_back(Sds::from_str(&format!("val{}", i)));
+        ql.push_back(Sds::from_str(&format!("val{i}")));
     }
     let v = Value::List(ql);
     c.bench_function("ZSPFrame::try_from(Value::List)", |b| {

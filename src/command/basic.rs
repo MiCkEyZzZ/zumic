@@ -195,14 +195,14 @@ mod tests {
         };
 
         let result = set_cmd.execute(&mut store);
-        assert!(result.is_ok(), "SetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "SetCommand failed: {result:?}");
 
         let get_cmd = GetCommand {
             key: "test_key".to_string(),
         };
 
         let result = get_cmd.execute(&mut store);
-        assert!(result.is_ok(), "GetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "GetCommand failed: {result:?}");
 
         assert_eq!(result.unwrap(), Value::Str(Sds::from_str("test_value")));
     }
@@ -218,7 +218,7 @@ mod tests {
         };
 
         let result = get_command.execute(&mut store);
-        assert!(result.is_ok(), "GetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "GetCommand failed: {result:?}");
 
         assert_eq!(result.unwrap(), Value::Null);
     }
@@ -235,14 +235,14 @@ mod tests {
         };
 
         let result = set_cmd.execute(&mut store);
-        assert!(result.is_ok(), "SetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "SetCommand failed: {result:?}");
 
         let del_cmd = DelCommand {
             key: "test_key".to_string(),
         };
 
         let del_result = del_cmd.execute(&mut store);
-        assert!(del_result.is_ok(), "DelCommand failed: {:?}", del_result);
+        assert!(del_result.is_ok(), "DelCommand failed: {del_result:?}");
 
         assert_eq!(del_result.unwrap(), Value::Int(1));
 
@@ -251,7 +251,7 @@ mod tests {
         };
 
         let result = get_cmd.execute(&mut store);
-        assert!(result.is_ok(), "GetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "GetCommand failed: {result:?}");
 
         assert_eq!(result.unwrap(), Value::Null);
     }
@@ -266,7 +266,7 @@ mod tests {
         };
 
         let del_result = del_cmd.execute(&mut store);
-        assert!(del_result.is_ok(), "DelCommand failed: {:?}", del_result);
+        assert!(del_result.is_ok(), "DelCommand failed: {del_result:?}");
 
         assert_eq!(del_result.unwrap(), Value::Int(0));
     }
@@ -328,14 +328,14 @@ mod tests {
 
         let result = setnx_cmd.execute(&mut store);
 
-        assert!(result.is_ok(), "SetNxCommand failed: {:?}", result);
+        assert!(result.is_ok(), "SetNxCommand failed: {result:?}");
         assert_eq!(result.unwrap(), Value::Int(1));
 
         let get_cmd = GetCommand {
             key: "new_key".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("new_value")));
     }
 
@@ -359,14 +359,14 @@ mod tests {
 
         let result = setnx_cmd.execute(&mut store);
 
-        assert!(result.is_ok(), "SetNxCommand failed: {:?}", result);
+        assert!(result.is_ok(), "SetNxCommand failed: {result:?}");
         assert_eq!(result.unwrap(), Value::Int(0));
 
         let get_cmd = GetCommand {
             key: "existing_key".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value")));
     }
 
@@ -384,14 +384,14 @@ mod tests {
         };
 
         let result = mset_cmd.execute(&mut store);
-        assert!(result.is_ok(), "MSetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "MSetCommand failed: {result:?}");
 
         let get_cmd1 = GetCommand {
             key: "key1".to_string(),
         };
 
         let get_result1 = get_cmd1.execute(&mut store);
-        assert!(get_result1.is_ok(), "GetCommand failed: {:?}", get_result1);
+        assert!(get_result1.is_ok(), "GetCommand failed: {get_result1:?}");
         assert_eq!(get_result1.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd2 = GetCommand {
@@ -399,7 +399,7 @@ mod tests {
         };
 
         let get_result2 = get_cmd2.execute(&mut store);
-        assert!(get_result2.is_ok(), "GetCommand failed: {:?}", get_result2);
+        assert!(get_result2.is_ok(), "GetCommand failed: {get_result2:?}");
         assert_eq!(get_result2.unwrap(), Value::Str(Sds::from_str("value2")));
     }
 
@@ -423,7 +423,7 @@ mod tests {
         };
 
         let result = mget_cmd.execute(&mut store);
-        assert!(result.is_ok(), "MGetCommand failed: {:?}", result);
+        assert!(result.is_ok(), "MGetCommand failed: {result:?}");
 
         let result_list = match result.unwrap() {
             Value::List(list) => list,
@@ -456,13 +456,13 @@ mod tests {
         };
 
         let result = rename_cmd.execute(&mut store);
-        assert!(result.is_ok(), "RenameCommand failed: {:?}", result);
+        assert!(result.is_ok(), "RenameCommand failed: {result:?}");
 
         let get_cmd = GetCommand {
             key: "key2".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd_old = GetCommand {
@@ -471,8 +471,7 @@ mod tests {
         let get_result_old = get_cmd_old.execute(&mut store);
         assert!(
             get_result_old.is_ok(),
-            "GetCommand failed: {:?}",
-            get_result_old
+            "GetCommand failed: {get_result_old:?}"
         );
         assert_eq!(get_result_old.unwrap(), Value::Null);
     }
@@ -497,14 +496,14 @@ mod tests {
         };
 
         let result = rename_cmd.execute(&mut store);
-        assert!(result.is_ok(), "RenameNxCommand failed: {:?}", result);
+        assert!(result.is_ok(), "RenameNxCommand failed: {result:?}");
         assert_eq!(result.unwrap(), Value::Int(1));
 
         let get_cmd = GetCommand {
             key: "key2".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value1")));
 
         let get_cmd_old = GetCommand {
@@ -513,8 +512,7 @@ mod tests {
         let get_result_old = get_cmd_old.execute(&mut store);
         assert!(
             get_result_old.is_ok(),
-            "GetCommand failed: {:?}",
-            get_result_old
+            "GetCommand failed: {get_result_old:?}"
         );
         assert_eq!(get_result_old.unwrap(), Value::Null);
     }
@@ -538,14 +536,14 @@ mod tests {
         };
 
         let result = rename_nx_cmd.execute(&mut store);
-        assert!(result.is_ok(), "RenameNxCommand failed: {:?}", result);
+        assert!(result.is_ok(), "RenameNxCommand failed: {result:?}");
         assert_eq!(result.unwrap(), Value::Int(1));
 
         let get_cmd = GetCommand {
             key: "key1".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Null);
 
         let get_cmd_new = GetCommand {
@@ -554,8 +552,7 @@ mod tests {
         let get_result_new = get_cmd_new.execute(&mut store);
         assert!(
             get_result_new.is_ok(),
-            "GetCommand failed: {:?}",
-            get_result_new
+            "GetCommand failed: {get_result_new:?}"
         );
         assert_eq!(get_result_new.unwrap(), Value::Str(Sds::from_str("value1")));
     }
@@ -581,21 +578,21 @@ mod tests {
         let flush_cmd = FlushDbCommand;
 
         let result = flush_cmd.execute(&mut store);
-        assert!(result.is_ok(), "FlushDbCommand failed: {:?}", result);
+        assert!(result.is_ok(), "FlushDbCommand failed: {result:?}");
         assert_eq!(result.unwrap(), Value::Str(Sds::from_str("OK")));
 
         let get_cmd = GetCommand {
             key: "key1".to_string(),
         };
         let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {:?}", get_result);
+        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Null);
 
         let get_cmd2 = GetCommand {
             key: "key2".to_string(),
         };
         let get_result2 = get_cmd2.execute(&mut store);
-        assert!(get_result2.is_ok(), "GetCommand failed: {:?}", get_result2);
+        assert!(get_result2.is_ok(), "GetCommand failed: {get_result2:?}");
         assert_eq!(get_result2.unwrap(), Value::Null);
     }
 }

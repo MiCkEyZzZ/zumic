@@ -89,7 +89,7 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, Stri
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
     for (k, v) in smart.iter() {
-        let key = String::from_utf8(k.to_vec()).map_err(|e| format!("Invalid hash key: {}", e))?;
+        let key = String::from_utf8(k.to_vec()).map_err(|e| format!("Invalid hash key: {e}"))?;
         let key_cow: Cow<'a, str> = Cow::Owned(key);
         let frame = v.clone().into();
         map.insert(key_cow, frame);
@@ -101,8 +101,7 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, Stri
 pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
     let mut pairs = Vec::with_capacity(dict.len());
     for (k_sds, &score) in dict.iter() {
-        let key =
-            String::from_utf8(k_sds.to_vec()).map_err(|e| format!("ZSet key error: {}", e))?;
+        let key = String::from_utf8(k_sds.to_vec()).map_err(|e| format!("ZSet key error: {e}"))?;
         pairs.push((key, score));
     }
     Ok(ZSPFrame::ZSet(pairs))

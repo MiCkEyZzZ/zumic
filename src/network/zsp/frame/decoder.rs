@@ -142,8 +142,7 @@ impl<'a> ZSPDecoder<'a> {
             len if len >= 0 => {
                 let len = len as usize;
                 if len > MAX_BINARY_LENGTH {
-                    let err_msg =
-                        format!("Binary string too long ({} > {})", len, MAX_BINARY_LENGTH);
+                    let err_msg = format!("Binary string too long ({len} > {MAX_BINARY_LENGTH})");
                     return Err(DecodeError::InvalidData(err_msg));
                 }
 
@@ -330,6 +329,12 @@ impl<'a> ZSPDecoder<'a> {
         }
         *slice = &slice[2..];
         Ok(())
+    }
+}
+
+impl<'a> Default for ZSPDecoder<'a> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

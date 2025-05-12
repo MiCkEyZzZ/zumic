@@ -35,9 +35,9 @@ fn bench_mset_mget(c: &mut Criterion) {
     let cluster = make_cluster();
 
     let keys: Vec<_> = (0..100)
-        .map(|i| Sds::from_str(&format!("key{{tag}}{}", i)))
+        .map(|i| Sds::from_str(&format!("key{{tag}}{i}")))
         .collect();
-    let values: Vec<_> = (0..100).map(|i| Value::Int(i)).collect();
+    let values: Vec<_> = (0..100).map(Value::Int).collect();
     let entries: Vec<_> = keys
         .iter()
         .zip(values.iter())

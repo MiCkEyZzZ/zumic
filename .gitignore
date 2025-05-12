@@ -23,7 +23,7 @@ Flamegraph/
 book
 doc**/*
 
-# Secrets and enviroment
+# Secrets and environment
 .env
 zumic.conf
 

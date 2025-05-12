@@ -53,14 +53,14 @@ fn bench_mset(c: &mut Criterion) {
         let store = InMemoryStore::new();
 
         // Создаём все ключи заранее и храним их в векторе
-        let keys: Vec<Sds> = (0..1000).map(|i| key(&format!("key_{}", i))).collect();
+        let keys: Vec<Sds> = (0..1000).map(|i| key(&format!("key_{i}"))).collect();
 
         let entries: Vec<(&Sds, Value)> = keys
             .iter()
             .map(|key| {
                 (
                     key, // Теперь мы передаем ссылки на уже созданные ключи
-                    Value::Str(Sds::from_str(&format!("value_{}", key))),
+                    Value::Str(Sds::from_str(&format!("value_{key}"))),
                 )
             })
             .collect();
@@ -75,10 +75,10 @@ fn bench_mset(c: &mut Criterion) {
 fn bench_mget(c: &mut Criterion) {
     c.bench_function("mget", |b| {
         let store = InMemoryStore::new();
-        let keys: Vec<Sds> = (0..1000).map(|i| key(&format!("key_{}", i))).collect();
+        let keys: Vec<Sds> = (0..1000).map(|i| key(&format!("key_{i}"))).collect();
         let values: Vec<Value> = keys
             .iter()
-            .map(|k| Value::Str(Sds::from_str(&format!("value_{}", k))))
+            .map(|k| Value::Str(Sds::from_str(&format!("value_{k}"))))
             .collect();
 
         // Заполняем хранилище.

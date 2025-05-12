@@ -40,8 +40,8 @@ fn bench_dictionary(c: &mut Criterion) {
     let mut map: HashMap<Cow<'_, str>, ZSPFrame<'_>> = HashMap::new();
     for i in 0..10 {
         map.insert(
-            Cow::Owned(format!("key{}", i)),
-            ZSPFrame::InlineString(Cow::Owned(format!("val{}", i))),
+            Cow::Owned(format!("key{i}")),
+            ZSPFrame::InlineString(Cow::Owned(format!("val{i}"))),
         );
     }
 
@@ -54,7 +54,7 @@ fn bench_dictionary(c: &mut Criterion) {
 fn bench_zset(c: &mut Criterion) {
     let mut zset = Vec::new();
     for i in 0..50 {
-        zset.push((format!("member{}", i), i as f64));
+        zset.push((format!("member{i}"), i as f64));
     }
     let frame = ZSPFrame::ZSet(zset);
     c.bench_function("encode_zset_50_entries", |b| {

@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn test_serialize_hll() {
         let hll = crate::HLL { data: [0; 12288] };
-        let value = Value::HyperLogLog(hll);
+        let value = Value::HyperLogLog(Box::new(hll));
         let frame = serialize_response(Response::Value(value));
         assert_eq!(frame, ZSPFrame::InlineString("HLL(NotImplemented)".into()));
     }

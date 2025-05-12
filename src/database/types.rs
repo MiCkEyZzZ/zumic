@@ -39,7 +39,7 @@ pub enum Value {
     /// A set of unique string elements.
     Set(HashSet<Sds>),
     /// A HyperLogLog structure for approximate cardinality estimation.
-    HyperLogLog(HLL),
+    HyperLogLog(Box<HLL>),
     /// A stream of entries, each identified by an ID and a set of fields.
     SStream(Vec<StreamEntry>),
 }

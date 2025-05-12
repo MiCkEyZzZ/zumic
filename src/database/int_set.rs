@@ -186,6 +186,12 @@ impl IntSet {
     }
 }
 
+impl Default for IntSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -37,9 +37,7 @@ fn bench_engine_mset_mget(c: &mut Criterion) {
     let engine = make_engine();
 
     // подготовим данные
-    let keys: Vec<Sds> = (0..100)
-        .map(|i| Sds::from_str(&format!("k{}", i)))
-        .collect();
+    let keys: Vec<Sds> = (0..100).map(|i| Sds::from_str(&format!("k{i}"))).collect();
     let vals: Vec<Value> = (0..100).map(Value::Int).collect();
     let entries: Vec<(&Sds, Value)> = keys.iter().zip(vals.iter().cloned()).collect();
 

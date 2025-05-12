@@ -70,23 +70,23 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("quicklist_vs_vecdeque");
 
     for &n in &[N_SMALL, N_LARGE] {
-        group.bench_function(format!("quicklist_push_back_{}", n), |b| {
+        group.bench_function(format!("quicklist_push_back_{n}"), |b| {
             b.iter(|| bench_quicklist_push_back(n))
         });
 
-        group.bench_function(format!("vecdeque_push_back_{}", n), |b| {
+        group.bench_function(format!("vecdeque_push_back_{n}"), |b| {
             b.iter(|| bench_vecdeque_push_back(n))
         });
 
-        group.bench_function(format!("vecdeque_iter_{}", n), |b| {
+        group.bench_function(format!("vecdeque_iter_{n}"), |b| {
             b.iter(|| bench_vecdeque_iter(n))
         });
 
-        group.bench_function(format!("quicklist_mixed_{}", n), |b| {
+        group.bench_function(format!("quicklist_mixed_{n}"), |b| {
             b.iter(|| bench_quicklist_mixed(n))
         });
 
-        group.bench_function(format!("vecdeque_mixed_{}", n), |b| {
+        group.bench_function(format!("vecdeque_mixed_{n}"), |b| {
             b.iter(|| bench_vecdeque_mixed(n))
         });
     }

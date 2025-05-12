@@ -331,8 +331,7 @@ mod tests {
         let err = sub.recv().await.unwrap_err();
         assert!(
             matches!(err, RecvError::Lagged(1)),
-            "Expected Lagged(1), got: {:?}",
-            err
+            "Expected Lagged(1), got: {err:?}"
         );
     }
 

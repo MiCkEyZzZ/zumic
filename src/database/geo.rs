@@ -28,7 +28,7 @@ impl GeoSet {
     }
 
     /// Добавить или обновить точку.
-    /// Вычисчитываем score = encode_geohash(lon, lat).
+    /// Высчитываем score = encode_geohash(lon, lat).
     pub fn add(&mut self, member: String, lon: f64, lat: f64) {
         let point = GeoPoint { lon, lat };
         let score = encode_geohash_bits(lon, lat);
@@ -115,7 +115,6 @@ fn decode_geohash_bits(mut hash: u64) -> (f64, f64) {
     let mut lat_min = -90.0;
     let mut lat_max = 90.0;
 
-    hash <<= (64 - 52);
     for _ in 0..26 {
         let bit_lon = (hash & 0x8000_0000_0000_0000) != 0;
         hash <<= 1;
@@ -153,7 +152,7 @@ fn haversine_distance(p1: GeoPoint, p2: GeoPoint) -> f64 {
 
 /// Простейшая грубая оценка Δ по score для данного радиуса.
 /// Чтобы получить точный набор квадрантов, нужен алгоритм
-/// соседних геокварталов, но для примера возьмём константнте
+/// соседних геокварталов, но для примера возьмём константе
 /// большое Δ.
 #[allow(dead_code)]
 fn max_delta_for_radius(_radius_m: f64) -> u64 {

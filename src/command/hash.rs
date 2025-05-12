@@ -161,7 +161,7 @@ mod tests {
 
         match get_result {
             Ok(Value::Null) => {}
-            other => panic!("Expected Ok(Value::Null), got {:?}", other),
+            other => panic!("Expected Ok(Value::Null), got {other:?}"),
         }
     }
 
@@ -186,7 +186,7 @@ mod tests {
         let del_result = hdel_cmd.execute(&mut store);
         match del_result {
             Ok(Value::Int(1)) => {}
-            other => panic!("Expected Ok(Value::Int(1)), got {:?}", other),
+            other => panic!("Expected Ok(Value::Int(1)), got {other:?}"),
         }
 
         // Проверяем, что поле действительно удалено
@@ -197,7 +197,7 @@ mod tests {
         let get_result = hget_cmd.execute(&mut store);
         match get_result {
             Ok(Value::Null) => {}
-            other => panic!("Expected Ok(Value::Null), got {:?}", other),
+            other => panic!("Expected Ok(Value::Null), got {other:?}"),
         }
     }
 

@@ -85,17 +85,17 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
             if n != DENSE_SIZE {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("invalid HLL length {}, expected {}", n, DENSE_SIZE),
+                    format!("invalid HLL length {n}, expected {DENSE_SIZE}"),
                 ));
             }
             let mut regs = [0u8; DENSE_SIZE];
             r.read_exact(&mut regs)?;
-            Ok(Value::HyperLogLog(HLL { data: regs }))
+            Ok(Value::HyperLogLog(Box::new(HLL { data: regs })))
         }
 
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Unknown tag {}", other),
+            format!("Unknown tag {other}"),
         )),
     }
 }
@@ -196,9 +196,8 @@ mod tests {
             panic!("Expected Set");
         }
         // HLL
-        if let Value::HyperLogLog(HLL { data }) = read_value(&mut cursor).unwrap() {
-            // only check the first two registers that we wrote
-            assert_eq!(&data[..2], &[3, 7]);
+        if let Value::HyperLogLog(hll) = read_value(&mut cursor).unwrap() {
+            assert_eq!(&hll.data[..2], &[3, 7]);
         } else {
             panic!("Expected HLL");
         }

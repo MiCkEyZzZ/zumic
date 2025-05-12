@@ -79,8 +79,7 @@ impl ServerConfig {
                 }
                 _ => {
                     return Err(ConfigError::Parse(format!(
-                        "Unknown user directive: {}",
-                        part
+                        "Unknown user directive: {part}"
                     )))
                 }
             }

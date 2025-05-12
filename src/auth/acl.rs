@@ -39,7 +39,7 @@ pub fn parse_category(cat: &str) -> CmdCategory {
 /// Парсим имя команды один раз в индекс.
 /// Возвращает `None` для незнакомых команд.
 pub fn lookup_cmd_idx(cmd: &str) -> Option<usize> {
-    // один раз привлдим к to_ascii_lowercase, а в горящем пути уже usize
+    // один раз приводим к to_ascii_lowercase, а в горящем пути уже usize
     let lower = cmd.to_ascii_lowercase();
     COMMAND_INDEX.get(lower.as_str()).copied()
 }
@@ -50,7 +50,7 @@ static COMMAND_INDEX: phf::Map<&'static str, usize> = phf::phf_map! {
     "set" => 1,
     "del" => 2,
     "flushall" => 3,
-    // тут можно добавить в будущем остальные команды с уникаьным индексом.
+    // тут можно добавить в будущем остальные команды с уникальным индексом.
 };
 
 /// Представляет одно ACL-правило, разобранное из строки конфигурации.
@@ -79,7 +79,7 @@ pub enum AclRule {
     AllowChannelPattern(String),
     /// Запретить шаблон каналов Pub/Sub (`-&pattern`).
     DenyChannelPattern(String),
-    /// Пользовател. не требуется пароля (nopass).
+    /// Пользователь. не требуется пароля (nopass).
     NoPass,
 }
 
@@ -90,7 +90,7 @@ pub struct AclUser {
     pub username: String,
     /// Флаг, обозначающий, включён ли пользователь.
     pub enabled: bool,
-    /// Список хэшей паролей для поддержки ротации.
+    /// Список хешей паролей для поддержки ротации.
     pub password_hashes: Vec<String>,
     /// Разрешённые категории команд.
     pub allowed_categories: CmdCategory,
@@ -642,7 +642,7 @@ mod tests {
         assert!(!u.check_channel("channel"));
     }
 
-    /// Тест проверяет добавление нескольких хэшей паролей через правила ">hash".
+    /// Тест проверяет добавление нескольких хешей паролей через правила ">hash".
     #[test]
     fn test_user_with_multiple_passwords() {
         let acl = Acl::default();
