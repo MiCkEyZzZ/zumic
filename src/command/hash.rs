@@ -88,9 +88,9 @@ impl CommandExecute for HGetAllCommand {
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {
             let result: QuickList<Sds> = QuickList::from_iter(
-                smart_hash
-                    .iter()
-                    .flat_map(|(k, v)| [Sds::from(k.as_ref()), Sds::from(v.as_ref())]),
+                smart_hash.iter().flat_map(|(k, v)| {
+                    [Sds::from_str(&k.to_string()), Sds::from_str(&v.to_string())]
+                }),
                 64,
             );
             return Ok(Value::List(result));

@@ -113,7 +113,9 @@ mod tests {
 
     // Helper: creates a cluster with two in-memory shards.
     fn make_cluster() -> InClusterStore {
+        #[allow(clippy::arc_with_non_send_sync)]
         let s1 = Arc::new(InMemoryStore::new());
+        #[allow(clippy::arc_with_non_send_sync)]
         let s2 = Arc::new(InMemoryStore::new());
         InClusterStore::new(vec![s1, s2])
     }

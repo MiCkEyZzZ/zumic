@@ -4,7 +4,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::{InClusterStore, InMemoryStore, Sds, Storage, Value}; // замени `your_crate` на имя твоего крейта
 
 fn make_cluster() -> InClusterStore {
+    #[allow(clippy::arc_with_non_send_sync)]
     let s1 = Arc::new(InMemoryStore::new());
+    #[allow(clippy::arc_with_non_send_sync)]
     let s2 = Arc::new(InMemoryStore::new());
     InClusterStore::new(vec![s1, s2])
 }

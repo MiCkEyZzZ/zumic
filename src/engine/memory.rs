@@ -8,12 +8,14 @@ use crate::{Sds, Storage, StoreError, StoreResult, Value};
 /// using `DashMap` and `Arc`.
 #[derive(Debug)]
 pub struct InMemoryStore {
+    #[allow(clippy::arc_with_non_send_sync)]
     pub data: Arc<DashMap<Sds, Value>>,
 }
 
 impl InMemoryStore {
     pub fn new() -> Self {
         Self {
+            #[allow(clippy::arc_with_non_send_sync)]
             data: Arc::new(DashMap::new()),
         }
     }

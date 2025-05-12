@@ -66,6 +66,7 @@ impl Sds {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let bytes = s.as_bytes();
         if bytes.len() <= Self::INLINE_CAP {
@@ -458,7 +459,7 @@ mod tests {
     #[test]
     fn test_display_valid_utf8() {
         let s = Sds::from_str("test");
-        assert_eq!(format!("{}", s), "test");
+        assert_eq!(format!("{s}"), "test");
     }
 
     /// Tests comparing strings for equality and order.
