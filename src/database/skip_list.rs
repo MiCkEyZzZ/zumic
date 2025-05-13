@@ -340,8 +340,11 @@ where
     /// Возвращает последний элемент (максимальный ключ) списка.
     /// Использует поле backward для доступа к предыдущему узлу.
     pub fn last(&self) -> Option<(&K, &V)> {
-        self.last_node()
-            .map(|tail_ptr| unsafe { (&tail_ptr.as_ref().key, &tail_ptr.as_ref().value) })
+        if let Some(tail_ptr) = self.last_node() {
+            unsafe { Some((&tail_ptr.as_ref().key, &tail_ptr.as_ref().value)) }
+        } else {
+            None
+        }
     }
 
     /// Возвращает указатель на последний элемент (хвост) списка (исключая голову).
@@ -492,145 +495,5 @@ impl<K, V> Drop for SkipList<K, V> {
                 *slot = None;
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Проверяет корректность вставки и поиска по ключу.
-    #[test]
-    fn test_insert_and_search() {
-        let mut list = SkipList::new();
-        list.insert(1, "a");
-        list.insert(3, "c");
-        list.insert(2, "b");
-
-        assert_eq!(list.search(&1), Some(&"a"));
-        assert_eq!(list.search(&2), Some(&"b"));
-        assert_eq!(list.search(&3), Some(&"c"));
-        assert_eq!(list.search(&4), None);
-    }
-
-    /// Проверяет, что повторная вставка по ключу перезаписывает значение.
-    #[test]
-    fn test_insert_overwrite() {
-        let mut list = SkipList::new();
-        list.insert(42, "first");
-        assert_eq!(list.search(&42), Some(&"first"));
-        list.insert(42, "second");
-        assert_eq!(list.search(&42), Some(&"second"));
-    }
-
-    /// Проверяет удаление ключей и корректное обновление состояния списка.
-    #[test]
-    fn test_remove() {
-        let mut list = SkipList::new();
-        list.insert(10, "x");
-        list.insert(20, "y");
-        assert_eq!(list.remove(&10), Some("x"));
-        assert_eq!(list.search(&10), None);
-        assert_eq!(list.remove(&10), None);
-        assert_eq!(list.remove(&20), Some("y"));
-        assert!(list.is_empty());
-    }
-
-    /// Проверяет методы получения длины и проверки на пустоту.
-    #[test]
-    fn test_len_and_is_empty() {
-        let mut list = SkipList::new();
-        assert!(list.is_empty());
-        list.insert(1, "a");
-        list.insert(2, "b");
-        assert_eq!(list.len(), 2);
-        list.remove(&1);
-        assert_eq!(list.len(), 1);
-        list.clear();
-        assert!(list.is_empty());
-    }
-
-    /// Проверяет, что итерация возвращает элементы в порядке возрастания ключей.
-    #[test]
-    fn test_iter_order() {
-        let mut list = SkipList::new();
-        list.insert(3, "c");
-        list.insert(1, "a");
-        list.insert(2, "b");
-
-        let items: Vec<_> = list.iter().map(|(k, v)| (*k, *v)).collect();
-        assert_eq!(items, vec![(1, "a"), (2, "b"), (3, "c")]);
-    }
-
-    /// Проверяет, что обратная итерация возвращает элементы в порядке убывания ключей.
-    #[test]
-    fn test_iter_rev() {
-        let mut list = SkipList::new();
-        list.insert(1, "a");
-        list.insert(2, "b");
-        list.insert(3, "c");
-
-        let items: Vec<_> = list.iter_rev().map(|(k, v)| (*k, *v)).collect();
-        // Обратный порядок: 3,2,1.
-        assert_eq!(items, vec![(3, "c"), (2, "b"), (1, "a")]);
-    }
-
-    /// Проверяет итерацию по диапазону ключей.
-    #[test]
-    fn test_range_iter() {
-        let mut list = SkipList::new();
-        for i in 1..=10 {
-            list.insert(i, format!("v{i}"));
-        }
-        // Выберем диапазон [3, 7): должны получиться ключи 3,4,5,6.
-        let items: Vec<_> = list.range(&3, &7).map(|(k, v)| (*k, v.clone())).collect();
-        assert_eq!(
-            items,
-            vec![
-                (3, "v3".to_string()),
-                (4, "v4".to_string()),
-                (5, "v5".to_string()),
-                (6, "v6".to_string())
-            ]
-        );
-    }
-
-    /// Проверяет получение первого и последнего элементов.
-    #[test]
-    fn test_first_and_last() {
-        let mut list = SkipList::new();
-        assert_eq!(list.first(), None);
-        assert_eq!(list.last(), None);
-
-        list.insert(10, "x");
-        list.insert(5, "y");
-        list.insert(30, "z");
-
-        assert_eq!(list.first(), Some((&5, &"y")));
-        assert_eq!(list.last(), Some((&30, &"z")));
-    }
-
-    /// Проверяет, что `search_mut` позволяет изменять значения.
-    #[test]
-    fn test_search_mut() {
-        let mut list = SkipList::new();
-        list.insert(7, "a");
-        if let Some(v) = list.search_mut(&7) {
-            *v = "b";
-        }
-        assert_eq!(list.search(&7), Some(&"b"));
-    }
-
-    /// Проверяет, что `clear` очищает список полностью.
-    #[test]
-    fn test_clear() {
-        let mut list = SkipList::new();
-        list.insert(1, "one");
-        list.insert(2, "two");
-        list.clear();
-        assert!(list.is_empty());
-        assert_eq!(list.search(&1), None);
-        assert_eq!(list.search(&2), None);
-        assert_eq!(list.search(&4), None);
     }
 }

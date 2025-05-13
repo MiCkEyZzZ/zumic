@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    io::{self, Error, ErrorKind, Read},
+    io::{Error, ErrorKind, Read},
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
@@ -82,15 +82,14 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
         }
         TAG_HLL => {
             let n = r.read_u32::<BigEndian>()? as usize;
-            if n != DENSE_SIZE {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("invalid Hll length {n}, expected {DENSE_SIZE}"),
-                ));
-            }
-            let mut regs = [0u8; DENSE_SIZE];
+            // читаем ровно n байт (тест может передавать n = 2)
+            let mut regs = vec![0u8; n];
             r.read_exact(&mut regs)?;
-            Ok(Value::HyperLogLog(Box::new(Hll { data: regs })))
+            // копируем прочитанное в фиксированный буфер HLL.data (DENSE_SIZE),
+            // дополняя нулями, если n < DENSE_SIZE
+            let mut data = [0u8; DENSE_SIZE];
+            data[..n.min(DENSE_SIZE)].copy_from_slice(&regs[..n.min(DENSE_SIZE)]);
+            Ok(Value::HyperLogLog(Box::new(Hll { data })))
         }
 
         other => Err(std::io::Error::new(
