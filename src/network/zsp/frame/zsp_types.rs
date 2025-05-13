@@ -33,7 +33,7 @@ pub enum ZspFrame<'a> {
     Null,
 }
 
-impl<'a> TryFrom<Value> for ZspFrame<'a> {
+impl TryFrom<Value> for ZspFrame<'_> {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
@@ -53,7 +53,7 @@ impl<'a> TryFrom<Value> for ZspFrame<'a> {
     }
 }
 
-impl<'a> From<Sds> for ZspFrame<'a> {
+impl From<Sds> for ZspFrame<'_> {
     fn from(value: Sds) -> Self {
         ZspFrame::BinaryString(Some(value.to_vec()))
     }

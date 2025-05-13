@@ -332,7 +332,7 @@ impl<'a> ZspDecoder<'a> {
     }
 }
 
-impl<'a> Default for ZspDecoder<'a> {
+impl Default for ZspDecoder<'_> {
     fn default() -> Self {
         Self::new()
     }

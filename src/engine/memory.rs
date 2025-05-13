@@ -20,7 +20,7 @@ impl InMemoryStore {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (Sds, Value)> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = (Sds, Value)> + '_ {
         self.data
             .iter()
             .map(|entry| (entry.key().clone(), entry.value().clone()))
