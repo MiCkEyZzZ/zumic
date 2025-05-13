@@ -340,11 +340,10 @@ where
     /// Возвращает последний элемент (максимальный ключ) списка.
     /// Использует поле backward для доступа к предыдущему узлу.
     pub fn last(&self) -> Option<(&K, &V)> {
-        if let Some(tail_ptr) = self.last_node() {
-            unsafe { Some((&tail_ptr.as_ref().key, &tail_ptr.as_ref().value)) }
-        } else {
-            None
-        }
+        self.last_node().map(|tail_ptr| {
+            let node = unsafe { tail_ptr.as_ref() }; // Только тут и оправдан `unsafe`
+            (&node.key, &node.value)
+        })
     }
 
     /// Возвращает указатель на последний элемент (хвост) списка (исключая голову).
