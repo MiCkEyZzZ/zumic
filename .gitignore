@@ -1,5 +1,8 @@
 # Rust build artifacts
 target/
+dist
+tmp
+/bin
 **/cargo-target
 
 # IDE and editors
@@ -8,6 +11,7 @@ target/
 .zed/
 .trunk
 *.iml
+out/
 
 # System files
 .DS_Store

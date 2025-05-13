@@ -8,12 +8,12 @@ const REGISTER_BITS: usize = 6;
 pub const DENSE_SIZE: usize = NUM_REGISTERS * REGISTER_BITS / 8; // 12288 байт
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct HLL {
+pub struct Hll {
     #[serde(with = "BigArray")]
     pub data: [u8; DENSE_SIZE],
 }
 
-impl HLL {
+impl Hll {
     pub fn new() -> Self {
         Self {
             data: [0; DENSE_SIZE],
@@ -99,7 +99,7 @@ impl HLL {
     }
 }
 
-impl Default for HLL {
+impl Default for Hll {
     fn default() -> Self {
         Self::new()
     }

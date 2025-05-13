@@ -1,14 +1,15 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
 use zumic::{
     command::list::{
         LLenCommand, LPopCommand, LPushCommand, LRangeCommand, RPopCommand, RPushCommand,
     },
-    engine::{engine::StorageEngine, memory::InMemoryStore},
+    engine::{memory::InMemoryStore, store::StorageEngine},
     CommandExecute,
 };
 
 fn bench_lpush(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     c.bench_function("LPushCommand - insert 100 items to head", |b| {
         b.iter(|| {
@@ -24,7 +25,7 @@ fn bench_lpush(c: &mut Criterion) {
 }
 
 fn bench_rpush(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     c.bench_function("RPushCommand - insert 100 items to tail", |b| {
         b.iter(|| {
@@ -40,7 +41,7 @@ fn bench_rpush(c: &mut Criterion) {
 }
 
 fn bench_lpop(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..100 {
         let cmd = LPushCommand {
@@ -63,7 +64,7 @@ fn bench_lpop(c: &mut Criterion) {
 }
 
 fn bench_rpop(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..100 {
         let cmd = RPushCommand {
@@ -86,7 +87,7 @@ fn bench_rpop(c: &mut Criterion) {
 }
 
 fn bench_llen(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..100 {
         let cmd = LPushCommand {
@@ -107,7 +108,7 @@ fn bench_llen(c: &mut Criterion) {
 }
 
 fn bench_lrange(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..100 {
         let cmd = RPushCommand {

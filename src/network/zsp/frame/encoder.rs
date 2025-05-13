@@ -9,36 +9,36 @@
 use std::borrow::Cow;
 
 use super::{
-    ZSPFrame, {MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
+    ZspFrame, {MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
 };
 use crate::EncodeError;
 
 /// Структура энкодера для кодирования в формат ZSP.
-pub struct ZSPEncoder;
+pub struct ZspEncoder;
 
-impl ZSPEncoder {
-    pub fn encode(frame: &ZSPFrame) -> Result<Vec<u8>, EncodeError> {
+impl ZspEncoder {
+    pub fn encode(frame: &ZspFrame) -> Result<Vec<u8>, EncodeError> {
         Self::encode_frame(frame, 0)
     }
 
-    fn encode_frame(frame: &ZSPFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
+    fn encode_frame(frame: &ZspFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
         if current_depth > MAX_ARRAY_DEPTH {
             let err_msg = format!("Max array depth exceed ({MAX_ARRAY_DEPTH})");
             return Err(EncodeError::InvalidData(err_msg));
         }
 
         match frame {
-            ZSPFrame::InlineString(s) => {
+            ZspFrame::InlineString(s) => {
                 Self::validate_simple_string(s)?;
                 Ok(format!("+{s}\r\n").into_bytes())
             }
-            ZSPFrame::FrameError(s) => {
+            ZspFrame::FrameError(s) => {
                 Self::validate_error_string(s)?;
                 Ok(format!("-{s}\r\n").into_bytes())
             }
-            ZSPFrame::Integer(i) => Ok(format!(":{i}\r\n").into_bytes()),
-            ZSPFrame::Float(f) => Ok(format!(":{f}\r\n").into_bytes()),
-            ZSPFrame::BinaryString(Some(b)) => {
+            ZspFrame::Integer(i) => Ok(format!(":{i}\r\n").into_bytes()),
+            ZspFrame::Float(f) => Ok(format!(":{f}\r\n").into_bytes()),
+            ZspFrame::BinaryString(Some(b)) => {
                 if b.len() > MAX_BINARY_LENGTH {
                     let err_msg = format!(
                         "Binary string too long ({} > {})",
@@ -53,17 +53,17 @@ impl ZSPEncoder {
                 out.extend(b"\r\n");
                 Ok(out)
             }
-            ZSPFrame::BinaryString(None) => Ok(b"$-1\r\n".to_vec()),
-            ZSPFrame::Array(ref elements) if elements.is_empty() => Ok(b"*-1\r\n".to_vec()),
-            ZSPFrame::Array(ref elements) => {
+            ZspFrame::BinaryString(None) => Ok(b"$-1\r\n".to_vec()),
+            ZspFrame::Array(ref elements) if elements.is_empty() => Ok(b"*-1\r\n".to_vec()),
+            ZspFrame::Array(ref elements) => {
                 let mut out = format!("*{}\r\n", elements.len()).into_bytes();
                 for e in elements {
                     out.extend(Self::encode_frame(e, current_depth + 1)?);
                 }
                 Ok(out)
             }
-            ZSPFrame::Dictionary(ref items) if items.is_empty() => Ok(b"%-1\r\n".to_vec()),
-            ZSPFrame::Dictionary(ref items) => {
+            ZspFrame::Dictionary(ref items) if items.is_empty() => Ok(b"%-1\r\n".to_vec()),
+            ZspFrame::Dictionary(ref items) => {
                 if items.is_empty() {
                     // Если словарь пустой, возвращаем специальный формат для пустого словаря
                     return Ok(b"%-1\r\n".to_vec());
@@ -73,14 +73,14 @@ impl ZSPEncoder {
                 for (key, value) in items {
                     let key_cow: Cow<'_, str> = key.clone();
                     out.extend(Self::encode_frame(
-                        &ZSPFrame::InlineString(key_cow),
+                        &ZspFrame::InlineString(key_cow),
                         current_depth + 1,
                     )?);
                     out.extend(Self::encode_frame(value, current_depth + 1)?);
                 }
                 Ok(out)
             }
-            ZSPFrame::ZSet(entries) => {
+            ZspFrame::ZSet(entries) => {
                 let mut out = format!("^{}\r\n", entries.len()).into_bytes();
                 for (member, score) in entries {
                     Self::validate_simple_string(member)?;
@@ -89,7 +89,7 @@ impl ZSPEncoder {
                 }
                 Ok(out)
             }
-            ZSPFrame::Null => Ok(b"$-1\r\n".to_vec()),
+            ZspFrame::Null => Ok(b"$-1\r\n".to_vec()),
         }
     }
 
@@ -122,8 +122,8 @@ mod tests {
     /// Проверяет, что строка "OK" правильно кодируется в формат "+OK\r\n".
     #[test]
     fn test_simple_string() {
-        let frame = ZSPFrame::InlineString("OK".into());
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let frame = ZspFrame::InlineString("OK".into());
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"+OK\r\n");
     }
 
@@ -131,8 +131,8 @@ mod tests {
     /// Проверяет, что строка "hello" правильно кодируется с длиной и содержимым.
     #[test]
     fn test_binary_string() {
-        let frame = ZSPFrame::BinaryString(Some(b"hello".to_vec()));
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let frame = ZspFrame::BinaryString(Some(b"hello".to_vec()));
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"$5\r\nhello\r\n");
     }
 
@@ -140,11 +140,11 @@ mod tests {
     /// Проверяет, что массив из двух элементов (строка и число) правильно кодируется.
     #[test]
     fn test_nested_array() {
-        let frame = ZSPFrame::Array(vec![
-            ZSPFrame::InlineString("test".into()),
-            ZSPFrame::Integer(42),
+        let frame = ZspFrame::Array(vec![
+            ZspFrame::InlineString("test".into()),
+            ZspFrame::Integer(42),
         ]);
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"*2\r\n+test\r\n:42\r\n");
     }
 
@@ -152,8 +152,8 @@ mod tests {
     /// Проверяет, что строка с символами \r\n вызывает ошибку.
     #[test]
     fn test_invalid_simple_string() {
-        let frame = ZSPFrame::InlineString("bad\r\nstring".into());
-        let result = ZSPEncoder::encode(&frame);
+        let frame = ZspFrame::InlineString("bad\r\nstring".into());
+        let result = ZspEncoder::encode(&frame);
         assert!(result.is_err());
     }
 
@@ -161,8 +161,8 @@ mod tests {
     /// Проверяет, что пустой словарь кодируется как "%-1\r\n".
     #[test]
     fn test_empty_dictionary() {
-        let frame = ZSPFrame::Dictionary(HashMap::new());
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let frame = ZspFrame::Dictionary(HashMap::new());
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"%-1\r\n");
     }
 
@@ -171,9 +171,9 @@ mod tests {
     #[test]
     fn test_single_item_dictionary() {
         let mut items = std::collections::HashMap::new();
-        items.insert("key1".into(), ZSPFrame::InlineString("value1".into()));
-        let frame = ZSPFrame::Dictionary(items);
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        items.insert("key1".into(), ZspFrame::InlineString("value1".into()));
+        let frame = ZspFrame::Dictionary(items);
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"%1\r\n+key1\r\n+value1\r\n");
     }
 
@@ -182,10 +182,10 @@ mod tests {
     #[test]
     fn test_multiple_items_dictionary() {
         let mut items = std::collections::HashMap::new();
-        items.insert("key1".into(), ZSPFrame::InlineString("value1".into()));
-        items.insert("key2".into(), ZSPFrame::InlineString("value2".into()));
-        let frame = ZSPFrame::Dictionary(items);
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        items.insert("key1".into(), ZspFrame::InlineString("value1".into()));
+        items.insert("key2".into(), ZspFrame::InlineString("value2".into()));
+        let frame = ZspFrame::Dictionary(items);
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n");
     }
 
@@ -194,10 +194,10 @@ mod tests {
     #[test]
     fn test_invalid_dictionary_key() {
         let mut items = std::collections::HashMap::new();
-        items.insert("key1".into(), ZSPFrame::InlineString("value1".into()));
+        items.insert("key1".into(), ZspFrame::InlineString("value1".into()));
         // Пытаемся вставить значение типа InlineString в словарь
-        let frame = ZSPFrame::Dictionary(items);
-        let result = ZSPEncoder::encode(&frame);
+        let frame = ZspFrame::Dictionary(items);
+        let result = ZspEncoder::encode(&frame);
         assert!(result.is_ok()); // Должно пройти, потому что ключи валидные
     }
 
@@ -206,26 +206,26 @@ mod tests {
     #[test]
     fn test_incomplete_dictionary() {
         let mut items = std::collections::HashMap::new();
-        items.insert("key1".into(), ZSPFrame::InlineString("value1".into()));
+        items.insert("key1".into(), ZspFrame::InlineString("value1".into()));
         // Пример неполного словаря
-        let frame = ZSPFrame::Dictionary(items);
-        let result = ZSPEncoder::encode(&frame);
+        let frame = ZspFrame::Dictionary(items);
+        let result = ZspEncoder::encode(&frame);
         assert!(result.is_ok()); // Ожидается, что словарь будет закодирован корректно
     }
 
     /// Тестирование кодирования числа с плавающей запятой.
     #[test]
     fn test_float_encoding() {
-        let frame = ZSPFrame::Float(42.42);
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let frame = ZspFrame::Float(42.42);
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b":42.42\r\n");
     }
 
     /// Тестирование кодирования отрицательного числа с плавающей запятой.
     #[test]
     fn test_negative_float_encoding() {
-        let frame = ZSPFrame::Float(-42.42);
-        let encoded = ZSPEncoder::encode(&frame).unwrap();
+        let frame = ZspFrame::Float(-42.42);
+        let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b":-42.42\r\n");
     }
 }

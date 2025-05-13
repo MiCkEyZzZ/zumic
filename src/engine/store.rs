@@ -6,80 +6,80 @@ use crate::{
 };
 
 pub enum StorageEngine {
-    InMemory(InMemoryStore),
-    InCluster(InClusterStore),
-    InPersistent(InPersistentStore),
+    Memory(InMemoryStore),
+    Cluster(InClusterStore),
+    Persistent(InPersistentStore),
 }
 
 impl StorageEngine {
     pub fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         match self {
-            StorageEngine::InMemory(store) => store.set(key, value),
-            StorageEngine::InCluster(store) => store.set(key, value),
-            StorageEngine::InPersistent(store) => store.set(key, value),
+            StorageEngine::Memory(store) => store.set(key, value),
+            StorageEngine::Cluster(store) => store.set(key, value),
+            StorageEngine::Persistent(store) => store.set(key, value),
         }
     }
 
     pub fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
         match self {
-            StorageEngine::InMemory(store) => store.get(key),
-            StorageEngine::InCluster(store) => store.get(key),
-            StorageEngine::InPersistent(store) => store.get(key),
+            StorageEngine::Memory(store) => store.get(key),
+            StorageEngine::Cluster(store) => store.get(key),
+            StorageEngine::Persistent(store) => store.get(key),
         }
     }
 
     pub fn del(&self, key: &Sds) -> StoreResult<i64> {
         match self {
-            StorageEngine::InMemory(store) => store.del(key),
-            StorageEngine::InCluster(store) => store.del(key),
-            StorageEngine::InPersistent(store) => store.del(key),
+            StorageEngine::Memory(store) => store.del(key),
+            StorageEngine::Cluster(store) => store.del(key),
+            StorageEngine::Persistent(store) => store.del(key),
         }
     }
 
     pub fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         match self {
-            StorageEngine::InMemory(store) => store.mset(entries),
-            StorageEngine::InCluster(store) => store.mset(entries),
-            StorageEngine::InPersistent(store) => store.mset(entries),
+            StorageEngine::Memory(store) => store.mset(entries),
+            StorageEngine::Cluster(store) => store.mset(entries),
+            StorageEngine::Persistent(store) => store.mset(entries),
         }
     }
 
     pub fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
         match self {
-            StorageEngine::InMemory(store) => store.mget(keys),
-            StorageEngine::InCluster(store) => store.mget(keys),
-            StorageEngine::InPersistent(store) => store.mget(keys),
+            StorageEngine::Memory(store) => store.mget(keys),
+            StorageEngine::Cluster(store) => store.mget(keys),
+            StorageEngine::Persistent(store) => store.mget(keys),
         }
     }
 
     pub fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
         match self {
-            StorageEngine::InMemory(store) => store.rename(from, to),
-            StorageEngine::InCluster(store) => store.rename(from, to),
-            StorageEngine::InPersistent(store) => store.rename(from, to),
+            StorageEngine::Memory(store) => store.rename(from, to),
+            StorageEngine::Cluster(store) => store.rename(from, to),
+            StorageEngine::Persistent(store) => store.rename(from, to),
         }
     }
 
     pub fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
         match self {
-            StorageEngine::InMemory(store) => store.renamenx(from, to),
-            StorageEngine::InCluster(store) => store.renamenx(from, to),
-            StorageEngine::InPersistent(store) => store.renamenx(from, to),
+            StorageEngine::Memory(store) => store.renamenx(from, to),
+            StorageEngine::Cluster(store) => store.renamenx(from, to),
+            StorageEngine::Persistent(store) => store.renamenx(from, to),
         }
     }
 
     pub fn flushdb(&self) -> StoreResult<()> {
         match self {
-            StorageEngine::InMemory(store) => store.flushdb(),
-            StorageEngine::InCluster(store) => store.flushdb(),
-            StorageEngine::InPersistent(store) => store.flushdb(),
+            StorageEngine::Memory(store) => store.flushdb(),
+            StorageEngine::Cluster(store) => store.flushdb(),
+            StorageEngine::Persistent(store) => store.flushdb(),
         }
     }
 
     /// Initialize storage engine based in the passed configuration.
     pub fn initialize(config: &StorageConfig) -> io::Result<Self> {
         match &config.storage_type {
-            StorageType::Memory => Ok(Self::InMemory(InMemoryStore::new())),
+            StorageType::Memory => Ok(Self::Memory(InMemoryStore::new())),
             StorageType::Cluster => todo!("Cluster store initialization"),
             StorageType::Persistent => todo!("Persistent store initialization"),
         }
@@ -88,17 +88,17 @@ impl StorageEngine {
     /// Gets a reference to a specific storage via the `Storage` common trait.
     pub fn get_store(&self) -> &dyn Storage {
         match self {
-            Self::InMemory(store) => store,
-            Self::InCluster(store) => store,
-            Self::InPersistent(store) => store,
+            Self::Memory(store) => store,
+            Self::Cluster(store) => store,
+            Self::Persistent(store) => store,
         }
     }
 
     pub fn get_store_mut(&mut self) -> &mut dyn Storage {
         match self {
-            Self::InMemory(store) => store,
-            Self::InCluster(store) => store,
-            Self::InPersistent(store) => store,
+            Self::Memory(store) => store,
+            Self::Cluster(store) => store,
+            Self::Persistent(store) => store,
         }
     }
 }
@@ -114,7 +114,7 @@ mod tests {
     /// Tests that setting a value and then getting it return the same value.
     #[test]
     fn test_engine_set_and_get() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k = key("kin");
         let v = Value::Str(Sds::from_str("dzadza"));
 
@@ -126,7 +126,7 @@ mod tests {
     /// Checks that getting a value by a non-existent key return None.
     #[test]
     fn test_engine_get_nonexistent_key() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k = key("not_found");
 
         let got = engine.get(&k).unwrap();
@@ -136,7 +136,7 @@ mod tests {
     /// Checks that deleting an existing key removes it from the store.
     #[test]
     fn test_engine_delete() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k = key("hello");
         let v = Value::Str(Sds::from_str("world"));
 
@@ -150,7 +150,7 @@ mod tests {
     /// Checks that deleting a non-existent key doesn't result in an error.
     #[test]
     fn test_engine_delete_nonexistent_key() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k = key("ghost");
 
         // Deleting should not cause a panic or error.
@@ -161,7 +161,7 @@ mod tests {
     /// Tests setting multiple key-value pairs with mset.
     #[test]
     fn test_engine_mset() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
 
         // Live variables so references are valid until the end of the function.
         let k1 = key("kin1");
@@ -181,7 +181,7 @@ mod tests {
     /// Checks that mget returns values in the correct order for multiple keys.
     #[test]
     fn test_engine_mget() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k1 = key("kin1");
         let k2 = key("kin2");
         let v1 = Value::Str(Sds::from_str("dza1"));
@@ -197,7 +197,7 @@ mod tests {
     /// Checks that the key is renamed successfully.
     #[test]
     fn test_engine_rename() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
@@ -212,7 +212,7 @@ mod tests {
     /// Checks that renaming a non-existent key results in an error.
     #[test]
     fn test_engine_rename_nonexistent_key() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
 
@@ -225,7 +225,7 @@ mod tests {
     /// if the new key is missing.
     #[test]
     fn test_engine_renamenx() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let k1 = key("old_key");
         let k2 = key("new_key");
         let v = Value::Str(Sds::from_str("value"));
@@ -246,7 +246,7 @@ mod tests {
     /// Tests that flushdb clears all data from storage.
     #[test]
     fn test_engine_flushdb() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         engine
             .set(&key("a"), Value::Str(Sds::from_str("x")))
             .unwrap();
@@ -276,7 +276,7 @@ mod tests {
     /// Tests that the get_store method returns a trait object that can be manipulated.
     #[test]
     fn test_engine_get_store() {
-        let engine = StorageEngine::InMemory(InMemoryStore::new());
+        let engine = StorageEngine::Memory(InMemoryStore::new());
         let store = engine.get_store();
         assert!(store.mget(&[]).is_ok());
     }
@@ -284,7 +284,7 @@ mod tests {
     /// Tests that get_store_mut returns a mutable trait object that can be manipulated.
     #[test]
     fn test_engine_get_store_mut() {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let mut engine = StorageEngine::Memory(InMemoryStore::new());
         let store_mut = engine.get_store_mut();
         assert!(store_mut.set(&key("x"), Value::Int(42)).is_ok());
 

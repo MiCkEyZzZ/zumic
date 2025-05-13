@@ -75,7 +75,7 @@ mod tests {
     /// Исходное значение ключа — 10.0. После увеличения на 5.5 ожидаем 15.5.
     #[test]
     fn test_incr_by_float() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
         store
             .set(&Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
@@ -92,7 +92,7 @@ mod tests {
     /// Исходное значение ключа — 10.0. После уменьшения на 3.5 ожидаем 6.5.
     #[test]
     fn test_decr_by_float() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
         store
             .set(&Sds::from_str("key1"), Value::Float(10.0))
             .unwrap();
@@ -109,7 +109,7 @@ mod tests {
     /// Устанавливаем значение 20.5 под ключом "key1", затем проверяем результат.
     #[test]
     fn test_set_float() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let cmd = SetFloatCommand {
             key: "key1".to_string(),

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{Dict, QuickList, Sds, SkipList, SmartHash, StreamEntry, HLL};
+use super::{Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
 use crate::{StoreError, StoreResult};
 
 /// Represents a generic value in the storage engine.
@@ -39,7 +39,7 @@ pub enum Value {
     /// A set of unique string elements.
     Set(HashSet<Sds>),
     /// A HyperLogLog structure for approximate cardinality estimation.
-    HyperLogLog(Box<HLL>),
+    HyperLogLog(Box<Hll>),
     /// A stream of entries, each identified by an ID and a set of fields.
     SStream(Vec<StreamEntry>),
 }

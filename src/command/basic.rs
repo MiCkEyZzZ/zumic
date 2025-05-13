@@ -187,7 +187,7 @@ mod tests {
     /// оно может быть корректно получено с помощью `GetCommand`.
     #[test]
     fn test_set_and_get() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
@@ -211,7 +211,7 @@ mod tests {
     /// Проверяет, что команда возвращает `Null` для отсутствующих ключей.
     #[test]
     fn test_get_non_existent_key() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let get_command = GetCommand {
             key: "non_existent_key".to_string(),
@@ -227,7 +227,7 @@ mod tests {
     /// Проверяет, что удаление возвращает 1 и ключ действительно удалён.
     #[test]
     fn test_del_existing_key() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
             key: "test_key".to_string(),
@@ -259,7 +259,7 @@ mod tests {
     /// Тестирование `DelCommand` для несуществующего ключа.
     #[test]
     fn test_del_non_existent_key() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let del_cmd = DelCommand {
             key: "non_existent_key".to_string(),
@@ -275,7 +275,7 @@ mod tests {
     /// Проверяет, что команда правильно считает количество существующих ключей.
     #[test]
     fn test_exists_command() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let exists_cmd = ExistsCommand {
             keys: vec!["test_key1".to_string(), "test_key2".to_string()],
@@ -309,7 +309,7 @@ mod tests {
     /// Проверяет, что команда возвращает 0 для пустого списка.
     #[test]
     fn test_exists_empty_keys() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
         let exists_cmd = ExistsCommand { keys: vec![] };
         let result = exists_cmd.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(0));
@@ -319,7 +319,7 @@ mod tests {
     /// Проверяет, что ключ устанавливается и возвращается 1.
     #[test]
     fn test_setnx_key_not_exists() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let setnx_cmd = SetNxCommand {
             key: "new_key".to_string(),
@@ -343,7 +343,7 @@ mod tests {
     /// Проверяет, что команда возвращает 0 и не перезаписывает значение.
     #[test]
     fn test_setnx_key_exists() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetNxCommand {
             key: "existing_key".to_string(),
@@ -374,7 +374,7 @@ mod tests {
     /// Проверяет, что команда корректно устанавливает значения для всех ключей.
     #[test]
     fn test_mset() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let mset_cmd = MSetCommand {
             entries: vec![
@@ -408,7 +408,7 @@ mod tests {
     /// `MGetCommand` корректно возвращает список значений в том же порядке.
     #[test]
     fn test_mget() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let mset_cmd = MSetCommand {
             entries: vec![
@@ -442,7 +442,7 @@ mod tests {
     /// Он переименовывает существующий ключ в новое имя.
     #[test]
     fn test_rename() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
@@ -482,7 +482,7 @@ mod tests {
     /// and that the old key is deleted successfully.
     #[test]
     fn test_renamenx() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
@@ -522,7 +522,7 @@ mod tests {
     /// and verifies that the key is successfully renamed. It then checks that the old key no longer exists and the new key is present.
     #[test]
     fn test_rename_nx_key_not_exists() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd = SetCommand {
             key: "key1".to_string(),
@@ -561,7 +561,7 @@ mod tests {
     /// It first adds two keys, executes the flush command, and then checks that both keys have been removed.
     #[test]
     fn test_flushdb() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let set_cmd1 = SetCommand {
             key: "key1".to_string(),

@@ -61,7 +61,7 @@ impl Storage for InMemoryStore {
     }
 
     fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
-        if let Some((_, value)) = self.data.remove(&from) {
+        if let Some((_, value)) = self.data.remove(from) {
             self.data.insert(to.clone(), value);
             Ok(())
         } else {
@@ -70,10 +70,10 @@ impl Storage for InMemoryStore {
     }
 
     fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
-        if self.data.contains_key(&to) {
+        if self.data.contains_key(to) {
             return Ok(false);
         }
-        if let Some((_, value)) = self.data.remove(&from) {
+        if let Some((_, value)) = self.data.remove(from) {
             self.data.insert(to.clone(), value);
             Ok(true)
         } else {

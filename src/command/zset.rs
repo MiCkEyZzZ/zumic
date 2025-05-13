@@ -211,7 +211,7 @@ mod tests {
     use crate::InMemoryStore;
 
     fn create_store() -> StorageEngine {
-        StorageEngine::InMemory(InMemoryStore::new())
+        StorageEngine::Memory(InMemoryStore::new())
     }
 
     /// Проверяет, что добавление нового элемента в ZSet, его получение

@@ -7,7 +7,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
 use super::tags::{TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET};
-use crate::{database::DENSE_SIZE, Dict, Sds, SkipList, SmartHash, Value, HLL};
+use crate::{database::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
 
 /// Чтение Value из потока.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
@@ -85,12 +85,12 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
             if n != DENSE_SIZE {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("invalid HLL length {n}, expected {DENSE_SIZE}"),
+                    format!("invalid Hll length {n}, expected {DENSE_SIZE}"),
                 ));
             }
             let mut regs = [0u8; DENSE_SIZE];
             r.read_exact(&mut regs)?;
-            Ok(Value::HyperLogLog(Box::new(HLL { data: regs })))
+            Ok(Value::HyperLogLog(Box::new(Hll { data: regs })))
         }
 
         other => Err(std::io::Error::new(
@@ -175,7 +175,7 @@ mod tests {
         buf.write_u32::<BigEndian>(1).unwrap();
         buf.write_u32::<BigEndian>(1).unwrap();
         buf.extend_from_slice(b"y");
-        // HLL: [3,7]
+        // Hll: [3,7]
         buf.write_u8(TAG_HLL).unwrap();
         buf.write_u32::<BigEndian>(2).unwrap();
         buf.extend_from_slice(&[3, 7]);
@@ -195,7 +195,7 @@ mod tests {
         } else {
             panic!("Expected Set");
         }
-        // HLL
+        // Hll
         if let Value::HyperLogLog(hll) = read_value(&mut cursor).unwrap() {
             assert_eq!(&hll.data[..2], &[3, 7]);
         } else {

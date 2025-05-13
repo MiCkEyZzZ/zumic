@@ -15,18 +15,18 @@
 
 pub mod aof;
 pub mod cluster;
-pub mod engine;
 pub mod memory;
 pub mod persistent;
 pub mod storage;
+pub mod store;
 pub mod zdb;
 pub mod zdb_protocol;
 
 pub use aof::*;
 pub use cluster::*;
-pub use engine::*;
 pub use memory::*;
 pub use persistent::*;
 pub use storage::*;
+pub use store::*;
 pub use zdb::*;
 pub use zdb_protocol::*;

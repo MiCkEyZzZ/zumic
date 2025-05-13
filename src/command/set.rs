@@ -114,7 +114,7 @@ mod tests {
 
     // Вспомогательная функция для создания нового хранилища в памяти.
     fn create_store() -> StorageEngine {
-        StorageEngine::InMemory(InMemoryStore::new())
+        StorageEngine::Memory(InMemoryStore::new())
     }
 
     /// Тест, который проверяет, что SAddCommand добавляет новый элемент в множество.

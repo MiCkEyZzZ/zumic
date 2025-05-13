@@ -1,11 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use zumic::network::zsp::{frame::zsp_types::ZSPFrame, protocol::parser::parse_command};
+use zumic::network::zsp::{frame::zsp_types::ZspFrame, protocol::parser::parse_command};
 
 fn bench_parse_set_inline_string(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("SET".into()),
-        ZSPFrame::InlineString("mykey".into()),
-        ZSPFrame::InlineString("myvalue".into()),
+    let frame = ZspFrame::Array(vec![
+        ZspFrame::InlineString("SET".into()),
+        ZspFrame::InlineString("mykey".into()),
+        ZspFrame::InlineString("myvalue".into()),
     ]);
 
     c.bench_function("parse_command - SET (InlineString)", |b| {
@@ -16,10 +16,10 @@ fn bench_parse_set_inline_string(c: &mut Criterion) {
 }
 
 fn bench_parse_set_binary_string(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(vec![
-        ZSPFrame::BinaryString(Some(b"SET".to_vec())),
-        ZSPFrame::BinaryString(Some(b"mykey".to_vec())),
-        ZSPFrame::BinaryString(Some(b"myvalue".to_vec())),
+    let frame = ZspFrame::Array(vec![
+        ZspFrame::BinaryString(Some(b"SET".to_vec())),
+        ZspFrame::BinaryString(Some(b"mykey".to_vec())),
+        ZspFrame::BinaryString(Some(b"myvalue".to_vec())),
     ]);
 
     c.bench_function("parse_command - SET (BinaryString)", |b| {
@@ -30,9 +30,9 @@ fn bench_parse_set_binary_string(c: &mut Criterion) {
 }
 
 fn bench_parse_get(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("GET".into()),
-        ZSPFrame::InlineString("key".into()),
+    let frame = ZspFrame::Array(vec![
+        ZspFrame::InlineString("GET".into()),
+        ZspFrame::InlineString("key".into()),
     ]);
 
     c.bench_function("parse_command - GET", |b| {
@@ -43,10 +43,10 @@ fn bench_parse_get(c: &mut Criterion) {
 }
 
 fn bench_parse_set_with_integer(c: &mut Criterion) {
-    let frame = ZSPFrame::Array(vec![
-        ZSPFrame::InlineString("SET".into()),
-        ZSPFrame::InlineString("num".into()),
-        ZSPFrame::Integer(12345),
+    let frame = ZspFrame::Array(vec![
+        ZspFrame::InlineString("SET".into()),
+        ZspFrame::InlineString("num".into()),
+        ZspFrame::Integer(12345),
     ]);
 
     c.bench_function("parse_command - SET (Int)", |b| {

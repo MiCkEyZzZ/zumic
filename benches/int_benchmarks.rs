@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use zumic::{
     command::{DecrByCommand, DecrCommand, IncrByCommand, IncrCommand},
     database::{Sds, Value},
-    engine::{engine::StorageEngine, memory::InMemoryStore},
+    engine::{memory::InMemoryStore, store::StorageEngine},
     CommandExecute,
 };
 
@@ -11,7 +11,7 @@ fn key(data: &str) -> Sds {
 }
 
 fn int_commands_benchmark(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
     store.set(&key("key"), Value::Int(0)).unwrap();
 
     c.bench_function("incr command", |b| {

@@ -21,19 +21,19 @@ use crate::{Dict, QuickList, Sds, SmartHash, Value};
 /// - Двоичные строки
 /// - Массивы и словари
 #[derive(Debug, Clone, PartialEq)]
-pub enum ZSPFrame<'a> {
+pub enum ZspFrame<'a> {
     InlineString(Cow<'a, str>),
     FrameError(String),
     Integer(i64),
     Float(f64),
     BinaryString(Option<Vec<u8>>),
-    Array(Vec<ZSPFrame<'a>>),
-    Dictionary(HashMap<Cow<'a, str>, ZSPFrame<'a>>),
+    Array(Vec<ZspFrame<'a>>),
+    Dictionary(HashMap<Cow<'a, str>, ZspFrame<'a>>),
     ZSet(Vec<(String, f64)>),
     Null,
 }
 
-impl<'a> TryFrom<Value> for ZSPFrame<'a> {
+impl<'a> TryFrom<Value> for ZspFrame<'a> {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
@@ -46,46 +46,46 @@ impl<'a> TryFrom<Value> for ZSPFrame<'a> {
             // Теперь Value::Hash сохраняет SmartHash, поэтому вызываем новую конвертацию.
             Value::Hash(smart_hash) => convert_smart_hash(smart_hash),
             Value::ZSet { dict, .. } => convert_zset(dict),
-            Value::Null => Ok(ZSPFrame::Null),
+            Value::Null => Ok(ZspFrame::Null),
             // Игнорировать неподдерживаемые типы
             Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
         }
     }
 }
 
-impl<'a> From<Sds> for ZSPFrame<'a> {
+impl<'a> From<Sds> for ZspFrame<'a> {
     fn from(value: Sds) -> Self {
-        ZSPFrame::BinaryString(Some(value.to_vec()))
+        ZspFrame::BinaryString(Some(value.to_vec()))
     }
 }
 
-pub fn convert_sds_to_frame<'a>(sds: Sds) -> Result<ZSPFrame<'a>, String> {
+pub fn convert_sds_to_frame<'a>(sds: Sds) -> Result<ZspFrame<'a>, String> {
     let bytes = sds.as_ref();
     match std::str::from_utf8(bytes) {
-        Ok(valid_str) => Ok(ZSPFrame::InlineString(Cow::Owned(valid_str.to_string()))),
-        Err(_) => Ok(ZSPFrame::BinaryString(Some(bytes.to_vec()))),
+        Ok(valid_str) => Ok(ZspFrame::InlineString(Cow::Owned(valid_str.to_string()))),
+        Err(_) => Ok(ZspFrame::BinaryString(Some(bytes.to_vec()))),
     }
 }
 
-pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZSPFrame<'a>, String> {
+pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZspFrame<'a>, String> {
     let mut frames = Vec::with_capacity(list.len());
     for item in list.iter() {
         frames.push(item.clone().into());
     }
-    Ok(ZSPFrame::Array(frames))
+    Ok(ZspFrame::Array(frames))
 }
 
-pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZSPFrame<'a>, String> {
+pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZspFrame<'a>, String> {
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
         frames.push(convert_sds_to_frame(item)?);
     }
-    Ok(ZSPFrame::Array(frames))
+    Ok(ZspFrame::Array(frames))
 }
 
 /// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
 #[inline]
-pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, String> {
+pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZspFrame<'a>, String> {
     let mut map = HashMap::with_capacity(smart.len());
     // Используем итератор, предоставляемый SmartHash
     for (k, v) in smart.iter() {
@@ -94,17 +94,17 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZSPFrame<'a>, Stri
         let frame = v.clone().into();
         map.insert(key_cow, frame);
     }
-    Ok(ZSPFrame::Dictionary(map))
+    Ok(ZspFrame::Dictionary(map))
 }
 
 #[inline]
-pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZSPFrame<'a>, String> {
+pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZspFrame<'a>, String> {
     let mut pairs = Vec::with_capacity(dict.len());
     for (k_sds, &score) in dict.iter() {
         let key = String::from_utf8(k_sds.to_vec()).map_err(|e| format!("ZSet key error: {e}"))?;
         pairs.push((key, score));
     }
-    Ok(ZSPFrame::ZSet(pairs))
+    Ok(ZspFrame::ZSet(pairs))
 }
 
 #[cfg(test)]
@@ -123,14 +123,14 @@ mod tests {
         sh.insert(Sds::from_str("key2"), Sds::from_str("val2"));
 
         let frame = convert_smart_hash(sh).unwrap();
-        if let ZSPFrame::Dictionary(dict) = frame {
+        if let ZspFrame::Dictionary(dict) = frame {
             assert_eq!(
                 dict.get("key1"),
-                Some(&ZSPFrame::BinaryString(Some(b"val1".to_vec())))
+                Some(&ZspFrame::BinaryString(Some(b"val1".to_vec())))
             );
             assert_eq!(
                 dict.get("key2"),
-                Some(&ZSPFrame::BinaryString(Some(b"val2".to_vec())))
+                Some(&ZspFrame::BinaryString(Some(b"val2".to_vec())))
             );
         } else {
             panic!("Expected Dictionary frame");
@@ -142,14 +142,14 @@ mod tests {
     fn handle_sds_utf8_and_binary() {
         let utf8 = Sds::from_str("hello");
         let frame = convert_sds_to_frame(utf8).unwrap();
-        assert_eq!(frame, ZSPFrame::InlineString("hello".into()));
+        assert_eq!(frame, ZspFrame::InlineString("hello".into()));
 
         let bin = Sds::from_vec(vec![0xFF, 0xFE]);
         let frame = convert_sds_to_frame(bin.clone()).unwrap();
-        assert_eq!(frame, ZSPFrame::BinaryString(Some(bin.to_vec())));
+        assert_eq!(frame, ZspFrame::BinaryString(Some(bin.to_vec())));
     }
 
-    /// Тестирует преобразование QuickList<Sds> в ZSPFrame::Array BinaryStrings.
+    /// Тестирует преобразование QuickList<Sds> в ZspFrame::Array BinaryStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -157,11 +157,11 @@ mod tests {
         ql.push_back(Sds::from_str("b"));
 
         let zsp = convert_quicklist(ql).unwrap();
-        if let ZSPFrame::Array(vec) = zsp {
+        if let ZspFrame::Array(vec) = zsp {
             let strs: Vec<_> = vec
                 .into_iter()
                 .map(|f| {
-                    if let ZSPFrame::BinaryString(Some(b)) = f {
+                    if let ZspFrame::BinaryString(Some(b)) = f {
                         String::from_utf8(b).unwrap()
                     } else {
                         panic!("Expected BinaryString");
@@ -181,13 +181,13 @@ mod tests {
         hs.insert(Sds::from_str("x"));
         hs.insert(Sds::from_str("y"));
         let zsp = convert_hashset(hs).unwrap();
-        if let ZSPFrame::Array(vec) = zsp {
+        if let ZspFrame::Array(vec) = zsp {
             let mut got: Vec<_> = vec
                 .into_iter()
                 .map(|f| match f {
-                    ZSPFrame::InlineString(Cow::Borrowed(s)) => s.to_string(),
-                    ZSPFrame::InlineString(Cow::Owned(s)) => s,
-                    ZSPFrame::BinaryString(Some(b)) => String::from_utf8(b).unwrap(),
+                    ZspFrame::InlineString(Cow::Borrowed(s)) => s.to_string(),
+                    ZspFrame::InlineString(Cow::Owned(s)) => s,
+                    ZspFrame::BinaryString(Some(b)) => String::from_utf8(b).unwrap(),
                     _ => panic!(),
                 })
                 .collect();
@@ -198,17 +198,17 @@ mod tests {
         }
     }
 
-    /// Тестирует TryFrom<Value> для ZSPFrame с различными типами, такими как Int и Null.
+    /// Тестирует TryFrom<Value> для ZspFrame с различными типами, такими как Int и Null.
     #[test]
     fn try_from_value_various() {
         assert_eq!(
-            ZSPFrame::try_from(Value::Int(10)).unwrap(),
-            ZSPFrame::Integer(10)
+            ZspFrame::try_from(Value::Int(10)).unwrap(),
+            ZspFrame::Integer(10)
         );
-        assert_eq!(ZSPFrame::try_from(Value::Null).unwrap(), ZSPFrame::Null);
+        assert_eq!(ZspFrame::try_from(Value::Null).unwrap(), ZspFrame::Null);
     }
 
-    /// Тестирует преобразование ZSet (HashMap<Sds, f64>) в ZSPFrame::ZSet.
+    /// Тестирует преобразование ZSet (HashMap<Sds, f64>) в ZspFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = Dict::new();
@@ -216,7 +216,7 @@ mod tests {
         zs.insert(Sds::from_str("bar"), 2.2);
 
         let result = convert_zset(zs).unwrap();
-        if let ZSPFrame::ZSet(mut pairs) = result {
+        if let ZspFrame::ZSet(mut pairs) = result {
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
             assert_eq!(
                 pairs,
@@ -234,12 +234,12 @@ mod tests {
         let invalid = Sds::from_vec(vec![0xFF, 0xFE]);
 
         assert_eq!(
-            ZSPFrame::try_from(Value::Str(valid.clone())).unwrap(),
-            ZSPFrame::InlineString("abc".into())
+            ZspFrame::try_from(Value::Str(valid.clone())).unwrap(),
+            ZspFrame::InlineString("abc".into())
         );
 
-        let frame = ZSPFrame::try_from(Value::Str(invalid.clone())).unwrap();
-        assert_eq!(frame, ZSPFrame::BinaryString(Some(invalid.to_vec())));
+        let frame = ZspFrame::try_from(Value::Str(invalid.clone())).unwrap();
+        assert_eq!(frame, ZspFrame::BinaryString(Some(invalid.to_vec())));
     }
 
     /// Тестовое преобразование пустого Quicklist в пустой фрейм массива.
@@ -247,7 +247,7 @@ mod tests {
     fn test_empty_quicklist() {
         let ql = QuickList::new(16);
         let zsp = convert_quicklist(ql).unwrap();
-        assert_eq!(zsp, ZSPFrame::Array(vec![]));
+        assert_eq!(zsp, ZspFrame::Array(vec![]));
     }
 
     /// Тестовое преобразование пустого HashSet в пустой фрейм массива.
@@ -255,7 +255,7 @@ mod tests {
     fn convert_empty_hashset() {
         let hs = HashSet::new();
         let zsp = convert_hashset(hs).unwrap();
-        assert_eq!(zsp, ZSPFrame::Array(vec![]));
+        assert_eq!(zsp, ZspFrame::Array(vec![]));
     }
 
     /// Тестовое преобразование пустого HashMap в пустой фрейм словаря.
@@ -263,8 +263,8 @@ mod tests {
     fn convert_empty_hashmap() {
         let hm: HashMap<Sds, Sds> = HashMap::new();
         let zsp = convert_smart_hash(SmartHash::from_iter(hm)).unwrap();
-        assert_eq!(zsp, ZSPFrame::Dictionary(HashMap::new()));
-        assert_eq!(zsp, ZSPFrame::Dictionary(HashMap::new()));
+        assert_eq!(zsp, ZspFrame::Dictionary(HashMap::new()));
+        assert_eq!(zsp, ZspFrame::Dictionary(HashMap::new()));
     }
 
     /// Проверьте, что преобразование HashMap с недопустимым ключом UTF-8 возвращает ошибку.
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn arcbytes_into_binarytring() {
         let arc = Sds::from_str("hello");
-        let frame: ZSPFrame<'_> = arc.clone().into();
-        assert_eq!(frame, ZSPFrame::BinaryString(Some(arc.to_vec())));
+        let frame: ZspFrame<'_> = arc.clone().into();
+        assert_eq!(frame, ZspFrame::BinaryString(Some(arc.to_vec())));
     }
 }

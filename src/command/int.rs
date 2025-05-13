@@ -110,7 +110,7 @@ mod tests {
     /// - Если ключ существует и его значение — целое число, оно должно быть увеличено на 1.
     #[test]
     fn test_incr_command() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let incr_command = IncrCommand {
             key: "counter".to_string(),
@@ -130,7 +130,7 @@ mod tests {
     /// - Если ключ существует и его значение — целое число, оно должно быть увеличено на указанную величину.
     #[test]
     fn test_incrby_command() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let incr_by_command = IncrByCommand {
             key: "counter".to_string(),
@@ -151,7 +151,7 @@ mod tests {
     /// - Если ключ существует и его значение — целое число, оно должно быть уменьшено на 1.
     #[test]
     fn test_decr_command() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let decr_command = DecrCommand {
             key: "counter".to_string(),
@@ -171,7 +171,7 @@ mod tests {
     /// - Если ключ существует и его значение — целое число, оно должно быть уменьшено на указанную величину.
     #[test]
     fn test_decrby_command() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
 
         let decr_by_command = DecrByCommand {
             key: "counter".to_string(),
@@ -191,7 +191,7 @@ mod tests {
     /// - Если ключ существует, но его значение не является целым числом, команда должна вернуть ошибку.
     #[test]
     fn test_invalid_type_for_incr() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
         store
             .set(
                 &Sds::from_str("counter"),
@@ -211,7 +211,7 @@ mod tests {
     /// - Если ключ существует, но его значение не является целым числом, команда должна вернуть ошибку.
     #[test]
     fn test_invalid_type_for_decr() {
-        let mut store = StorageEngine::InMemory(InMemoryStore::new());
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
         store
             .set(
                 &Sds::from_str("counter"),

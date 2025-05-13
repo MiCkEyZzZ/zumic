@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use zumic::network::zsp::frame::decoder::ZSPDecoder;
+use zumic::network::zsp::frame::decoder::ZspDecoder;
 
 fn bench_simple_string(c: &mut Criterion) {
     let input = b"+OK\r\n";
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_simple_string")
         .throughput(Throughput::Bytes(input.len() as u64))
@@ -17,7 +17,7 @@ fn bench_simple_string(c: &mut Criterion) {
 
 fn bench_error_string(c: &mut Criterion) {
     let input = b"-ERR something went wrong\r\n";
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_error_string")
         .throughput(Throughput::Bytes(input.len() as u64))
@@ -31,7 +31,7 @@ fn bench_error_string(c: &mut Criterion) {
 
 fn bench_integer(c: &mut Criterion) {
     let input = b":1234567890\r\n";
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_integer")
         .throughput(Throughput::Bytes(input.len() as u64))
@@ -45,7 +45,7 @@ fn bench_integer(c: &mut Criterion) {
 
 fn bench_bulk_small(c: &mut Criterion) {
     let input = b"$3\r\nfoo\r\n";
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_bulk_small")
         .throughput(Throughput::Bytes(input.len() as u64))
@@ -63,7 +63,7 @@ fn bench_bulk_large(c: &mut Criterion) {
     let mut input = format!("${}\r\n", payload.len()).into_bytes();
     input.extend_from_slice(&payload);
     input.extend_from_slice(b"\r\n");
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_bulk_large_1KB")
         .throughput(Throughput::Bytes(input.len() as u64))
@@ -81,7 +81,7 @@ fn bench_array(c: &mut Criterion) {
     for i in 0..100 {
         input.extend_from_slice(format!(":{i}\r\n").as_bytes());
     }
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_array_100_ints")
         .throughput(Throughput::Elements(100))
@@ -100,7 +100,7 @@ fn bench_dictionary(c: &mut Criterion) {
         input.extend_from_slice(format!("+key{i}\r\n").as_bytes());
         input.extend_from_slice(format!("+val{i}\r\n").as_bytes());
     }
-    let mut decoder = ZSPDecoder::new();
+    let mut decoder = ZspDecoder::new();
 
     c.benchmark_group("decode_dictionary_50")
         .throughput(Throughput::Elements(50))

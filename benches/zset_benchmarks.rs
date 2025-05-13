@@ -9,7 +9,7 @@ fn bench_zadd(c: &mut Criterion) {
     group.sample_size(100);
     group.bench_function("insert 100 members", |b| {
         b.iter(|| {
-            let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+            let mut engine = StorageEngine::Memory(InMemoryStore::new());
             for i in 0..100 {
                 let cmd = ZAddCommand {
                     key: "myzset".to_string(),
@@ -28,7 +28,7 @@ fn bench_zrem(c: &mut Criterion) {
     group.sample_size(100);
     group.bench_function("remove 100 members", |b| {
         b.iter(|| {
-            let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+            let mut engine = StorageEngine::Memory(InMemoryStore::new());
             for i in 0..100 {
                 let cmd = ZAddCommand {
                     key: "myzset".to_string(),
@@ -53,7 +53,7 @@ fn bench_zscore(c: &mut Criterion) {
     let mut group = c.benchmark_group("ZScoreCommand");
     group.sample_size(100);
     group.bench_function("get score 100 times", |b| {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let mut engine = StorageEngine::Memory(InMemoryStore::new());
         for i in 0..100 {
             let cmd = ZAddCommand {
                 key: "myzset".to_string(),
@@ -79,7 +79,7 @@ fn bench_zrange(c: &mut Criterion) {
     let mut group = c.benchmark_group("ZRangeCommand");
     group.sample_size(100);
     group.bench_function("range 100..200", |b| {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let mut engine = StorageEngine::Memory(InMemoryStore::new());
         for i in 0..300 {
             let cmd = ZAddCommand {
                 key: "myzset".to_string(),
@@ -104,7 +104,7 @@ fn bench_zcard(c: &mut Criterion) {
     let mut group = c.benchmark_group("ZCardCommand");
     group.sample_size(100);
     group.bench_function("get cardinality", |b| {
-        let mut engine = StorageEngine::InMemory(InMemoryStore::new());
+        let mut engine = StorageEngine::Memory(InMemoryStore::new());
         for i in 0..300 {
             let cmd = ZAddCommand {
                 key: "myzset".to_string(),

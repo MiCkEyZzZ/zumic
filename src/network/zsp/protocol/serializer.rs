@@ -1,39 +1,39 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use super::Response;
-use crate::{zsp::frame::zsp_types::ZSPFrame, Value};
+use crate::{zsp::frame::zsp_types::ZspFrame, Value};
 
-/// Сериализует ответ команды в формат ZSPFrame.
-pub fn serialize_response<'a>(response: Response) -> ZSPFrame<'a> {
+/// Сериализует ответ команды в формат ZspFrame.
+pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
     match response {
-        Response::Ok => ZSPFrame::InlineString("OK".into()),
+        Response::Ok => ZspFrame::InlineString("OK".into()),
         Response::Value(value) => value_to_frame(value),
-        Response::Error(msg) => ZSPFrame::FrameError(msg),
-        Response::NotFound => ZSPFrame::Null,
-        Response::Integer(n) => ZSPFrame::Integer(n),
-        Response::Float(f) => ZSPFrame::Float(f),
-        Response::String(s) => ZSPFrame::InlineString(s.into()),
+        Response::Error(msg) => ZspFrame::FrameError(msg),
+        Response::NotFound => ZspFrame::Null,
+        Response::Integer(n) => ZspFrame::Integer(n),
+        Response::Float(f) => ZspFrame::Float(f),
+        Response::String(s) => ZspFrame::InlineString(s.into()),
     }
 }
 
-/// Преобразует тип Value в ZSPFrame.
-fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
+/// Преобразует тип Value в ZspFrame.
+fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
     match value {
-        Value::Str(s) => ZSPFrame::BinaryString(Some(s.to_vec())),
-        Value::Int(i) => ZSPFrame::Integer(i),
-        Value::Float(f) => ZSPFrame::Float(f),
-        Value::Null => ZSPFrame::Null,
+        Value::Str(s) => ZspFrame::BinaryString(Some(s.to_vec())),
+        Value::Int(i) => ZspFrame::Integer(i),
+        Value::Float(f) => ZspFrame::Float(f),
+        Value::Null => ZspFrame::Null,
         Value::List(list) => {
             let frames = list
                 .iter()
-                .map(|item| ZSPFrame::BinaryString(Some(item.to_vec())))
+                .map(|item| ZspFrame::BinaryString(Some(item.to_vec())))
                 .collect();
-            ZSPFrame::Array(frames)
+            ZspFrame::Array(frames)
         }
 
         // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
         Value::Hash(mut smart) => {
-            let dict: HashMap<Cow<'a, str>, ZSPFrame<'a>> = smart
+            let dict: HashMap<Cow<'a, str>, ZspFrame<'a>> = smart
                 .iter()
                 .map(|(k, v)| {
                     // Преобразуем ключ в Cow<'a, str>
@@ -42,13 +42,13 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
                     );
 
                     // Преобразуем значение в BinaryString, как раньше
-                    let val = ZSPFrame::BinaryString(Some(v.to_vec()));
+                    let val = ZspFrame::BinaryString(Some(v.to_vec()));
 
                     (key, val)
                 })
                 .collect();
 
-            ZSPFrame::Dictionary(dict)
+            ZspFrame::Dictionary(dict)
         }
 
         Value::ZSet { dict, .. } => {
@@ -60,7 +60,7 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
                     (key, score) // score уже f64
                 })
                 .collect::<Vec<(String, f64)>>(); // теперь тип правильно совпадает
-            ZSPFrame::ZSet(pairs)
+            ZspFrame::ZSet(pairs)
         }
 
         Value::Set(set) => {
@@ -69,13 +69,13 @@ fn value_to_frame<'a>(value: Value) -> ZSPFrame<'a> {
                 .map(|item| {
                     let s = String::from_utf8(item.to_vec())
                         .unwrap_or_else(|_| "<invalid utf8>".into());
-                    ZSPFrame::InlineString(Cow::Owned(s))
+                    ZspFrame::InlineString(Cow::Owned(s))
                 })
                 .collect();
-            ZSPFrame::Array(frames)
+            ZspFrame::Array(frames)
         }
-        Value::HyperLogLog(_) => ZSPFrame::InlineString("HLL(NotImplemented)".into()),
-        Value::SStream(_) => ZSPFrame::InlineString("SStream(NotImplemented)".into()),
+        Value::HyperLogLog(_) => ZspFrame::InlineString("HLL(NotImplemented)".into()),
+        Value::SStream(_) => ZspFrame::InlineString("SStream(NotImplemented)".into()),
     }
 }
 
@@ -89,53 +89,53 @@ mod tests {
         Dict,
     };
 
-    /// Проверяет сериализацию `Response::Ok` в `ZSPFrame::InlineString("OK")`
+    /// Проверяет сериализацию `Response::Ok` в `ZspFrame::InlineString("OK")`
     #[test]
     fn test_serialize_ok() {
         let frame = serialize_response(Response::Ok);
-        assert_eq!(frame, ZSPFrame::InlineString("OK".into()));
+        assert_eq!(frame, ZspFrame::InlineString("OK".into()));
     }
 
-    /// Проверяет сериализацию `Response::Error("fail")` в `ZSPFrame::FrameError("fail")`
+    /// Проверяет сериализацию `Response::Error("fail")` в `ZspFrame::FrameError("fail")`
     #[test]
     fn test_serialize_error() {
         let frame = serialize_response(Response::Error("fail".into()));
-        assert_eq!(frame, ZSPFrame::FrameError("fail".into()));
+        assert_eq!(frame, ZspFrame::FrameError("fail".into()));
     }
 
-    /// Проверяет сериализацию `Value::Str` в `ZSPFrame::BinaryString`
+    /// Проверяет сериализацию `Value::Str` в `ZspFrame::BinaryString`
     #[test]
     fn test_serialize_str() {
         let value = Value::Str(Sds::from_str("hello"));
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::BinaryString(Some(b"hello".to_vec())));
+        assert_eq!(frame, ZspFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    /// Проверяет сериализацию `Value::Int` в `ZSPFrame::Integer`
+    /// Проверяет сериализацию `Value::Int` в `ZspFrame::Integer`
     #[test]
     fn test_serialize_int() {
         let value = Value::Int(123);
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::Integer(123));
+        assert_eq!(frame, ZspFrame::Integer(123));
     }
 
-    /// Проверяет сериализацию `Value::Float` в `ZSPFrame::Float`
+    /// Проверяет сериализацию `Value::Float` в `ZspFrame::Float`
     #[test]
     fn test_serialize_float() {
         let value = Value::Float(2.14);
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::Float(2.14));
+        assert_eq!(frame, ZspFrame::Float(2.14));
     }
 
-    /// Проверяет сериализацию `Value::Null` в `ZSPFrame::Null`
+    /// Проверяет сериализацию `Value::Null` в `ZspFrame::Null`
     #[test]
     fn test_serialize_null() {
         let value = Value::Null;
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::Null);
+        assert_eq!(frame, ZspFrame::Null);
     }
 
-    /// Проверяет сериализацию `Value::List` (QuickList) в `ZSPFrame::Array`
+    /// Проверяет сериализацию `Value::List` (QuickList) в `ZspFrame::Array`
     #[test]
     fn test_serialize_list() {
         let mut list = QuickList::new(4);
@@ -146,14 +146,14 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
         assert_eq!(
             frame,
-            ZSPFrame::Array(vec![
-                ZSPFrame::BinaryString(Some(b"a".to_vec())),
-                ZSPFrame::BinaryString(Some(b"b".to_vec())),
+            ZspFrame::Array(vec![
+                ZspFrame::BinaryString(Some(b"a".to_vec())),
+                ZspFrame::BinaryString(Some(b"b".to_vec())),
             ])
         );
     }
 
-    /// Проверяет сериализацию `Value::Set` (HashSet) в `ZSPFrame::Array` со строками
+    /// Проверяет сериализацию `Value::Set` (HashSet) в `ZspFrame::Array` со строками
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
@@ -163,11 +163,11 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZSPFrame::Array(mut items) => {
+            ZspFrame::Array(mut items) => {
                 let mut strings = items
                     .drain(..)
                     .map(|item| match item {
-                        ZSPFrame::InlineString(s) => s,
+                        ZspFrame::InlineString(s) => s,
                         _ => panic!("Expected InlineString"),
                     })
                     .collect::<Vec<_>>();
@@ -178,7 +178,7 @@ mod tests {
         }
     }
 
-    /// Проверяет сериализацию `Value::Hash` (SmartHash) в `ZSPFrame::Dictionary`
+    /// Проверяет сериализацию `Value::Hash` (SmartHash) в `ZspFrame::Dictionary`
     #[test]
     fn test_serialize_hash() {
         let mut sh = crate::database::smart_hash::SmartHash::new();
@@ -187,17 +187,17 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZSPFrame::Dictionary(dict) => {
+            ZspFrame::Dictionary(dict) => {
                 assert_eq!(
                     dict.get("k1"),
-                    Some(&ZSPFrame::BinaryString(Some(b"v1".to_vec())))
+                    Some(&ZspFrame::BinaryString(Some(b"v1".to_vec())))
                 );
             }
             _ => panic!("Expected Dictionary frame"),
         }
     }
 
-    /// Проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZSPFrame::ZSet`
+    /// Проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZspFrame::ZSet`
     #[test]
     fn test_serialize_zset() {
         let mut dict = Dict::new();
@@ -212,7 +212,7 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZSPFrame::ZSet(pairs) => {
+            ZspFrame::ZSet(pairs) => {
                 assert_eq!(pairs.len(), 1);
                 assert_eq!(pairs[0], ("one".to_string(), 1.0));
             }
@@ -220,23 +220,23 @@ mod tests {
         }
     }
 
-    /// Проверяет сериализацию `Value::HyperLogLog` в `ZSPFrame::InlineString("HLL(NotImplemented)")`
+    /// Проверяет сериализацию `Value::HyperLogLog` в `ZspFrame::InlineString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
-        let hll = crate::HLL { data: [0; 12288] };
+        let hll = crate::Hll { data: [0; 12288] };
         let value = Value::HyperLogLog(Box::new(hll));
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZSPFrame::InlineString("HLL(NotImplemented)".into()));
+        assert_eq!(frame, ZspFrame::InlineString("Hll(NotImplemented)".into()));
     }
 
-    /// Проверяет сериализацию `Value::SStream` в `ZSPFrame::InlineString("SStream(NotImplemented)")`
+    /// Проверяет сериализацию `Value::SStream` в `ZspFrame::InlineString("SStream(NotImplemented)")`
     #[test]
     fn test_serialize_sstream() {
         let value = Value::SStream(vec![]);
         let frame = serialize_response(Response::Value(value));
         assert_eq!(
             frame,
-            ZSPFrame::InlineString("SStream(NotImplemented)".into())
+            ZspFrame::InlineString("SStream(NotImplemented)".into())
         );
     }
 }

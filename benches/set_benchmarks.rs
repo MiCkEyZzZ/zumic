@@ -1,12 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zumic::{
     command::set::{SAddCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
-    engine::{engine::StorageEngine, memory::InMemoryStore},
+    engine::{memory::InMemoryStore, store::StorageEngine},
     CommandExecute,
 };
 
 fn bench_sadd(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     c.bench_function("SAddCommand - insert 1000 items", |b| {
         b.iter(|| {
@@ -22,7 +22,7 @@ fn bench_sadd(c: &mut Criterion) {
 }
 
 fn bench_sismember(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     // Предварительно заполним множество
     for i in 0..1000 {
@@ -47,7 +47,7 @@ fn bench_sismember(c: &mut Criterion) {
 }
 
 fn bench_srem(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..1000 {
         let cmd = SAddCommand {
@@ -71,7 +71,7 @@ fn bench_srem(c: &mut Criterion) {
 }
 
 fn bench_smembers(c: &mut Criterion) {
-    let mut store = StorageEngine::InMemory(InMemoryStore::new());
+    let mut store = StorageEngine::Memory(InMemoryStore::new());
 
     for i in 0..1000 {
         let cmd = SAddCommand {

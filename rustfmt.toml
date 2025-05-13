@@ -1,12 +1,26 @@
-# Используемое издание Rust
+# Форматирование кода
 edition = "2021"
 
 # Максимальная ширина строки
 max_width = 100
 
-# Табуляция через пробелы (4 пробела)
+# Пробелы вместо табуляции
 hard_tabs = false
 tab_spaces = 4
 
-# Не объединять короткие цепочки вызовов в одну строку
+# Ширина цепочек вызовов
 chain_width = 60
+
+[formatting]
+# Автоматическое раскладывание длинных массивов
+array_auto_expand = true
+array_auto_collapse = false
+
+# Комментарии и структура
+indent_string = "    "  # Отступы в 4 пробела
+indent_tables = false
+trailing_newline = true
+allowed_blank_lines = 1
+
+# Сортировка ключей в зависимостях
+reorder_keys = false

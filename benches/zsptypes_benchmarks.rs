@@ -5,7 +5,7 @@ use zumic::{
     database::{QuickList, Value},
     network::zsp::frame::zsp_types::{
         convert_hashset, convert_quicklist, convert_sds_to_frame, convert_smart_hash, convert_zset,
-        ZSPFrame,
+        ZspFrame,
     },
     Dict, Sds, SmartHash,
 };
@@ -90,9 +90,9 @@ fn bench_convert_zset(c: &mut Criterion) {
 fn bench_tryfrom_value_str(c: &mut Criterion) {
     let sds = Sds::from_str("some inline");
     let v = Value::Str(sds);
-    c.bench_function("ZSPFrame::try_from(Value::Str)", |b| {
+    c.bench_function("ZspFrame::try_from(Value::Str)", |b| {
         b.iter(|| {
-            let f = ZSPFrame::try_from(black_box(v.clone())).unwrap();
+            let f = ZspFrame::try_from(black_box(v.clone())).unwrap();
             black_box(f);
         })
     });
@@ -104,9 +104,9 @@ fn bench_tryfrom_value_list(c: &mut Criterion) {
         ql.push_back(Sds::from_str(&format!("val{i}")));
     }
     let v = Value::List(ql);
-    c.bench_function("ZSPFrame::try_from(Value::List)", |b| {
+    c.bench_function("ZspFrame::try_from(Value::List)", |b| {
         b.iter(|| {
-            let f = ZSPFrame::try_from(black_box(v.clone())).unwrap();
+            let f = ZspFrame::try_from(black_box(v.clone())).unwrap();
             black_box(f);
         })
     });

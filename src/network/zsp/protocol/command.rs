@@ -12,9 +12,9 @@ pub enum Command {
     Del { key: String },
     MSet { entries: Vec<(String, Value)> },
     MGet { keys: Vec<String> },
-    SetNX { key: String, value: Value },
+    SetNx { key: String, value: Value },
     Rename { from: String, to: String },
-    RenameNX { from: String, to: String },
+    RenameNx { from: String, to: String },
 
     // Авторизация
     Auth { user: Option<String>, pass: String },

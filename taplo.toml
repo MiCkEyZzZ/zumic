@@ -1,45 +1,13 @@
-# Включаем для всех Cargo.toml и cliff.toml
+# Включаем для всех Cargo.toml
 include = ["**/Cargo.toml"]
 
 [formatting]
-# Максимальная ширина строки, на которую ориентируется авто-разбор массивов
+# Сортировка ключей и раскладывание массивов
 column_width = 100
-
-# Отмена вертикального выравнивания ключей
-align_entries = false
-
-# При длинных массивах — раскладывать по строкам
 array_auto_expand = true
 array_auto_collapse = false
 compact_arrays = true
 compact_inline_tables = false
 array_trailing_comma = true
-
-# Отступы в 4 пробела
-indent_string = "    "
-indent_tables = false
-
-# Всегда в конце файла — перевод строки
+indent_string = "    "  # Отступы в 4 пробела
 trailing_newline = true
-# Не более одной пустой строки подряд
-allowed_blank_lines = 1
-
-# Сортировка ключей по алфавиту в секциях зависимостей
-reorder_keys = false
-
-# Правило для зависимостей в Cargo.toml и workspace
-[[rule]]
-# Эти секции внутри Cargo.toml
-keys = [
-  "dependencies",
-  "dev-dependencies",
-  "build-dependencies",
-  "target.*.dependencies",
-  "workspace.dependencies",
-]
-formatting = { reorder_keys = true }
-
-# Правило для секций package и workspace.package — не сортируем, чтобы сохранять твою ручную структуру
-[[rule]]
-keys = ["package", "workspace.package"]
-formatting = { reorder_keys = false }

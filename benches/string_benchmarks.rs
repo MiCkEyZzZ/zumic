@@ -5,7 +5,7 @@ use zumic::{
 };
 
 fn setup_store_with_str(key: &str, value: &str) -> StorageEngine {
-    let store = StorageEngine::InMemory(InMemoryStore::new());
+    let store = StorageEngine::Memory(InMemoryStore::new());
     store
         .set(&Sds::from_str(key), Value::Str(Sds::from_str(value)))
         .unwrap();
