@@ -109,31 +109,33 @@ fn encode_geohash_bits(lon: f64, lat: f64) -> u64 {
 
 /// decode из hash обратно в центре диапазона (для отладки).
 #[allow(dead_code)]
-fn decode_geohash_bits(mut hash: u64) -> (f64, f64) {
+fn decode_geohash_bits(hash: u64) -> (f64, f64) {
     let mut lon_min = -180.0;
     let mut lon_max = 180.0;
     let mut lat_min = -90.0;
     let mut lat_max = 90.0;
 
-    for _ in 0..26 {
-        let bit_lon = (hash & 0x8000_0000_0000_0000) != 0;
-        hash <<= 1;
+    for i in 0..26 {
+        // Извлекаем биты справа налево
+        let bit_idx = 2 * (25 - i);
+        let bit_lon = (hash >> (bit_idx + 1)) & 1;
+        let bit_lat = (hash >> bit_idx) & 1;
+
         let mid_lon = (lon_min + lon_max) * 0.5;
-        if bit_lon {
-            lon_min = mid_lon
+        if bit_lon == 1 {
+            lon_min = mid_lon;
         } else {
-            lon_max = mid_lon
+            lon_max = mid_lon;
         }
 
-        let bit_lat = (hash & 0x8000_0000_0000_0000) != 0;
-        hash <<= 1;
         let mid_lat = (lat_min + lat_max) * 0.5;
-        if bit_lat {
-            lat_min = mid_lat
+        if bit_lat == 1 {
+            lat_min = mid_lat;
         } else {
-            lat_max = mid_lat
+            lat_max = mid_lat;
         }
     }
+
     ((lon_min + lon_max) * 0.5, (lat_min + lat_max) * 0.5)
 }
 
