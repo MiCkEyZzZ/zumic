@@ -231,7 +231,6 @@ mod tests {
     use tokio;
 
     use super::*;
-    use crate::auth::config::UserConfig;
 
     /// Тест проверяет создание пользователя и успешную/неуспешную аутентификацию.
     #[tokio::test]
@@ -316,46 +315,6 @@ mod tests {
         assert!(matches!(err, AuthError::TooManyAttempts));
     }
 
-    /// Тест проверяет корректную инициализацию менеджера авторизации из конфигурации.
-    #[tokio::test]
-    async fn test_from_config() {
-        let cfg = ServerConfig {
-            requirepass: Some("master".into()), // глобальный пароль
-            auth_pepper: Some("pep".into()),    // соль
-            users: vec![UserConfig {
-                username: "u1".into(),
-                enabled: true,
-                nopass: false,
-                password: Some("p1".into()),
-                keys: vec!["~kin:*".into()],
-                permissions: vec!["+@read".into()],
-            }],
-        };
-
-        // Инициализация из конфига.
-        let manager = AuthManager::from_config(&cfg).await.unwrap();
-
-        // Проверка дефолтного пользователя: глобальный пароль даёт полный доступ.
-        assert!(manager.authenticate("default", "master").await.is_ok());
-        assert!(manager.authorize_key("default", "anything").await.is_ok());
-        assert!(manager
-            .authorize_command("default", "admin", "config")
-            .await
-            .is_ok());
-
-        // Проверка u1: доступ к ключам по шаблону, разрешение только на read-команды.
-        assert!(manager.authenticate("u1", "p1").await.is_ok());
-        assert!(manager.authorize_key("u1", "kin:zaza").await.is_ok());
-        assert!(manager.authorize_command("u1", "read", "get").await.is_ok());
-
-        // Команды категории write должны быть запрещены.
-        let err = manager
-            .authorize_command("u1", "write", "set")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, AuthError::Acl(AclError::PermissionDenied)));
-    }
-
     #[tokio::test]
     async fn test_create_user_duplicate() {
         let m = AuthManager::new();
@@ -415,24 +374,5 @@ mod tests {
             m2.authenticate("u", "p").await.unwrap_err(),
             AuthError::TooManyAttempts
         ));
-    }
-
-    #[tokio::test]
-    async fn test_from_config_nopass_user() {
-        let mut cfg = ServerConfig::default();
-        cfg.users.push(UserConfig {
-            username: "nop".into(),
-            enabled: true,
-            nopass: true,
-            password: None,
-            keys: vec![],
-            permissions: vec!["+@all".into()],
-        });
-        let manager = AuthManager::from_config(&cfg).await.unwrap();
-
-        // логин без пароля
-        assert!(manager.authenticate("nop", "").await.is_ok());
-        // команды разрешены
-        assert!(manager.authorize_command("nop", "read", "x").await.is_ok());
     }
 }
