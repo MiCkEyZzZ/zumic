@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn test_parse_float_valid_positive() {
         let mut decoder = ZspDecoder::new();
-        let mut slice = b",3.1415\r\n".as_ref();
+        let mut slice = b",3.141592653589793\r\n".as_ref();
         let frame = decoder.decode(&mut slice).unwrap().unwrap();
         assert_eq!(frame, ZspFrame::Float(PI));
     }
