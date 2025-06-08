@@ -1,26 +1,25 @@
-# Форматирование кода
+brace_style = "SameLineWhere"
+control_brace_style = "AlwaysSameLine"
+
 edition = "2021"
-
-# Максимальная ширина строки
 max_width = 100
-
-# Пробелы вместо табуляции
-hard_tabs = false
-tab_spaces = 4
-
-# Ширина цепочек вызовов
 chain_width = 60
 
+hard_tabs = false
+empty_item_single_line = true
+
 [formatting]
-# Автоматическое раскладывание длинных массивов
 array_auto_expand = true
 array_auto_collapse = false
+fn_single_line = false
+force_explicit_abi = true
 
-# Комментарии и структура
-indent_string = "    "  # Отступы в 4 пробела
-indent_tables = false
-trailing_newline = true
-allowed_blank_lines = 1
+imports_granularity = "Crate"
+imports_layout = "Mixed"
+imports_indent = "Block"
 
-# Сортировка ключей в зависимостях
-reorder_keys = false
+indent_style = "Block"
+indent_string = "    "
+tab_spaces = 4
+
+trailing_comma = "Vertical"

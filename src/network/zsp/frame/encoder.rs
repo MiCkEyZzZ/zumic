@@ -1,3 +1,5 @@
+// Copyright 2025 Zumic
+
 //! Энкодер ZSP (Zumic Serialization Protocol).
 //!
 //! Этот модуль предоставляет функциональность для кодирования

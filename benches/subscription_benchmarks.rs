@@ -1,5 +1,8 @@
 use bytes::Bytes;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::{Broker, Subscription};
 
 // Подставьте здесь ваше имя крайта и пути к модулям:

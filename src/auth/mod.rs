@@ -1,12 +1,12 @@
-//! Authentication and access control system.
+//! Система аутентификации и контроля доступа.
 //!
-//! This module provides components for managing users, permissions,
-//! and authentication mechanisms:
+//! Этот модуль предоставляет компоненты для управления
+//! пользователями, правами доступа и механизмами аутентификации:
 //!
-//! - `acl`: access control logic for managing user permissions.
-//! - `config`: configuration structures and utilities for authentication settings.
-//! - `manager`: central manager for users and access control rules.
-//! - `password`: password verification and hashing utilities.
+//! - `acl`: логика контроля доступа для управления правами пользователей.
+//! - `config`: структуры конфигурации и утилиты для настроек аутентификации.
+//! - `manager`: центральный менеджер для пользователей и правил контроля доступа.
+//! - `password`: утилиты для проверки и хеширования паролей.
 
 pub mod acl;
 pub mod config;

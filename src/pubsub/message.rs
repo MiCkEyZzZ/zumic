@@ -4,26 +4,26 @@ use bytes::Bytes;
 
 use super::intern_channel;
 
-/// Представляет одно сообщение в системе pub/sub.
+/// Represents a single message in the pub/sub system.
 ///
-/// Содержит:
-/// - имя канала, через который сообщение было отправлено;
-/// - полезную нагрузку сообщения в виде байтов.
+/// Contains:
+/// - The channel name through which the message was sent;
+/// - The message payload as bytes.
 ///
-/// Используется как в обычной подписке (`SUBSCRIBE`), так и в шаблонной (`PSUBSCRIBE`).
+/// Used for both standard subscriptions (`SUBSCRIBE`) and pattern-based subscriptions (`PSUBSCRIBE`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
-    /// Канал, в который было отправлено сообщение.
+    /// Channel to which the message was published.
     pub channel: Arc<str>,
-    /// Содержимое сообщения.
+    /// Message content.
     pub payload: Bytes,
 }
 
 impl Message {
-    /// Создаёт новое сообщение из канала и полезной нагрузки.
+    /// Creates a new message from a channel and payload.
     ///
-    /// Канал может быть строкой (`&str`, `String`, `Arc<str>`),
-    /// а полезная нагрузка — байтовыми данными (`Vec<u8>`, `&[u8]`, `Bytes`).
+    /// The channel can be any type implementing `AsRef<str>` (`&str`, `String`, `Arc<str>`),
+    /// and the payload can be any type convertible into `Bytes` (`Vec<u8>`, `&[u8]`, `Bytes`).
     pub fn new<S, P>(channel: S, payload: P) -> Self
     where
         S: AsRef<str>,
@@ -35,9 +35,10 @@ impl Message {
         }
     }
 
-    /// Создаёт сообщение из полностью статичных данных без копирования.
+    /// Creates a message from fully static data without copying.
     ///
-    /// Это самый быстрый способ создать сообщение, если и канал, и содержимое заданы как `'static`.
+    /// This is the fastest way to create a message if both the channel
+    /// and content are `'static`.
     pub fn from_static(channel: &'static str, payload: &'static [u8]) -> Self {
         Self {
             channel: intern_channel(channel),
@@ -50,7 +51,8 @@ impl Message {
 mod tests {
     use super::*;
 
-    /// Проверяет создание сообщения из строки и вектора: правильность канала и преобразование payload в Bytes.
+    /// Verifies creation of a message from a string and vector: correct channel
+    /// and conversion of payload to `Bytes`.
     #[test]
     fn test_from_and_vec() {
         let ch = "news";
@@ -60,7 +62,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from(pl_vec));
     }
 
-    /// Проверяет создание из String и Bytes, включая совпадение ссылок и содержимого.
+    /// Verifies creation from `String` and `Bytes`, including matching references and contents.
     #[test]
     fn new_from_string_and_bytes() {
         let ch_string = String::from("updates");
@@ -70,7 +72,7 @@ mod tests {
         assert_eq!(msg.payload, pl_bytes);
     }
 
-    /// Проверяет, что клон сохраняет указатели (Arc и Bytes) без копирования.
+    /// Verifies that `clone` preserves pointers (Arc and Bytes) without copying.
     #[test]
     fn clone_preserves_arc_and_bytes_zero_copy() {
         let msg1 = Message::new("chan", Bytes::from_static(b"x"));
@@ -82,7 +84,7 @@ mod tests {
         assert_eq!(msg2.payload.as_ptr(), bytes_ptr);
     }
 
-    /// Проверяет создание из статических данных без копирования (from_static).
+    /// Verifies creation from static data without copying (`from_static`).
     #[test]
     fn from_static_zero_copy() {
         let msg = Message::from_static("static_chan", b"data");
@@ -90,7 +92,8 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"data"));
     }
 
-    /// Сравнивает поведение `new` и `from_static`: каналы равны по значению, но не по указателям.
+    /// Compares behavior of `new` and `from_static`: channels equal by value,
+    /// and pointers equal due to interning.
     #[test]
     fn mix_new_and_from_static() {
         let m1 = Message::new("kin", b"dzadza".to_vec());
@@ -100,7 +103,7 @@ mod tests {
         assert!(Arc::ptr_eq(&m1.channel, &m2.channel));
     }
 
-    /// Проверяет корректную работу с пустыми каналом и payload (новый и from_static).
+    /// Verifies correct handling of empty channel and payload (new and from_static).
     #[test]
     fn empty_channel_and_payload() {
         let m = Message::new("", Vec::<u8>::new());
@@ -112,7 +115,7 @@ mod tests {
         assert!(m_static.payload.is_empty());
     }
 
-    /// Проверяет создание сообщения из среза и Bytes, сравнивает payload.
+    /// Verifies creation from slice and `Bytes`, comparing payload.
     #[test]
     fn new_from_slice_and_bytes_clone() {
         let slice = b"slice_data";
@@ -125,7 +128,7 @@ mod tests {
         assert_eq!(m2.payload, bytes);
     }
 
-    /// Проверяет создание из вектора и среза байтов, сравнивает payload с ожидаемым.
+    /// Verifies creation from vector and static slice, comparing payload with expected.
     #[test]
     fn new_from_vec_and_static() {
         let v = vec![9u8; 10];
@@ -136,7 +139,7 @@ mod tests {
         assert_eq!(m2.payload, Bytes::from_static(s));
     }
 
-    /// Проверяет, что два сообщения с одинаковыми каналами и payload равны.
+    /// Verifies that two messages with identical channels and payloads are equal.
     #[test]
     fn message_equality() {
         let a = Message::new("a", b"x".to_vec());
@@ -144,7 +147,7 @@ mod tests {
         assert_eq!(a, b);
     }
 
-    /// Проверяет, что формат Debug содержит канал и payload.
+    /// Checks that `Debug` output contains channel and payload.
     #[test]
     fn debug_contains_channel_and_payload() {
         let m = Message::new("dbg", b"z".to_vec());
@@ -154,7 +157,7 @@ mod tests {
         assert!(s.contains("dbg"));
     }
 
-    /// Проверяет, что клон большого payload не копирует данные (zero-copy).
+    /// Verifies that cloning a large payload does not copy data (zero-copy).
     #[test]
     fn large_payload_clone_zero_copy() {
         let big = vec![0u8; 1_000_000];
@@ -165,7 +168,7 @@ mod tests {
         assert_eq!(m2.payload.len(), big.len());
     }
 
-    /// Проверяет, что при создании из Arc<str> указатель сохраняется.
+    /// Verifies that creating from an `Arc<str>` retains the pointer.
     #[test]
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
@@ -173,27 +176,27 @@ mod tests {
         assert_eq!(&*arc, &*m.channel);
     }
 
-    /// Проверяет, что вызовы `from_static` с одинаковым именем канала
-    /// возвращают один и тот же `Arc<str>`, несмотря на разные payload.
+    /// Verifies that calls to `from_static` with the same channel name
+    /// return the same `Arc<str>`, despite different payloads.
     #[test]
     fn static_messages_share_pointer() {
         let m1 = Message::from_static("stat", b"1");
-        let m2 = Message::from_static("stat", b"2"); // payload отличается, но канал один и тот же
+        let m2 = Message::from_static("stat", b"2");
         assert!(
             Arc::ptr_eq(&m1.channel, &m2.channel),
-            "Одинаковые статичные каналы должны интернироваться в один Arc"
+            "Identical static channels should intern to the same Arc"
         );
     }
 
-    /// Проверяет, что `Message::new` и `Message::from_static` с одинаковым именем
-    /// используют один и тот же interned `Arc<str>` для канала.
+    /// Verifies that `Message::new` and `Message::from_static` with the same name
+    /// use the same interned `Arc<str>` for the channel.
     #[test]
     fn new_and_from_static_share_pointer() {
         let m1 = Message::new("mix", b"kin".to_vec());
         let m2 = Message::from_static("mix", b"dza");
         assert!(
             Arc::ptr_eq(&m1.channel, &m2.channel),
-            "new и from_static с одинаковым именем должны возвращать один Arc"
+            "new and from_static with the same name should return the same Arc"
         );
     }
 }

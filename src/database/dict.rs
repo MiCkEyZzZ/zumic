@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
+/// Hash table parameters
 const INITIAL_SIZE: usize = 4;
 const REHASH_BATCH: usize = 1;
 

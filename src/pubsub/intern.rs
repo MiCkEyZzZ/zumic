@@ -3,12 +3,12 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 
-/// Пул для повторного использования Arc<str> по одинаковым именам каналов.
-/// Crate-private: другие модули внутри этого крейта видят, а внешние — нет.
+/// A pool for reusing `Arc<str>` for identical channel names.
+/// Crate-private: visible to modules within this crate, but not externally.
 static CHANNEL_INTERN: Lazy<DashMap<String, Arc<str>>> = Lazy::new(DashMap::new);
 
-/// Возвращает interned Arc<str> для данного канала.
-/// При первом вызове для нового имени создаёт Arc<str> и сохраняет его в пуле.
+/// Returns an interned `Arc<str>` for the given channel name.
+/// On first invocation for a new name, creates an `Arc<str>` and stores it in the pool.
 #[inline(always)]
 pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
     let key = chan.as_ref();
@@ -26,46 +26,46 @@ pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
 mod tests {
     use super::*;
 
-    /// Проверяет, что при первом вызове создаётся Arc<str> с правильным содержимым,
-    /// а при повторном — возвращается тот же самый объект (zero-copy).
+    /// Verifies that the first call creates an `Arc<str>` with the correct contents,
+    /// and a subsequent call returns the same object (zero-copy).
     #[test]
     fn intern_new_and_repeats() {
-        // первый раз создаётся Arc<str> с нужным текстом.
+        // First call creates an Arc<str> with the expected text.
         let a1 = intern_channel("kin");
         assert_eq!(&*a1, "kin");
 
-        // второй раз pointer должен совпадать
+        // Second call should return the identical Arc by pointer.
         let a2 = intern_channel("kin");
-        assert!(
-            Arc::ptr_eq(&a1, &a2),
-            "Должен вернуть тот же Arc по указателю"
-        );
+        assert!(Arc::ptr_eq(&a1, &a2), "Should return the same Arc instance");
     }
 
-    /// Проверяет, что для разных имён каналов создаются разные Arc<str>.
+    /// Verifies that different channel names produce distinct `Arc<str>`.
     #[test]
     fn intern_different_keys() {
-        // два разных имени - разные Arc
+        // Two different names → two different Arcs
         let a1 = intern_channel("dzadza");
         let a2 = intern_channel("maz");
         assert_eq!(&*a1, "dzadza");
         assert_eq!(&*a2, "maz");
-        assert!(!Arc::ptr_eq(&a1, &a2), "Разные ключи - разные Arc");
+        assert!(
+            !Arc::ptr_eq(&a1, &a2),
+            "Different keys should yield different Arcs"
+        );
     }
 
-    /// Проверяет, что строка из String и строковый литерал с одинаковым содержимым
-    /// интернируются в один Arc<str>.
+    /// Verifies that both a `String` and a string literal with the same contents
+    /// are interned to the same `Arc<str>`.
     #[test]
     fn intern_mixed_static_and_string() {
-        // строковый и статичный вариант при одинаковом тексте.
+        // String and literal variants with identical text.
         let s = String::from("hello");
         let a1 = intern_channel(&s as &str);
         let a2 = intern_channel("hello");
-        assert!(Arc::ptr_eq(&a1, &a2), "Arc должен выдаваться единообразно");
+        assert!(Arc::ptr_eq(&a1, &a2), "Arc instances should be identical");
     }
 
-    /// Проверяет, что при конкурентных вызовах `intern_channel`
-    /// для одинаковых строк в разных потоках возвращается один и тот же `Arc<str>`.
+    /// Verifies that concurrent calls to `intern_channel`
+    /// for the same string across threads return the same `Arc<str>`.
     #[test]
     fn intern_concurrent() {
         let keys = ["a", "b", "a", "c", "b", "a"];
@@ -76,14 +76,13 @@ mod tests {
 
         let arcs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
-        // все "a" каналы должны указывать на один Arc.
+        // All `"a"` channels should point to the same Arc.
         let a1 = arcs[0].clone();
 
-        // `arc` is an `&Arc<str>` here, so `(*arc).as_ref()` yields `&str`.
         for arc in arcs.iter().filter(|arc| (*arc).as_ref() == "a") {
             assert!(
                 Arc::ptr_eq(&a1, arc),
-                "Все interned для \"a\" должны ссылаться на один Arc"
+                "All interned Arcs for \"a\" should refer to the same instance"
             );
         }
     }

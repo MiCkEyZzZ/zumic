@@ -1,5 +1,8 @@
 use bytes::BytesMut;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::database::sds::Sds;
 
 const INLINE_STR: &str = "short_str"; // длина < 22

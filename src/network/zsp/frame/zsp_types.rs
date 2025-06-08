@@ -1,9 +1,11 @@
-//! Типы ZSP (Zumic Serialization Protocol).
+// Copyright 2025 Zumic
+
+//! ZSP (Zumic Serialization Protocol) Types.
 //!
-//! Протокол ZSP — это текстово-бинарный протокол с расширенным
-//! набором типов. Здесь определён enum `ZSPFrame<'a>`, а также
-//! конвертации из внутренних типов `Value`, `Sds`, `SmartHash`
-//! и т. д.
+//! The ZSP protocol is a text-binary protocol with an extended
+//! set of data types. This module defines the `ZspFrame<'a>` enum,
+//! along with conversions from internal types such as `Value`,
+//! `Sds`, `SmartHash`, etc.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -11,15 +13,19 @@ use std::convert::TryFrom;
 
 use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
-/// Типы фреймов, поддерживаемые протоколом ZSP.
+/// Frame types supported by the ZSP protocol.
 ///
-/// Включает в себя различные виды данных, которые могут быть
-/// переданы в рамках протокола: быть переданы в рамках протокола:
-/// - Простые строки
-/// - Ошибки
-/// - Целые числа
-/// - Двоичные строки
-/// - Массивы и словари
+/// Represents the various data kinds that can be transmitted
+/// in the protocol, including:
+/// - Simple strings
+/// - Errors
+/// - Integers
+/// - Floats
+/// - Binary strings (optional)
+/// - Arrays
+/// - Dictionaries (key-value maps)
+/// - ZSets (sorted sets with float scores)
+/// - Nulls
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZspFrame<'a> {
     InlineString(Cow<'a, str>),
@@ -36,6 +42,7 @@ pub enum ZspFrame<'a> {
 impl TryFrom<Value> for ZspFrame<'_> {
     type Error = String;
 
+    /// Attempts to convert a `Value` to a `ZspFrame`, handling various types.
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
             Value::Str(s) => convert_sds_to_frame(s),
@@ -43,22 +50,23 @@ impl TryFrom<Value> for ZspFrame<'_> {
             Value::Float(f) => Ok(Self::Float(f)),
             Value::List(list) => convert_quicklist(list),
             Value::Set(set) => convert_hashset(set),
-            // Теперь Value::Hash сохраняет SmartHash, поэтому вызываем новую конвертацию.
             Value::Hash(smart_hash) => convert_smart_hash(smart_hash),
             Value::ZSet { dict, .. } => convert_zset(dict),
             Value::Null => Ok(ZspFrame::Null),
-            // Игнорировать неподдерживаемые типы
             Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
         }
     }
 }
 
 impl From<Sds> for ZspFrame<'_> {
+    /// Converts an `Sds` into a binary string ZSP frame.
     fn from(value: Sds) -> Self {
         ZspFrame::BinaryString(Some(value.to_vec()))
     }
 }
 
+/// Converts an `Sds` into a ZSP frame. Tries to parse it as a UTF-8 string.
+/// If parsing succeeds, returns an InlineString. Otherwise, returns a BinaryString.
 pub fn convert_sds_to_frame<'a>(sds: Sds) -> Result<ZspFrame<'a>, String> {
     let bytes = sds.as_ref();
     match std::str::from_utf8(bytes) {
@@ -67,6 +75,7 @@ pub fn convert_sds_to_frame<'a>(sds: Sds) -> Result<ZspFrame<'a>, String> {
     }
 }
 
+/// Converts a `QuickList<Sds>` into a ZSP Array frame, wrapping each element in a BinaryString.
 pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZspFrame<'a>, String> {
     let mut frames = Vec::with_capacity(list.len());
     for item in list.iter() {
@@ -75,6 +84,8 @@ pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZspFrame<'a>, Strin
     Ok(ZspFrame::Array(frames))
 }
 
+/// Converts a `HashSet<Sds>` into a ZSP Array frame, trying to convert each `Sds`
+/// to either an InlineString or BinaryString.
 pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZspFrame<'a>, String> {
     let mut frames = Vec::with_capacity(set.len());
     for item in set {
@@ -83,7 +94,10 @@ pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZspFrame<'a>, String> {
     Ok(ZspFrame::Array(frames))
 }
 
-/// Новая функция для конвертации SmartHash в ZSPFrame::Dictionary
+/// Converts a `SmartHash` (like a HashMap<Sds, Sds | Value>) into a ZSP Dictionary frame.
+///
+/// Each key is converted into a `Cow<str>` (requiring valid UTF-8).
+/// Values are converted recursively into `ZspFrame`s.
 #[inline]
 pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZspFrame<'a>, String> {
     let mut map = HashMap::with_capacity(smart.len());
@@ -97,6 +111,9 @@ pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZspFrame<'a>, Stri
     Ok(ZspFrame::Dictionary(map))
 }
 
+/// Converts a ZSet represented as `Dict<Sds, f64>` into a ZSet frame (Vec<(String, f64)>).
+///
+/// Keys must be valid UTF-8, otherwise an error is returned.
 #[inline]
 pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZspFrame<'a>, String> {
     let mut pairs = Vec::with_capacity(dict.len());

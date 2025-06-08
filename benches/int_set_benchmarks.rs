@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
 use zumic::database::int_set::IntSet;
 
 fn bench_insert_small(c: &mut Criterion) {

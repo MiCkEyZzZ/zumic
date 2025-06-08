@@ -1,5 +1,5 @@
-# Основные настройки для Clippy
-upper-case-acronyms-aggressive = true  # Жёсткое соблюдение стиля для акронимов
+# Primary settings for Clippy
+upper-case-acronyms-aggressive = true  # Enforce strict style for acronyms
 
-# Немного расслаблены правила, чтобы не блокировать полезный код
-avoid-breaking-exported-api = false  # Не блокировать изменения в экспортируемых API
+# Slightly relaxed rules to avoid blocking useful code
+avoid-breaking-exported-api = false  # Do not block changes to exported APIs

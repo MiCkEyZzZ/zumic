@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use zumic::network::zsp::frame::decoder::ZspDecoder;
 
 fn bench_simple_string(c: &mut Criterion) {
