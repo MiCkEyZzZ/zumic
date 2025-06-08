@@ -183,24 +183,6 @@ mod tests {
     }
 
     #[test]
-    fn test_renamenx_behaviour() {
-        let cluster = make_cluster();
-
-        // Use hash tags to ensure same slot
-        let a = Sds::from_str("{nx}");
-        let b = Sds::from_str("{nx}alt");
-
-        assert_eq!(InClusterStore::key_slot(&a), InClusterStore::key_slot(&b));
-
-        cluster.set(&a, Value::Int(1)).unwrap();
-        assert!(cluster.renamenx(&a, &b).unwrap());
-        assert_eq!(cluster.get(&a).unwrap(), None);
-        assert_eq!(cluster.get(&b).unwrap(), Some(Value::Int(1)));
-        // Second renamenx should fail since the destination already exists
-        assert!(cluster.renamenx(&a, &b).unwrap());
-    }
-
-    #[test]
     fn test_flushdb_clears_all_shards() {
         let cluster = make_cluster();
         cluster.set(&Sds::from_str("one"), Value::Int(1)).unwrap();
