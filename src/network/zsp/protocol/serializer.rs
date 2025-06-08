@@ -74,7 +74,7 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
                 .collect();
             ZspFrame::Array(frames)
         }
-        Value::HyperLogLog(_) => ZspFrame::InlineString("HLL(NotImplemented)".into()),
+        Value::HyperLogLog(_) => ZspFrame::InlineString("Hll(NotImplemented)".into()),
         Value::SStream(_) => ZspFrame::InlineString("SStream(NotImplemented)".into()),
     }
 }
