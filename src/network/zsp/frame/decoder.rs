@@ -490,6 +490,7 @@ impl Default for ZspDecoder<'_> {
 mod tests {
     use super::*;
     use crate::network::zsp::frame::encoder::ZspEncoder;
+    const TEST_PI: f64 = 3.1415;
 
     /// Тест для строк в формате inline
     /// Проверка декодирования строки, начинающейся с '+'
@@ -614,7 +615,7 @@ mod tests {
         let mut decoder = ZspDecoder::new();
         let mut slice = b",3.1415\r\n".as_ref();
         let frame = decoder.decode(&mut slice).unwrap().unwrap();
-        assert_eq!(frame, ZspFrame::Float(3.1415));
+        assert_eq!(frame, ZspFrame::Float(TEST_PI));
     }
 
     /// Тест для проверки на корректное отрицательное число.
