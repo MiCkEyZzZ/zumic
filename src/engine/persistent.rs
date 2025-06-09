@@ -180,7 +180,7 @@ mod tests {
 
         // Delete the value.
         let del_count = store.del(&key)?;
-        assert_eq!(del_count, true);
+        assert!(del_count);
 
         // Try to get the value after deletion.
         let retrieved = store.get(&key)?;

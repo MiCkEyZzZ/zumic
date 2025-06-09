@@ -1,10 +1,10 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, io::Cursor};
 
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
 use super::{Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
-use crate::{StoreError, StoreResult};
+use crate::engine::{decode, encode};
 
 /// Represents a generic value in the storage engine.
 ///
@@ -47,13 +47,16 @@ pub enum Value {
 }
 
 impl Value {
-    /// Serializes the `Value` into JSON bytes.
+    /// Сериализация через ZDB encode
     pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("Value serialization failed")
+        let mut buf = Vec::new();
+        encode::write_value(&mut buf, self).expect("ZDB serialization failed");
+        buf
     }
 
-    /// Deserializes a `Value` from JSON bytes.
-    pub fn from_bytes(bytes: &[u8]) -> StoreResult<Value> {
-        serde_json::from_slice(bytes).map_err(|e| StoreError::SerdeError(e.to_string()))
+    /// Десериализация через твой ZDB decode
+    pub fn from_bytes(bytes: &[u8]) -> crate::StoreResult<Value> {
+        let mut cursor = Cursor::new(bytes);
+        decode::read_value(&mut cursor).map_err(|e| crate::StoreError::SerdeError(e.to_string()))
     }
 }
