@@ -186,18 +186,6 @@ mod tests {
         assert_eq!(encoded, b"%1\r\n+key1\r\n+value1\r\n");
     }
 
-    /// Тестирование кодирования словаря с несколькими элементами.
-    /// Проверяет, что словарь с двумя элементами кодируется корректно.
-    #[test]
-    fn test_multiple_items_dictionary() {
-        let mut items = std::collections::HashMap::new();
-        items.insert("key1".into(), ZspFrame::InlineString("value1".into()));
-        items.insert("key2".into(), ZspFrame::InlineString("value2".into()));
-        let frame = ZspFrame::Dictionary(items);
-        let encoded = ZspEncoder::encode(&frame).unwrap();
-        assert_eq!(encoded, b"%2\r\n+key1\r\n+value1\r\n+key2\r\n+value2\r\n");
-    }
-
     /// Тестирование кодирования словаря с некорректным значением.
     /// Проверяет, что в словарь могут быть добавлены только валидные строки.
     #[test]

@@ -107,3 +107,73 @@ pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{engine::read_value, Sds};
+
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_write_read_int() {
+        let original = Value::Int(-123456);
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_write_read_float() {
+        let original = Value::Float(std::f64::consts::PI);
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+
+        match decoded {
+            Value::Float(f) => assert!((f - std::f64::consts::PI).abs() < 1e-10),
+            _ => panic!("Expected Float"),
+        }
+    }
+
+    #[test]
+    fn test_write_read_bool() {
+        let original = Value::Bool(true);
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_write_read_null() {
+        let original = Value::Null;
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_write_read_str() {
+        let original = Value::Str(Sds::from_str("hello"));
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+
+        assert_eq!(decoded, original);
+    }
+}
