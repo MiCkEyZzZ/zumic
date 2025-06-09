@@ -6,55 +6,75 @@ use serde::{Deserialize, Serialize};
 use super::{Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
 use crate::engine::{decode, encode};
 
-/// Represents a generic value in the storage engine.
+/// Представляет универсальное значение в движке хранения данных.
 ///
-/// This serves as the primary container for various supported data types:
-/// strings, integers, floating-point numbers, `null`, collections (lists,
-/// sets, hashes, sorted sets), as well as more complex structures like
-/// HyperLogLog and streams.
+/// Это основной контейнер для различных поддерживаемых типов данных:
+/// строк, целых и числовых значений с плавающей точкой, `null`,
+/// коллекций (списки, множества, хэши, отсортированные множества),
+/// а также более сложных структур — HyperLogLog и потоков.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Value {
-    /// A binary-safe string.
+    /// Безопасная бинарная строка.
     Str(Sds),
-    /// A 64-bit floating-point number.
+
+    /// Целое 64-битное число.
     Int(i64),
-    /// A 64-bit floating-point number.
+
+    /// Число с плавающей точкой двойной точности (64-бит).
     Float(f64),
+
     /// Булево значение.
     Bool(bool),
-    /// A `null` type (used to represent absence of value or deletion).
+
+    /// Тип `null` — отсутствие значения или удаление.
     Null,
-    /// A list of binary strings, implemented using `QuickList`.
+
+    /// Список бинарных строк, реализованный через `QuickList`.
     List(QuickList<Sds>),
-    /// A hash map (dictionary), stored as `SmartHash`.
+
+    /// Хэш-таблица (словарь), реализованная через `SmartHash`.
     Hash(SmartHash),
-    /// A sorted set with score-based ordering.
+
+    /// Отсортированное множество с упорядочиванием по скору.
     ///
-    /// The `dict` field maps each element to its score,
-    /// while `sorted` maintains the order of elements by score.
+    /// Поле `dict` сопоставляет элементу его скор,
+    /// а `sorted` поддерживает порядок элементов по значению скора.
     ZSet {
-        /// Maps each element to its score.
+        /// Отображение элементов в их скор.
         dict: Dict<Sds, f64>,
-        /// Maintains elements ordered by their score.
+
+        /// Структура для поддержания сортировки по скору.
         sorted: SkipList<OrderedFloat<f64>, Sds>,
     },
-    /// A set of unique string elements.
+
+    /// Множество уникальных строковых элементов.
     Set(HashSet<Sds>),
-    /// A HyperLogLog structure for approximate cardinality estimation.
+
+    /// Структура HyperLogLog для приблизительного подсчёта количества уникальных элементов.
     HyperLogLog(Box<Hll>),
-    /// A stream of entries, each identified by an ID and a set of fields.
+
+    /// Поток записей, каждая из которых идентифицируется ID и набором полей.
     SStream(Vec<StreamEntry>),
 }
 
 impl Value {
-    /// Сериализация через ZDB encode
+    /// Сериализует значение в бинарный формат через ZDB encode.
+    ///
+    /// Возвращает вектор байт с закодированным значением.
+    ///
+    /// # Паника
+    ///
+    /// Паника при ошибке сериализации, так как предполагается
+    /// корректность данных.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         encode::write_value(&mut buf, self).expect("ZDB serialization failed");
         buf
     }
 
-    /// Десериализация через твой ZDB decode
+    /// Десериализует значение из бинарного формата через ZDB decode.
+    ///
+    /// Возвращает результат с десериализованным значением или ошибку.
     pub fn from_bytes(bytes: &[u8]) -> crate::StoreResult<Value> {
         let mut cursor = Cursor::new(bytes);
         decode::read_value(&mut cursor).map_err(|e| crate::StoreError::SerdeError(e.to_string()))
