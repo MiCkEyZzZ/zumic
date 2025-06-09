@@ -8,10 +8,10 @@ use std::{
 
 use tempfile::NamedTempFile;
 
-/// 4-byte magic header for the AOF file format (version identifier).
+/// 4-байтовый магический заголовок для формата AOF (идентификатор версии).
 const MAGIC: &[u8; 4] = b"AOF1";
 
-/// Operation code used in AOF log.
+/// Коды операций, используемые в журнале AOF.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AofOp {
@@ -19,18 +19,18 @@ pub enum AofOp {
     Del = 2,
 }
 
-/// How often to flush the AOF buffer to disk.
+/// Политика синхронизации — как часто сбрасывать буфер AOF на диск.
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
-    /// fsync/flush after every command (max durability, lowest, throughput).
+    /// fsync/flush после каждой команды (максимальная надёжность, минимальная производительность).
     Always,
-    /// flush in background once per second.
+    /// сброс раз в секунду в фоне.
     EverySec,
-    /// never explicitly flush (leave to OS).
+    /// не сбрасывать явно (полагаемся на ОС).
     No,
 }
 
-/// Append-Only File (AOF) log with buffered writing and safe replay functionality.
+/// Журнал AOF (Append-Only File) с буферизованной записью и безопасным воспроизведением.
 pub struct AofLog {
     writer: BufWriter<File>,
     reader: File,
@@ -38,17 +38,17 @@ pub struct AofLog {
 }
 
 impl AofLog {
-    /// Opens (or creates) the AOF file with the given sync policy,
-    /// and verifies or writes the magic header.
+    /// Открывает (или создаёт) файл AOF с заданной политикой синхронизации,
+    /// проверяет или записывает магический заголовок.
     pub fn open<P: AsRef<Path>>(path: P, policy: SyncPolicy) -> io::Result<Self> {
-        // Open the file for reading and appending.
+        // Открываем файл для чтения и дозаписи.
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .append(true)
             .open(&path)?;
 
-        // Read or initialize the magic header.
+        // Читаем или инициализируем магический заголовок.
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
@@ -60,16 +60,16 @@ impl AofLog {
                     ));
                 }
             } else {
-                // Empty file - write the header.
+                // Пустой файл — записываем заголовок.
                 file.seek(io::SeekFrom::Start(0))?;
                 file.write_all(MAGIC)?;
                 file.flush()?;
             }
         }
 
-        // Reset the file cursor to the beginning for reading.
+        // Сброс курсора в начало для чтения.
         file.seek(io::SeekFrom::Start(0))?;
-        // Create a separate buffered writer.
+        // Отдельный файл для записи.
         let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
 
         let log = AofLog {
@@ -78,7 +78,7 @@ impl AofLog {
             policy,
         };
 
-        // If EverySec, spawn background flusher.
+        // Если выбрана EverySec, запускаем фоновый flusher.
         if let SyncPolicy::EverySec = log.policy {
             let writer_clone = log.writer.get_ref().try_clone()?;
             thread::spawn(move || {
@@ -93,7 +93,7 @@ impl AofLog {
         Ok(log)
     }
 
-    /// Appends a SET operation to the AOF log.
+    /// Добавляет SET-операцию в журнал AOF.
     pub fn append_set(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Set as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
@@ -104,7 +104,7 @@ impl AofLog {
         Ok(())
     }
 
-    /// Appends a DEL operation to the AOF log.
+    /// Добавляет DEL-операцию в журнал AOF.
     pub fn append_del(&mut self, key: &[u8]) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Del as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
@@ -113,32 +113,32 @@ impl AofLog {
         Ok(())
     }
 
-    /// Replays all operations in the log by calling the provided callback for each entry.
+    /// Воспроизводит все операции из журнала, вызывая заданный callback для каждой записи.
     pub fn replay<F>(&mut self, mut f: F) -> io::Result<()>
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        // Reset reader to the beginning.
+        // Сбросываем считыватель в начало.
         self.reader.seek(io::SeekFrom::Start(0))?;
 
-        // Read and validate the magic header.
+        // Читаем и проверяем магический заголовок.
         let mut header = [0u8; 4];
         self.reader.read_exact(&mut header)?;
         if &header != MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
         }
 
-        // Read the full log contents into memory.
+        // Считываем полное содержимое журнала в память.
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
         let mut pos = 0;
 
         while pos < buf.len() {
-            // Read operation code.
+            // Читаем код операции.
             let op = AofOp::try_from(buf[pos])?;
             pos += 1;
 
-            // Read key.
+            // Читаем ключ.
             let key_len = Self::read_u32(&buf, &mut pos)? as usize;
             if pos + key_len > buf.len() {
                 return Err(io::Error::new(
@@ -149,7 +149,7 @@ impl AofLog {
             let key = buf[pos..pos + key_len].to_vec();
             pos += key_len;
 
-            // If SET, read value.
+            // Если SET, читаем значение.
             let val = if op == AofOp::Set {
                 let vlen = Self::read_u32(&buf, &mut pos)? as usize;
                 if pos + vlen > buf.len() {
@@ -171,8 +171,8 @@ impl AofLog {
         Ok(())
     }
 
-    /// Compacts the AOF by writing only the latest SET for each key from `live`
-    /// into a new temporary file and atomically swapping it with the current one.
+    /// Сжимает (перезаписывает) AOF: оставляет только последние SET-операции из `live`,
+    /// записывает их в новый временный файл и атомарно заменяет текущий.
     pub fn rewrite<I, P>(&mut self, path: P, live: I) -> io::Result<()>
     where
         I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
@@ -197,7 +197,7 @@ impl AofLog {
         }
         tmp.flush()?;
 
-        // Atomically replace старые файлы.
+        // Атомарно заменяем старый файл.
         tmp.persist(path)?;
 
         // После замены - нужно обновить writer и reader в AofLog:
@@ -215,13 +215,13 @@ impl AofLog {
         Ok(())
     }
 
-    /// Helper to write a u32 in big-endian format.
+    /// Утилита для записи `u32` в формате big-endian.
     #[inline]
     fn write_32<W: Write>(w: &mut W, v: u32) -> io::Result<()> {
         w.write_all(&v.to_be_bytes())
     }
 
-    /// Safely reads a u32 in big-endian format from a buffer with bounds checking.
+    /// Безопасно читает `u32` из буфера в формате big-endian, с проверкой границ.
     #[inline]
     fn read_u32(buf: &[u8], pos: &mut usize) -> io::Result<u32> {
         if *pos + 4 > buf.len() {
@@ -236,12 +236,12 @@ impl AofLog {
         Ok(u32::from_be_bytes(arr))
     }
 
-    /// Flush helper: obeys sync policy.
+    /// Выполняет flush согласно текущей политике синхронизации.
     fn maybe_flush(&mut self) -> io::Result<()> {
         match self.policy {
             SyncPolicy::Always => self.writer.flush(),
             SyncPolicy::EverySec => Ok(()),
-            SyncPolicy::No => Ok(()), // background thread will flush
+            SyncPolicy::No => Ok(()), // будет сброшено фоном
         }
     }
 }
@@ -266,7 +266,8 @@ mod tests {
 
     use super::*;
 
-    /// Helper function to test append_set and append_del followed by replay under a given sync policy.
+    /// Вспомогательная функция для проверки append_set и append_del с последующим воспроизведением
+    /// в соответствии с заданной политикой синхронизации.
     fn run_append_replay(policy: SyncPolicy) -> io::Result<()> {
         let temp_file = NamedTempFile::new()?;
         let path = temp_file.path();
@@ -294,25 +295,25 @@ mod tests {
         Ok(())
     }
 
-    /// Verifies append and replay behavior with SyncPolicy::Always
+    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::Always
     #[test]
     fn test_always_policy() {
         run_append_replay(SyncPolicy::Always).unwrap();
     }
 
-    /// Verifies append and replay behavior with SyncPolicy::EverySec
+    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::EverySec
     #[test]
     fn test_everysec_policy() {
         run_append_replay(SyncPolicy::EverySec).unwrap();
     }
 
-    /// Verifies append and replay behavior with SyncPolicy::No
+    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::No
     #[test]
     fn test_no_policy() {
         run_append_replay(SyncPolicy::No).unwrap();
     }
 
-    /// Tests multiple SET operations under all sync policies and verifies replay order.
+    /// Тестирует несколько операций SET при всех политиках синхронизации и проверяет порядок воспроизведения.
     #[test]
     fn test_append_multiple_set_under_all_policies() {
         for policy in &[SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No] {
@@ -341,8 +342,8 @@ mod tests {
         }
     }
 
-    /// Tests that `rewrite()` compacts the AOF by keeping only the latest SET operations
-    /// and removing overwritten or deleted keys.
+    /// Проверяет, что `rewrite()` сжимает AOF, сохраняя только последние операции SET и
+    /// удаляя перезаписанные или удаленные ключи.
     #[test]
     fn test_rewrite_compacts_log() -> io::Result<()> {
         // Create AOF with duplicate keys and deletions
@@ -356,7 +357,7 @@ mod tests {
         log.append_set(b"k3", b"v3")?;
         drop(log);
 
-        // Collect in-memory "live" pairs, as in Storage::new
+        // Собираем в памяти «живые» пары, как в Storage::new
         let mut live_map = std::collections::HashMap::new();
         {
             let mut rlog = AofLog::open(&path, SyncPolicy::Always)?;
@@ -370,16 +371,16 @@ mod tests {
             })?;
         }
 
-        // Call rewrite
+        // Перезаписываем вызовы
         let mut clog = AofLog::open(&path, SyncPolicy::Always)?;
         clog.rewrite(&path, live_map.clone().into_iter())?;
 
-        // After rewrite the log should contain only the actual SET for each key
+        // После перезаписи журнал должен содержать только фактический SET для каждого ключа
         let mut seq = Vec::new();
         let mut rlog2 = AofLog::open(&path, SyncPolicy::Always)?;
         rlog2.replay(|op, key, val| seq.push((op, key, val)))?;
 
-        // Check that the order can be any, but the values must match
+        // Проверьте, что порядок может быть любым, но значения должны совпадать
         let mut seen = std::collections::HashMap::new();
         for (op, key, val) in seq {
             assert_eq!(op, AofOp::Set);

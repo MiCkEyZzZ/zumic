@@ -3,15 +3,28 @@ use std::sync::Arc;
 use super::Storage;
 use crate::{Sds, StoreError, StoreResult, Value};
 
+/// Количество слотов в кластере.
 pub const SLOT_COUNT: usize = 16384;
 
+/// Реализация распределённого хранилища с маршрутизацией по слотам.
+///
+/// `InClusterStore` позволяет использовать несколько `Storage`-шардов.
+/// Каждый ключ маршрутизируется в один из шардов на основе слота (slot),
+/// вычисленного из значения ключа с использованием CRC16.
+///
+/// Распределение слотов между шардов происходит по кругу (round-robin)
+/// при инициализации.
 #[derive(Clone)]
 pub struct InClusterStore {
     pub shards: Vec<Arc<dyn Storage>>,
-    pub slots: Vec<usize>, // length: 16384, each slot maps to an index in `shards`
+    pub slots: Vec<usize>, // длина: 16384, каждый слот сопоставляется с индексом в `shards`
 }
 
 impl InClusterStore {
+    /// Создаёт новый кластер, распределяя 16384 слота равномерно между шардов.
+    ///
+    /// # Паника
+    /// Паника произойдёт, если `shards` пуст.
     pub fn new(shards: Vec<Arc<dyn Storage>>) -> Self {
         let mut slots = vec![0; SLOT_COUNT];
         for (i, slot) in slots.iter_mut().enumerate() {
@@ -20,13 +33,21 @@ impl InClusterStore {
         Self { shards, slots }
     }
 
+    /// Вычисляет слот (от 0 до 16383) для данного ключа.
+    ///
+    /// Если в ключе присутствует подстрока в фигурных скобках (`{}`), хешируется только она.
+    /// Это позволяет контролировать маршрутизацию ключей на уровне приложения
+    /// и гарантировать, что определённые ключи попадут на один и тот же шард.
+    ///
+    /// В противном случае, хешируется весь ключ.
+    ///
+    /// Используется алгоритм CRC16 (XMODEM).
     fn key_slot(key: &Sds) -> usize {
         use crc16::State;
         use crc16::XMODEM;
 
         let bytes = key.as_bytes();
 
-        // Look for a substring between '{' and '}', if present
         if let Some(start) = bytes.iter().position(|&b| b == b'{') {
             if let Some(end) = bytes[start + 1..].iter().position(|&b| b == b'}') {
                 let tag = &bytes[start + 1..start + 1 + end];
@@ -35,11 +56,11 @@ impl InClusterStore {
             }
         }
 
-        // Otherwise, hash the entire key
         let hash = State::<XMODEM>::calculate(bytes);
         (hash as usize) % SLOT_COUNT
     }
 
+    /// Возвращает шард, на который должен быть направлен данный ключ.
     fn get_shard(&self, key: &Sds) -> Arc<dyn Storage> {
         let slot = Self::key_slot(key);
         let shard_idx = self.slots[slot];
@@ -48,18 +69,24 @@ impl InClusterStore {
 }
 
 impl Storage for InClusterStore {
+    /// Устанавливает значение для ключа на соответствующем шарде.
     fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         self.get_shard(key).set(key, value)
     }
 
+    /// Получает значение ключа с соответствующего шарда.
     fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
         self.get_shard(key).get(key)
     }
 
+    /// Удаляет ключ с соответствующего шарда.
     fn del(&self, key: &Sds) -> StoreResult<i64> {
         self.get_shard(key).del(key)
     }
 
+    /// Устанавливает несколько пар ключ-значение.
+    ///
+    /// Все ключи могут располагаться на разных шардах.
     fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         for (k, v) in entries {
             self.set(k, v)?;
@@ -67,10 +94,16 @@ impl Storage for InClusterStore {
         Ok(())
     }
 
+    /// Получает значения для нескольких ключей.
+    ///
+    /// Все ключи могут располагаться на разных шардах.
     fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
         keys.iter().map(|key| self.get(key)).collect()
     }
 
+    /// Переименовывает ключ, если оба находятся на одном шарде.
+    ///
+    /// Возвращает ошибку `StoreError::WrongShard`, если `from` и `to` попадают на разные шарды.
     fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
         let from_shard = self.get_shard(from);
         let to_shard = self.get_shard(to);
@@ -83,6 +116,9 @@ impl Storage for InClusterStore {
         Ok(())
     }
 
+    /// То же, что и `rename`, но не переименовывает, если целевой ключ уже существует.
+    ///
+    /// Возвращает `Ok(true)`, если переименование произошло, иначе `Ok(false)`.
     fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
         let from_shard = self.get_shard(from);
         let to_shard = self.get_shard(to);
@@ -98,6 +134,7 @@ impl Storage for InClusterStore {
         Ok(true)
     }
 
+    /// Полностью очищает все шардированные хранилища.
     fn flushdb(&self) -> StoreResult<()> {
         for shard in &self.shards {
             shard.flushdb()?;
@@ -111,7 +148,9 @@ mod tests {
     use super::*;
     use crate::InMemoryStore;
 
-    // Helper: creates a cluster with two in-memory shards.
+    /// Создаёт кластер `InClusterStore` с двумя in-memory хранилищами.
+    ///
+    /// Используется в тестах для проверки маршрутизации ключей между шардами.
     fn make_cluster() -> InClusterStore {
         #[allow(clippy::arc_with_non_send_sync)]
         let s1 = Arc::new(InMemoryStore::new());
@@ -120,6 +159,7 @@ mod tests {
         InClusterStore::new(vec![s1, s2])
     }
 
+    /// Проверяет, что слот, получаемый из ключа, всегда в пределах диапазона [0, SLOT_COUNT).
     #[test]
     fn test_key_slot_range() {
         let key = Sds::from_str("kin");
@@ -127,6 +167,7 @@ mod tests {
         assert!(slot < SLOT_COUNT);
     }
 
+    /// Убеждаемся, что ключи направляются к правильным шардам при `set` и `get`.
     #[test]
     fn test_set_get_routes_to_correct_shard() {
         let cluster = make_cluster();
@@ -136,19 +177,17 @@ mod tests {
         let k2 = Sds::from_str("beta");
         let v2 = Value::Str(Sds::from_str("B"));
 
-        // Set two different keys
         cluster.set(&k1, v1.clone()).unwrap();
         cluster.set(&k2, v2.clone()).unwrap();
 
-        // Verify that `get` returns the correct values
         assert_eq!(cluster.get(&k1).unwrap(), Some(v1));
         assert_eq!(cluster.get(&k2).unwrap(), Some(v2));
     }
 
+    /// Проверяет, что `rename` срабатывает, если ключи находятся на одном шарде.
     #[test]
     fn test_rename_same_shard_succeeds() {
         let cluster = make_cluster();
-        // Use hash tags "{same}" and "{same}new" to ensure both go to the same slot
         let from = Sds::from_str("{same}");
         let to = Sds::from_str("{same}new");
 
@@ -164,11 +203,11 @@ mod tests {
         assert_eq!(cluster.get(&to).unwrap(), Some(Value::Int(42)));
     }
 
+    /// Убеждаемся, что попытка `rename` между разными шардами вызывает ошибку `WrongShard`.
     #[test]
     fn test_rename_different_shards_errors() {
         let mut cluster = make_cluster();
 
-        // Manually force different slots to point to different shards
         let a = Sds::from_str("a");
         let b = Sds::from_str("b");
 
@@ -182,6 +221,7 @@ mod tests {
         assert!(matches!(err, StoreError::WrongShard));
     }
 
+    /// Проверяет, что `flushdb` очищает все шарды.
     #[test]
     fn test_flushdb_clears_all_shards() {
         let cluster = make_cluster();
@@ -197,13 +237,14 @@ mod tests {
         assert_eq!(cluster.get(&Sds::from_str("two")).unwrap(), None);
     }
 
+    /// Проверяет, что ключи с одинаковым хеш-тегом `{tag}` направляются в
+    /// один и тот же слот, даже если остальные части ключа отличаются.
     #[test]
     fn test_key_slot_tag_ignores_outside() {
         let a = Sds::from_str("{tag}");
         let b = Sds::from_str("{tag}kin");
         let c = Sds::from_str("x{tag}kin");
 
-        // All should hash the same due to identical tag inside '{}'
         let sa = InClusterStore::key_slot(&a);
         let sb = InClusterStore::key_slot(&b);
         let sc = InClusterStore::key_slot(&c);
