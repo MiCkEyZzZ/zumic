@@ -1,17 +1,17 @@
-//! Database primitives and data structures.
+//! Примитивы базы данных и структуры данных.
 //!
-//! This module provides core data types and abstractions for
-//! implementing an in-memory database:
+//! Этот модуль предоставляет основные типы данных и абстракции
+//! для реализации базы данных в оперативной памяти:
 //!
-//! - `dict`: generic key-value hash map with support for custom key types.
-//! - `int_set`: compact set for storing integers efficiently.
-//! - `list_pack`: compact serialization format for storing small lists of elements.
-//! - `lua`: support for running embedded Lua scripts.
-//! - `quicklist`: memory-efficient doubly linked list supporting compression.
-//! - `sds`: simple dynamic string type optimized for performance.
-//! - `skip_list`: sorted data structure with logarithmic operations.
-//! - `smart_hash`: hybrid hash table optimized for memory and speed.
-//! - `types`: definitions for supported value types in the database.
+//! - `dict`: обобщённая хеш-таблица «ключ-значение» с поддержкой пользовательских типов ключей.
+//! - `int_set`: компактное множество для эффективного хранения целых чисел.
+//! - `list_pack`: компактный формат сериализации для хранения небольших списков элементов.
+//! - `lua`: поддержка выполнения встроенных Lua-скриптов.
+//! - `quicklist`: эффективный по памяти двусвязный список с поддержкой сжатия.
+//! - `sds`: простой динамический строковый тип, оптимизированный по производительности.
+//! - `skip_list`: отсортированная структура данных с логарифмической сложностью операций.
+//! - `smart_hash`: гибридная хеш-таблица, оптимизированная по памяти и скорости.
+//! - `types`: определения поддерживаемых типов значений в базе данных.
 
 pub mod aof;
 pub mod cluster;

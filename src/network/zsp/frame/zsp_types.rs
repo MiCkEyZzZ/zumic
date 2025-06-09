@@ -21,6 +21,7 @@ use crate::{Dict, QuickList, Sds, SmartHash, Value};
 /// - Errors
 /// - Integers
 /// - Floats
+/// - Boolean
 /// - Binary strings (optional)
 /// - Arrays
 /// - Dictionaries (key-value maps)
@@ -32,6 +33,7 @@ pub enum ZspFrame<'a> {
     FrameError(String),
     Integer(i64),
     Float(f64),
+    Bool(bool),
     BinaryString(Option<Vec<u8>>),
     Array(Vec<ZspFrame<'a>>),
     Dictionary(HashMap<Cow<'a, str>, ZspFrame<'a>>),
@@ -48,6 +50,7 @@ impl TryFrom<Value> for ZspFrame<'_> {
             Value::Str(s) => convert_sds_to_frame(s),
             Value::Int(i) => Ok(Self::Integer(i)),
             Value::Float(f) => Ok(Self::Float(f)),
+            Value::Bool(b) => Ok(Self::Bool(b)),
             Value::List(list) => convert_quicklist(list),
             Value::Set(set) => convert_hashset(set),
             Value::Hash(smart_hash) => convert_smart_hash(smart_hash),

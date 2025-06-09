@@ -40,6 +40,13 @@ impl ZspEncoder {
             }
             ZspFrame::Integer(i) => Ok(format!(":{i}\r\n").into_bytes()),
             ZspFrame::Float(f) => Ok(format!(":{f}\r\n").into_bytes()),
+            ZspFrame::Bool(b) => {
+                if *b {
+                    Ok(b"#t\r\n".to_vec())
+                } else {
+                    Ok(b"#f\r\n".to_vec())
+                }
+            }
             ZspFrame::BinaryString(Some(b)) => {
                 if b.len() > MAX_BINARY_LENGTH {
                     let err_msg = format!(
@@ -229,5 +236,17 @@ mod tests {
         let frame = ZspFrame::Float(-42.42);
         let encoded = ZspEncoder::encode(&frame).unwrap();
         assert_eq!(encoded, b":-42.42\r\n");
+    }
+
+    #[test]
+    fn test_bool_true() {
+        let frame = ZspFrame::Bool(true);
+        assert_eq!(ZspEncoder::encode(&frame).unwrap(), b"#t\r\n");
+    }
+
+    #[test]
+    fn test_bool_false() {
+        let frame = ZspFrame::Bool(false);
+        assert_eq!(ZspEncoder::encode(&frame).unwrap(), b"#f\r\n");
     }
 }

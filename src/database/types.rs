@@ -20,6 +20,8 @@ pub enum Value {
     Int(i64),
     /// A 64-bit floating-point number.
     Float(f64),
+    /// Булево значение.
+    Bool(bool),
     /// A `null` type (used to represent absence of value or deletion).
     Null,
     /// A list of binary strings, implemented using `QuickList`.

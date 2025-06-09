@@ -28,5 +28,6 @@ pub enum Response {
     NotFound,
     Integer(i64),
     Float(f64),
+    Bool(bool),
     String(String),
 }

@@ -39,7 +39,7 @@ pub struct DelCommand {
 impl CommandExecute for DelCommand {
     fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
         let deleted = store.del(&Sds::from_str(&self.key))?;
-        Ok(Value::Int(deleted))
+        Ok(Value::Bool(deleted))
     }
 }
 
@@ -244,7 +244,7 @@ mod tests {
         let del_result = del_cmd.execute(&mut store);
         assert!(del_result.is_ok(), "DelCommand failed: {del_result:?}");
 
-        assert_eq!(del_result.unwrap(), Value::Int(1));
+        assert_eq!(del_result.unwrap(), Value::Bool(true));
 
         let get_cmd = GetCommand {
             key: "test_key".to_string(),
@@ -268,7 +268,7 @@ mod tests {
         let del_result = del_cmd.execute(&mut store);
         assert!(del_result.is_ok(), "DelCommand failed: {del_result:?}");
 
-        assert_eq!(del_result.unwrap(), Value::Int(0));
+        assert_eq!(del_result.unwrap(), Value::Bool(false));
     }
 
     /// Тестирование `ExistsCommand`.

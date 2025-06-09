@@ -2,6 +2,7 @@
 pub const TAG_STR: u8 = 0x01;
 pub const TAG_INT: u8 = 0x02;
 pub const TAG_FLOAT: u8 = 0x03;
+pub const TAG_BOOL: u8 = 0x0B;
 pub const TAG_NULL: u8 = 0x04;
 pub const TAG_LIST: u8 = 0x05;
 pub const TAG_HASH: u8 = 0x06;

@@ -28,7 +28,7 @@ impl StorageEngine {
         }
     }
 
-    pub fn del(&self, key: &Sds) -> StoreResult<i64> {
+    pub fn del(&self, key: &Sds) -> StoreResult<bool> {
         match self {
             StorageEngine::Memory(store) => store.del(key),
             StorageEngine::Cluster(store) => store.del(key),

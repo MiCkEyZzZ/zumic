@@ -53,14 +53,14 @@ impl Storage for InPersistentStore {
         }
     }
 
-    fn del(&self, key: &Sds) -> StoreResult<i64> {
+    fn del(&self, key: &Sds) -> StoreResult<bool> {
         let key_b = key.as_bytes();
         let mut map = self.index.lock().unwrap();
         if map.remove(key_b).is_some() {
             self.aof.lock().unwrap().append_del(key_b)?;
-            Ok(1)
+            Ok(true)
         } else {
-            Ok(0)
+            Ok(false)
         }
     }
 
@@ -180,7 +180,7 @@ mod tests {
 
         // Delete the value.
         let del_count = store.del(&key)?;
-        assert_eq!(del_count, 1);
+        assert_eq!(del_count, true);
 
         // Try to get the value after deletion.
         let retrieved = store.get(&key)?;

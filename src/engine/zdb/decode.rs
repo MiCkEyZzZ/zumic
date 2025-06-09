@@ -6,7 +6,10 @@ use std::{
 use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
-use super::tags::{TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET};
+use super::{
+    tags::{TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET},
+    TAG_BOOL,
+};
 use crate::{database::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
 
 /// Чтение Value из потока.
@@ -26,6 +29,11 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
         TAG_FLOAT => {
             let f = r.read_f64::<BigEndian>()?;
             Ok(Value::Float(f))
+        }
+        TAG_BOOL => {
+            // Булево: 1 => true, 0 => false
+            let b = r.read_u8()? != 0;
+            Ok(Value::Bool(b))
         }
         TAG_NULL => Ok(Value::Null),
         TAG_HASH => {

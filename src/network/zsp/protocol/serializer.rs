@@ -12,6 +12,7 @@ pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
         Response::NotFound => ZspFrame::Null,
         Response::Integer(n) => ZspFrame::Integer(n),
         Response::Float(f) => ZspFrame::Float(f),
+        Response::Bool(b) => ZspFrame::Bool(b),
         Response::String(s) => ZspFrame::InlineString(s.into()),
     }
 }
@@ -22,6 +23,7 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
         Value::Str(s) => ZspFrame::BinaryString(Some(s.to_vec())),
         Value::Int(i) => ZspFrame::Integer(i),
         Value::Float(f) => ZspFrame::Float(f),
+        Value::Bool(b) => ZspFrame::Bool(b),
         Value::Null => ZspFrame::Null,
         Value::List(list) => {
             let frames = list

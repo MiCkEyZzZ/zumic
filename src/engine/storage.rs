@@ -13,8 +13,8 @@ pub trait Storage {
     fn get(&self, key: &Sds) -> StoreResult<Option<Value>>;
 
     /// Removes the key from the store.
-    /// Returns `1` if the key was removed, or `0` if it didn’t exist.
-    fn del(&self, key: &Sds) -> StoreResult<i64>;
+    /// Returns `true` if the key was removed, or `false` if it didn’t exist.
+    fn del(&self, key: &Sds) -> StoreResult<bool>;
 
     /// Sets multiple key-value pairs in a single operation.
     fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()>;

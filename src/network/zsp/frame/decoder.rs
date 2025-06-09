@@ -186,6 +186,7 @@ impl<'a> ZspDecoder<'a> {
             b'-' => self.parse_error(slice),
             b':' => self.parse_integer(slice),
             b',' => self.parse_float(slice),
+            b'#' => self.parse_bool(slice),
             b'^' => self.parse_zset(slice),
             b'$' => self.parse_binary_string(slice),
             b'*' => self.parse_array(slice, 0),
@@ -225,6 +226,23 @@ impl<'a> ZspDecoder<'a> {
             DecodeError::InvalidData(err_msg)
         })?;
         Ok(Some(ZspFrame::Float(num)))
+    }
+
+    /// Парсит булево значение: `#t\r\n` или `#f\r\n`
+    fn parse_bool(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+        if slice.len() < 3 {
+            return Err(DecodeError::UnexpectedEof("Incomplete boolean".into()));
+        }
+        let b = slice[0];
+        if slice[1] != b'\r' || slice[2] != b'\n' {
+            return Err(DecodeError::InvalidData("Invalid boolean format".into()));
+        }
+        *slice = &slice[3..];
+        match b {
+            b't' => Ok(Some(ZspFrame::Bool(true))),
+            b'f' => Ok(Some(ZspFrame::Bool(false))),
+            _ => Err(DecodeError::InvalidData("Unknown boolean value".into())),
+        }
     }
 
     fn parse_binary_string(
@@ -716,5 +734,21 @@ mod tests {
             frame,
             ZspFrame::ZSet(vec![("foo".to_string(), 1.0), ("bar".to_string(), 2.0),])
         );
+    }
+
+    #[test]
+    fn test_parse_bool_true() {
+        let mut dec = ZspDecoder::new();
+        let mut buf = b"#t\r\n".as_ref();
+        let frame = dec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(frame, ZspFrame::Bool(true));
+    }
+
+    #[test]
+    fn test_parse_bool_false() {
+        let mut dec = ZspDecoder::new();
+        let mut buf = b"#f\r\n".as_ref();
+        let frame = dec.decode(&mut buf).unwrap().unwrap();
+        assert_eq!(frame, ZspFrame::Bool(false));
     }
 }

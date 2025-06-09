@@ -80,7 +80,7 @@ impl Storage for InClusterStore {
     }
 
     /// Удаляет ключ с соответствующего шарда.
-    fn del(&self, key: &Sds) -> StoreResult<i64> {
+    fn del(&self, key: &Sds) -> StoreResult<bool> {
         self.get_shard(key).del(key)
     }
 

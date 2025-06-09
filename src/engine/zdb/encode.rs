@@ -3,8 +3,8 @@ use std::io::Write;
 use byteorder::{BigEndian, WriteBytesExt};
 
 use super::tags::{
-    TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR,
-    TAG_ZSET,
+    TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
+    TAG_STR, TAG_ZSET,
 };
 use crate::Value;
 
@@ -24,6 +24,10 @@ pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
         Value::Float(f) => {
             w.write_u8(TAG_FLOAT)?;
             w.write_f64::<BigEndian>(*f)
+        }
+        Value::Bool(b) => {
+            w.write_u8(TAG_BOOL)?;
+            w.write_u8(if *b { 1 } else { 0 })
         }
         Value::Null => w.write_u8(TAG_NULL),
         Value::List(list) => {
