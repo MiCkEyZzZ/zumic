@@ -1,3 +1,10 @@
+//! Модуль для десериализации значений `Value` из бинарного формата.
+//!
+//! Поддерживаются все внутренние типы данных базы:
+//! строки, числа, множества, словари, ZSet, HyperLogLog и Stream.
+//!
+//! Каждое значение начинается с однобайтового тега, за которым следует длина и данные.
+
 use std::{
     collections::HashSet,
     io::{Error, ErrorKind, Read},
@@ -6,13 +13,15 @@ use std::{
 use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
-use super::{
-    tags::{TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET},
-    TAG_BOOL,
+use super::tags::{
+    TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{database::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
 
-/// Чтение Value из потока.
+/// Десериализует значение [`Value`] из бинарного потока.
+///
+/// Возвращает ошибку, если входные данные некорректны
+/// или нарушают ожидаемый формат.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
     let tag = r.read_u8()?;
     match tag {

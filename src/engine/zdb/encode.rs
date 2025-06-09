@@ -1,3 +1,10 @@
+//! Модуль для сериализации значений `Value` в бинарный формат.
+//!
+//! Все типы значений кодируются с префиксным тегом,
+//! за которым следует длина и содержимое (если применимо).
+//!
+//! Используется BigEndian-формат для чисел.
+
 use std::io::Write;
 
 use byteorder::{BigEndian, WriteBytesExt};
@@ -8,7 +15,9 @@ use super::tags::{
 };
 use crate::Value;
 
-/// Запись Value в поток
+/// Сериализует значение [`Value`] в поток `Write`.
+///
+/// Возвращает ошибку, если запись не удалась.
 pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
     match v {
         Value::Str(s) => {
