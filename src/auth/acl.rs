@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
 
-use crate::AclError;
+use crate::error::auth::AclError;
 
 /// Глобальный "всегда разрешающий" паттерн.
 static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());

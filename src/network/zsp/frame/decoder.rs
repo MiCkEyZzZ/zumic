@@ -17,8 +17,9 @@ use std::{borrow::Cow, collections::HashMap};
 use bytes::Buf;
 use memchr::memchr;
 
-use super::ZspFrame;
-use crate::DecodeError;
+use crate::error::decode::DecodeError;
+
+use super::zsp_types::ZspFrame;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///
@@ -217,7 +218,7 @@ impl<'a> ZspDecoder<'a> {
         Ok(Some(ZspFrame::Integer(num)))
     }
 
-    /// Дукодирует число с плавающей точкой (префикс `,`).
+    /// Декодирует число с плавающей точкой (префикс `,`).
     /// Формат: `,<float>\r\n`
     fn parse_float(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         let line = self.read_line(slice)?;

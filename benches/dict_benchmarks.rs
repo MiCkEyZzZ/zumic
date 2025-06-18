@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use zumic::database::Dict;
+use zumic::Dict;
 
 fn bench_insert(c: &mut Criterion) {
     c.bench_function("insert 10_000 (Dict)", |b| {

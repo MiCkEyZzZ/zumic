@@ -18,6 +18,8 @@ mod intern;
 pub mod message;
 pub mod subscriber;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use broker::*;
 pub(crate) use intern::intern_channel;
 pub use message::*;

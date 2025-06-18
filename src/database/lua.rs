@@ -1,6 +1,6 @@
 use mlua::{UserData, UserDataMethods};
 
-use super::Sds;
+use super::sds::Sds;
 
 impl UserData for Sds {
     fn add_methods<T: UserDataMethods<Self>>(methods: &mut T) {

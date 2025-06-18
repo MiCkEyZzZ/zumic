@@ -20,7 +20,7 @@ impl Hll {
         }
     }
 
-    /// Add an element to HeperLogLog.
+    /// Add an element to HelperLogLog.
     pub fn add(&mut self, value: &[u8]) {
         let hash = Self::hash(value);
         let (index, rho) = Self::index_and_rho(hash);

@@ -1,80 +1,71 @@
-//! Zumic - a high-performance in-memory key-value engine.
+//! Zumic — высокопроизводительный движок хранения ключ-значение в памяти.
 //!
-//! Main modules:
-//! - `auth` — authentication and ACL (users, passwords, access control rules)
-//! - `command` — command parsing and execution (SET, GET, INCR, etc.)
-//! - `config` — server configuration loading
-//! - `database` — built-in data structures (Dict, SkipList, QuickList, SDS, etc.)
-//! - `engine` — storage engine abstractions and implementations (InMemory, Persistent, Cluster)
-//! - `error` — common error types (encoding/decoding, parsing, storage)
-//! - `logging` — flexible logging (formatting, filters, sinks)
-//! - `network` — networking: ZSP protocol and Tokio server
-//! - `pubsub` — Pub/Sub: broker, subscriptions, messages
+//! Основные модули:
+//! - `auth` — аутентификация и контроль доступа (пользователи, пароли, правила доступа)
+//! - `command` — разбор и выполнение команд (SET, GET, INCR и др.)
+//! - `config` — загрузка конфигурации сервера
+//! - `database` — встроенные структуры данных (Dict, SkipList, QuickList, SDS и др.)
+//! - `engine` — абстракции и реализации движков хранения (InMemory, Persistent, Cluster)
+//! - `error` — типы ошибок (кодирование/декодирование, парсинг, хранение)
+//! - `logging` — гибкая система логирования (форматирование, фильтры, вывод)
+//! - `network` — работа с сетью: протокол ZSP и сервер на базе Tokio
+//! - `pubsub` — Pub/Sub: брокер, подписки, сообщения
 
-/// Authentication and ACL: users, passwords, access control rules.
+/// Аутентификация и контроль доступа: пользователи, пароли, правила доступа.
 pub mod auth;
-/// Authentication and ACL: users, passwords, access control rules.
+/// Разбор и выполнение команд: SET, GET, INCR и др.
 pub mod command;
-/// Server configuration loading.
+/// Загрузка конфигурации сервера.
 pub mod config;
-/// Built-in data structures (Dict, SkipList, QuickList, SDS).
+/// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
 pub mod database;
-/// Storage engine abstractions and implementations (InMemory, Persistent, Cluster).
+/// Абстракции и реализации движков хранения (InMemory, Persistent, Cluster).
 pub mod engine;
-/// Common error types: encoding/decoding, parsing, storage.
+/// Типы ошибок: кодирование/декодирование, парсинг, хранение.
 pub mod error;
-/// Flexible logging (formatting, filters, sinks).
+/// Гибкая система логирования (форматирование, фильтры, вывод).
 pub mod logging;
-/// Networking: ZSP protocol and Tokio-based server.
+/// Работа с сетью: протокол ZSP и сервер на Tokio.
 pub mod network;
-/// Pub/Sub: broker, subscriptions, messages.
+/// Pub/Sub: брокер, подписки, сообщения.
 pub mod pubsub;
 
 // -----------------------------------------------------------------------------
-//  Frequently used public types
+//  Часто используемые публичные типы
 // -----------------------------------------------------------------------------
 
-/// Hashing and password verification functions, ACL manager.
+/// Функции хеширования и проверки пароля, менеджер ACL.
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
 
-/// Core key-value commands: SET, GET, INCR, HSET, LPOP, ZADD, etc.
+/// Основные команды key-value: SET, GET, INCR, HSET, LPOP, ZADD и др.
 pub use command::{
-    AppendCommand, AuthCommand, Command, CommandExecute, DecrByCommand, DecrByFloatCommand,
-    DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, GetRangeCommand,
-    HDelCommand, HGetAllCommand, HGetCommand, HSetCommand, IncrByCommand, IncrByFloatCommand,
-    IncrCommand, LLenCommand, LPopCommand, LPushCommand, LRangeCommand, MGetCommand, MSetCommand,
-    RPopCommand, RPushCommand, RenameCommand, RenameNxCommand, SAddCommand, SCardCommand,
-    SIsMemberCommand, SMembersCommand, SRemCommand, SetCommand, SetFloatCommand, SetNxCommand,
-    StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand,
-    ZScoreCommand,
+    AppendCommand, AuthCommand, Command as StoreCommand, CommandExecute, DecrByCommand,
+    DecrByFloatCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand,
+    GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand, IncrByCommand,
+    IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand, LPushCommand, LRangeCommand,
+    MGetCommand, MSetCommand, RPopCommand, RPushCommand, RenameCommand, RenameNxCommand,
+    SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand, SetCommand,
+    SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand,
+    ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 
-/// Configuration types.
-pub use config::{Settings, StorageConfig, StorageType};
-
-/// Data structures: Dict, QuickList, SkipList, Sds, and others.
+/// Структуры данных: Dict, QuickList, SkipList, Sds и другие.
 pub use database::{
     Dict, GeoEntry, GeoPoint, GeoSet, Hll, ListPack, QuickList, Sds, SkipList, SmartHash,
-    StreamEntry, Value,
+    StreamEntry, Value, DENSE_SIZE,
 };
 
-/// Storage engines: InMemoryStore, InPersistentStore, InClusterStore.
+/// Движки хранения: InMemoryStore, InPersistentStore, InClusterStore.
 pub use engine::{
     load_from_zdb, save_to_zdb, AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage,
     StorageEngine,
 };
 
-/// Operation errors and result types.
-pub use error::{
-    AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
-    PasswordError, StoreError, StoreResult,
-};
-
-/// Network server and protocol.
+/// Сетевой сервер и протокол.
 pub use network::{server, zsp};
 
-/// Pub/Sub API.
+/// API для Pub/Sub.
 pub use pubsub::{Broker, Message, PatternSubscription, Subscription};

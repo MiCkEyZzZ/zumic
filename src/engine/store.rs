@@ -2,7 +2,9 @@ use std::io::{self};
 
 use super::{InClusterStore, InMemoryStore, InPersistentStore};
 use crate::{
-    Sds, Storage, StoreResult, Value, {StorageConfig, StorageType},
+    config::config::{StorageConfig, StorageType},
+    error::system::StoreResult,
+    Sds, Storage, Value,
 };
 
 pub enum StorageEngine {

@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::ConfigError;
+use crate::error::auth::ConfigError;
 
 #[derive(Debug, Default)]
 pub struct ServerConfig {

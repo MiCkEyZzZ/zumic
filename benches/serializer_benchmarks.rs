@@ -4,9 +4,8 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{
-    database::{skip_list::SkipList, QuickList, Value},
     network::zsp::protocol::{command::Response, serializer::serialize_response},
-    Dict, Sds, SmartHash,
+    Dict, QuickList, Sds, SkipList, SmartHash, Value,
 };
 
 /// Бенчмарк для сериализации Response::Ok

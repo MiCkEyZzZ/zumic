@@ -1,7 +1,8 @@
 use std::{borrow::Cow, collections::HashMap};
 
-use super::Response;
-use crate::{zsp::frame::zsp_types::ZspFrame, Value};
+use crate::{zsp::zsp_types::ZspFrame, Value};
+
+use super::command::Response;
 
 /// Сериализует ответ команды в формат ZspFrame.
 pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
@@ -85,11 +86,9 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
 mod tests {
     use std::collections::HashSet;
 
+    use crate::{Dict, Hll, QuickList, Sds, SkipList, SmartHash};
+
     use super::*;
-    use crate::{
-        database::{skip_list::SkipList, QuickList, Sds},
-        Dict,
-    };
 
     /// Проверяет сериализацию `Response::Ok` в `ZspFrame::InlineString("OK")`
     #[test]
@@ -183,7 +182,7 @@ mod tests {
     /// Проверяет сериализацию `Value::Hash` (SmartHash) в `ZspFrame::Dictionary`
     #[test]
     fn test_serialize_hash() {
-        let mut sh = crate::database::smart_hash::SmartHash::new();
+        let mut sh = SmartHash::new();
         sh.insert(Sds::from_str("k1"), Sds::from_str("v1"));
         let value = Value::Hash(sh);
         let frame = serialize_response(Response::Value(value));
@@ -225,7 +224,7 @@ mod tests {
     /// Проверяет сериализацию `Value::HyperLogLog` в `ZspFrame::InlineString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
-        let hll = crate::Hll { data: [0; 12288] };
+        let hll = Hll { data: [0; 12288] };
         let value = Value::HyperLogLog(Box::new(hll));
         let frame = serialize_response(Response::Value(value));
         assert_eq!(frame, ZspFrame::InlineString("Hll(NotImplemented)".into()));

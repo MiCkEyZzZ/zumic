@@ -25,6 +25,8 @@ pub mod set;
 pub mod string;
 pub mod zset;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use auth::*;
 pub use basic::*;
 pub use execute::*;

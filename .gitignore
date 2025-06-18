@@ -1,9 +1,12 @@
 # Rust build artifacts
 target/
 dist
+book
 tmp
 /bin
 **/cargo-target
+
+**/*.DS_Store
 
 # IDE and editors
 .idea/
@@ -20,7 +23,7 @@ debug/
 
 # Logs and profilers
 /logs
-Flamegraph/
+/Flamegraph
 
 # Documentation readable by generators
 /docs/

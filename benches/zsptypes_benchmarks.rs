@@ -4,12 +4,11 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{
-    database::{QuickList, Value},
     network::zsp::frame::zsp_types::{
         convert_hashset, convert_quicklist, convert_sds_to_frame, convert_smart_hash, convert_zset,
         ZspFrame,
     },
-    Dict, Sds, SmartHash,
+    Dict, QuickList, Sds, SmartHash, Value,
 };
 
 fn bench_convert_sds_inline(c: &mut Criterion) {

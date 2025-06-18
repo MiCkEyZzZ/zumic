@@ -1,62 +1,51 @@
-// use bytes::{Buf, BytesMut};
-// use tokio::io::{AsyncReadExt, AsyncWriteExt};
-// use tokio::net::{TcpListener, TcpStream};
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
 
-// use super::zsp::frame::decoder::ZSPDecoder;
-// use crate::network::zsp::frame::zsp_types::ZSPFrame;
+use crate::{Sds, StorageEngine, Value};
 
-// const BUFFER_CAPACITY: usize = 4096;
+pub async fn handle_connection(
+    socket: TcpStream,
+    engine: Arc<StorageEngine>,
+) -> anyhow::Result<()> {
+    let mut lines = BufReader::new(socket).lines();
 
-// pub async fn run_tcp_server(addr: &str) -> anyhow::Result<()> {
-//     let listener = TcpListener::bind(addr).await?;
-//     println!("Listening on {}", addr);
+    while let Some(line) = lines.next_line().await? {
+        let parts: Vec<&str> = line.trim_end().splitn(3, ' ').collect();
+        let response = match parts.as_slice() {
+            ["SET", key, val] => {
+                let k = Sds::from(key.as_bytes());
+                let v = Value::Str(Sds::from(val.as_bytes()));
+                engine
+                    .set(&k, v)
+                    .map(|_| "+OK\r\n".to_string())
+                    .unwrap_or("-ERR set failed\r\n".to_string())
+            }
+            ["GET", key] => {
+                let k = Sds::from(key.as_bytes());
+                match engine.get(&k) {
+                    Ok(Some(Value::Str(s))) => String::from_utf8(s.to_vec())
+                        .map(|s| format!("+{}\r\n", s))
+                        .unwrap_or("-ERR utf8\r\n".to_string()),
+                    Ok(Some(_)) => "-ERR unsupported type\r\n".to_string(),
+                    Ok(None) => "$-1\r\n".to_string(),
+                    Err(_) => "-ERR get failed\r\n".to_string(),
+                }
+            }
+            ["DEL", key] => {
+                let k = Sds::from(key.as_bytes());
+                match engine.del(&k) {
+                    Ok(true) => ":1\r\n".to_string(),
+                    Ok(false) => ":0\r\n".to_string(),
+                    Err(_) => "-ERR del failed\r\n".to_string(),
+                }
+            }
+            _ => "-ERR unknown command\r\n".to_string(),
+        };
 
-//     loop {
-//         let (socket, addr) = listener.accept().await?;
-//         println!("Accepted connection from {}", addr);
+        let socket = lines.get_mut();
+        socket.write_all(response.as_bytes()).await?;
+    }
 
-//         tokio::spawn(async move {
-//             if let Err(e) = handle_connection(socket).await {
-//                 eprintln!("Error handling connection: {}", e);
-//             }
-//         });
-//     }
-// }
-
-// async fn handle_connection(mut socket: TcpStream) -> anyhow::Result<()> {
-//     let mut decoder = ZSPDecoder::new();
-//     let mut buffer = BytesMut::with_capacity(BUFFER_CAPACITY);
-
-//     loop {
-//         let mut temp_buf = [0u8; BUFFER_CAPACITY];
-//         let n = socket.read(&mut temp_buf).await?;
-
-//         if n == 0 {
-//             println!("Connection closed");
-//             return Ok(());
-//         }
-
-//         buffer.extend_from_slice(&temp_buf[..n]);
-
-//         // Получаем срез данных из буфера
-//         let mut buf = &buffer[..];
-
-//         while let Ok(Some(frame)) = decoder.decode(&mut buf) {
-//             println!("Received frame: {:?}", frame);
-
-//             let response = match &frame {
-//                 ZSPFrame::InlineString(s) => format!("+{}\r\n", s),
-//                 ZSPFrame::Integer(i) => format!(":{}\r\n", i),
-//                 ZSPFrame::FrameError(e) => format!("-{}\r\n", e),
-//                 _ => "+OK\r\n".to_string(),
-//             };
-
-//             socket.write_all(response.as_bytes()).await?;
-//         }
-
-//         // Получаем позицию в буфере после декодирования
-//         let pos = buf.as_ptr() as usize - buffer.as_ptr() as usize;
-
-//         buffer.advance(pos);
-//     }
-// }
+    Ok(())
+}

@@ -118,7 +118,7 @@ impl AofLog {
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        // Сбросываем считыватель в начало.
+        // Сбрасываем считыватель в начало.
         self.reader.seek(io::SeekFrom::Start(0))?;
 
         // Читаем и проверяем магический заголовок.

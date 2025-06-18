@@ -1,7 +1,8 @@
-use super::Command as ZSPCommand;
 use crate::{
-    zsp::frame::zsp_types::ZspFrame,
-    Command as StoreCommand, ParseError, {Sds, Value},
+    error::parser::ParseError,
+    zsp::{command::Command as ZSPCommand, zsp_types::ZspFrame},
+    AuthCommand, DelCommand, GetCommand, MGetCommand, MSetCommand, RenameCommand, RenameNxCommand,
+    Sds, SetCommand, SetNxCommand, StoreCommand, Value,
 };
 
 /// RawCommand → ExeCommand
@@ -12,41 +13,22 @@ trait IntoExecutable {
 impl IntoExecutable for ZSPCommand {
     fn into_executable(self) -> Result<StoreCommand, ParseError> {
         match self {
-            ZSPCommand::Set { key, value } => {
-                Ok(StoreCommand::Set(crate::command::SetCommand { key, value }))
-            }
-            ZSPCommand::Get { key } => Ok(StoreCommand::Get(crate::command::GetCommand { key })),
-            ZSPCommand::Del { key } => Ok(StoreCommand::Del(crate::command::DelCommand { key })),
-            ZSPCommand::MSet { entries } => {
-                Ok(StoreCommand::MSet(crate::command::MSetCommand { entries }))
-            }
-            ZSPCommand::MGet { keys } => {
-                Ok(StoreCommand::MGet(crate::command::MGetCommand { keys }))
-            }
+            ZSPCommand::Set { key, value } => Ok(StoreCommand::Set(SetCommand { key, value })),
+            ZSPCommand::Get { key } => Ok(StoreCommand::Get(GetCommand { key })),
+            ZSPCommand::Del { key } => Ok(StoreCommand::Del(DelCommand { key })),
+            ZSPCommand::MSet { entries } => Ok(StoreCommand::MSet(MSetCommand { entries })),
+            ZSPCommand::MGet { keys } => Ok(StoreCommand::MGet(MGetCommand { keys })),
             ZSPCommand::SetNx { key, value } => {
-                Ok(StoreCommand::Setnx(crate::command::SetNxCommand {
-                    key,
-                    value,
-                }))
+                Ok(StoreCommand::Setnx(SetNxCommand { key, value }))
             }
-            ZSPCommand::Rename { from, to } => {
-                Ok(StoreCommand::Rename(crate::command::RenameCommand {
-                    from,
-                    to,
-                }))
-            }
+            ZSPCommand::Rename { from, to } => Ok(StoreCommand::Rename(RenameCommand { from, to })),
             ZSPCommand::RenameNx { from, to } => {
-                Ok(StoreCommand::Renamenx(crate::command::RenameNxCommand {
-                    from,
-                    to,
-                }))
+                Ok(StoreCommand::Renamenx(RenameNxCommand { from, to }))
             }
-            ZSPCommand::Auth { user, pass } => {
-                Ok(StoreCommand::Auth(crate::command::AuthCommand {
-                    user: user.unwrap(),
-                    pass,
-                }))
-            }
+            ZSPCommand::Auth { user, pass } => Ok(StoreCommand::Auth(AuthCommand {
+                user: user.unwrap(),
+                pass,
+            })),
 
             ZSPCommand::Ping => Err(ParseError::UnknownCommand),
             ZSPCommand::Echo(_) => Err(ParseError::UnknownCommand),

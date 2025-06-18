@@ -235,7 +235,7 @@ where
                             }
                         });
                     // Если существует следующий узел на уровне 0,
-                    // обновляем его baclward-ссылку.
+                    // обновляем его backward-ссылку.
                     if let Some(next_ptr) = node_ref.forward[0] {
                         (*next_ptr.as_ptr()).backward = node_ref.backward;
                     }

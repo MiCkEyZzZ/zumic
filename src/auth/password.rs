@@ -8,7 +8,7 @@ use num_cpus;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 
-use crate::PasswordError;
+use crate::error::auth::PasswordError;
 
 /// Параметры Argon2 (KiB, итерации)
 const MEMORY_COST_KIB: u32 = 64 * 1024; // 64 MiB
@@ -24,7 +24,7 @@ static ARGON2: Lazy<Argon2> = Lazy::new(|| {
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
 
-/// Хеширует `password`, опционально добавляя `pepper` (секрет из конфига).
+/// Хэширует `password`, опционально добавляя `pepper` (секрет из конфига).
 pub fn hash_password(password: &str, pepper: Option<&str>) -> Result<String, PasswordError> {
     let mut pwd = String::with_capacity(password.len() + pepper.map_or(0, |p| p.len()));
     pwd.push_str(password);

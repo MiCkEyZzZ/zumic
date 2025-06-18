@@ -17,7 +17,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::Sds;
+use super::sds::Sds;
 
 /// Порог, при достижении которого `SmartHash` переключается с `Zip` на `Map`.
 const THRESHOLD: usize = 32;

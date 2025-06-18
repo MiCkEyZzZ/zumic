@@ -10,15 +10,21 @@
 
 use std::borrow::Cow;
 
+use crate::error::encode::EncodeError;
+
 use super::{
-    ZspFrame, {MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
+    decoder::{MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
+    zsp_types::ZspFrame,
 };
-use crate::EncodeError;
 
 /// Структура энкодера для кодирования в формат ZSP.
 pub struct ZspEncoder;
 
 impl ZspEncoder {
+    pub fn new() -> Self {
+        ZspEncoder
+    }
+
     pub fn encode(frame: &ZspFrame) -> Result<Vec<u8>, EncodeError> {
         Self::encode_frame(frame, 0)
     }

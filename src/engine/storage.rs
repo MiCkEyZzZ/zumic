@@ -1,6 +1,4 @@
-use crate::{
-    StoreResult, {Sds, Value},
-};
+use crate::{error::system::StoreResult, Sds, Value};
 
 /// The `Storage` trait defines the interface for key-value store backends.
 /// All methods may return an error and produce a `StoreResult`.

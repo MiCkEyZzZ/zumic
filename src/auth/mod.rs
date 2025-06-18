@@ -13,6 +13,8 @@ pub mod config;
 pub mod manager;
 pub mod password;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use acl::*;
 pub use config::*;
 pub use manager::*;

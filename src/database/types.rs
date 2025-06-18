@@ -3,8 +3,15 @@ use std::{collections::HashSet, io::Cursor};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-use super::{Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
-use crate::engine::{decode, encode};
+use crate::{
+    engine::{decode, encode},
+    error::system::{StoreError, StoreResult},
+};
+
+use super::{
+    dict::Dict, hll::Hll, quicklist::QuickList, sds::Sds, skiplist::SkipList,
+    smart_hash::SmartHash, stream::StreamEntry,
+};
 
 /// Представляет универсальное значение в движке хранения данных.
 ///
@@ -75,8 +82,8 @@ impl Value {
     /// Десериализует значение из бинарного формата через ZDB decode.
     ///
     /// Возвращает результат с десериализованным значением или ошибку.
-    pub fn from_bytes(bytes: &[u8]) -> crate::StoreResult<Value> {
+    pub fn from_bytes(bytes: &[u8]) -> StoreResult<Value> {
         let mut cursor = Cursor::new(bytes);
-        decode::read_value(&mut cursor).map_err(|e| crate::StoreError::SerdeError(e.to_string()))
+        decode::read_value(&mut cursor).map_err(|e| StoreError::SerdeError(e.to_string()))
     }
 }

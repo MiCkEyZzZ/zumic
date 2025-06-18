@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
-use crate::{Dict, QuickList, Sds, SmartHash, Value};
+use crate::database::{Dict, QuickList, Sds, SmartHash, Value};
 
 /// Frame types supported by the ZSP protocol.
 ///
@@ -132,7 +132,6 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use super::*;
-    use crate::database::Sds;
 
     /// Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
     #[test]

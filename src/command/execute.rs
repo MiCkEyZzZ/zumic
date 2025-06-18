@@ -9,7 +9,7 @@ use super::{
     SRemCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand,
     ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
-use crate::{StorageEngine, StoreError, Value};
+use crate::{error::system::StoreError, StorageEngine, Value};
 
 pub trait CommandExecute: std::fmt::Debug {
     /// Выполнить команду с доступом к хранилищу.

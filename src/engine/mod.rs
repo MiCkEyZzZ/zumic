@@ -22,6 +22,8 @@ pub mod store;
 pub mod zdb;
 pub mod zdb_protocol;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use aof::*;
 pub use cluster::*;
 pub use memory::*;

@@ -121,7 +121,7 @@ mod tests {
         let slice = b"slice_data";
         let bytes = Bytes::from_static(b"bytes_data");
 
-        let m1 = Message::new("chan1", slice as &[u8]);
+        let m1 = Message::new("chan1", slice);
         let m2 = Message::new("chan2", bytes.clone());
 
         assert_eq!(m1.payload, Bytes::from_static(slice));

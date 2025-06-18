@@ -21,18 +21,21 @@ pub mod list_pack;
 pub mod lua;
 pub mod quicklist;
 pub mod sds;
-pub mod skip_list;
+pub mod skiplist;
 pub mod smart_hash;
 pub mod stream;
 pub mod types;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use dict::*;
 pub use geo::*;
 pub use hll::*;
+pub use int_set::*;
 pub use list_pack::*;
 pub use quicklist::*;
 pub use sds::*;
-pub use skip_list::*;
+pub use skiplist::*;
 pub use smart_hash::*;
 pub use stream::*;
 pub use types::*;

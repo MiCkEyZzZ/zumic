@@ -4,7 +4,10 @@ use super::{
     aof::{AofOp, SyncPolicy},
     AofLog, Storage,
 };
-use crate::{Sds, StoreError, StoreResult, Value};
+use crate::{
+    error::system::{StoreError, StoreResult},
+    Sds, Value,
+};
 
 pub struct InPersistentStore {
     index: Mutex<HashMap<Vec<u8>, Vec<u8>>>,

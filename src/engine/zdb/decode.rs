@@ -16,7 +16,7 @@ use ordered_float::OrderedFloat;
 use super::tags::{
     TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
-use crate::{database::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
+use crate::{database::hll::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
 
 /// Десериализует значение [`Value`] из бинарного потока.
 ///

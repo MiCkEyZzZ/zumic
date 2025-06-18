@@ -11,6 +11,8 @@ pub mod decode;
 pub mod encode;
 pub mod tags;
 
+// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
+// чтобы упростить доступ к ним из внешнего кода.
 pub use decode::*;
 pub use encode::*;
 pub use tags::*;

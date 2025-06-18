@@ -2,9 +2,8 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{
     command::{DecrByFloatCommand, IncrByFloatCommand, SetFloatCommand},
-    database::{Sds, Value},
     engine::{memory::InMemoryStore, store::StorageEngine},
-    CommandExecute,
+    CommandExecute, Sds, Value,
 };
 
 fn key(data: &str) -> Sds {

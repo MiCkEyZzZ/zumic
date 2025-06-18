@@ -1,24 +1,16 @@
+//! Модуль, отвечающий за обработку ошибок, возникающих в различных
+//! частях системы.
+//! Включает типы ошибок и связанные с ними утилиты.
+
+/// Модуль аутентификации — ошибки, связанные с авторизацией и контролем доступа.
 pub mod auth;
+/// Модуль декодирования — ошибки, возникающие при декодировании данных.
 pub mod decode;
+/// Модуль кодирования — ошибки, связанные с кодированием данных.
 pub mod encode;
+/// Модуль сетевого взаимодействия — ошибки, возникающие при работе с сетью.
+pub mod network;
+/// Модуль парсинга — ошибки при разборе входящих данных или команд.
 pub mod parser;
+/// Модуль системных ошибок — общие системные ошибки, не попадающие в другие категории.
 pub mod system;
-
-pub use auth::{AclError, AuthError, ConfigError, PasswordError};
-pub use decode::DecodeError;
-pub use encode::EncodeError;
-pub use parser::ParseError;
-pub use system::{StoreError, StoreResult};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum NetworkError {
-    #[error("Parse error: {0}")]
-    Parse(#[from] ParseError),
-
-    #[error("Decode error: {0}")]
-    Decode(#[from] DecodeError),
-
-    #[error("Encode error: {0}")]
-    Encode(#[from] EncodeError),
-}
