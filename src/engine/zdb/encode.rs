@@ -9,12 +9,11 @@ use std::io::Write;
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use crate::Value;
-
 use super::tags::{
     TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
     TAG_STR, TAG_ZSET,
 };
+use crate::Value;
 
 /// Сериализует значение [`Value`] в поток `Write`.
 ///

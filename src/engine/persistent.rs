@@ -9,17 +9,23 @@ use crate::{
     Sds, Value,
 };
 
+/// Хранилище с поддержкой постоянства через AOF (Append-Only File).
+/// Ключи и значения находятся в памяти, но изменения логируются на диск.
 pub struct InPersistentStore {
+    /// Основной in-memory индекс.
     index: Mutex<HashMap<Vec<u8>, Vec<u8>>>,
+    /// Журнал AOF, логирующий изменения.
     aof: Mutex<AofLog>,
 }
 
 impl InPersistentStore {
+    /// Создаёт новое хранилище с журналом AOF.
+    /// При инициализации восстанавливает состояние из AOF.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, StoreError> {
         let mut aof = AofLog::open(path, SyncPolicy::Always)?;
         let mut index = HashMap::new();
 
-        // in-memory restore from AOF
+        // Восстановление состояния из журнала
         aof.replay(|op, key, val| match op {
             AofOp::Set => {
                 if let Some(value) = val {
@@ -39,6 +45,7 @@ impl InPersistentStore {
 }
 
 impl Storage for InPersistentStore {
+    /// Устанавливает значение по ключу, логируя операцию в AOF.
     fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
         let key_b = key.as_bytes();
         let val_b = value.to_bytes();
@@ -47,6 +54,7 @@ impl Storage for InPersistentStore {
         Ok(())
     }
 
+    /// Получает значение по ключу, если оно существует.
     fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
         let key_b = key.as_bytes();
         let map = self.index.lock().unwrap();
@@ -56,6 +64,7 @@ impl Storage for InPersistentStore {
         }
     }
 
+    /// Удаляет ключ, если он есть, и логирует удаление в AOF.
     fn del(&self, key: &Sds) -> StoreResult<bool> {
         let key_b = key.as_bytes();
         let mut map = self.index.lock().unwrap();
@@ -67,6 +76,8 @@ impl Storage for InPersistentStore {
         }
     }
 
+    /// Устанавливает несколько пар ключ-значение сразу.
+    /// Каждая операция логируется в AOF.
     fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
         let mut log = self.aof.lock().unwrap();
         let mut map = self.index.lock().unwrap();
@@ -79,6 +90,7 @@ impl Storage for InPersistentStore {
         Ok(())
     }
 
+    /// Получает значения по списку ключей.
     fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
         let map = self.index.lock().unwrap();
         let mut result = Vec::with_capacity(keys.len());
@@ -93,6 +105,8 @@ impl Storage for InPersistentStore {
         Ok(result)
     }
 
+    /// Переименовывает ключ, если он существует.
+    /// Удаляет старый и добавляет новый, логируя оба действия.
     fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
         let mut map = self.index.lock().unwrap();
         let from_b = from.as_bytes();
@@ -108,20 +122,21 @@ impl Storage for InPersistentStore {
         }
     }
 
+    /// Как `rename`, но не переименовывает, если целевой ключ уже существует.
     fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
         let mut map = self.index.lock().unwrap();
         let from_b = from.as_bytes();
         let to_b = to.as_bytes();
 
-        // 1) If `from` doesn’t exist, error out.
+        // 1. Если исходного ключа нет — ошибка
         if !map.contains_key(from_b) {
             return Err(StoreError::KeyNotFound);
         }
-        // 2) If `to` already exists, renamenx should return false.
+        // 2. Если целевой уже есть — ничего не делаем
         if map.contains_key(to_b) {
             return Ok(false);
         }
-        // 3) Perform the move: remove `from`, log both DEL and SET, then insert `to`.
+        // 3. Перемещаем ключ, логируем обе операции
         if let Some(val) = map.remove(from_b) {
             let mut aof = self.aof.lock().unwrap();
             aof.append_del(from_b)?;
@@ -129,14 +144,15 @@ impl Storage for InPersistentStore {
             map.insert(to_b.to_vec(), val);
             return Ok(true);
         }
-        // Should be unreachable, but just in case:
+        // По идее unreachable, но на всякий
         Ok(false)
     }
 
+    /// Очищает всё in-memory содержимое.
+    /// AOF не трогаем (на практике можно реализовать truncate).
     fn flushdb(&self) -> StoreResult<()> {
         let mut map = self.index.lock().unwrap();
         map.clear();
-        // can implement AOF truncate or just delete the file - we'll skip that for now.
         Ok(())
     }
 }
@@ -147,7 +163,7 @@ mod tests {
 
     use super::*;
 
-    // Helper fn to create a new InPersistentStore with a temporary AOF file.
+    // Вспомогательный fn для создания нового в постоянном хранилище с временным файлом AOF.
     fn new_store() -> Result<InPersistentStore, StoreError> {
         let temp_file = NamedTempFile::new()?;
         InPersistentStore::new(temp_file.path())
@@ -161,10 +177,8 @@ mod tests {
         let key = Sds::from_str("key1");
         let value = Value::Str(Sds::from_str("value1"));
 
-        // Set the value.
         store.set(&key, value.clone())?;
 
-        // Get the value and check if it matches.
         let retrieved = store.get(&key)?;
         assert_eq!(retrieved, Some(value));
         Ok(())
@@ -178,14 +192,11 @@ mod tests {
         let key = Sds::from_str("key1");
         let value = Value::Str(Sds::from_str("value1"));
 
-        // Set the value.
         store.set(&key, value.clone())?;
 
-        // Delete the value.
         let del_count = store.del(&key)?;
         assert!(del_count);
 
-        // Try to get the value after deletion.
         let retrieved = store.get(&key)?;
         assert_eq!(retrieved, None);
 
@@ -205,10 +216,8 @@ mod tests {
             (&k2, Value::Str(Sds::from_str("value2"))),
         ];
 
-        // Set multiple values
         store.mset(entries)?;
 
-        // Get multiple values
         let keys = vec![&k1, &k2];
         let retrieved = store.mget(&keys)?;
 
@@ -232,13 +241,10 @@ mod tests {
         let key2 = Sds::from_str("key2");
         let value = Value::Str(Sds::from_str("value1"));
 
-        // Set the value for key1
         store.set(&key1, value)?;
 
-        // Rename key1 to key2
         store.rename(&key1, &key2)?;
 
-        // Check if the old key was removed and the new key has the value
         let retrieved_old = store.get(&key1)?;
         assert_eq!(retrieved_old, None);
 
@@ -257,16 +263,13 @@ mod tests {
         let key2 = Sds::from_str("key2");
         let val = Value::Str(Sds::from_str("value1"));
 
-        // 1) set key1
         store.set(&key1, val.clone())?;
         assert_eq!(store.get(&key2)?, None);
 
-        // 2) renamenx succeeds
         assert!(store.renamenx(&key1, &key2)?);
         assert_eq!(store.get(&key1)?, None);
         assert_eq!(store.get(&key2)?, Some(val.clone()));
 
-        // 3) renamenx with existing target fails
         store.set(&key1, Value::Str(Sds::from_str("other")))?;
         assert!(!store.renamenx(&key1, &key2)?);
 
@@ -282,14 +285,11 @@ mod tests {
         let key2 = Sds::from_str("key2");
         let value = Value::Str(Sds::from_str("value1"));
 
-        // Set multiple values
         store.set(&key1, value.clone())?;
         store.set(&key2, value)?;
 
-        // Flush the database (clear the index)
         store.flushdb()?;
 
-        // Check if the keys are cleared
         let retrieved1 = store.get(&key1)?;
         let retrieved2 = store.get(&key2)?;
 
