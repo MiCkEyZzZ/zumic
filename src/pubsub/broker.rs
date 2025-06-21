@@ -20,6 +20,7 @@ type PatternKey = Glob;
 /// - Pattern subscriptions (glob-based)
 /// - Automatic removal of empty channels
 /// - Statistics tracking for publishes and send errors
+#[derive(Debug)]
 pub struct Broker {
     /// Exact channel → `Sender`
     channels: Arc<DashMap<ChannelKey, broadcast::Sender<Message>>>,

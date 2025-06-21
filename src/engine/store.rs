@@ -2,7 +2,7 @@ use std::io::{self};
 
 use super::{InClusterStore, InMemoryStore, InPersistentStore};
 use crate::{
-    config::config::{StorageConfig, StorageType},
+    config::settings::{StorageConfig, StorageType},
     error::system::StoreResult,
     Sds, Storage, Value,
 };
