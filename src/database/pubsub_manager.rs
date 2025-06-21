@@ -66,6 +66,7 @@ mod tests {
     use super::*;
     use bytes::Bytes;
 
+    /// Тест проверяет, что публикация в канал доставляется подписчику.
     #[tokio::test]
     async fn test_publish_and_subscribe() {
         let manager = PubSubManager::new();
@@ -78,6 +79,7 @@ mod tests {
         assert_eq!(&*msg.channel, "news");
     }
 
+    /// Тест проверяет, что после unsubscribe_all подписчик не получает сообщений.
     #[tokio::test]
     async fn test_unsubscribe_all() {
         let manager = PubSubManager::new();
@@ -99,6 +101,7 @@ mod tests {
         );
     }
 
+    /// Тест проверяет шаблонную подписку: получает оба сообщения, соответствующие "news:*".
     #[tokio::test]
     async fn test_psubscribe_and_publish() {
         let manager = PubSubManager::new();
@@ -118,6 +121,7 @@ mod tests {
         assert!(payload1 != payload2, "Expected two distinct payloads");
     }
 
+    /// Тест проверяет, что некорректный шаблон возвращает ошибку.
     #[test]
     fn test_psubscribe_invalid_pattern() {
         let manager = PubSubManager::new();
@@ -125,6 +129,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Тест проверяет, что punsubscribe успешно снимает шаблон.
     #[test]
     fn test_punsubscribe_success() {
         let manager = PubSubManager::new();
@@ -135,6 +140,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    /// Тест проверяет корректность подсчёта статистики publish_count и send_error_count.
     #[test]
     fn test_stats_tracking() {
         let manager = PubSubManager::new();
@@ -146,6 +152,7 @@ mod tests {
         assert_eq!(errors, 0);
     }
 
+    /// Тест проверяет реализацию Default (должна совпадать с new()).
     #[test]
     fn test_default_impl() {
         let defaulted = PubSubManager::default();

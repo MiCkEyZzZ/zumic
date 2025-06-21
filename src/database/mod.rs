@@ -1,17 +1,21 @@
-//! Core database data structures.
+//! Основные структуры данных базы данных.
 //!
-//! This module defines the fundamental building blocks used to implement
-//! Redis-like data types:
+//! В этом модуле определяются ключевые строительные блоки для реализации
+//! типов данных:
 //!
-//! - `dict`: generic dictionary (hash map) implementation.
-//! - `int_set`: compact integer set for storing small integer collections.
-//! - `list_pack`: compact list structure for memory-efficient storage.
-//! - `lua`: bindings or context for embedded Lua scripting.
-//! - `quicklist`: hybrid list combining linked lists and ziplists.
-//! - `sds`: simple dynamic strings (SDS), similar to Redis internal strings.
-//! - `skip_list`: skip list for sorted data with fast access.
-//! - `smart_hash`: auto-scaling hash table with support for small optimizations.
-//! - `types`: defines `Value` types stored in the database.
+//! - `dict`: реализация словаря на основе хеш-таблицы.
+//! - `int_set`: компактное множество целых чисел для небольших коллекций.
+//! - `list_pack`: компактная структура списка для эффективного хранения.
+//! - `lua`: привязки и контекст для встроенного Lua.
+//! - `quicklist`: гибридный список, сочетающий связные списки и зиплисты.
+//! - `sds`: простые динамические строки (SDS), похожие на внутренние строки Redis.
+//! - `skip_list`: скип-лист для быстрого доступа к отсортированным данным.
+//! - `smart_hash`: автоматически масштабируемая хеш-таблица с оптимизациями.
+//! - `stream`: структуры для работы с потоками данных.
+//! - `types`: определяет корневые типы `Value`, хранящиеся в базе.
+//! - `pubsub_manager`: менеджер Pub/Sub — публикация, подписка и статистика.
+//!
+//! Публичный экспорт всех подмодулей и их функций упрощает доступ из внешнего кода.
 
 pub mod dict;
 pub mod geo;
