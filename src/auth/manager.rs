@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 
-use crate::error::auth::{AclError, AuthError, PasswordError};
+use crate::{AclError, AuthError, PasswordError};
 
 use super::{lookup_cmd_idx, parse_category};
 use super::{

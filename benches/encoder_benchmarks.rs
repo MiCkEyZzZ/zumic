@@ -2,6 +2,7 @@ use std::hint::black_box;
 use std::{borrow::Cow, collections::HashMap, f64::consts::PI};
 
 use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::network::zsp::frame::{encoder::ZspEncoder, zsp_types::ZspFrame};
 
 fn bench_inline_string(c: &mut Criterion) {

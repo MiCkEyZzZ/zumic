@@ -3,8 +3,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 
 use crate::{
-    error::system::{StoreError, StoreResult},
-    Sds, Storage, Value,
+    Sds, Storage, Value, {StoreError, StoreResult},
 };
 
 /// Потокобезопасное in-memory хранилище ключ-значение.

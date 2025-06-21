@@ -1,5 +1,7 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use once_cell::sync::Lazy;
+
+use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::auth::password::{hash_password, verify_password};
 
 const PEPPER: Option<&str> = Some("super_pepper");

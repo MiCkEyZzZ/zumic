@@ -5,8 +5,7 @@ use super::{
     AofLog, Storage,
 };
 use crate::{
-    error::system::{StoreError, StoreResult},
-    Sds, Value,
+    Sds, Value, {StoreError, StoreResult},
 };
 
 /// Хранилище с поддержкой постоянства через AOF (Append-Only File).

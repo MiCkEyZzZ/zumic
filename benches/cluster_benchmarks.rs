@@ -2,6 +2,7 @@ use std::hint::black_box;
 use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::{InClusterStore, InMemoryStore, Sds, Storage, Value}; // замени `your_crate` на имя твоего крейта
 
 fn make_cluster() -> InClusterStore {

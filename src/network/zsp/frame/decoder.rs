@@ -18,7 +18,7 @@ use bytes::Buf;
 use memchr::memchr;
 
 use super::zsp_types::ZspFrame;
-use crate::error::decode::DecodeError;
+use crate::DecodeError;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///

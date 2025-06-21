@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use super::Storage;
 use crate::{
-    error::system::{StoreError, StoreResult},
-    Sds, Value,
+    Sds, Value, {StoreError, StoreResult},
 };
 
 /// Количество слотов в кластере.

@@ -10,7 +10,7 @@
 
 use std::borrow::Cow;
 
-use crate::error::encode::EncodeError;
+use crate::EncodeError;
 
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},

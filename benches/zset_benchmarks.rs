@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+
 use zumic::{
     CommandExecute, {InMemoryStore, StorageEngine},
     {ZAddCommand, ZCardCommand, ZRangeCommand, ZRemCommand, ZScoreCommand},

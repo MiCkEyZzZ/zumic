@@ -2,6 +2,7 @@ use std::fs::remove_file;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use tempfile::NamedTempFile;
+
 use zumic::{
     engine::aof::{AofOp, SyncPolicy},
     AofLog,

@@ -69,3 +69,8 @@ pub use network::{server, zsp};
 
 /// API для Pub/Sub.
 pub use pubsub::{Broker, Message, PatternSubscription, Subscription};
+
+pub use error::{
+    AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
+    PasswordError, StoreError, StoreResult,
+};
