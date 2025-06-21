@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 
-use crate::database::{Dict, QuickList, Sds, SmartHash, Value};
+use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
 /// Frame types supported by the ZSP protocol.
 ///

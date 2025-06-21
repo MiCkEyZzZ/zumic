@@ -3,7 +3,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{
-    config::config::{StorageConfig, StorageType},
+    config::settings::{StorageConfig, StorageType},
     Sds, StorageEngine, Value,
 };
 
