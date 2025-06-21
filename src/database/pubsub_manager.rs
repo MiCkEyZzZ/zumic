@@ -109,11 +109,13 @@ mod tests {
 
         let msg1 = psub.receiver().recv().await.unwrap();
         assert!(msg1.channel.starts_with("news:"));
-        assert!(msg1.payload == Bytes::from("global") || msg1.payload == Bytes::from("city"));
+        let payload1: &[u8] = msg1.payload.as_ref();
+        assert!(payload1 == b"global" || payload1 == b"city");
 
         let msg2 = psub.receiver().recv().await.unwrap();
         assert!(msg2.channel.starts_with("news:"));
-        assert_ne!(msg1.payload, msg2.payload); // два разных сообщения
+        let payload2: &[u8] = msg2.payload.as_ref();
+        assert!(payload1 != payload2, "Expected two distinct payloads");
     }
 
     #[test]
