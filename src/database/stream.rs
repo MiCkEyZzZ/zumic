@@ -8,25 +8,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::Value;
 
+/// Уникальный идентификатор записи в потоке.
+/// Состоит из времени в миллисекундах и порядкового номера (sequence).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StreamId {
-    pub ms_time: u64,
-    pub sequence: u64,
+    pub ms_time: u64,  // Время создания записи в миллисекундах с эпохи UNIX
+    pub sequence: u64, // Порядковый номер записи в пределах одной миллисекунды
 }
 
+/// Запись потока — содержит идентификатор и данные.
+/// Данные — это ассоциативный массив (ключ-значение) с произвольными значениями.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StreamEntry {
     pub id: StreamId,
     pub data: HashMap<String, Value>,
 }
 
+/// Поток — структура, хранящая упорядоченный список записей.
+/// Использует атомарный счётчик для генерации уникальных идентификаторов.
 #[derive(Debug, Default)]
 pub struct Stream {
-    entries: VecDeque<StreamEntry>,
-    next_sequence: AtomicU64,
+    entries: VecDeque<StreamEntry>, // Очередь записей
+    next_sequence: AtomicU64,       // Атомарный счетчик для sequence
 }
 
 impl Stream {
+    /// Создает новый пустой поток
     pub fn new() -> Self {
         Self {
             entries: VecDeque::new(),
@@ -34,8 +41,13 @@ impl Stream {
         }
     }
 
+    /// Добавляет новую запись с данными в поток.
+    /// Автоматически создаёт уникальный идентификатор на основе текущего
+    /// времени и sequence.
+    /// Возвращает созданный StreamId.
     pub fn add(&mut self, data: HashMap<String, Value>) -> StreamId {
         let ms_time = Self::current_millis();
+        // Получаем следующий sequence атомарно (с использованием Relaxed порядка)
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         let id = StreamId { ms_time, sequence };
         self.entries.push_back(StreamEntry {
@@ -45,6 +57,8 @@ impl Stream {
         id
     }
 
+    /// Возвращает срез записей в диапазоне идентификаторов [start, end].
+    /// Идентификаторы сравниваются с помощью PartialOrd и Ord.
     pub fn range(&self, start: &StreamId, end: &StreamId) -> Vec<&StreamEntry> {
         self.entries
             .iter()
@@ -52,18 +66,23 @@ impl Stream {
             .collect()
     }
 
+    /// Итератор по всем записям в потоке в порядке их добавления.
     pub fn iter(&self) -> impl Iterator<Item = &StreamEntry> {
         self.entries.iter()
     }
 
+    /// Возвращает количество записей в потоке.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Проверяет, пуст ли поток.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Вспомогательная функция для получения текущего времени в
+    /// миллисекундах с эпохи UNIX.
     fn current_millis() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -76,12 +95,15 @@ impl Stream {
 mod tests {
     use super::*;
 
+    /// Вспомогательная функция для создания записи с одним ключом и значением Int.
     fn make_entry(key: &str, val: i64) -> HashMap<String, Value> {
         let mut hm = HashMap::new();
         hm.insert(key.to_string(), Value::Int(val));
         hm
     }
 
+    /// Тест проверяет методы new, is_empty и len, который корректно создаёт новый
+    /// поток пустым, и что методы `is_empty` и `len` корректно отражают состояние.
     #[test]
     fn test_new_is_empty() {
         let stream = Stream::new();
@@ -89,6 +111,8 @@ mod tests {
         assert_eq!(stream.len(), 0);
     }
 
+    /// Тест проверяет метод add, который корректно добавляет записи и sequence
+    /// увеличивается, а поток становится непустым, и корректно меняется длина.
     #[test]
     fn test_add_increments_and_len() {
         let mut stream = Stream::new();
@@ -102,10 +126,14 @@ mod tests {
         let id2 = stream.add(data2.clone());
         assert_eq!(stream.len(), 2);
 
+        // Проверяем, что время ms_time одинаковое (тест может сломаться, если время изменится между вызовами)
         assert_eq!(id2.ms_time, id1.ms_time);
+        // Проверяем, что sequence увеличился на 1
         assert_eq!(id2.sequence, id1.sequence + 1);
     }
 
+    /// Тест проверяет метод iter, который корректно возвращает записи в
+    /// порядке добавления, а данные в записях совпадают с теми, что мы добавляли.
     #[test]
     fn test_iter_yields_entries_in_order() {
         let mut stream = Stream::new();
@@ -123,6 +151,8 @@ mod tests {
         assert_eq!(entries[1].data.get("y"), Some(&Value::Int(20)));
     }
 
+    /// Тест проверяет метод range, который должен вернуть записи,
+    /// находящиеся в заданном диапазоне идентификаторов.
     #[test]
     fn test_range_limits_entries() {
         let mut stream = Stream::new();
@@ -134,19 +164,19 @@ mod tests {
         let id2 = stream.add(data2.clone());
         let id3 = stream.add(data3.clone());
 
-        // Range from id1 to id2 should include only first two entries
+        // Диапазон от id1 до id2 должен содержать первые две записи
         let slice = stream.range(&id1, &id2);
         assert_eq!(slice.len(), 2);
         assert_eq!(slice[0].id, id1);
         assert_eq!(slice[1].id, id2);
 
-        // Range from id2 to id3 should include last two
+        // Диапазон от id2 до id3 должен содержать последние две записи
         let slice2 = stream.range(&id2, &id3);
         assert_eq!(slice2.len(), 2);
         assert_eq!(slice2[0].id, id2);
         assert_eq!(slice2[1].id, id3);
 
-        // Range outside bounds should yield empty
+        // Диапазон от минимального до максимального id должен вернуть все записи
         let before = StreamId {
             ms_time: 0,
             sequence: 0,

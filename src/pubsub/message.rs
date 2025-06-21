@@ -118,13 +118,15 @@ mod tests {
     /// Verifies creation from slice and `Bytes`, comparing payload.
     #[test]
     fn new_from_slice_and_bytes_clone() {
-        let slice = b"slice_data";
-        let bytes = Bytes::from_static(b"bytes_data");
+        // slice имеет тип &[u8; 10]
+        let slice: &'static [u8; 10] = b"slice_data";
 
-        let m1 = Message::new("chan1", slice);
+        let m1 = Message::new("chan1", &slice[..]);
+
+        let bytes = Bytes::from_static(b"bytes_data");
         let m2 = Message::new("chan2", bytes.clone());
 
-        assert_eq!(m1.payload, Bytes::from_static(slice));
+        assert_eq!(m1.payload, Bytes::from_static(&slice[..]));
         assert_eq!(m2.payload, bytes);
     }
 

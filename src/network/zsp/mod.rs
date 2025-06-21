@@ -1,5 +1,5 @@
 #![allow(clippy::doc_lazy_continuation)]
-//! Модуль `zsp` реализует сетевой протокол ZSP (Zumic Socket Protocol).
+//! Модуль `zsp` реализует сетевой протокол ZSP (Zumic Serialization Protocol).
 //!
 //! Он включает в себя:
 //! - Субмодуль `frame` – низкоуровневый разбор и формирование **фреймов**

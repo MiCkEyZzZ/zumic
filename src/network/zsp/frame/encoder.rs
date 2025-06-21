@@ -127,6 +127,12 @@ impl ZspEncoder {
     }
 }
 
+impl Default for ZspEncoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
