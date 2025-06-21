@@ -54,3 +54,9 @@ impl PubSubManager {
         )
     }
 }
+
+impl Default for PubSubManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
