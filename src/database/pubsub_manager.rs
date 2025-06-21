@@ -60,3 +60,95 @@ impl Default for PubSubManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+
+    #[tokio::test]
+    async fn test_publish_and_subscribe() {
+        let manager = PubSubManager::new();
+        let mut sub = manager.subscribe("news");
+
+        manager.publish("news", Bytes::from("hello"));
+
+        let msg = sub.receiver().recv().await.unwrap();
+        assert_eq!(msg.payload, Bytes::from("hello"));
+        assert_eq!(&*msg.channel, "news");
+    }
+
+    #[tokio::test]
+    async fn test_unsubscribe_all() {
+        let manager = PubSubManager::new();
+        let mut sub = manager.subscribe("updates");
+
+        manager.unsubscribe_all("updates");
+        manager.publish("updates", Bytes::from("nope"));
+
+        // Ждём максимум 100 мс, затем `unwrap()` по таймауту
+        let res =
+            tokio::time::timeout(std::time::Duration::from_millis(100), sub.receiver().recv())
+                .await
+                .expect("recv() future timed out itself");
+        // И теперь ожидаем именно `Closed`
+        assert!(
+            matches!(res, Err(tokio::sync::broadcast::error::RecvError::Closed)),
+            "Expected channel to be closed, got {:?}",
+            res
+        );
+    }
+
+    #[tokio::test]
+    async fn test_psubscribe_and_publish() {
+        let manager = PubSubManager::new();
+        let mut psub = manager.psubscribe("news:*").unwrap();
+
+        manager.publish("news:world", Bytes::from("global"));
+        manager.publish("news:local", Bytes::from("city"));
+
+        let msg1 = psub.receiver().recv().await.unwrap();
+        assert!(msg1.channel.starts_with("news:"));
+        assert!(msg1.payload == Bytes::from("global") || msg1.payload == Bytes::from("city"));
+
+        let msg2 = psub.receiver().recv().await.unwrap();
+        assert!(msg2.channel.starts_with("news:"));
+        assert_ne!(msg1.payload, msg2.payload); // два разных сообщения
+    }
+
+    #[test]
+    fn test_psubscribe_invalid_pattern() {
+        let manager = PubSubManager::new();
+        let result = manager.psubscribe("**bad[pattern");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_punsubscribe_success() {
+        let manager = PubSubManager::new();
+        let pattern = "log:*";
+
+        manager.psubscribe(pattern).unwrap();
+        let result = manager.punsubscribe(pattern);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stats_tracking() {
+        let manager = PubSubManager::new();
+        manager.publish("any", Bytes::from("1"));
+        manager.publish("any", Bytes::from("2"));
+        let (published, errors) = manager.stats();
+
+        assert_eq!(published, 2);
+        assert_eq!(errors, 0);
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let defaulted = PubSubManager::default();
+        let direct = PubSubManager::new();
+        // Примитивное сравнение: просто проверим, что они не паникуют
+        assert_eq!(defaulted.stats().0, direct.stats().0);
+    }
+}
