@@ -1,7 +1,9 @@
-//! The Smart Dynamic String `Sds` module implements a data
-//! structure that represents a string, with optimized storage
-//! for both small and large strings, using a stack for small
-//! strings and a heap for long strings.
+//! Модуль "Умная динамическая строка" (Sds)
+//!
+//! Этот модуль реализует эффективную структуру данных для хранения строк,
+//! которая использует стек (stack) для коротких строк и кучу (heap) для длинных,
+//! обеспечивая компактность и высокую производительность.
+//! Структура автоматически переключается между двумя режимами хранения в зависимости от длины строки.
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -12,17 +14,20 @@ use std::str::{from_utf8, Utf8Error};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// Представление строки: в стеке (короткая) или в куче (длинная).
 #[derive(Debug, Clone)]
 enum Repr {
-    /// Short string, stored directly on the stack.
+    /// Короткая строка, хранимая напрямую в стеке.
     Inline { len: u8, buf: [u8; Sds::INLINE_CAP] },
-    /// Long string, stored on the heap.
+    /// Длинная строка, хранимая в куче.
     Heap { buf: Vec<u8>, len: usize },
 }
 
+/// Основная структура умной строки.
 #[derive(Debug, Clone)]
 pub struct Sds(Repr);
 
+// Реализация преобразования из &str в Sds через трейт FromStr.
 impl std::str::FromStr for Sds {
     type Err = std::convert::Infallible;
 
@@ -32,9 +37,10 @@ impl std::str::FromStr for Sds {
 }
 
 impl Sds {
-    /// Maximum string size at which the stack representation is used.
+    /// Максимальный размер строки, при котором используется стековое представление.
     pub const INLINE_CAP: usize = 22;
 
+    /// Создаёт Sds из вектора байт, выбирая стек или кучу в зависимости от размера.
     #[inline(always)]
     pub fn from_vec(vec: Vec<u8>) -> Self {
         let len = vec.len();
@@ -50,6 +56,7 @@ impl Sds {
         }
     }
 
+    /// Создаёт Sds из байтов, копируя их при необходимости.
     pub fn from_bytes<B: AsRef<[u8]>>(bytes: B) -> Self {
         let slice = bytes.as_ref();
         if slice.len() <= Self::INLINE_CAP {
@@ -66,6 +73,7 @@ impl Sds {
         }
     }
 
+    /// Создаёт строку из &str, автоматически определяя способ хранения.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let bytes = s.as_bytes();
@@ -83,6 +91,7 @@ impl Sds {
         }
     }
 
+    /// Возвращает содержимое строки как срез байт.
     pub fn as_slice(&self) -> &[u8] {
         match &self.0 {
             Repr::Inline { len, buf } => &buf[..*len as usize],
@@ -90,10 +99,12 @@ impl Sds {
         }
     }
 
+    /// Возвращает байтовое представление строки (аналог `as_slice`).
     pub fn as_bytes(&self) -> &[u8] {
         self.as_slice()
     }
 
+    /// Возвращает изменяемый срез байт.
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         match &mut self.0 {
             Repr::Inline { len, buf } => &mut buf[..*len as usize],
@@ -101,6 +112,7 @@ impl Sds {
         }
     }
 
+    /// Возвращает текущую длину строки.
     #[inline(always)]
     pub fn len(&self) -> usize {
         match &self.0 {
@@ -109,11 +121,13 @@ impl Sds {
         }
     }
 
+    /// Проверяет, пуста ли строка.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Возвращает текущую ёмкость буфера (полезно только для кучи).
     pub fn capacity(&self) -> usize {
         match &self.0 {
             Repr::Inline { .. } => Self::INLINE_CAP,
@@ -121,6 +135,7 @@ impl Sds {
         }
     }
 
+    /// Резервирует место для дополнительных байт.
     pub fn reserve(&mut self, additional: usize) {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
@@ -139,6 +154,7 @@ impl Sds {
         }
     }
 
+    /// Очищает содержимое строки (длина = 0).
     pub fn clear(&mut self) {
         match &mut self.0 {
             Repr::Inline { len, .. } => *len = 0,
@@ -146,6 +162,7 @@ impl Sds {
         }
     }
 
+    /// Добавляет один байт в конец строки.
     pub fn push(&mut self, byte: u8) {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
@@ -174,6 +191,7 @@ impl Sds {
         }
     }
 
+    /// Добавляет байтовую строку в конец текущей строки.
     pub fn append(&mut self, other: &[u8]) {
         let total = self.len() + other.len();
         match &mut self.0 {
@@ -211,6 +229,7 @@ impl Sds {
         }
     }
 
+    /// Обрезает строку до указанной длины.
     pub fn truncate(&mut self, new_len: usize) {
         match &mut self.0 {
             Repr::Inline { len, .. } => {
@@ -223,6 +242,7 @@ impl Sds {
         self.inline_downgrade();
     }
 
+    /// Возвращает срез строки в указанном диапазоне.
     pub fn slice_range(&self, start: usize, end: usize) -> Self {
         assert!(start <= end && end <= self.len(), "invalid slice range");
         let slice = &self.as_slice()[start..end];
@@ -242,6 +262,7 @@ impl Sds {
         }
     }
 
+    /// Преобразует строку обратно в стековое представление, если она стала достаточно короткой.
     fn inline_downgrade(&mut self) {
         if let Repr::Heap { buf, len } = &self.0 {
             if *len <= Self::INLINE_CAP {
@@ -255,6 +276,7 @@ impl Sds {
         }
     }
 
+    /// Преобразует байтовое представление строки в `&str`, если она валидна как UTF-8.
     pub fn as_str(&self) -> Result<&str, Utf8Error> {
         from_utf8(self.as_slice())
     }
@@ -365,7 +387,7 @@ impl From<&[u8]> for Sds {
 mod tests {
     use super::*;
 
-    /// Tests creating a string that fits within the inline representation.
+    /// Тест проверяет создание строки, которая помещается в стековое представление.
     #[test]
     fn test_inline_creation_from_str() {
         let s = Sds::from_str("hello");
@@ -374,7 +396,7 @@ mod tests {
         assert!(matches!(s.0, Repr::Inline { .. }));
     }
 
-    /// Tests creating a string that exceeds the inline limit and moves to the heap.
+    /// Тест проверяет создание строки, которая превышает лимит стека и переходит в кучу.
     #[test]
     fn test_heap_creation_from_str() {
         let long = "this is a long string exceeding the inline cap";
@@ -384,7 +406,7 @@ mod tests {
         assert!(matches!(s.0, Repr::Heap { .. }));
     }
 
-    /// Tests pushing a single byte that fits within the inline representation.
+    /// Тест проверяет добавление одного байта, помещающегося в стековое представление.
     #[test]
     fn test_push_within_inline() {
         let mut s = Sds::from_str("12345");
@@ -393,7 +415,7 @@ mod tests {
         assert!(matches!(s.0, Repr::Inline { .. }));
     }
 
-    /// Tests that pushing a byte causes the transition from inline to heap when overflowing.
+    /// Тест проверяет переход от стека к куче при добавлении байта, превышающего лимит.
     #[test]
     fn test_push_exceeding_inline() {
         let mut s = Sds::from_str("a".repeat(Sds::INLINE_CAP).as_str());
@@ -402,7 +424,7 @@ mod tests {
         assert_eq!(s.len(), Sds::INLINE_CAP + 1);
     }
 
-    /// Tests appending that does not exceed the inline representation.
+    /// Тест проверяет добавление байтов, не превышающее стековое представление.
     #[test]
     fn test_append_within_inline() {
         let mut s = Sds::from_str("123");
@@ -411,7 +433,7 @@ mod tests {
         assert!(matches!(s.0, Repr::Inline { .. }));
     }
 
-    /// Tests appending that causes the transition from inline to heap.
+    /// Тест проверяет добавление байтов, вызывающее переход к кучи.
     #[test]
     fn test_append_exceeding_inline() {
         let mut s = Sds::from_str("hello");
@@ -420,7 +442,7 @@ mod tests {
         assert_eq!(s.as_str().unwrap(), "hello world this is too long");
     }
 
-    /// Tests clearing the content of the string.
+    /// Тест проверяет очистку содержимого строки.
     #[test]
     fn test_clear() {
         let mut s = Sds::from_str("hello");
@@ -429,7 +451,7 @@ mod tests {
         assert!(s.is_empty());
     }
 
-    /// Tests truncating the string to a given length.
+    /// Тест проверяет усечение строки до заданной длины.
     #[test]
     fn test_truncate() {
         let mut s = Sds::from_str("hello world");
@@ -437,7 +459,7 @@ mod tests {
         assert_eq!(s.as_str().unwrap(), "hello");
     }
 
-    /// Tests that truncate converts the string from heap to inline if the length allows.
+    /// Тест проверяет, что усечение переводит строку из кучи обратно в стек при возможности.
     #[test]
     fn test_truncate_to_inline() {
         let mut s = Sds::from_str("a very very long string indeed");
@@ -447,7 +469,7 @@ mod tests {
         assert_eq!(s.as_str().unwrap(), "a ver");
     }
 
-    /// Tests slicing a string within a specified range.
+    /// Тест проверяет извлечение подстроки в заданном диапазоне.
     #[test]
     fn test_slice_range() {
         let s = Sds::from_str("abcdefg");
@@ -455,14 +477,14 @@ mod tests {
         assert_eq!(sliced.as_slice(), b"cde");
     }
 
-    /// Tests the correct display output of a string when it's a valid UTF-8 string.
+    /// Тест проверяет корректный вывод строки, если она валидна как UTF-8.
     #[test]
     fn test_display_valid_utf8() {
         let s = Sds::from_str("test");
         assert_eq!(format!("{s}"), "test");
     }
 
-    /// Tests comparing strings for equality and order.
+    /// Тест сравнения строк на равенство и порядок.
     #[test]
     fn test_equality_and_ordering() {
         let a = Sds::from_str("abc");
@@ -472,7 +494,7 @@ mod tests {
         assert!(a < c);
     }
 
-    /// Tests correct conversion of a string to `String` when valid UTF-8.
+    /// Тест корректного преобразования строки в `String`, если это допустимая UTF-8.
     #[test]
     fn test_try_from_valid_utf8() {
         let s = Sds::from_str("hello");
@@ -480,7 +502,7 @@ mod tests {
         assert_eq!(string, "hello");
     }
 
-    /// Tests that hashing of identical strings results in the same hash.
+    /// Тест на совпадение хэшей для одинаковых строк.
     #[test]
     fn test_hashing_consistency() {
         use std::collections::hash_map::DefaultHasher;
@@ -493,52 +515,52 @@ mod tests {
         assert_eq!(hasher1.finish(), hasher2.finish());
     }
 
-    /// Tests that slicing works correctly.
+    /// Тест на корректную работу срезов.
     #[test]
     fn test_check_slice_range() {
         let s = Sds::from_str("Hello, world!");
-        let sliced = s.slice_range(0, 5); // Expecting "Hello"
+        let sliced = s.slice_range(0, 5); // Ожидается "Hello"
         assert_eq!(sliced.as_str().unwrap(), "Hello");
 
-        let sliced = s.slice_range(7, 12); // Expecting "world"
+        let sliced = s.slice_range(7, 12); // Ожидается "world"
         assert_eq!(sliced.as_str().unwrap(), "world");
     }
 
-    /// Tests that an invalid string cannot be converted to UTF-8.
+    /// Тест, что недопустимая строка не может быть преобразована в UTF-8.
     #[test]
     fn test_invalid_utf8() {
-        let invalid_bytes = vec![0x80, 0x80, 0x80]; // Invalid UTF-8 bytes
+        let invalid_bytes = vec![0x80, 0x80, 0x80]; // Невалидные байты UTF-8
         let s = Sds::from_vec(invalid_bytes);
-        assert!(s.as_str().is_err()); // Should return error on conversion
+        assert!(s.as_str().is_err()); // Ожидается ошибка при преобразовании
     }
 
-    /// Tests reserving memory when adding data.
+    /// Тест выделения памяти при добавлении данных.
     #[test]
     fn test_reserve() {
         let mut s = Sds::from_str("Hello");
-        s.reserve(10); // Reserving extra memory
+        s.reserve(10); // Резервируем дополнительную память
         assert!(s.capacity() >= 15);
         assert_eq!(s.len(), 5);
     }
 
-    /// Tests the Deref functionality for Sds.
+    /// Тест на реализацию Deref для Sds.
     #[test]
     fn test_deref() {
         let s = Sds::from_str("Hello, world!");
-        let slice: &[u8] = &s; // Using Deref
+        let slice: &[u8] = &s; // Использование Deref
         assert_eq!(slice, b"Hello, world!");
     }
 
-    /// Tests the DerefMut functionality for Sds.
+    /// Тест на реализацию DerefMut для Sds.
     #[test]
     fn test_deref_mut() {
         let mut s = Sds::from_str("Hello");
-        let slice: &mut [u8] = &mut s; // Using DerefMut
-        slice[0] = b'J'; // Modifying the first character
+        let slice: &mut [u8] = &mut s; // Использование DerefMut
+        slice[0] = b'J'; // Изменяем первый символ
         assert_eq!(s.as_str().unwrap(), "Jello");
     }
 
-    /// Tests that the `push` method does not corrupt the string.
+    /// Тест, что метод `push` не портит строку.
     #[test]
     fn test_push_integrity() {
         let mut s = Sds::from_str("Rust");

@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 

@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 use super::{
     AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
     FlushDbCommand, GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand,

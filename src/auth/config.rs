@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 use std::fs;
 use std::path::Path;
 

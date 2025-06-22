@@ -1,34 +1,36 @@
 use crate::{Sds, StoreResult, Value};
 
-/// The `Storage` trait defines the interface for key-value store backends.
-/// All methods may return an error and produce a `StoreResult`.
+/// Трейт `Storage` определяет интерфейс для реализаций хранилища
+/// ключ-значение.
+/// Все методы могут возвращать ошибку и используют `StoreResult`
+/// как тип результата.
 pub trait Storage {
-    /// Sets the value for the given key.
-    /// Any existing value will be overwritten.
+    /// Устанавливает значение по заданному ключу.
+    /// Если значение по ключу уже существует, оно будет перезаписано.
     fn set(&self, key: &Sds, value: Value) -> StoreResult<()>;
 
-    /// Returns the value for the given key, or `None` if the key does not exist.
+    /// Возвращает значение по заданному ключу, либо `None`, если ключ не существует.
     fn get(&self, key: &Sds) -> StoreResult<Option<Value>>;
 
-    /// Removes the key from the store.
-    /// Returns `true` if the key was removed, or `false` if it didn’t exist.
+    /// Удаляет ключ из хранилища.
+    /// Возвращает `true`, если ключ был удалён, или `false`, если его не существовало.
     fn del(&self, key: &Sds) -> StoreResult<bool>;
 
-    /// Sets multiple key-value pairs in a single operation.
+    /// Устанавливает несколько пар ключ-значение за одну операцию.
     fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()>;
 
-    /// Returns the values for a list of keys.
-    /// If a key has no associated value, `None` is returned in its place.
+    /// Возвращает значения для списка ключей.
+    /// Если для какого-либо ключа значение отсутствует, на его месте будет `None`.
     fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>>;
 
-    /// Renames a key to a new name.
-    /// Returns an error if the original key does not exist.
+    /// Переименовывает ключ.
+    /// Возвращает ошибку, если исходный ключ не существует.
     fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()>;
 
-    /// Renames a key to a new name only if the target key does not already exist.
-    /// Returns `true` if the rename was successful, `false` if the destination key already exists.
+    /// Переименовывает ключ только в том случае, если новый ключ ещё не существует.
+    /// Возвращает `true`, если переименование удалось, `false` — если целевой ключ уже существует.
     fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool>;
 
-    /// Clears the database by removing all keys.
+    /// Очищает базу данных, удаляя все ключи.
     fn flushdb(&self) -> StoreResult<()>;
 }

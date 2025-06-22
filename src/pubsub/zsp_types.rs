@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 //! Типы протокола сериализации ZSP (Zumic Serialization Protocol).
 //!
 //! Протокол ZSP — это текстово-бинарный протокол с расширенным

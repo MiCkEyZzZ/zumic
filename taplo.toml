@@ -1,13 +1,13 @@
-# Enable for all Cargo.toml files
+# Включить для всех файлов Cargo.toml
 include = ["**/Cargo.toml"]
 
 [formatting]
-# Key sorting and array expansion
+# Сортировка ключей и расширение массива
 column_width = 100
 array_auto_expand = true
 array_auto_collapse = false
 compact_arrays = true
 compact_inline_tables = false
 array_trailing_comma = true
-indent_string = "    "  # Indentation with 4 spaces
+indent_string = "    "  # Отступ с 4 пробелами
 trailing_newline = true

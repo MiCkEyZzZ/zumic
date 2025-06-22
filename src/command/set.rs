@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 use std::collections::HashSet;
 
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};

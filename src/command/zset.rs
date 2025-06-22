@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 use ordered_float::OrderedFloat;
 
 use crate::{CommandExecute, Dict, QuickList, Sds, SkipList, StorageEngine, StoreError, Value};
