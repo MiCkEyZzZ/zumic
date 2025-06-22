@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::hint::black_box;
+use std::{collections::VecDeque, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 

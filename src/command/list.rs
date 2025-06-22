@@ -7,7 +7,10 @@ pub struct LPushCommand {
 }
 
 impl CommandExecute for LPushCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
@@ -31,7 +34,10 @@ pub struct RPushCommand {
 }
 
 impl CommandExecute for RPushCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let element = Sds::from_str(&self.value);
 
@@ -54,7 +60,10 @@ pub struct LPopCommand {
 }
 
 impl CommandExecute for LPopCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {
@@ -78,7 +87,10 @@ pub struct RPopCommand {
 }
 
 impl CommandExecute for RPopCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {
@@ -102,7 +114,10 @@ pub struct LLenCommand {
 }
 
 impl CommandExecute for LLenCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         match store.get(&key)? {
             Some(Value::List(list)) => Ok(Value::Int(list.len() as i64)),
@@ -120,7 +135,10 @@ pub struct LRangeCommand {
 }
 
 impl CommandExecute for LRangeCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         match store.get(&key)? {
             Some(Value::List(list)) => {

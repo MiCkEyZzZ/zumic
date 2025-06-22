@@ -1,14 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
-use tokio::sync::RwLock;
-use tokio::time::{Duration, Instant};
+use tokio::{
+    sync::RwLock,
+    time::{Duration, Instant},
+};
 
 use crate::{AclError, AuthError, PasswordError};
 
-use super::{lookup_cmd_idx, parse_category};
-use super::{
-    Acl, ServerConfig, {hash_password, verify_password},
-};
+use super::{hash_password, lookup_cmd_idx, parse_category, verify_password, Acl, ServerConfig};
 
 /// Максимальное количество неудачных попыток входа перед временной блокировкой.
 const MAX_FAILS: u8 = 5;
@@ -76,7 +75,11 @@ impl AuthManager {
     }
 
     /// Аутентифицирует пользователя по имени и паролю.
-    pub async fn authenticate(&self, username: &str, password: &str) -> Result<(), AuthError> {
+    pub async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<(), AuthError> {
         // Проверка блокировки пользователя по неудачным попыткам
         {
             let mut failures = self.failures.write().await;
@@ -147,7 +150,11 @@ impl AuthManager {
     }
 
     /// Проверяет доступ пользователя к конкретному ключу.
-    pub async fn authorize_key(&self, username: &str, key: &str) -> Result<(), AuthError> {
+    pub async fn authorize_key(
+        &self,
+        username: &str,
+        key: &str,
+    ) -> Result<(), AuthError> {
         let acl = self.acl.read().await;
         let user = acl.acl_getuser(username).ok_or(AuthError::UserNotFound)?;
         if user.check_key(key) {

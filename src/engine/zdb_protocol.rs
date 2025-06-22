@@ -11,7 +11,10 @@ use crate::Value;
 
 /// Сохраняет все ключи и значения из хранилища в файл ZDB.
 /// Ключи и значения записываются попарно: сначала ключ, затем значение.
-pub fn save_to_zdb(store: &InMemoryStore, path: &str) -> std::io::Result<()> {
+pub fn save_to_zdb(
+    store: &InMemoryStore,
+    path: &str,
+) -> std::io::Result<()> {
     let mut file = BufWriter::new(File::create(path)?);
     for (k, v) in store.iter() {
         // Сначала сохраняем ключ как Value::Str
@@ -25,7 +28,10 @@ pub fn save_to_zdb(store: &InMemoryStore, path: &str) -> std::io::Result<()> {
 
 /// Загружает ключи и значения из файла ZDB в указанное хранилище.
 /// Ожидается, что каждая пара состоит из строки-ключа и произвольного значения.
-pub fn load_from_zdb(store: &mut InMemoryStore, path: &str) -> std::io::Result<()> {
+pub fn load_from_zdb(
+    store: &mut InMemoryStore,
+    path: &str,
+) -> std::io::Result<()> {
     let mut file = BufReader::new(File::open(path)?);
 
     loop {

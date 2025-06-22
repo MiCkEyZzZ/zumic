@@ -5,12 +5,14 @@
 //! обеспечивая компактность и высокую производительность.
 //! Структура автоматически переключается между двумя режимами хранения в зависимости от длины строки.
 
-use std::cmp::Ordering;
-use std::convert::TryFrom;
-use std::fmt::{self, Display};
-use std::hash::{Hash, Hasher};
-use std::ops::{Deref, DerefMut};
-use std::str::{from_utf8, Utf8Error};
+use std::{
+    cmp::Ordering,
+    convert::TryFrom,
+    fmt::{self, Display},
+    hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
+    str::{from_utf8, Utf8Error},
+};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -136,7 +138,10 @@ impl Sds {
     }
 
     /// Резервирует место для дополнительных байт.
-    pub fn reserve(&mut self, additional: usize) {
+    pub fn reserve(
+        &mut self,
+        additional: usize,
+    ) {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
                 let cur_len = *len as usize;
@@ -163,7 +168,10 @@ impl Sds {
     }
 
     /// Добавляет один байт в конец строки.
-    pub fn push(&mut self, byte: u8) {
+    pub fn push(
+        &mut self,
+        byte: u8,
+    ) {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
                 let cur_len = *len as usize;
@@ -192,7 +200,10 @@ impl Sds {
     }
 
     /// Добавляет байтовую строку в конец текущей строки.
-    pub fn append(&mut self, other: &[u8]) {
+    pub fn append(
+        &mut self,
+        other: &[u8],
+    ) {
         let total = self.len() + other.len();
         match &mut self.0 {
             Repr::Inline { len, buf } => {
@@ -230,7 +241,10 @@ impl Sds {
     }
 
     /// Обрезает строку до указанной длины.
-    pub fn truncate(&mut self, new_len: usize) {
+    pub fn truncate(
+        &mut self,
+        new_len: usize,
+    ) {
         match &mut self.0 {
             Repr::Inline { len, .. } => {
                 *len = new_len.min(*len as usize) as u8;
@@ -243,7 +257,11 @@ impl Sds {
     }
 
     /// Возвращает срез строки в указанном диапазоне.
-    pub fn slice_range(&self, start: usize, end: usize) -> Self {
+    pub fn slice_range(
+        &self,
+        start: usize,
+        end: usize,
+    ) -> Self {
         assert!(start <= end && end <= self.len(), "invalid slice range");
         let slice = &self.as_slice()[start..end];
 
@@ -305,7 +323,10 @@ impl DerefMut for Sds {
 }
 
 impl Display for Sds {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
         match self.as_str() {
             Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "{:?}", self.as_slice()),
@@ -314,13 +335,19 @@ impl Display for Sds {
 }
 
 impl Hash for Sds {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H,
+    ) {
         self.as_slice().hash(state);
     }
 }
 
 impl PartialEq for Sds {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
@@ -328,13 +355,19 @@ impl PartialEq for Sds {
 impl Eq for Sds {}
 
 impl PartialOrd for Sds {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Sds {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
         self.as_slice().cmp(other.as_slice())
     }
 }
@@ -347,7 +380,10 @@ impl TryFrom<Sds> for String {
 }
 
 impl Serialize for Sds {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {

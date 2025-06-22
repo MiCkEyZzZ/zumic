@@ -1,5 +1,7 @@
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use std::{
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
 
 use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -171,7 +173,10 @@ impl AclUser {
     }
 
     /// Добавляет новый шаблон ключей для разрешения и помечает паттерны "dirty".
-    pub fn allow_key_pattern(&mut self, pat: &str) -> Result<(), AclError> {
+    pub fn allow_key_pattern(
+        &mut self,
+        pat: &str,
+    ) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_key_patterns.push(g);
         // Пересобираем только ключи:
@@ -180,7 +185,10 @@ impl AclUser {
     }
 
     /// Добавляет новый шаблон ключей в список запретов и помечает паттерны "dirty".
-    pub fn deny_key_pattern(&mut self, pat: &str) -> Result<(), AclError> {
+    pub fn deny_key_pattern(
+        &mut self,
+        pat: &str,
+    ) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_key_patterns.push(g);
         // Пересобираем только deny-ключи:
@@ -189,7 +197,10 @@ impl AclUser {
     }
 
     /// Добавляет новый шаблон каналов для разрешения и помечает паттерны "dirty".
-    pub fn allow_channel_pattern(&mut self, pat: &str) -> Result<(), AclError> {
+    pub fn allow_channel_pattern(
+        &mut self,
+        pat: &str,
+    ) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_channel_patterns.push(g);
         self.channel_patterns = Self::rebuild_globset(&self.raw_channel_patterns)?;
@@ -197,7 +208,10 @@ impl AclUser {
     }
 
     /// Добавляет новый шаблон каналов в список запретов и помечает паттерны "dirty".
-    pub fn deny_channel_pattern(&mut self, pat: &str) -> Result<(), AclError> {
+    pub fn deny_channel_pattern(
+        &mut self,
+        pat: &str,
+    ) -> Result<(), AclError> {
         let g = Glob::new(pat).map_err(|_| AclError::InvalidAclRule(pat.into()))?;
         self.raw_deny_channel_patterns.push(g);
         self.deny_channel_patterns = Self::rebuild_globset(&self.raw_deny_channel_patterns)?;
@@ -206,7 +220,11 @@ impl AclUser {
 
     /// Проверяет, имеет ли пользователь право выполнить команду.
     /// Горячий путь: принимает уже разобранную категорию и опциональный индекс команды.
-    pub fn check_idx(&self, category: CmdCategory, cmd_idx: Option<usize>) -> bool {
+    pub fn check_idx(
+        &self,
+        category: CmdCategory,
+        cmd_idx: Option<usize>,
+    ) -> bool {
         if !self.enabled {
             return false;
         }
@@ -225,7 +243,10 @@ impl AclUser {
     }
 
     /// Проверяет, разрешён ли доступ к заданному ключу.
-    pub fn check_key(&self, key: &str) -> bool {
+    pub fn check_key(
+        &self,
+        key: &str,
+    ) -> bool {
         if !self.enabled {
             return false;
         }
@@ -240,7 +261,10 @@ impl AclUser {
     }
 
     /// Проверяет доступность Pub/Sub-канала на основе заданных шаблонов.
-    pub fn check_channel(&self, channel: &str) -> bool {
+    pub fn check_channel(
+        &self,
+        channel: &str,
+    ) -> bool {
         if !self.enabled {
             return false;
         }
@@ -278,7 +302,11 @@ impl AclUser {
 
 impl Acl {
     /// Устанавливает или обновляет пользователя с набором правил ACL.
-    pub fn acl_setuser(&self, username: &str, rules: &[&str]) -> Result<(), AclError> {
+    pub fn acl_setuser(
+        &self,
+        username: &str,
+        rules: &[&str],
+    ) -> Result<(), AclError> {
         // Сначала парсим все строки-правила в enum-значения
         let parsed: Vec<AclRule> = rules.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
 
@@ -318,12 +346,18 @@ impl Acl {
     }
 
     /// Возвращает копию данных пользователя ACL по его имени.
-    pub fn acl_getuser(&self, username: &str) -> Option<AclUser> {
+    pub fn acl_getuser(
+        &self,
+        username: &str,
+    ) -> Option<AclUser> {
         self.users.get(username).map(|u| u.read().unwrap().clone())
     }
 
     /// Удаляет пользователя ACL по его имени.
-    pub fn acl_deluser(&self, username: &str) -> Result<(), AclError> {
+    pub fn acl_deluser(
+        &self,
+        username: &str,
+    ) -> Result<(), AclError> {
         self.users
             .remove(username)
             .map(|_| ())

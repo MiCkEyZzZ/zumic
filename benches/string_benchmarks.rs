@@ -3,11 +3,14 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{
-    CommandExecute, {AppendCommand, GetRangeCommand, StrLenCommand},
-    {InMemoryStore, StorageEngine}, {Sds, Value},
+    AppendCommand, CommandExecute, GetRangeCommand, InMemoryStore, Sds, StorageEngine,
+    StrLenCommand, Value,
 };
 
-fn setup_store_with_str(key: &str, value: &str) -> StorageEngine {
+fn setup_store_with_str(
+    key: &str,
+    value: &str,
+) -> StorageEngine {
     let store = StorageEngine::Memory(InMemoryStore::new());
     store
         .set(&Sds::from_str(key), Value::Str(Sds::from_str(value)))

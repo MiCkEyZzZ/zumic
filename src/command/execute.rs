@@ -14,7 +14,10 @@ pub trait CommandExecute: std::fmt::Debug {
     ///
     /// Этот метод изменяет состояние хранилища и возвращает результат в виде
     /// значения типа `Value` или ошибку типа `StoreError`.
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError>;
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError>;
 }
 
 #[derive(Debug)]
@@ -64,7 +67,10 @@ pub enum Command {
 }
 
 impl CommandExecute for Command {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         match self {
             Command::Set(cmd) => cmd.execute(store),
             Command::Get(cmd) => cmd.execute(store),

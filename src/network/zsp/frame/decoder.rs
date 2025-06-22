@@ -70,7 +70,10 @@ impl<'a> ZspDecoder<'a> {
         }
     }
 
-    pub fn decode(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    pub fn decode(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         let state = std::mem::replace(&mut self.state, ZspDecodeState::Initial);
 
         match state {
@@ -203,12 +206,18 @@ impl<'a> ZspDecoder<'a> {
         Ok(Some(ZspFrame::InlineString(Cow::Borrowed(line))))
     }
 
-    fn parse_error(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    fn parse_error(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         let line = self.read_line(slice)?;
         Ok(Some(ZspFrame::FrameError(line.to_string())))
     }
 
-    fn parse_integer(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    fn parse_integer(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         let line = self.read_line(slice)?;
         let num = line.parse::<i64>().map_err(|_| {
             let err_msg = "Invalid integer".to_string();
@@ -219,7 +228,10 @@ impl<'a> ZspDecoder<'a> {
 
     /// Декодирует число с плавающей точкой (префикс `,`).
     /// Формат: `,<float>\r\n`
-    fn parse_float(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    fn parse_float(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         let line = self.read_line(slice)?;
         let num = line.parse::<f64>().map_err(|_| {
             let err_msg = "Invalid float".to_string();
@@ -229,7 +241,10 @@ impl<'a> ZspDecoder<'a> {
     }
 
     /// Парсит булево значение: `#t\r\n` или `#f\r\n`
-    fn parse_bool(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    fn parse_bool(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         if slice.len() < 3 {
             return Err(DecodeError::UnexpectedEof("Incomplete boolean".into()));
         }
@@ -410,7 +425,10 @@ impl<'a> ZspDecoder<'a> {
     /// Содержит <count> пар "член-оценка", где оценка — число с плавающей
     /// точкой:contentReference[oaicite:7]{index=7}.
     /// Пример: `^2\r\n$3\r\nfoo\r\n,1.23\r\n$3\r\nbar\r\n,4.56\r\n`.
-    fn parse_zset(&mut self, slice: &mut &'a [u8]) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    fn parse_zset(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
         // Считываем количество элементов ZSET
         let len_str = self.read_line(slice)?;
         let len = len_str
@@ -474,7 +492,10 @@ impl<'a> ZspDecoder<'a> {
         Ok(Some(ZspFrame::Array(std::mem::take(items))))
     }
 
-    fn read_line(&mut self, slice: &mut &'a [u8]) -> Result<&'a str, DecodeError> {
+    fn read_line(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<&'a str, DecodeError> {
         if let Some(pos) = memchr(b'\r', slice) {
             if pos + 1 < slice.len() && slice[pos + 1] == b'\n' {
                 let line = &slice[..pos];
@@ -489,7 +510,10 @@ impl<'a> ZspDecoder<'a> {
     }
 
     #[inline(always)]
-    fn expect_crlf(&self, slice: &mut &'a [u8]) -> Result<(), DecodeError> {
+    fn expect_crlf(
+        &self,
+        slice: &mut &'a [u8],
+    ) -> Result<(), DecodeError> {
         if slice.len() < 2 || slice[0] != b'\r' || slice[1] != b'\n' {
             return Err(DecodeError::UnexpectedEof("Expected CRLF".to_string()));
         }

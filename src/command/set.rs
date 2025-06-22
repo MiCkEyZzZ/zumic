@@ -9,7 +9,10 @@ pub struct SAddCommand {
 }
 
 impl CommandExecute for SAddCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -37,7 +40,10 @@ pub struct SRemCommand {
 }
 
 impl CommandExecute for SRemCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -58,7 +64,10 @@ pub struct SIsMemberCommand {
 }
 
 impl CommandExecute for SIsMemberCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -76,7 +85,10 @@ pub struct SMembersCommand {
 }
 
 impl CommandExecute for SMembersCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         if let Some(Value::Set(set)) = store.get(&key)? {
@@ -94,7 +106,10 @@ pub struct SCardCommand {
 }
 
 impl CommandExecute for SCardCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {

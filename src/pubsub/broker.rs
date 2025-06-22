@@ -51,7 +51,10 @@ impl Broker {
     /// Подписка на паттерн (glob), например "kin.*" или "a?c".
     ///
     /// Повторная подписка на один и тот же паттерн возвращает тот же канал отправки.
-    pub fn psubscribe(&self, pattern: &str) -> Result<PatternSubscription, globset::Error> {
+    pub fn psubscribe(
+        &self,
+        pattern: &str,
+    ) -> Result<PatternSubscription, globset::Error> {
         let glob = Glob::new(pattern)?;
         let tx = self
             .patterns
@@ -65,7 +68,10 @@ impl Broker {
     }
 
     /// Отписка от паттерна. Удаляет связанный отправитель.
-    pub fn punsubscribe(&self, pattern: &str) -> Result<(), globset::Error> {
+    pub fn punsubscribe(
+        &self,
+        pattern: &str,
+    ) -> Result<(), globset::Error> {
         let glob = Glob::new(pattern)?;
         self.patterns.remove(&glob);
         Ok(())
@@ -74,7 +80,10 @@ impl Broker {
     /// Подписка на точный канал по имени.
     ///
     /// Ключ канала — interned `Arc<str>`.
-    pub fn subscribe(&self, channel: &str) -> Subscription {
+    pub fn subscribe(
+        &self,
+        channel: &str,
+    ) -> Subscription {
         let key: Arc<str> = intern_channel(channel);
         let tx = self
             .channels
@@ -95,7 +104,11 @@ impl Broker {
     ///
     /// Если в точном канале нет подписчиков, увеличивается счётчик ошибок,
     /// и канал удаляется.
-    pub fn publish(&self, channel: &str, payload: Bytes) {
+    pub fn publish(
+        &self,
+        channel: &str,
+        payload: Bytes,
+    ) {
         self.publish_count.fetch_add(1, Ordering::Relaxed);
 
         // 1) точное совпадение
@@ -127,7 +140,10 @@ impl Broker {
     /// Удаляет все подписки и сам канал.
     ///
     /// После этого публикации в канал не создадут его заново.
-    pub fn unsubscribe_all(&self, channel: &str) {
+    pub fn unsubscribe_all(
+        &self,
+        channel: &str,
+    ) {
         self.channels.remove(channel);
     }
 }
@@ -135,8 +151,10 @@ impl Broker {
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-    use tokio::sync::broadcast::error::RecvError;
-    use tokio::time::{timeout, Duration};
+    use tokio::{
+        sync::broadcast::error::RecvError,
+        time::{timeout, Duration},
+    };
 
     use super::*;
 

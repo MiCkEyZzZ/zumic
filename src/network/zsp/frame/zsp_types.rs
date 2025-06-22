@@ -7,9 +7,11 @@
 //! along with conversions from internal types such as `Value`,
 //! `Sds`, `SmartHash`, etc.
 
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+};
 
 use crate::{Dict, QuickList, Sds, SmartHash, Value};
 

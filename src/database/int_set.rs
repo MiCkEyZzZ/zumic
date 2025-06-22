@@ -57,7 +57,10 @@ impl IntSet {
     }
 
     /// Checks whether the set contains the given value.
-    pub fn contains(&self, v: i64) -> bool {
+    pub fn contains(
+        &self,
+        v: i64,
+    ) -> bool {
         match self.enc {
             Encoding::Int16 => {
                 let x = v as i16;
@@ -73,7 +76,10 @@ impl IntSet {
 
     /// Inserts a value into the set. Returns `true` if the value was added,
     /// or `false` if it was already present.
-    pub fn insert(&mut self, v: i64) -> bool {
+    pub fn insert(
+        &mut self,
+        v: i64,
+    ) -> bool {
         let need = if v >= i16::MIN as i64 && v <= i16::MAX as i64 {
             Encoding::Int16
         } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
@@ -118,7 +124,10 @@ impl IntSet {
     }
 
     /// Upgrades the internal encoding to support larger values.
-    fn upgrade(&mut self, new_enc: Encoding) {
+    fn upgrade(
+        &mut self,
+        new_enc: Encoding,
+    ) {
         match (self.enc, new_enc) {
             (Encoding::Int16, Encoding::Int32) => {
                 self.data32 = self.data16.iter().map(|&x| x as i32).collect();
@@ -135,7 +144,10 @@ impl IntSet {
     }
 
     /// Removes a value from the set. Returns `true` if the value was present.
-    pub fn remove(&mut self, v: i64) -> bool {
+    pub fn remove(
+        &mut self,
+        v: i64,
+    ) -> bool {
         match self.enc {
             Encoding::Int16 => {
                 let x = v as i16;

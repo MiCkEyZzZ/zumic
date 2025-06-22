@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use crate::{
-    Sds, Storage, Value, {StoreError, StoreResult},
-};
+use crate::{Sds, Storage, StoreError, StoreResult, Value};
 
 /// Потокобезопасное in-memory хранилище ключ-значение.
 ///
@@ -41,7 +39,11 @@ impl Storage for InMemoryStore {
     /// Устанавливает значение для ключа.
     ///
     /// Перезаписывает существующее значение, если ключ уже существует.
-    fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
+    fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()> {
         self.data.insert(key.clone(), value);
         Ok(())
     }
@@ -49,20 +51,29 @@ impl Storage for InMemoryStore {
     /// Получает значение по ключу.
     ///
     /// Возвращает `Ok(Some(value))`, если ключ существует, иначе `Ok(None)`.
-    fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
+    fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>> {
         Ok(self.data.get(key).map(|entry| entry.value().clone()))
     }
 
     /// Удаляет ключ. Возвращает `Ok(true)`, если ключ действительно был удалён,
     /// и `Ok(false)`, если ключ не существовал.
-    fn del(&self, key: &Sds) -> StoreResult<bool> {
+    fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool> {
         Ok(self.data.remove(key).is_some())
     }
 
     /// Массовая установка значений.
     ///
     /// Устанавливает все переданные пары ключ-значение. Ключи клонируются.
-    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
+    fn mset(
+        &self,
+        entries: Vec<(&Sds, Value)>,
+    ) -> StoreResult<()> {
         for (key, value) in entries {
             self.data.insert(key.clone(), value);
         }
@@ -72,7 +83,10 @@ impl Storage for InMemoryStore {
     /// Массовое получение значений по ключам.
     ///
     /// Возвращает вектор опциональных значений, соответствующих переданным ключам.
-    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
+    fn mget(
+        &self,
+        keys: &[&Sds],
+    ) -> StoreResult<Vec<Option<Value>>> {
         let result = keys
             .iter()
             .map(|key| self.data.get(key).map(|entry| entry.value().clone()))
@@ -84,7 +98,11 @@ impl Storage for InMemoryStore {
     ///
     /// Удаляет старый ключ и вставляет значение по новому.
     /// Возвращает ошибку `KeyNotFound`, если исходный ключ не существует.
-    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
+    fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()> {
         if let Some((_, value)) = self.data.remove(from) {
             self.data.insert(to.clone(), value);
             Ok(())
@@ -98,7 +116,11 @@ impl Storage for InMemoryStore {
     /// Возвращает `Ok(true)`, если переименование прошло успешно.
     /// Возвращает `Ok(false)`, если целевой ключ уже существует.
     /// Возвращает `Err(KeyNotFound)`, если исходный ключ отсутствует.
-    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
+    fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool> {
         if self.data.contains_key(to) {
             return Ok(false);
         }

@@ -6,7 +6,10 @@ pub struct StrLenCommand {
 }
 
 impl CommandExecute for StrLenCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         if let Some(value) = store.get(&key)? {
             if let Value::Str(ref s) = value {
@@ -27,7 +30,10 @@ pub struct AppendCommand {
 }
 
 impl CommandExecute for AppendCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let append_data = self.value.as_bytes();
 
@@ -60,7 +66,10 @@ pub struct GetRangeCommand {
 }
 
 impl CommandExecute for GetRangeCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         if let Some(value) = store.get(&key)? {
             if let Value::Str(ref s) = value {

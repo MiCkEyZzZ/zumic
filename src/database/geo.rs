@@ -29,7 +29,12 @@ impl GeoSet {
 
     /// Добавить или обновить точку.
     /// Высчитываем score = encode_geohash(lon, lat).
-    pub fn add(&mut self, member: String, lon: f64, lat: f64) {
+    pub fn add(
+        &mut self,
+        member: String,
+        lon: f64,
+        lat: f64,
+    ) {
         let point = GeoPoint { lon, lat };
         let score = encode_geohash_bits(lon, lat);
         if let Some(e) = self.entries.iter_mut().find(|e| e.member == member) {
@@ -47,7 +52,10 @@ impl GeoSet {
     }
 
     /// Получить точку по имени.
-    pub fn get(&self, member: &str) -> Option<GeoPoint> {
+    pub fn get(
+        &self,
+        member: &str,
+    ) -> Option<GeoPoint> {
         self.entries
             .iter()
             .find(|e| e.member == member)
@@ -55,7 +63,11 @@ impl GeoSet {
     }
 
     /// Расстояние между двумя точками в метрах.
-    pub fn dist(&self, m1: &str, m2: &str) -> Option<f64> {
+    pub fn dist(
+        &self,
+        m1: &str,
+        m2: &str,
+    ) -> Option<f64> {
         let p1 = self.get(m1)?;
         let p2 = self.get(m2)?;
         Some(haversine_distance(p1, p2))
@@ -64,7 +76,12 @@ impl GeoSet {
     /// Простой радиусный поиск:
     /// возвращает всех членов, чьё score попадает в [center_score - Δ, center_score + Δ]
     /// и чей фактический distance ≤ radius_meters.
-    pub fn radius(&self, lon: f64, lat: f64, radius_m: f64) -> Vec<(String, f64)> {
+    pub fn radius(
+        &self,
+        lon: f64,
+        lat: f64,
+        radius_m: f64,
+    ) -> Vec<(String, f64)> {
         let center = GeoPoint { lon, lat };
         self.entries
             .iter()
@@ -81,7 +98,11 @@ impl GeoSet {
 }
 
 /// refine_bit - сужает диапазон и возвращает 0/1.
-fn refine_bit(v: f64, min: &mut f64, max: &mut f64) -> u64 {
+fn refine_bit(
+    v: f64,
+    min: &mut f64,
+    max: &mut f64,
+) -> u64 {
     let mid = (*min + *max) * 0.5;
     if v >= mid {
         *min = mid;
@@ -93,7 +114,10 @@ fn refine_bit(v: f64, min: &mut f64, max: &mut f64) -> u64 {
 }
 
 /// encode в 52-битный hash (interleaved lon/lat).
-fn encode_geohash_bits(lon: f64, lat: f64) -> u64 {
+fn encode_geohash_bits(
+    lon: f64,
+    lat: f64,
+) -> u64 {
     let mut lon_min = -180.0;
     let mut lon_max = 180.0;
     let mut lat_min = -90.0;
@@ -140,7 +164,10 @@ fn decode_geohash_bits(hash: u64) -> (f64, f64) {
 }
 
 /// Формула Haversine - расстояния в метрах.
-fn haversine_distance(p1: GeoPoint, p2: GeoPoint) -> f64 {
+fn haversine_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> f64 {
     let to_rad = std::f64::consts::PI / 180.0;
     let dlat = (p2.lat - p1.lat) * to_rad;
     let dlon = (p2.lon - p1.lon) * to_rad;

@@ -25,7 +25,10 @@ impl Message {
     ///
     /// Параметр `channel` может быть любого типа, реализующего `AsRef<str>` (`&str`, `String`, `Arc<str>`),
     /// а `payload` — любого типа, преобразуемого в `Bytes` (`Vec<u8>`, `&[u8]`, `Bytes`).
-    pub fn new<S, P>(channel: S, payload: P) -> Self
+    pub fn new<S, P>(
+        channel: S,
+        payload: P,
+    ) -> Self
     where
         S: AsRef<str>,
         P: Into<Bytes>,
@@ -40,7 +43,10 @@ impl Message {
     ///
     /// Это самый быстрый способ создать сообщение, если и канал, и содержимое имеют
     /// статическую область видимости (`'static`).
-    pub fn from_static(channel: &'static str, payload: &'static [u8]) -> Self {
+    pub fn from_static(
+        channel: &'static str,
+        payload: &'static [u8],
+    ) -> Self {
         Self {
             channel: intern_channel(channel),
             payload: Bytes::from_static(payload),

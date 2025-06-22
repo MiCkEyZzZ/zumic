@@ -23,7 +23,10 @@ static ARGON2: Lazy<Argon2> = Lazy::new(|| {
 });
 
 /// Хэширует `password`, опционально добавляя `pepper` (секрет из конфига).
-pub fn hash_password(password: &str, pepper: Option<&str>) -> Result<String, PasswordError> {
+pub fn hash_password(
+    password: &str,
+    pepper: Option<&str>,
+) -> Result<String, PasswordError> {
     let mut pwd = String::with_capacity(password.len() + pepper.map_or(0, |p| p.len()));
     pwd.push_str(password);
 

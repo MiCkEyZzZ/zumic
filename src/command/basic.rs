@@ -7,7 +7,10 @@ pub struct SetCommand {
 }
 
 impl CommandExecute for SetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         store.set(&Sds::from_str(self.key.as_str()), self.value.clone())?;
         Ok(Value::Null)
     }
@@ -19,7 +22,10 @@ pub struct GetCommand {
 }
 
 impl CommandExecute for GetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let result = store.get(&Sds::from_str(self.key.as_str()));
         match result {
             Ok(Some(value)) => Ok(value),
@@ -35,7 +41,10 @@ pub struct DelCommand {
 }
 
 impl CommandExecute for DelCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let deleted = store.del(&Sds::from_str(&self.key))?;
         Ok(Value::Bool(deleted))
     }
@@ -47,7 +56,10 @@ pub struct ExistsCommand {
 }
 
 impl CommandExecute for ExistsCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let count = self
             .keys
             .iter()
@@ -67,7 +79,10 @@ pub struct SetNxCommand {
 }
 
 impl CommandExecute for SetNxCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let exists = store.get(&Sds::from_str(&self.key))?.is_some();
         if !exists {
             store.set(&Sds::from_str(&self.key), self.value.clone())?;
@@ -84,7 +99,10 @@ pub struct MSetCommand {
 }
 
 impl CommandExecute for MSetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let mut keys: Vec<Sds> = Vec::with_capacity(self.entries.len());
         for (k, _) in &self.entries {
             keys.push(Sds::from_str(k));
@@ -105,7 +123,10 @@ pub struct MGetCommand {
 }
 
 impl CommandExecute for MGetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         // 1. Сначала переводим все String → Sds и храним их,
         //    чтобы ссылки на них были валидны
         let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
@@ -143,7 +164,10 @@ pub struct RenameCommand {
 }
 
 impl CommandExecute for RenameCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         store.rename(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Str(Sds::from_str("")))
     }
@@ -156,7 +180,10 @@ pub struct RenameNxCommand {
 }
 
 impl CommandExecute for RenameNxCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let success = store.renamenx(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Int(if success { 1 } else { 0 }))
     }
@@ -166,7 +193,10 @@ impl CommandExecute for RenameNxCommand {
 pub struct FlushDbCommand;
 
 impl CommandExecute for FlushDbCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         store.flushdb()?;
         Ok(Value::Str(Sds::from_str("OK")))
     }

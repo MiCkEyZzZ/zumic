@@ -1,5 +1,4 @@
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use tracing_appender::{non_blocking, rolling::daily};
 use tracing_subscriber::{fmt, Layer};

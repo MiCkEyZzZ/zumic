@@ -31,7 +31,10 @@ impl ListPack {
 
     /// Amortized expansion and centering of the internal buffer if needed.
     /// Ensures there is enough space to insert `extra` bytes.
-    fn grow_and_center(&mut self, extra: usize) {
+    fn grow_and_center(
+        &mut self,
+        extra: usize,
+    ) {
         let used = self.tail - self.head;
         let need = used + extra + 1;
         if need <= self.data.len() {
@@ -50,7 +53,10 @@ impl ListPack {
     }
 
     /// Inserts a value at the front of the list.
-    pub fn push_front(&mut self, value: &[u8]) {
+    pub fn push_front(
+        &mut self,
+        value: &[u8],
+    ) {
         let mut len_bytes = Vec::new();
         let mut v = value.len();
         while v >= 0x80 {
@@ -74,7 +80,10 @@ impl ListPack {
     }
 
     /// Inserts a value at the back of the list.
-    pub fn push_back(&mut self, value: &[u8]) {
+    pub fn push_back(
+        &mut self,
+        value: &[u8],
+    ) {
         // Encode the length as varint
         let mut len_bytes = Vec::new();
         let mut v = value.len();
@@ -113,7 +122,10 @@ impl ListPack {
     }
 
     /// Returns a reference to the element at the specified index, if it exists.
-    pub fn get(&self, index: usize) -> Option<&[u8]> {
+    pub fn get(
+        &self,
+        index: usize,
+    ) -> Option<&[u8]> {
         if index >= self.num_entries {
             return None;
         }
@@ -157,7 +169,10 @@ impl ListPack {
     }
 
     /// Removes the element at the specified index. Returns true if successful.
-    pub fn remove(&mut self, index: usize) -> bool {
+    pub fn remove(
+        &mut self,
+        index: usize,
+    ) -> bool {
         if index >= self.num_entries {
             return false;
         }

@@ -7,7 +7,10 @@ pub struct AuthCommand {
 }
 
 impl CommandExecute for AuthCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let user_key = Sds::from_str(&format!("user:{}", self.user));
         match store.get(&user_key)? {
             Some(Value::Str(ref stored_password)) => {

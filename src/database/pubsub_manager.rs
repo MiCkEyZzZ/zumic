@@ -18,27 +18,43 @@ impl PubSubManager {
     }
 
     /// Публикация сообщения в канал.
-    pub fn publish(&self, channel: &str, payload: Bytes) {
+    pub fn publish(
+        &self,
+        channel: &str,
+        payload: Bytes,
+    ) {
         self.broker.publish(channel, payload);
     }
 
     /// Подписка на точный канал.
-    pub fn subscribe(&self, channel: &str) -> Subscription {
+    pub fn subscribe(
+        &self,
+        channel: &str,
+    ) -> Subscription {
         self.broker.subscribe(channel)
     }
 
     /// Отписаться от всех подписок на канал.
-    pub fn unsubscribe_all(&self, channel: &str) {
+    pub fn unsubscribe_all(
+        &self,
+        channel: &str,
+    ) {
         self.broker.unsubscribe_all(channel);
     }
 
     /// Подписка по шаблону.
-    pub fn psubscribe(&self, pattern: &str) -> Result<PatternSubscription, GlobError> {
+    pub fn psubscribe(
+        &self,
+        pattern: &str,
+    ) -> Result<PatternSubscription, GlobError> {
         self.broker.psubscribe(pattern)
     }
 
     /// Отписаться от шаблона.
-    pub fn punsubscribe(&self, pattern: &str) -> Result<(), GlobError> {
+    pub fn punsubscribe(
+        &self,
+        pattern: &str,
+    ) -> Result<(), GlobError> {
         self.broker.punsubscribe(pattern)
     }
 

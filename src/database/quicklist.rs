@@ -58,7 +58,10 @@ impl<T> QuickList<T> {
     }
 
     /// Returns a reference to the element at the given logical index, if it exists.
-    pub fn get(&self, index: usize) -> Option<&T> {
+    pub fn get(
+        &self,
+        index: usize,
+    ) -> Option<&T> {
         if index >= self.len {
             return None;
         }
@@ -74,7 +77,10 @@ impl<T> QuickList<T> {
     }
 
     /// Returns a mutable reference to the element at the given logical index, if it exists.
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+    pub fn get_mut(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut T> {
         if index >= self.len {
             return None;
         }
@@ -90,7 +96,10 @@ impl<T> QuickList<T> {
     }
 
     /// Inserts an element at the front of the list.
-    pub fn push_front(&mut self, item: T) {
+    pub fn push_front(
+        &mut self,
+        item: T,
+    ) {
         if self.segments.is_empty() || self.segments[0].len() >= self.max_segment_size {
             self.segments
                 .insert(0, VecDeque::with_capacity(self.max_segment_size));
@@ -102,7 +111,10 @@ impl<T> QuickList<T> {
     }
 
     /// Inserts an element at the back of the list.
-    pub fn push_back(&mut self, item: T) {
+    pub fn push_back(
+        &mut self,
+        item: T,
+    ) {
         if self.segments.is_empty() || self.segments.last().unwrap().len() >= self.max_segment_size
         {
             self.segments
@@ -204,7 +216,10 @@ impl<T> QuickList<T> {
     }
 
     /// Creates a `QuickList` from a single `VecDeque`.
-    pub fn from_vecdeque(items: VecDeque<T>, max_segment_size: usize) -> Self {
+    pub fn from_vecdeque(
+        items: VecDeque<T>,
+        max_segment_size: usize,
+    ) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in items {
             qlist.push_back(item);
@@ -222,7 +237,10 @@ impl<T> QuickList<T> {
     }
 
     /// Creates a `QuickList` from any iterable set of elements.
-    pub fn from_iter<I: IntoIterator<Item = T>>(iter: I, max_segment_size: usize) -> Self {
+    pub fn from_iter<I: IntoIterator<Item = T>>(
+        iter: I,
+        max_segment_size: usize,
+    ) -> Self {
         let mut qlist = Self::new(max_segment_size);
         for item in iter {
             qlist.push_back(item);

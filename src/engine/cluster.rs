@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use super::Storage;
-use crate::{
-    Sds, Value, {StoreError, StoreResult},
-};
+use crate::{Sds, StoreError, StoreResult, Value};
 
 /// Количество слотов в кластере.
 pub const SLOT_COUNT: usize = 16384;
@@ -45,8 +43,7 @@ impl InClusterStore {
     ///
     /// Используется алгоритм CRC16 (XMODEM).
     fn key_slot(key: &Sds) -> usize {
-        use crc16::State;
-        use crc16::XMODEM;
+        use crc16::{State, XMODEM};
 
         let bytes = key.as_bytes();
 
@@ -63,7 +60,10 @@ impl InClusterStore {
     }
 
     /// Возвращает шард, на который должен быть направлен данный ключ.
-    fn get_shard(&self, key: &Sds) -> Arc<dyn Storage> {
+    fn get_shard(
+        &self,
+        key: &Sds,
+    ) -> Arc<dyn Storage> {
         let slot = Self::key_slot(key);
         let shard_idx = self.slots[slot];
         self.shards[shard_idx].clone()
@@ -72,24 +72,37 @@ impl InClusterStore {
 
 impl Storage for InClusterStore {
     /// Устанавливает значение для ключа на соответствующем шарде.
-    fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
+    fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()> {
         self.get_shard(key).set(key, value)
     }
 
     /// Получает значение ключа с соответствующего шарда.
-    fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
+    fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>> {
         self.get_shard(key).get(key)
     }
 
     /// Удаляет ключ с соответствующего шарда.
-    fn del(&self, key: &Sds) -> StoreResult<bool> {
+    fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool> {
         self.get_shard(key).del(key)
     }
 
     /// Устанавливает несколько пар ключ-значение.
     ///
     /// Все ключи могут располагаться на разных шардах.
-    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
+    fn mset(
+        &self,
+        entries: Vec<(&Sds, Value)>,
+    ) -> StoreResult<()> {
         for (k, v) in entries {
             self.set(k, v)?;
         }
@@ -99,14 +112,21 @@ impl Storage for InClusterStore {
     /// Получает значения для нескольких ключей.
     ///
     /// Все ключи могут располагаться на разных шардах.
-    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
+    fn mget(
+        &self,
+        keys: &[&Sds],
+    ) -> StoreResult<Vec<Option<Value>>> {
         keys.iter().map(|key| self.get(key)).collect()
     }
 
     /// Переименовывает ключ, если оба находятся на одном шарде.
     ///
     /// Возвращает ошибку `StoreError::WrongShard`, если `from` и `to` попадают на разные шарды.
-    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
+    fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()> {
         let from_shard = self.get_shard(from);
         let to_shard = self.get_shard(to);
         if !Arc::ptr_eq(&from_shard, &to_shard) {
@@ -121,7 +141,11 @@ impl Storage for InClusterStore {
     /// То же, что и `rename`, но не переименовывает, если целевой ключ уже существует.
     ///
     /// Возвращает `Ok(true)`, если переименование произошло, иначе `Ok(false)`.
-    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
+    fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool> {
         let from_shard = self.get_shard(from);
         let to_shard = self.get_shard(to);
         if !Arc::ptr_eq(&from_shard, &to_shard) {

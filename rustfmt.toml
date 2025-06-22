@@ -1,25 +1,17 @@
-brace_style = "SameLineWhere"
-control_brace_style = "AlwaysSameLine"
-
 edition = "2021"
 max_width = 100
-chain_width = 60
-
 hard_tabs = false
-empty_item_single_line = true
 
-[formatting]
-array_auto_expand = true
-array_auto_collapse = false
-fn_single_line = false
-force_explicit_abi = true
-
-imports_granularity = "Crate"
-imports_layout = "Mixed"
-imports_indent = "Block"
-
-indent_style = "Block"
-indent_string = "    "
-tab_spaces = 4
-
+# Запятая после последнего элемента в многострочных литералах
 trailing_comma = "Vertical"
+
+# Настройки импорта
+imports_granularity = "Crate"
+imports_layout      = "Mixed"
+
+# Стиль размещения скобок
+brace_style         = "SameLineWhere"
+control_brace_style = "AlwaysSameLine"
+
+# Расположение параметров функции: каждый параметр на новой строке
+fn_params_layout    = "Vertical"

@@ -1,5 +1,4 @@
-use std::hint::black_box;
-use std::{borrow::Cow, collections::HashMap, f64::consts::PI};
+use std::{borrow::Cow, collections::HashMap, f64::consts::PI, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 

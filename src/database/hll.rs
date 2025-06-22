@@ -21,7 +21,10 @@ impl Hll {
     }
 
     /// Add an element to HelperLogLog.
-    pub fn add(&mut self, value: &[u8]) {
+    pub fn add(
+        &mut self,
+        value: &[u8],
+    ) {
         let hash = Self::hash(value);
         let (index, rho) = Self::index_and_rho(hash);
         let current = self.get_register(index);
@@ -67,7 +70,10 @@ impl Hll {
         (index, rho)
     }
 
-    fn get_register(&self, index: usize) -> u8 {
+    fn get_register(
+        &self,
+        index: usize,
+    ) -> u8 {
         let bit_index = index * 6;
         let byte_index = bit_index / 8;
         let bit_offset = bit_index % 8;
@@ -83,7 +89,11 @@ impl Hll {
         ((combined >> bit_offset) & 0x3F) as u8
     }
 
-    fn set_register(&mut self, index: usize, value: u8) {
+    fn set_register(
+        &mut self,
+        index: usize,
+        value: u8,
+    ) {
         let bit_index = index * 6;
         let byte_index = bit_index / 8;
         let bit_offset = bit_index % 8;

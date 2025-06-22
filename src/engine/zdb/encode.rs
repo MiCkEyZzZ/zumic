@@ -18,7 +18,10 @@ use crate::Value;
 /// Сериализует значение [`Value`] в поток `Write`.
 ///
 /// Возвращает ошибку, если запись не удалась.
-pub fn write_value<W: Write>(w: &mut W, v: &Value) -> std::io::Result<()> {
+pub fn write_value<W: Write>(
+    w: &mut W,
+    v: &Value,
+) -> std::io::Result<()> {
     match v {
         Value::Str(s) => {
             w.write_u8(TAG_STR)?;

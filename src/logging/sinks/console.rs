@@ -1,5 +1,4 @@
-use tracing_subscriber::fmt::Layer;
-use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{fmt::Layer, registry::LookupSpan};
 
 pub fn layer<S>() -> Layer<S>
 where

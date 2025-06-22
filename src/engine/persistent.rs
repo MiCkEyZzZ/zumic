@@ -4,9 +4,7 @@ use super::{
     aof::{AofOp, SyncPolicy},
     AofLog, Storage,
 };
-use crate::{
-    Sds, Value, {StoreError, StoreResult},
-};
+use crate::{Sds, StoreError, StoreResult, Value};
 
 /// Хранилище с поддержкой постоянства через AOF (Append-Only File).
 /// Ключи и значения находятся в памяти, но изменения логируются на диск.
@@ -45,7 +43,11 @@ impl InPersistentStore {
 
 impl Storage for InPersistentStore {
     /// Устанавливает значение по ключу, логируя операцию в AOF.
-    fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
+    fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()> {
         let key_b = key.as_bytes();
         let val_b = value.to_bytes();
         self.aof.lock().unwrap().append_set(key_b, &val_b)?;
@@ -54,7 +56,10 @@ impl Storage for InPersistentStore {
     }
 
     /// Получает значение по ключу, если оно существует.
-    fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
+    fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>> {
         let key_b = key.as_bytes();
         let map = self.index.lock().unwrap();
         match map.get(key_b) {
@@ -64,7 +69,10 @@ impl Storage for InPersistentStore {
     }
 
     /// Удаляет ключ, если он есть, и логирует удаление в AOF.
-    fn del(&self, key: &Sds) -> StoreResult<bool> {
+    fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool> {
         let key_b = key.as_bytes();
         let mut map = self.index.lock().unwrap();
         if map.remove(key_b).is_some() {
@@ -77,7 +85,10 @@ impl Storage for InPersistentStore {
 
     /// Устанавливает несколько пар ключ-значение сразу.
     /// Каждая операция логируется в AOF.
-    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
+    fn mset(
+        &self,
+        entries: Vec<(&Sds, Value)>,
+    ) -> StoreResult<()> {
         let mut log = self.aof.lock().unwrap();
         let mut map = self.index.lock().unwrap();
         for (key, val) in entries {
@@ -90,7 +101,10 @@ impl Storage for InPersistentStore {
     }
 
     /// Получает значения по списку ключей.
-    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
+    fn mget(
+        &self,
+        keys: &[&Sds],
+    ) -> StoreResult<Vec<Option<Value>>> {
         let map = self.index.lock().unwrap();
         let mut result = Vec::with_capacity(keys.len());
         for key in keys {
@@ -106,7 +120,11 @@ impl Storage for InPersistentStore {
 
     /// Переименовывает ключ, если он существует.
     /// Удаляет старый и добавляет новый, логируя оба действия.
-    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
+    fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()> {
         let mut map = self.index.lock().unwrap();
         let from_b = from.as_bytes();
         let to_b = to.as_bytes();
@@ -122,7 +140,11 @@ impl Storage for InPersistentStore {
     }
 
     /// Как `rename`, но не переименовывает, если целевой ключ уже существует.
-    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
+    fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool> {
         let mut map = self.index.lock().unwrap();
         let from_b = from.as_bytes();
         let to_b = to.as_bytes();

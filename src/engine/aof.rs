@@ -40,7 +40,10 @@ pub struct AofLog {
 impl AofLog {
     /// Открывает (или создаёт) файл AOF с заданной политикой синхронизации,
     /// проверяет или записывает магический заголовок.
-    pub fn open<P: AsRef<Path>>(path: P, policy: SyncPolicy) -> io::Result<Self> {
+    pub fn open<P: AsRef<Path>>(
+        path: P,
+        policy: SyncPolicy,
+    ) -> io::Result<Self> {
         // Открываем файл для чтения и дозаписи.
         let mut file = OpenOptions::new()
             .create(true)
@@ -94,7 +97,11 @@ impl AofLog {
     }
 
     /// Добавляет SET-операцию в журнал AOF.
-    pub fn append_set(&mut self, key: &[u8], value: &[u8]) -> io::Result<()> {
+    pub fn append_set(
+        &mut self,
+        key: &[u8],
+        value: &[u8],
+    ) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Set as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
         self.writer.write_all(key)?;
@@ -105,7 +112,10 @@ impl AofLog {
     }
 
     /// Добавляет DEL-операцию в журнал AOF.
-    pub fn append_del(&mut self, key: &[u8]) -> io::Result<()> {
+    pub fn append_del(
+        &mut self,
+        key: &[u8],
+    ) -> io::Result<()> {
         self.writer.write_all(&[AofOp::Del as u8])?;
         Self::write_32(&mut self.writer, key.len() as u32)?;
         self.writer.write_all(key)?;
@@ -114,7 +124,10 @@ impl AofLog {
     }
 
     /// Воспроизводит все операции из журнала, вызывая заданный callback для каждой записи.
-    pub fn replay<F>(&mut self, mut f: F) -> io::Result<()>
+    pub fn replay<F>(
+        &mut self,
+        mut f: F,
+    ) -> io::Result<()>
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
@@ -173,7 +186,11 @@ impl AofLog {
 
     /// Сжимает (перезаписывает) AOF: оставляет только последние SET-операции из `live`,
     /// записывает их в новый временный файл и атомарно заменяет текущий.
-    pub fn rewrite<I, P>(&mut self, path: P, live: I) -> io::Result<()>
+    pub fn rewrite<I, P>(
+        &mut self,
+        path: P,
+        live: I,
+    ) -> io::Result<()>
     where
         I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
         P: AsRef<Path>,
@@ -217,13 +234,19 @@ impl AofLog {
 
     /// Утилита для записи `u32` в формате big-endian.
     #[inline]
-    fn write_32<W: Write>(w: &mut W, v: u32) -> io::Result<()> {
+    fn write_32<W: Write>(
+        w: &mut W,
+        v: u32,
+    ) -> io::Result<()> {
         w.write_all(&v.to_be_bytes())
     }
 
     /// Безопасно читает `u32` из буфера в формате big-endian, с проверкой границ.
     #[inline]
-    fn read_u32(buf: &[u8], pos: &mut usize) -> io::Result<u32> {
+    fn read_u32(
+        buf: &[u8],
+        pos: &mut usize,
+    ) -> io::Result<u32> {
         if *pos + 4 > buf.len() {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,

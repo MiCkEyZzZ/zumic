@@ -45,7 +45,10 @@ impl Stream {
     /// Автоматически создаёт уникальный идентификатор на основе текущего
     /// времени и sequence.
     /// Возвращает созданный StreamId.
-    pub fn add(&mut self, data: HashMap<String, Value>) -> StreamId {
+    pub fn add(
+        &mut self,
+        data: HashMap<String, Value>,
+    ) -> StreamId {
         let ms_time = Self::current_millis();
         // Получаем следующий sequence атомарно (с использованием Relaxed порядка)
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
@@ -59,7 +62,11 @@ impl Stream {
 
     /// Возвращает срез записей в диапазоне идентификаторов [start, end].
     /// Идентификаторы сравниваются с помощью PartialOrd и Ord.
-    pub fn range(&self, start: &StreamId, end: &StreamId) -> Vec<&StreamEntry> {
+    pub fn range(
+        &self,
+        start: &StreamId,
+        end: &StreamId,
+    ) -> Vec<&StreamEntry> {
         self.entries
             .iter()
             .filter(|entry| entry.id >= *start && entry.id <= *end)
@@ -96,7 +103,10 @@ mod tests {
     use super::*;
 
     /// Вспомогательная функция для создания записи с одним ключом и значением Int.
-    fn make_entry(key: &str, val: i64) -> HashMap<String, Value> {
+    fn make_entry(
+        key: &str,
+        val: i64,
+    ) -> HashMap<String, Value> {
         let mut hm = HashMap::new();
         hm.insert(key.to_string(), Value::Int(val));
         hm

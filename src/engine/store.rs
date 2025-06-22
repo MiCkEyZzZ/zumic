@@ -21,7 +21,11 @@ pub enum StorageEngine {
 impl StorageEngine {
     /// Устанавливает значение по ключу в выбранном движке хранения.
     /// Если значение уже существует, оно будет перезаписано.
-    pub fn set(&self, key: &Sds, value: Value) -> StoreResult<()> {
+    pub fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()> {
         match self {
             StorageEngine::Memory(store) => store.set(key, value),
             StorageEngine::Cluster(store) => store.set(key, value),
@@ -31,7 +35,10 @@ impl StorageEngine {
 
     /// Получает значение по ключу.
     /// Если ключ отсутствует, возвращает `None`.
-    pub fn get(&self, key: &Sds) -> StoreResult<Option<Value>> {
+    pub fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>> {
         match self {
             StorageEngine::Memory(store) => store.get(key),
             StorageEngine::Cluster(store) => store.get(key),
@@ -42,7 +49,10 @@ impl StorageEngine {
     /// Удаляет ключ из хранилища.
     ///
     /// Возвращает `true`, если ключ был удалён, `false` если ключ не существовал.
-    pub fn del(&self, key: &Sds) -> StoreResult<bool> {
+    pub fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool> {
         match self {
             StorageEngine::Memory(store) => store.del(key),
             StorageEngine::Cluster(store) => store.del(key),
@@ -51,7 +61,10 @@ impl StorageEngine {
     }
 
     /// Устанавливает несколько пар ключ-значение за одну операцию.
-    pub fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()> {
+    pub fn mset(
+        &self,
+        entries: Vec<(&Sds, Value)>,
+    ) -> StoreResult<()> {
         match self {
             StorageEngine::Memory(store) => store.mset(entries),
             StorageEngine::Cluster(store) => store.mset(entries),
@@ -61,7 +74,10 @@ impl StorageEngine {
 
     /// Получает значения для списка ключей.
     /// Для отсутствующих ключей возвращает `None`.
-    pub fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>> {
+    pub fn mget(
+        &self,
+        keys: &[&Sds],
+    ) -> StoreResult<Vec<Option<Value>>> {
         match self {
             StorageEngine::Memory(store) => store.mget(keys),
             StorageEngine::Cluster(store) => store.mget(keys),
@@ -72,7 +88,11 @@ impl StorageEngine {
     /// Переименовывает ключ `from` в `to`.
     ///
     /// Возвращает ошибку, если ключ `from` не существует.
-    pub fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()> {
+    pub fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()> {
         match self {
             StorageEngine::Memory(store) => store.rename(from, to),
             StorageEngine::Cluster(store) => store.rename(from, to),
@@ -84,7 +104,11 @@ impl StorageEngine {
     ///
     /// Возвращает `true` если переименование прошло успешно,
     /// `false` если ключ `to` уже существует.
-    pub fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool> {
+    pub fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool> {
         match self {
             StorageEngine::Memory(store) => store.renamenx(from, to),
             StorageEngine::Cluster(store) => store.renamenx(from, to),

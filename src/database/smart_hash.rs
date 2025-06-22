@@ -63,7 +63,10 @@ impl SmartHash {
     }
 
     /// Проверяет наличие ключа.
-    pub fn contains(&self, key: &Sds) -> bool {
+    pub fn contains(
+        &self,
+        key: &Sds,
+    ) -> bool {
         match &self.repr {
             Repr::Zip(v) => v.iter().any(|(k, _)| k == key),
             Repr::Map(m) => m.contains_key(key),
@@ -74,7 +77,11 @@ impl SmartHash {
     ///
     /// При превышении количества элементов порогового значения происходит автоматическое
     /// переключение представления с `Zip` на `Map`.
-    pub fn insert(&mut self, key: Sds, value: Sds) {
+    pub fn insert(
+        &mut self,
+        key: Sds,
+        value: Sds,
+    ) {
         if self.pending_downgrade {
             self.do_downgrade();
         }
@@ -102,7 +109,10 @@ impl SmartHash {
     }
 
     /// Возвращает ссылку на значение, соответствующее заданному ключу, если оно существует.
-    pub fn get(&mut self, key: &Sds) -> Option<&Sds> {
+    pub fn get(
+        &mut self,
+        key: &Sds,
+    ) -> Option<&Sds> {
         if self.pending_downgrade {
             self.do_downgrade()
         }
@@ -118,7 +128,10 @@ impl SmartHash {
     /// Возвращает `true`, если ключ найден и значение удалено. При уменьшении размера
     /// структуры ниже половины порогового значения происходит downgrade до представления
     /// `Zip`.
-    pub fn remove(&mut self, key: &Sds) -> bool {
+    pub fn remove(
+        &mut self,
+        key: &Sds,
+    ) -> bool {
         let removed = match &mut self.repr {
             Repr::Zip(vec) => {
                 if let Some(pos) = vec.iter().position(|(k, _)| k == key) {
@@ -229,7 +242,10 @@ impl FromIterator<(Sds, Sds)> for SmartHash {
 }
 
 impl Extend<(Sds, Sds)> for SmartHash {
-    fn extend<I: IntoIterator<Item = (Sds, Sds)>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item = (Sds, Sds)>>(
+        &mut self,
+        iter: I,
+    ) {
         for (k, v) in iter {
             self.insert(k, v);
         }

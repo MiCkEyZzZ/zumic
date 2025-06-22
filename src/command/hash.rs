@@ -8,7 +8,10 @@ pub struct HSetCommand {
 }
 
 impl CommandExecute for HSetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
         let value = Sds::from_str(&self.value);
@@ -37,7 +40,10 @@ pub struct HGetCommand {
 }
 
 impl CommandExecute for HGetCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
@@ -59,7 +65,10 @@ pub struct HDelCommand {
 }
 
 impl CommandExecute for HDelCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
@@ -81,7 +90,10 @@ pub struct HGetAllCommand {
 }
 
 impl CommandExecute for HGetAllCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {

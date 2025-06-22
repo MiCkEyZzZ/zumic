@@ -65,7 +65,11 @@ pub struct RangeIter<'a, K, V> {
 
 impl<K, V> Node<K, V> {
     /// Создаёт новый узел с заданным уровнем.
-    fn new(key: K, value: V, level: usize) -> Box<Self> {
+    fn new(
+        key: K,
+        value: V,
+        level: usize,
+    ) -> Box<Self> {
         Box::new(Node {
             key,
             value,
@@ -111,7 +115,10 @@ where
 
     /// Поиск предшествующих узлов для каждого уровня.
     /// Возвращает вектор указателей, где update[i] — узел, после которого на уровне i должен быть вставлен новый узел.
-    unsafe fn find_update(&self, key: &K) -> Vec<*mut Node<K, V>> {
+    unsafe fn find_update(
+        &self,
+        key: &K,
+    ) -> Vec<*mut Node<K, V>> {
         let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
         let mut current = self.head.as_ref() as *const Node<K, V> as *mut Node<K, V>;
         for i in (0..self.level).rev() {
@@ -130,7 +137,11 @@ where
 
     /// Вставляет ключ и значение в пропускной список.
     /// Если ключ уже существует, обновляет значение.
-    pub fn insert(&mut self, key: K, value: V) {
+    pub fn insert(
+        &mut self,
+        key: K,
+        value: V,
+    ) {
         unsafe {
             let mut update = self.find_update(&key);
             // Проверяем наличие узла с тем же ключом в уровне 0.
@@ -175,7 +186,10 @@ where
     }
 
     /// Ищет узел с заданным ключом и возвращает ссылку на значение, если найден.
-    pub fn search(&self, key: &K) -> Option<&V> {
+    pub fn search(
+        &self,
+        key: &K,
+    ) -> Option<&V> {
         let mut current = self.head.as_ref();
 
         unsafe {
@@ -200,7 +214,10 @@ where
     }
 
     /// Ищет ключ и возвращает изменяемую ссылку на его значение, если он найден.
-    pub fn search_mut(&mut self, key: &K) -> Option<&mut V> {
+    pub fn search_mut(
+        &mut self,
+        key: &K,
+    ) -> Option<&mut V> {
         unsafe {
             let update = self.find_update(key);
             if let Some(node_ptr) = (&(*update[0]).forward)[0] {
@@ -215,7 +232,10 @@ where
 
     /// Удаляет узел с заданным ключом.
     /// Возвращает значение удаленного узла, если он был найден.
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove(
+        &mut self,
+        key: &K,
+    ) -> Option<V> {
         unsafe {
             let mut update = self.find_update(key);
 
@@ -277,7 +297,11 @@ where
     }
 
     /// Возвращает итератор по диапазону: от ключа `start` до ключа `end` (не включая end).
-    pub fn range(&self, start: &K, end: &K) -> RangeIter<K, V> {
+    pub fn range(
+        &self,
+        start: &K,
+        end: &K,
+    ) -> RangeIter<K, V> {
         unsafe {
             let mut current = self.head.as_ref();
 
@@ -301,7 +325,10 @@ where
     }
 
     /// Проверяет, содержится ли ключ в списке.
-    pub fn contains(&self, key: &K) -> bool {
+    pub fn contains(
+        &self,
+        key: &K,
+    ) -> bool {
         self.search(key).is_some()
     }
 
@@ -451,7 +478,10 @@ where
     K: Serialize + Ord + Clone + Default + Debug,
     V: Serialize + Clone + Default + Debug,
 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {

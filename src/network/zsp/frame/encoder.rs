@@ -29,7 +29,10 @@ impl ZspEncoder {
         Self::encode_frame(frame, 0)
     }
 
-    fn encode_frame(frame: &ZspFrame, current_depth: usize) -> Result<Vec<u8>, EncodeError> {
+    fn encode_frame(
+        frame: &ZspFrame,
+        current_depth: usize,
+    ) -> Result<Vec<u8>, EncodeError> {
         if current_depth > MAX_ARRAY_DEPTH {
             let err_msg = format!("Max array depth exceed ({MAX_ARRAY_DEPTH})");
             return Err(EncodeError::InvalidData(err_msg));

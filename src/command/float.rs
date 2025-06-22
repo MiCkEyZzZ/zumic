@@ -7,7 +7,10 @@ pub struct IncrByFloatCommand {
 }
 
 impl CommandExecute for IncrByFloatCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
         match store.get(&key_bytes)? {
@@ -32,7 +35,10 @@ pub struct DecrByFloatCommand {
 }
 
 impl CommandExecute for DecrByFloatCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
         match store.get(&key_bytes)? {
@@ -57,7 +63,10 @@ pub struct SetFloatCommand {
 }
 
 impl CommandExecute for SetFloatCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
         store.set(&key_bytes, Value::Float(self.value))?;
         Ok(Value::Float(self.value))

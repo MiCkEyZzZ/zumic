@@ -10,7 +10,10 @@ pub struct ZAddCommand {
 }
 
 impl CommandExecute for ZAddCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -48,7 +51,10 @@ pub struct ZRemCommand {
 }
 
 impl CommandExecute for ZRemCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -85,7 +91,10 @@ pub struct ZScoreCommand {
 }
 
 impl CommandExecute for ZScoreCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
@@ -110,7 +119,10 @@ pub struct ZCardCommand {
 }
 
 impl CommandExecute for ZCardCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         match store.get(&key)? {
             Some(Value::ZSet { dict, .. }) => Ok(Value::Int(dict.len() as i64)),
@@ -128,7 +140,10 @@ pub struct ZRangeCommand {
 }
 
 impl CommandExecute for ZRangeCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {
@@ -168,7 +183,10 @@ pub struct ZRevRangeCommand {
 }
 
 impl CommandExecute for ZRevRangeCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {

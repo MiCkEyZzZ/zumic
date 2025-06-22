@@ -4,8 +4,10 @@
 //! chained hash table with two tables and smooth
 //! rehashing without pauses.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -44,7 +46,11 @@ pub struct DictIter<'a, K, V> {
 }
 
 impl<K, V> Entry<K, V> {
-    fn new(key: K, val: V, next: Option<Box<Entry<K, V>>>) -> Box<Self> {
+    fn new(
+        key: K,
+        val: V,
+        next: Option<Box<Entry<K, V>>>,
+    ) -> Box<Self> {
         Box::new(Entry { key, val, next })
     }
 }
@@ -93,7 +99,11 @@ where
     }
 
     /// Inserts (key, val). If key exists — updates it and returns false.
-    pub fn insert(&mut self, key: K, val: V) -> bool {
+    pub fn insert(
+        &mut self,
+        key: K,
+        val: V,
+    ) -> bool {
         self.expand_if_needed();
         self.rehash_step();
 
@@ -122,7 +132,10 @@ where
     }
 
     /// Returns `&V` for the given key or None.
-    pub fn get(&mut self, key: &K) -> Option<&V> {
+    pub fn get(
+        &mut self,
+        key: &K,
+    ) -> Option<&V> {
         if self.is_rehashing() {
             self.rehash_step();
         }
@@ -146,7 +159,10 @@ where
     }
 
     /// Removes a key. Returns true if the key was removed.
-    pub fn remove(&mut self, key: &K) -> bool {
+    pub fn remove(
+        &mut self,
+        key: &K,
+    ) -> bool {
         // perform a rehash step if needed
         if self.is_rehashing() {
             self.rehash_step();

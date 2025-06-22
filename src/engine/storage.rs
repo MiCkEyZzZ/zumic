@@ -7,29 +7,53 @@ use crate::{Sds, StoreResult, Value};
 pub trait Storage {
     /// Устанавливает значение по заданному ключу.
     /// Если значение по ключу уже существует, оно будет перезаписано.
-    fn set(&self, key: &Sds, value: Value) -> StoreResult<()>;
+    fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()>;
 
     /// Возвращает значение по заданному ключу, либо `None`, если ключ не существует.
-    fn get(&self, key: &Sds) -> StoreResult<Option<Value>>;
+    fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>>;
 
     /// Удаляет ключ из хранилища.
     /// Возвращает `true`, если ключ был удалён, или `false`, если его не существовало.
-    fn del(&self, key: &Sds) -> StoreResult<bool>;
+    fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool>;
 
     /// Устанавливает несколько пар ключ-значение за одну операцию.
-    fn mset(&self, entries: Vec<(&Sds, Value)>) -> StoreResult<()>;
+    fn mset(
+        &self,
+        entries: Vec<(&Sds, Value)>,
+    ) -> StoreResult<()>;
 
     /// Возвращает значения для списка ключей.
     /// Если для какого-либо ключа значение отсутствует, на его месте будет `None`.
-    fn mget(&self, keys: &[&Sds]) -> StoreResult<Vec<Option<Value>>>;
+    fn mget(
+        &self,
+        keys: &[&Sds],
+    ) -> StoreResult<Vec<Option<Value>>>;
 
     /// Переименовывает ключ.
     /// Возвращает ошибку, если исходный ключ не существует.
-    fn rename(&self, from: &Sds, to: &Sds) -> StoreResult<()>;
+    fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()>;
 
     /// Переименовывает ключ только в том случае, если новый ключ ещё не существует.
     /// Возвращает `true`, если переименование удалось, `false` — если целевой ключ уже существует.
-    fn renamenx(&self, from: &Sds, to: &Sds) -> StoreResult<bool>;
+    fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool>;
 
     /// Очищает базу данных, удаляя все ключи.
     fn flushdb(&self) -> StoreResult<()>;

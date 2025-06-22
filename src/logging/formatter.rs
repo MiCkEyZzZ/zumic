@@ -1,5 +1,7 @@
-use tracing_subscriber::fmt::{self, format::FmtSpan, Layer};
-use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan, Layer},
+    registry::LookupSpan,
+};
 
 pub fn build_formatter<S>() -> Layer<S>
 where

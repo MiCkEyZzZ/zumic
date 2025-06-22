@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::hint::black_box;
+use std::{collections::HashMap, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 

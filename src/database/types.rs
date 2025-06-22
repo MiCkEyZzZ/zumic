@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     engine::{decode, encode},
-    {StoreError, StoreResult},
+    StoreError, StoreResult,
 };
 
 use super::{

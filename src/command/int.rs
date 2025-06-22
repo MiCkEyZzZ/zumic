@@ -6,7 +6,10 @@ pub struct IncrCommand {
 }
 
 impl CommandExecute for IncrCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
         match store.get(&key_bytes)? {
@@ -31,7 +34,10 @@ pub struct IncrByCommand {
 }
 
 impl CommandExecute for IncrByCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let keys_bytes = Sds::from_str(&self.key);
 
         match store.get(&keys_bytes)? {
@@ -55,7 +61,10 @@ pub struct DecrCommand {
 }
 
 impl CommandExecute for DecrCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
         match store.get(&key_bytes)? {
@@ -80,7 +89,10 @@ pub struct DecrByCommand {
 }
 
 impl CommandExecute for DecrByCommand {
-    fn execute(&self, store: &mut StorageEngine) -> Result<Value, StoreError> {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
         let key_bytes = Sds::from_str(&self.key);
 
         match store.get(&key_bytes)? {

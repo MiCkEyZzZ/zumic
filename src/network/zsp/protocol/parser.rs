@@ -62,7 +62,10 @@ fn parse_raw_command(frame: ZspFrame) -> Result<ZSPCommand, ParseError> {
 }
 
 /// Parsing command string and arguments from ZspFrame array → RawCommand
-fn parse_from_str_command(cmd: &str, items: &[ZspFrame]) -> Result<ZSPCommand, ParseError> {
+fn parse_from_str_command(
+    cmd: &str,
+    items: &[ZspFrame],
+) -> Result<ZSPCommand, ParseError> {
     match cmd.to_ascii_lowercase().as_str() {
         "ping" => Ok(ZSPCommand::Ping),
         "set" => {
@@ -163,7 +166,10 @@ fn parse_from_str_command(cmd: &str, items: &[ZspFrame]) -> Result<ZSPCommand, P
     }
 }
 
-fn parse_key(frame: &ZspFrame, cmd: &'static str) -> Result<String, ParseError> {
+fn parse_key(
+    frame: &ZspFrame,
+    cmd: &'static str,
+) -> Result<String, ParseError> {
     match frame {
         ZspFrame::InlineString(s) => Ok(s.to_string()),
         ZspFrame::BinaryString(Some(bytes)) => {
@@ -173,7 +179,10 @@ fn parse_key(frame: &ZspFrame, cmd: &'static str) -> Result<String, ParseError> 
     }
 }
 
-fn parse_value(frame: &ZspFrame, cmd: &'static str) -> Result<Value, ParseError> {
+fn parse_value(
+    frame: &ZspFrame,
+    cmd: &'static str,
+) -> Result<Value, ParseError> {
     match frame {
         ZspFrame::InlineString(s) => Ok(Value::Str(Sds::from_str(s))),
         ZspFrame::BinaryString(Some(bytes)) => Ok(Value::Str(Sds::from_vec(bytes.clone()))),
