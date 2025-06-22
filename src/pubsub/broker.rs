@@ -13,29 +13,29 @@ use super::{intern_channel, Message, PatternSubscription, Subscription};
 type ChannelKey = Arc<str>;
 type PatternKey = Glob;
 
-/// Pub/Sub message broker.
+/// Pub/Sub брокер сообщений.
 ///
-/// Features:
-/// - Exact subscriptions by channel name
-/// - Pattern subscriptions (glob-based)
-/// - Automatic removal of empty channels
-/// - Statistics tracking for publishes and send errors
+/// Особенности:
+/// - Подписка на точные каналы по имени
+/// - Подписка по паттернам (glob-выражения)
+/// - Автоматическое удаление пустых каналов
+/// - Сбор статистики по публикациям и ошибкам отправки
 #[derive(Debug)]
 pub struct Broker {
-    /// Exact channel → `Sender`
+    /// Точные каналы → отправители сообщений
     channels: Arc<DashMap<ChannelKey, broadcast::Sender<Message>>>,
-    /// Pattern (glob) → `Sender`
+    /// Паттерны (glob) → отправители сообщений
     patterns: Arc<DashMap<PatternKey, broadcast::Sender<Message>>>,
-    /// Buffer size for each `broadcast::channel`
+    /// Размер буфера для каждого канала
     default_capacity: usize,
-    /// Total number of `publish` calls
+    /// Общее число вызовов publish
     pub publish_count: AtomicUsize,
-    /// Number of failed `send` operations (no subscribers)
+    /// Число ошибок отправки сообщений (когда нет подписчиков)
     pub send_error_count: AtomicUsize,
 }
 
 impl Broker {
-    /// Creates a new `Broker` with the given buffer capacity.
+    /// Создаёт новый брокер с указанным размером буфера
     pub fn new(default_capacity: usize) -> Self {
         Self {
             channels: Arc::new(DashMap::new()),
@@ -48,9 +48,9 @@ impl Broker {
 }
 
 impl Broker {
-    /// Subscribes to a glob pattern, e.g. `"kin.*"` or `"a?c"`.
+    /// Подписка на паттерн (glob), например "kin.*" или "a?c".
     ///
-    /// Re-subscribing to the same pattern returns the same `Sender`.
+    /// Повторная подписка на один и тот же паттерн возвращает тот же канал отправки.
     pub fn psubscribe(&self, pattern: &str) -> Result<PatternSubscription, globset::Error> {
         let glob = Glob::new(pattern)?;
         let tx = self
@@ -64,16 +64,16 @@ impl Broker {
         })
     }
 
-    /// Unsubscribes from a pattern. Removes the associated `Sender`.
+    /// Отписка от паттерна. Удаляет связанный отправитель.
     pub fn punsubscribe(&self, pattern: &str) -> Result<(), globset::Error> {
         let glob = Glob::new(pattern)?;
         self.patterns.remove(&glob);
         Ok(())
     }
 
-    /// Subscribes to an exact channel name.
+    /// Подписка на точный канал по имени.
     ///
-    /// An `Arc<str>` key is interned on first subscription.
+    /// Ключ канала — interned `Arc<str>`.
     pub fn subscribe(&self, channel: &str) -> Subscription {
         let key: Arc<str> = intern_channel(channel);
         let tx = self
@@ -87,24 +87,25 @@ impl Broker {
         }
     }
 
-    /// Publishes a message to a channel.
+    /// Публикация сообщения в канал.
     ///
-    /// Works in two steps:
-    /// 1. Sends to the exact channel (if present)
-    /// 2. Sends to all matching pattern subscribers
+    /// Работает в два этапа:
+    /// 1. Отправка в точный канал (если есть)
+    /// 2. Отправка всем подписчикам по подходящим паттернам
     ///
-    /// If the exact channel has no subscribers, `send_error_count` is incremented
-    /// and the channel is removed.
+    /// Если в точном канале нет подписчиков, увеличивается счётчик ошибок,
+    /// и канал удаляется.
     pub fn publish(&self, channel: &str, payload: Bytes) {
         self.publish_count.fetch_add(1, Ordering::Relaxed);
 
-        // 1) exact match
+        // 1) точное совпадение
         if let Some(entry) = self.channels.get_mut(channel) {
             let tx = entry.value().clone();
             let msg = Message::new(entry.key().clone(), payload.clone());
             if tx.send(msg).is_err() {
                 self.send_error_count.fetch_add(1, Ordering::Relaxed);
             }
+            // Если подписчиков нет, удаляем канал
             if tx.receiver_count() == 0 {
                 let key = entry.key().clone();
                 drop(entry);
@@ -112,7 +113,7 @@ impl Broker {
             }
         }
 
-        // 2) pattern match
+        // 2) совпадение по паттернам
         for entry in self.patterns.iter() {
             let matcher = entry.key().compile_matcher();
             if matcher.is_match(channel) {
@@ -123,9 +124,9 @@ impl Broker {
         }
     }
 
-    /// Removes all subscriptions to a given channel and deletes the channel.
+    /// Удаляет все подписки и сам канал.
     ///
-    /// Future `publish` calls will not re-create the channel.
+    /// После этого публикации в канал не создадут его заново.
     pub fn unsubscribe_all(&self, channel: &str) {
         self.channels.remove(channel);
     }
@@ -139,15 +140,15 @@ mod tests {
 
     use super::*;
 
-    /// Helper: creates a broker and subscribes to it, returning (broker, receiver)
+    /// Helper: создает брокера и подписывается на него, возвращая (брокеру, получателю)
     async fn setup_one() -> (Broker, tokio::sync::broadcast::Receiver<Message>) {
         let broker = Broker::new(5);
         let Subscription { inner: rx, .. } = broker.subscribe("chan");
         (broker, rx)
     }
 
-    /// Checks that a message is delivered to a subscriber,
-    /// and that publish counters are updated correctly.
+    /// Проверяет, что сообщение доставляется подписчику,
+    /// и что счётчики публикаций и ошибок обновляются корректно.
     #[tokio::test]
     async fn test_publish_and_receive() {
         let (broker, mut rx) = setup_one().await;
@@ -158,24 +159,24 @@ mod tests {
             .expect("no message");
         assert_eq!(&*msg.channel, "chan");
         assert_eq!(msg.payload, Bytes::from_static(b"x"));
-        // publish_count should be 1, send_error_count == 0
+        // publish_count должно быть равно 1, send_error_count == 0
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
     }
 
-    /// Checks that publishing to a non-existent channel
-    /// does not create the channel or increment send_error_count.
+    /// Проверяет, что публикация в несуществующий канал
+    /// не создаёт канал и не увеличивает счётчик ошибок.
     #[tokio::test]
     async fn test_publish_to_nonexistent_channel() {
         let broker = Broker::new(5);
         broker.publish("nochan", Bytes::from_static(b"z"));
-        // No subscribers, channel is not created, send_error is not incremented
+        // Подписчиков нет, канал не создан, значение send_error не увеличивается
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
         assert!(!broker.channels.contains_key("nochan"));
     }
 
-    /// Checks that all subscribers to a channel receive the message.
+    /// Проверяет, что все подписчики канала получают сообщение.
     #[tokio::test]
     async fn test_multiple_subscribers_receive() {
         let broker = Broker::new(5);
@@ -197,56 +198,56 @@ mod tests {
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
     }
 
-    /// Checks that if the subscription is dropped and no one listens,
-    /// publishing triggers send_error and the channel is removed.
+    /// Проверяет, что если подписка сброшена и никто не слушает,
+    /// публикация увеличивает счётчик ошибок, а канал удаляется.
     #[tokio::test]
     async fn test_auto_remove_empty_channel_and_error_count() {
-        // 1) subscribe and immediately drop the subscription
+        // 1) подпишитесь и немедленно прекратите подписку
         let broker = Broker::new(5);
         {
             let sub = broker.subscribe("temp");
             drop(sub);
         }
-        // channel still exists until first publish
+        // канал все еще существует до первой публикации
         assert!(broker.channels.contains_key("temp"));
 
-        // 2) publishing should trigger send_error and remove the channel
+        // 2) публикация должна вызвать ошибку send_error и удалить канал
         broker.publish("temp", Bytes::from_static(b"u"));
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 1);
         assert!(!broker.channels.contains_key("temp"));
     }
 
-    /// Checks that after `unsubscribe_all`, future publications are ignored.
+    /// Проверяет, что после `unsubscribe_all` публикации игнорируются.
     #[tokio::test]
     async fn test_unsubscribe_all() {
         let broker = Broker::new(5);
         let _sub = broker.subscribe("gone");
-        // now remove all subscriptions
+        // теперь удалите все подписки
         broker.unsubscribe_all("gone");
         assert!(!broker.channels.contains_key("gone"));
 
-        // publishing after removal increments publish_count,
-        // but not send_error_count, and channel is not recreated
+        // при публикации после удаления увеличивается значение publish_count,
+        // но не значение send_error_count, и канал не создается заново
         broker.publish("gone", Bytes::from_static(b"x"));
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
         assert!(!broker.channels.contains_key("gone"));
     }
 
-    /// Checks that pattern-based (psubscribe) subscriptions receive messages.
+    /// Проверяет, что подписки по паттернам (psubscribe) получают сообщения.
     #[tokio::test]
     async fn test_psubscribe_and_receive() {
         let broker = Broker::new(5);
         let mut psub = broker.psubscribe("foo.*").unwrap();
-        // exact channel also matches the pattern
+        // точный канал также соответствует шаблону
         broker.publish("foo.bar", Bytes::from_static(b"X"));
         let msg = psub.receiver().recv().await.expect("no msg");
         assert_eq!(&*msg.channel, "foo.bar");
         assert_eq!(msg.payload, Bytes::from_static(b"X"));
     }
 
-    /// Checks that normal and pattern subscriptions work together.
+    /// Проверяет, что обычные и паттерн-подписки работают вместе.
     #[tokio::test]
     async fn test_sub_and_psub_together() {
         let broker = Broker::new(5);
@@ -263,21 +264,21 @@ mod tests {
         assert_eq!(m2.payload, Bytes::from_static(b"Z"));
     }
 
-    /// Checks that after `punsubscribe`, the receiver is closed.
+    /// Проверяет, что после `punsubscribe` приёмник закрывается.
     #[tokio::test]
     async fn test_punsubscribe_no_receive() {
         let broker = Broker::new(5);
         let mut psub = broker.psubscribe("a?c").unwrap();
-        // remove pattern from broker
+        // удалить шаблон у брокера
         broker.punsubscribe("a?c").unwrap();
-        // no remaining Senders, Receiver should get Closed
+        // отправителей больше нет, получатель должен быть закрыт
         let res = psub.receiver().recv().await;
         use tokio::sync::broadcast::error::RecvError;
         assert!(matches!(res, Err(RecvError::Closed)));
     }
 
-    /// Checks that two different subscribers to the same channel
-    /// both receive each published message.
+    /// Проверяет, что два подписчика на один канал
+    /// оба получают каждое сообщение.
     #[tokio::test]
     async fn test_multiple_subscribe_same_channel() {
         let broker = Broker::new(5);
@@ -298,8 +299,8 @@ mod tests {
         assert_eq!(msg2.payload, Bytes::from_static(b"hi"));
     }
 
-    /// Checks that dropping a Subscription
-    /// reduces the broadcast sender's receiver count to zero.
+    /// Проверяет, что при дропе подписки
+    /// количество подписчиков уменьшается.
     #[tokio::test]
     async fn test_drop_subscription_decrements_receiver_count() {
         let broker = Broker::new(5);
@@ -308,27 +309,27 @@ mod tests {
         let sender = broker.channels.get(&*key).unwrap().clone();
         assert_eq!(sender.receiver_count(), 1);
         drop(sub);
-        // Give time for drop to propagate
+        // Дайте время капле распространиться
         tokio::time::sleep(Duration::from_millis(10)).await;
         assert_eq!(sender.receiver_count(), 0);
     }
 
-    /// Checks broadcast behavior on buffer overflow:
-    /// old message is dropped, and recv() returns `Lagged(1)`.
+    /// Проверяет поведение при переполнении буфера:
+    /// старое сообщение удаляется, recv() возвращает `Lagged`.
     #[tokio::test]
     async fn test_broadcast_overwrites_when_buffer_full() {
-        let broker = Broker::new(1); // buffer size = 1
+        let broker = Broker::new(1); // размер буфера = 1
 
-        // Hold onto Subscription so it's not dropped
+        // Сохраняйте подписку, чтобы она не была удалена
         let mut subscription = broker.subscribe("overflow");
         let sub = subscription.receiver();
 
-        // Send the first message
+        // Отправить первое сообщение
         broker.publish("overflow", Bytes::from_static(b"first"));
-        // Send the second message — it should evict the first
+        // Отправьте второе сообщение — оно должно удалить первое
         broker.publish("overflow", Bytes::from_static(b"second"));
 
-        // Receiving should yield Err(Lagged(1)) due to message loss
+        // Получение должно привести к ошибке (задержка(1)) из-за потери сообщения
         let err = sub.recv().await.unwrap_err();
         assert!(
             matches!(err, RecvError::Lagged(1)),
@@ -336,7 +337,7 @@ mod tests {
         );
     }
 
-    /// Checks that psubscribe returns an error for invalid glob patterns.
+    /// Проверяет, что psubscribe возвращает ошибку на неправильный паттерн.
     #[tokio::test]
     async fn test_psubscribe_invalid_pattern() {
         let broker = Broker::new(5);
@@ -344,8 +345,8 @@ mod tests {
         assert!(res.is_err());
     }
 
-    /// Checks that after unsubscribe_all, the channel is not recreated
-    /// and statistics are updated correctly.
+    /// Проверяет, что после `unsubscribe_all` канал не создаётся заново,
+    /// а статистика обновляется правильно.
     #[tokio::test]
     async fn test_publish_after_unsubscribe_all_does_not_create_channel() {
         let broker = Broker::new(5);
@@ -356,6 +357,6 @@ mod tests {
         broker.publish("vanish", Bytes::from_static(b"y"));
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
-        assert!(!broker.channels.contains_key("vanish")); // channel shouldn't be re-created
+        assert!(!broker.channels.contains_key("vanish")); // канал не следует создавать заново
     }
 }

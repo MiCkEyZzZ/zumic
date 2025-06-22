@@ -1,14 +1,14 @@
-//! Publish–Subscribe messaging subsystem.
+//! Подсистема Publish–Subscribe (pub/sub).
 //!
-//! This module implements a lightweight pub/sub system for in-process
-//! message broadcasting and subscription management:
+//! Этот модуль реализует лёгкую систему pub/sub для внутрипроцессного
+//! вещания сообщений и управления подписками:
 //!
-//! - `broker`: orchestrates topic registration, subscriptions, and message delivery.
-//! - `intern` (private): internal channel utilities for subscriber coordination.
-//! - `message`: defines the message structure and metadata for published events.
-//! - `subscriber`: subscription logic and stream interfaces for consumers.
+//! - `broker`: управление регистрацией тем, подписками и доставкой сообщений.
+//! - `intern` (приватный): внутренние утилиты каналов для координации подписчиков.
+//! - `message`: структура сообщений и метаданные для публикуемых событий.
+//! - `subscriber`: логика подписок и интерфейсы потоков для потребителей.
 //!
-//! Public API re-exports:
+//! Публичный API переэкспортирует:
 //! - `broker::*`
 //! - `message::*`
 //! - `subscriber::*`

@@ -5,59 +5,60 @@ use tokio::sync::broadcast;
 
 use super::Message;
 
-/// Subscription to a specific pub/sub channel.
+/// Подписка на конкретный канал Pub/Sub.
 ///
-/// Wraps a [`broadcast::Receiver`] associated with a channel name (`Arc<str>`),
-/// allowing you to receive messages from that channel.
+/// Обёртка над [`broadcast::Receiver`], привязанная к имени канала (`Arc<str>`),
+/// позволяет получать сообщения из этого канала.
 ///
-/// Unsubscription happens automatically on `Drop`, or can be done explicitly via [`Subscription::unsubscribe`].
+/// Отписка происходит автоматически при `Drop` или явно через [`Subscription::unsubscribe`].
 pub struct Subscription {
-    /// The channel name subscribed to.
+    /// Название канала, на который подписаны.
     pub channel: Arc<str>,
-    /// The internal `broadcast::Receiver` for incoming messages.
+    /// Внутренний приёмник для входящих сообщений.
     pub inner: broadcast::Receiver<Message>,
 }
 
-/// Pattern-based subscription to multiple channels.
+/// Подписка по шаблону на несколько каналов.
 ///
-/// Uses [`globset::Glob`] to match channel names, and receives messages
-/// from all matching channels.
+/// Использует [`globset::Glob`] для сопоставления имён каналов и получает
+/// сообщения из всех каналов, подходящих под шаблон.
 ///
-/// Unsubscription also happens automatically on `Drop`, or can be done explicitly via [`PatternSubscription::unsubscribe`].
+/// Отписка также происходит автоматически при `Drop` или явно через
+/// [`PatternSubscription::unsubscribe`].
 pub struct PatternSubscription {
-    /// The glob pattern used to match channel names.
+    /// Шаблон glob для сопоставления имён каналов.
     pub pattern: Glob,
-    /// The internal `broadcast::Receiver` for incoming messages.
+    /// Внутренний приёмник для входящих сообщений.
     pub inner: broadcast::Receiver<Message>,
 }
 
 impl Subscription {
-    /// Returns a mutable reference to the internal [`broadcast::Receiver`],
-    /// so you can call `.recv().await`.
+    /// Возвращает изменяемую ссылку на внутренний приёмник,
+    /// чтобы можно было вызвать `.recv().await`.
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
 
-    /// Explicitly unsubscribe from the channel. Equivalent to `drop(self)`.
+    /// Явно отписаться от канала. Аналогично `drop(self)`.
     ///
-    /// After calling this, no more messages will be received.
+    /// После вызова больше не будут приходить сообщения.
     pub fn unsubscribe(self) {
-        // Nothing to do: dropping the inner Receiver removes it from the broadcast channel
+        // Ничего не нужно делать: при дропе Receiver отписывается сам
     }
 }
 
 impl PatternSubscription {
-    /// Returns a mutable reference to the internal [`broadcast::Receiver`],
-    /// so you can call `.recv().await`.
+    /// Возвращает изменяемую ссылку на внутренний приёмник,
+    /// чтобы можно было вызвать `.recv().await`.
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
 
-    /// Explicitly unsubscribe from the pattern subscription.
+    /// Явно отписаться от шаблона.
     ///
-    /// After calling this, no more messages matching the pattern will be received.
+    /// После вызова больше не будут приходить сообщения по этому шаблону.
     pub fn unsubscribe(self) {
-        // Dropping the Receiver removes it from the broadcast channel
+        // При дропе Receiver отписывается сам
     }
 }
 
@@ -71,7 +72,7 @@ mod tests {
 
     use crate::{pubsub::PatternSubscription, Broker, Subscription};
 
-    /// Verifies that a subscription retains the correct channel name.
+    /// Проверяет, что поле `channel` содержит правильное имя канала.
     #[tokio::test]
     async fn test_subscription_channel_name() {
         let sub = {
@@ -80,11 +81,12 @@ mod tests {
             assert_eq!(&*sub.channel, "mychan");
             sub
         };
-        // After broker goes out of scope, the subscriber still holds the channel
+        // Даже после того, как broker вышел из области видимости,
+        // имя канала остаётся доступным
         assert_eq!(&*sub.channel, "mychan");
     }
 
-    /// Verifies that a published message is received by the subscription.
+    /// Проверяет, что опубликованное сообщение приходит подписчику.
     #[tokio::test]
     async fn test_receive_message_via_subscription() {
         let broker = Broker::new(10);
@@ -98,7 +100,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Verifies that dropping the subscription decreases the receiver count.
+    /// Проверяет, что дроп подписки уменьшает счётчик слушателей.
     #[test]
     fn test_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(5);
@@ -112,7 +114,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Verifies that calling `unsubscribe` explicitly consumes the subscription.
+    /// Проверяет, что метод `unsubscribe` явно отписывает подписчика.
     #[test]
     fn test_explicit_unsubscribe_consumes_subscription() {
         let (tx, rx) = broadcast::channel(5);
@@ -126,7 +128,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Verifies that pattern subscription (`psubscribe`) correctly receives messages.
+    /// Проверяет, что шаблонная подписка получает сообщение.
     #[tokio::test]
     async fn test_pattern_subscription_receives_message() {
         let broker = Broker::new(10);
@@ -143,7 +145,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"xyz"));
     }
 
-    /// Verifies that after unsubscribing the pattern, no messages are received.
+    /// Проверяет, что после `punsubscribe` сообщения не приходят.
     #[tokio::test]
     async fn test_pattern_unsubscribe_stops_reception() {
         let broker = Broker::new(10);
@@ -156,7 +158,7 @@ mod tests {
         );
     }
 
-    /// Verifies that multiple pattern subscriptions receive the same message.
+    /// Проверяет, что несколько шаблонных подписок получают одно и то же сообщение.
     #[tokio::test]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
@@ -180,7 +182,7 @@ mod tests {
         assert_eq!(msg2.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Verifies that dropping a pattern subscription decreases the receiver count.
+    /// Проверяет, что дроп шаблонной подписки уменьшает число слушателей.
     #[test]
     fn test_pattern_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(3);
@@ -192,7 +194,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Verifies that calling `unsubscribe` on a pattern subscription consumes it.
+    /// Проверяет, что метод `unsubscribe` у шаблонной подписки отписывает.
     #[test]
     fn test_pattern_explicit_unsubscribe_consumes() {
         let (tx, rx) = broadcast::channel(3);
@@ -204,7 +206,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Verifies that two subscriptions to the same channel both receive each message.
+    /// Проверяет, что две подписки на один канал обе получают сообщения.
     #[tokio::test]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new(5);
@@ -221,8 +223,7 @@ mod tests {
         );
     }
 
-    /// Verifies that unsubscribing from a non-existent channel or pattern
-    /// does not panic and returns cleanly.
+    /// Проверяет, что отписка от несуществующего канала или шаблона не паникует.
     #[test]
     fn test_unsubscribe_nonexistent() {
         let broker = Broker::new(5);
@@ -231,7 +232,7 @@ mod tests {
         broker.punsubscribe("no*pat").unwrap();
     }
 
-    /// Verifies that subscribing with an invalid glob pattern returns a parse error.
+    /// Проверяет, что при некорректном шаблоне возвращается ошибка.
     #[test]
     fn test_invalid_glob_pattern() {
         let broker = Broker::new(5);
