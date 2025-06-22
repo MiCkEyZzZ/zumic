@@ -1,7 +1,7 @@
-# root = true indicates that this is the root of the settings.
+# root = true указывает на то, что это корень настроек.
 root = true
 
-# All files by default.
+# Все файлы по умолчанию.
 [*]
 charset = utf-8
 end_of_line = lf
@@ -14,6 +14,7 @@ indent_style = tab
 indent_size = 1       # таб = 1 "таба" (Go-гайд)
 tab_width    = 4      # отображение таба как 4 пробела
 max_line_length = 120
+
 # сортируем импорты по gofmt/goimports, без пробелов вокруг кода
 
 # Rust

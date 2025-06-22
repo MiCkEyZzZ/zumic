@@ -63,3 +63,58 @@ pub fn load_from_zdb(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::Sds;
+
+    use super::*;
+
+    #[test]
+    fn test_zdb_save_and_load_roundtrip() {
+        // уникальное имя файла для теста
+        let test_path = "test_zdb_roundtrip.zdb";
+
+        // 1. Создаём тестовое хранилище и наполняем его
+        let store = InMemoryStore::default();
+        store.set(&Sds::from_str("key1"), Value::Int(123)).unwrap();
+        store
+            .set(&Sds::from_str("key2"), Value::Bool(true))
+            .unwrap();
+        store
+            .set(&Sds::from_str("key3"), Value::Str(Sds::from_str("hello")))
+            .unwrap();
+
+        // 2. Сохраняем его в файл
+        save_to_zdb(&store, test_path).unwrap();
+
+        // 3. Загружаем в другое хранилище
+        let mut loaded = InMemoryStore::default();
+        load_from_zdb(&mut loaded, test_path).unwrap();
+
+        // 4. Проверяем, что количество ключей совпадает
+        let store_count = store.iter().count();
+        let loaded_count = loaded.iter().count();
+        assert_eq!(
+            store_count, loaded_count,
+            "Key count mismatch: {} vs {}",
+            store_count, loaded_count
+        );
+
+        // 5. Проверяем, что все пары ключ->значение совпадают
+        for (k, v) in store.iter() {
+            // вызов .get() возвращает Result<Option<Value>, _>, unwrap() гарантирует panic при Err
+            let loaded_val = loaded.get(&k).unwrap();
+            assert!(loaded_val.is_some(), "Key {:?} not found after loading", k);
+            // сравниваем значение: клонируем v, чтобы получить Value, и оборачиваем в Some
+            assert_eq!(
+                loaded_val,
+                Some(v.clone()),
+                "Value mismatch for key {:?}: expected {:?}, got {:?}",
+                k,
+                v,
+                loaded_val
+            );
+        }
+    }
+}

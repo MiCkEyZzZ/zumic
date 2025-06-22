@@ -39,3 +39,6 @@ zumic.conf
 
 # Web artifacts
 *.wasm
+
+# Тестовые файлы
+test_zdb_roundtrip.**
