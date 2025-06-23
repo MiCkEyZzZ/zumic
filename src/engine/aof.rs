@@ -3,11 +3,12 @@ use std::{
     io::{self, BufWriter, Read, Seek, Write},
     path::Path,
     sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tempfile::NamedTempFile;
@@ -36,6 +37,17 @@ pub enum SyncPolicy {
     No,
 }
 
+/// Набор метрик по работе AOF-лога.
+#[derive(Debug, Default)]
+pub struct AofMetrics {
+    pub ops_total: usize,
+    pub ops_set: usize,
+    pub ops_del: usize,
+    pub flush_count: usize,
+    pub flush_errors: usize,
+    pub flush_total_ns: u64,
+}
+
 /// Основная структура журнала AOF (Append-Only File).
 /// Поддерживает буферизованную запись, восстановление и компактацию.
 pub struct AofLog {
@@ -49,6 +61,13 @@ pub struct AofLog {
     flusher_stop_tx: Option<Sender<()>>,
     /// Хэндл фонового потока флешера, чтобы ждать его завершения.
     flusher_handle: Option<JoinHandle<()>>,
+    // Метрики
+    metrics_ops_total: AtomicUsize,
+    metrics_ops_set: AtomicUsize,
+    metrics_ops_del: AtomicUsize,
+    metrics_flush_count: AtomicUsize,
+    metrics_flush_errors: AtomicUsize,
+    metrics_flush_total_ns: AtomicU64,
 }
 
 impl AofLog {
@@ -70,7 +89,7 @@ impl AofLog {
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
-            if n == 4 {
+            if n == MAGIC.len() {
                 if &header != MAGIC {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -98,6 +117,12 @@ impl AofLog {
             policy,
             flusher_stop_tx: None,
             flusher_handle: None,
+            metrics_ops_total: AtomicUsize::new(0),
+            metrics_ops_set: AtomicUsize::new(0),
+            metrics_ops_del: AtomicUsize::new(0),
+            metrics_flush_count: AtomicUsize::new(0),
+            metrics_flush_errors: AtomicUsize::new(0),
+            metrics_flush_total_ns: AtomicU64::new(0),
         };
 
         // 4) Если политика EverySec — запускаем фоновый флешер
@@ -112,8 +137,13 @@ impl AofLog {
                     if rx.recv_timeout(Duration::from_secs(1)).is_ok() {
                         break;
                     }
-                    if let Ok(mut guard) = writer_clone.lock() {
-                        let _ = guard.flush();
+                    match writer_clone.lock() {
+                        Ok(ref mut guard) => {
+                            let _ = guard.flush();
+                        }
+                        Err(_) => {
+                            eprintln!("AOF flusher poisoned");
+                        }
                     }
                 }
             });
@@ -130,6 +160,12 @@ impl AofLog {
         key: &[u8],
         value: &[u8],
     ) -> io::Result<()> {
+        // метрики операций.
+        self.metrics_ops_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.metrics_ops_set
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let mut buf = self.writer.lock().unwrap();
         buf.write_all(&[AofOp::Set as u8])?;
         Self::write_32(&mut *buf, key.len() as u32)?;
@@ -137,6 +173,7 @@ impl AofLog {
         Self::write_32(&mut *buf, value.len() as u32)?;
         buf.write_all(value)?;
         drop(buf);
+
         self.maybe_flush()
     }
 
@@ -146,11 +183,17 @@ impl AofLog {
         &mut self,
         key: &[u8],
     ) -> io::Result<()> {
+        self.metrics_ops_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.metrics_ops_del
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let mut buf = self.writer.lock().unwrap();
         buf.write_all(&[AofOp::Del as u8])?;
         Self::write_32(&mut *buf, key.len() as u32)?;
         buf.write_all(key)?;
         drop(buf);
+
         self.maybe_flush()
     }
 
@@ -276,15 +319,35 @@ impl AofLog {
     }
 
     /// Выполняет flush согласно текущей политике синхронизации.
-    fn maybe_flush(&mut self) -> io::Result<()> {
-        match self.policy {
-            SyncPolicy::Always => {
-                // Блокируем мьютекс и делегируем flush внутреннему BufWriter<File>
-                let mut w = self.writer.lock().unwrap();
-                w.flush()
+    fn maybe_flush(&self) -> io::Result<()> {
+        if let SyncPolicy::Always = self.policy {
+            let start = Instant::now();
+            let mut buf = self.writer.lock().unwrap();
+            let res = buf.flush();
+            let dur = start.elapsed().as_nanos() as u64;
+
+            // обновляем метрики flush
+            self.metrics_flush_count.fetch_add(1, Ordering::Relaxed);
+            self.metrics_flush_total_ns
+                .fetch_add(dur, Ordering::Relaxed);
+            if res.is_err() {
+                self.metrics_flush_errors.fetch_add(1, Ordering::Relaxed);
             }
-            SyncPolicy::EverySec => Ok(()),
-            SyncPolicy::No => Ok(()), // будет сброшено фоном
+            res
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Возвращает снимок текущих метрик
+    pub fn metrics(&self) -> AofMetrics {
+        AofMetrics {
+            ops_total: self.metrics_ops_total.load(Ordering::Relaxed),
+            ops_set: self.metrics_ops_set.load(Ordering::Relaxed),
+            ops_del: self.metrics_ops_del.load(Ordering::Relaxed),
+            flush_count: self.metrics_flush_count.load(Ordering::Relaxed),
+            flush_errors: self.metrics_flush_errors.load(Ordering::Relaxed),
+            flush_total_ns: self.metrics_flush_total_ns.load(Ordering::Relaxed),
         }
     }
 }
@@ -442,6 +505,60 @@ mod tests {
             seen.insert(key, val.unwrap());
         }
         assert_eq!(seen, live_map);
+
+        Ok(())
+    }
+
+    /// Проверяет, что метрики операций и flush корректно считаются при SyncPolicy::Always.
+    #[test]
+    fn test_metrics_always_policy() -> io::Result<()> {
+        let temp = NamedTempFile::new()?;
+        let path = temp.path();
+        let mut log = AofLog::open(path, SyncPolicy::Always)?;
+
+        // Изначально все счётчики нулевые
+        let m0 = log.metrics();
+        assert_eq!(m0.ops_total, 0);
+        assert_eq!(m0.ops_set, 0);
+        assert_eq!(m0.ops_del, 0);
+        assert_eq!(m0.flush_count, 0);
+        assert_eq!(m0.flush_errors, 0);
+
+        // Делаем SET и DEL
+        log.append_set(b"k1", b"v1")?;
+        log.append_del(b"k1")?;
+
+        // Считаем метрики
+        let m1 = log.metrics();
+        assert_eq!(m1.ops_total, 2, "должно быть 2 операций");
+        assert_eq!(m1.ops_set, 1, "одна SET");
+        assert_eq!(m1.ops_del, 1, "один DEL");
+        // При Always каждый append вызывает flush
+        assert!(m1.flush_count >= 2, "минимум 2 flush");
+        assert_eq!(m1.flush_errors, 0, "ошибок flush быть не должно");
+        assert!(m1.flush_total_ns > 0, "текущее время flush замеряется");
+
+        Ok(())
+    }
+
+    /// Проверяет, что при SyncPolicy::No flush не происходит автоматически.
+    #[test]
+    fn test_metrics_no_policy() -> io::Result<()> {
+        let temp = NamedTempFile::new()?;
+        let path = temp.path();
+        let mut log = AofLog::open(path, SyncPolicy::No)?;
+
+        log.append_set(b"k", b"v")?;
+        log.append_del(b"k")?;
+
+        let m = log.metrics();
+        assert_eq!(m.ops_total, 2);
+        assert_eq!(m.ops_set, 1);
+        assert_eq!(m.ops_del, 1);
+        // При No flush_count остаётся 0
+        assert_eq!(m.flush_count, 0, "ни один flush не должен быть вызван");
+        assert_eq!(m.flush_errors, 0);
+        assert_eq!(m.flush_total_ns, 0);
 
         Ok(())
     }
