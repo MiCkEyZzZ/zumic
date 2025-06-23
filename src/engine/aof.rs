@@ -16,35 +16,43 @@ use tempfile::NamedTempFile;
 /// 4-байтовый магический заголовок для формата AOF (идентификатор версии).
 const MAGIC: &[u8; 4] = b"AOF1";
 
-/// Коды операций, используемые в журнале AOF.
+/// Коды операций в AOF-логе.
+/// Используются для сериализации и восстановления команд.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AofOp {
-    /// Установка значения (SET)
+    /// Установка пары ключ-значение (аналог команды SET)
     Set = 1,
-    /// Удаление ключа (DEL)
+    /// Удаление ключа (аналог команды DEL)
     Del = 2,
 }
 
-/// Политика синхронизации — как часто сбрасывать буфер AOF на диск.
+/// Политика синхронизации AOF.
+/// Определяет, когда именно сбрасывать данные из буфера на диск.
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
-    /// fsync/flush после каждой команды (максимальная надёжность).
+    /// Сбрасывать буфер после каждой команды (максимальная надёжность, но медленно)
     Always,
-    /// сброс раз в секунду в фоновом потоке.
+    /// Сбрасывать в фоновом потоке каждую секунду
     EverySec,
-    /// не сбрасывать явно (полагаемся на ОС).
+    /// Никогда не сбрасывать явно (надеемся на ОС и кэш)
     No,
 }
 
-/// Набор метрик по работе AOF-лога.
+/// Статистика работы AOF-журнала.
 #[derive(Debug, Default)]
 pub struct AofMetrics {
+    /// Общее количество операций (SET + DEL)
     pub ops_total: usize,
+    /// Количество операций SET
     pub ops_set: usize,
+    /// Количество операций DEL
     pub ops_del: usize,
+    /// Количество вызовов flush
     pub flush_count: usize,
+    /// Количество ошибок при flush
     pub flush_errors: usize,
+    /// Общее время всех flush-операций в наносекундах
     pub flush_total_ns: u64,
 }
 
@@ -66,7 +74,6 @@ pub struct AofLog {
     batch_size: AtomicUsize,
     /// Время последней операции (секунды с UNIX epoch)
     last_activity: AtomicU64,
-    // Метрики
     metrics_ops_total: AtomicUsize,
     metrics_ops_set: AtomicUsize,
     metrics_ops_del: AtomicUsize,
@@ -79,9 +86,18 @@ impl AofLog {
     /// Изначальный размер батча перед flush в режиме Always.
     const INITIAL_BATCH: usize = 32;
 
-    /// Открывает (или создаёт) файл AOF по пути `path`.
-    /// Проверяет или инициализирует магический заголовок.
-    /// Запускает фоновый flusher, если политика EverySec.
+    /// Открывает (или создаёт) файл AOF по заданному пути.
+    /// Проверяет или записывает магический заголовок.
+    /// Настраивает буферизацию и политику синхронизации.
+    ///
+    /// Если политика `EverySec`, запускает фоновый поток сброса.
+    ///
+    /// # Аргументы
+    /// - `path` — путь к AOF-файлу.
+    /// - `policy` — политика синхронизации (Always, EverySec, No).
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку при некорректном заголовке файла или ошибке открытия.
     pub fn open<P: AsRef<Path>>(
         path: P,
         policy: SyncPolicy,
@@ -93,7 +109,6 @@ impl AofLog {
             .append(true)
             .open(&path)?;
 
-        // Читаем или инициализируем MAGIC
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
@@ -113,12 +128,9 @@ impl AofLog {
         file.seek(io::SeekFrom::Start(0))?;
         let reader = file;
 
-        // 2) Открываем отдельный дескриптор для записи и буферизуем его
         let write_file = OpenOptions::new().create(true).append(true).open(&path)?;
-        // Оборачиваем BufWriter<File> в Arc<Mutex<_>>
         let writer = Arc::new(Mutex::new(BufWriter::new(write_file)));
 
-        // 3) Собираем структуру без фонового потока
         let mut log = AofLog {
             writer: Arc::clone(&writer),
             reader,
@@ -159,20 +171,26 @@ impl AofLog {
         Ok(log)
     }
 
-    /// Добавляет команду SET в журнал: [AofOp::Set][len_key][key][len_val][value]
-    /// Затем вызывает `maybe_flush` в зависимости от политики.
+    /// Добавляет в журнал команду `SET` с ключом и значением.
+    /// Формат: [AofOp::Set][len(key)][key][len(val)][val].
+    ///
+    /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
+    ///
+    /// # Аргументы
+    /// - `key` — ключ.
+    /// - `value` — значение.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку записи или сброса буфера.
     pub fn append_set(
         &mut self,
         key: &[u8],
         value: &[u8],
     ) -> io::Result<()> {
-        // метрики операций.
         self.metrics_ops_total
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.metrics_ops_set
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        // Нужен lock на writer
         {
             let mut buf = self.writer.lock().unwrap();
             buf.write_all(&[AofOp::Set as u8])?;
@@ -181,12 +199,8 @@ impl AofLog {
             Self::write_32(&mut *buf, value.len() as u32)?;
             buf.write_all(value)?;
         }
-
-        // обновляем время последней активности.
         let now_s = Instant::now().elapsed().as_secs();
         self.last_activity.store(now_s, Ordering::Relaxed);
-
-        // Политика Always — адаптивный батч
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
             let threshold = self.batch_size.load(Ordering::Relaxed);
@@ -194,7 +208,6 @@ impl AofLog {
                 self.flush_immediate()?;
                 self.pending_ops.store(0, Ordering::Relaxed);
             }
-            // После каждого append пробуем скорректировать batch_size
             self.adjust_batch_size();
             Ok(())
         } else {
@@ -202,8 +215,16 @@ impl AofLog {
         }
     }
 
-    /// Добавляет команду DEL в журнал: [AofOp::Del][len_key][key]
-    /// Затем вызывает `maybe_flush` в зависимости от политики.
+    /// Добавляет в журнал команду `DEL` с ключом.
+    /// Формат: [AofOp::Del][len(key)][key]
+    ///
+    /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
+    ///
+    /// # Аргументы
+    /// - `key` — ключ, который нужно удалить.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку записи или сброса буфера.
     pub fn append_del(
         &mut self,
         key: &[u8],
@@ -212,17 +233,14 @@ impl AofLog {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.metrics_ops_del
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
         {
             let mut buf = self.writer.lock().unwrap();
             buf.write_all(&[AofOp::Del as u8])?;
             Self::write_32(&mut *buf, key.len() as u32)?;
             buf.write_all(key)?;
         }
-
         let now_s = Instant::now().elapsed().as_secs();
         self.last_activity.store(now_s, Ordering::Relaxed);
-
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
             let threshold = self.batch_size.load(Ordering::Relaxed);
@@ -237,8 +255,16 @@ impl AofLog {
         }
     }
 
-    /// Воспроизводит все операции из начала файла, вызывая `f(op, key, value)`.
-    /// Для DEL значение будет `None`.
+    /// Воспроизводит все операции из AOF-журнала с начала файла.
+    ///
+    /// Вызывает переданный callback `f(op, key, val)`
+    /// для каждой операции SET/DEL. Для DEL значение `None`.
+    ///
+    /// # Аргументы
+    /// - `f` — функция, принимающая тип операции, ключ и значение (или None).
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку при чтении файла или некорректных данных.
     pub fn replay<F>(
         &mut self,
         mut f: F,
@@ -246,16 +272,12 @@ impl AofLog {
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        // возвращаем reader в начало
         self.reader.seek(io::SeekFrom::Start(0))?;
-        // проверяем MAGIC
         let mut header = [0u8; 4];
         self.reader.read_exact(&mut header)?;
         if &header != MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
         }
-
-        // читаем всё в память
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
         let mut pos = 0;
@@ -280,8 +302,15 @@ impl AofLog {
         Ok(())
     }
 
-    /// Компактация AOF: на основе итератора `live` создаём новый временный файл,
-    /// записываем в него только актуальные SET, и атомарно заменяем старый.
+    /// Компактирует журнал AOF, записывая только "живые" ключи.
+    /// Использует временный файл и затем атомарно заменяет оригинал.
+    ///
+    /// # Аргументы
+    /// - `path` — путь к AOF-файлу.
+    /// - `live` — итерируемое множество пар (ключ, значение), представляющее актуальное состояние.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку при записи или замене файла.
     pub fn rewrite<I, P>(
         &mut self,
         path: P,
@@ -292,14 +321,11 @@ impl AofLog {
         P: AsRef<Path>,
     {
         let path = path.as_ref();
-
         // 1. Создаём временный файл, в той же директории.
         let mut tmp = NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?;
-
         // 2. Записываем MAGIC
         tmp.write_all(MAGIC)?;
         tmp.flush()?;
-
         // 3. Записываем только SET-операции для каждого живого key/value.
         for (key, value) in live {
             tmp.write_all(&[AofOp::Set as u8])?;
@@ -309,10 +335,8 @@ impl AofLog {
             tmp.write_all(&value)?;
         }
         tmp.flush()?;
-
         // Атомарно заменяем старый файл.
         tmp.persist(path)?;
-
         // После замены - нужно обновить writer и reader в AofLog:
         // Закрываем текущие дескрипторы, открываем новый файл.
         let mut file = OpenOptions::new()
@@ -322,17 +346,36 @@ impl AofLog {
             .open(path)?;
         file.seek(io::SeekFrom::Start(0))?;
         self.reader = file;
-
         // Обновляем writer внутри Arc<Mutex<...>>
         let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
-
         let mut guard = self.writer.lock().unwrap();
         *guard = BufWriter::new(writer_file);
 
         Ok(())
     }
 
-    /// Утилита для записи `u32` в формате big-endian.
+    /// Возвращает снимок текущих метрик AOF-журнала.
+    ///
+    /// Полезно для мониторинга и отладки.
+    pub fn metrics(&self) -> AofMetrics {
+        AofMetrics {
+            ops_total: self.metrics_ops_total.load(Ordering::Relaxed),
+            ops_set: self.metrics_ops_set.load(Ordering::Relaxed),
+            ops_del: self.metrics_ops_del.load(Ordering::Relaxed),
+            flush_count: self.metrics_flush_count.load(Ordering::Relaxed),
+            flush_errors: self.metrics_flush_errors.load(Ordering::Relaxed),
+            flush_total_ns: self.metrics_flush_total_ns.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Утилита: записывает `u32` в формате big-endian.
+    ///
+    /// # Аргументы
+    /// - `w` — writer (например, BufWriter или File).
+    /// - `v` — значение u32.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку записи.
     #[inline]
     fn write_32<W: Write>(
         w: &mut W,
@@ -341,7 +384,14 @@ impl AofLog {
         w.write_all(&v.to_be_bytes())
     }
 
-    /// Безопасно читает `u32` из буфера в формате big-endian, с проверкой границ.
+    /// Утилита: безопасно читает `u32` в формате big-endian из буфера.
+    ///
+    /// # Аргументы
+    /// - `buf` — байтовый буфер.
+    /// - `pos` — текущая позиция чтения (модифицируется).
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку при недостатке байт.
     #[inline]
     fn read_u32(
         buf: &[u8],
@@ -363,7 +413,6 @@ impl AofLog {
     fn maybe_flush(&self) -> io::Result<()> {
         match self.policy {
             SyncPolicy::Always => {
-                // Синхронный flush и метрики
                 let start = Instant::now();
                 let mut buf = self.writer.lock().unwrap();
                 let res = buf.flush();
@@ -381,25 +430,17 @@ impl AofLog {
         }
     }
 
-    /// Возвращает снимок текущих метрик
-    pub fn metrics(&self) -> AofMetrics {
-        AofMetrics {
-            ops_total: self.metrics_ops_total.load(Ordering::Relaxed),
-            ops_set: self.metrics_ops_set.load(Ordering::Relaxed),
-            ops_del: self.metrics_ops_del.load(Ordering::Relaxed),
-            flush_count: self.metrics_flush_count.load(Ordering::Relaxed),
-            flush_errors: self.metrics_flush_errors.load(Ordering::Relaxed),
-            flush_total_ns: self.metrics_flush_total_ns.load(Ordering::Relaxed),
-        }
-    }
-
-    /// Немедленный flush с обновлением метрик (используется только для батчинга в Always).
+    /// Немедленно сбрасывает буфер на диск.
+    /// Используется при политике `Always`, когда достигнут порог batch.
+    /// Обновляет метрики (время, количество, ошибки).
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку flush.
     fn flush_immediate(&self) -> io::Result<()> {
         let start = Instant::now();
         let mut buf = self.writer.lock().unwrap();
         let res = buf.flush();
         let dur = start.elapsed().as_nanos() as u64;
-
         self.metrics_flush_count.fetch_add(1, Ordering::Relaxed);
         self.metrics_flush_total_ns
             .fetch_add(dur, Ordering::Relaxed);
@@ -409,21 +450,20 @@ impl AofLog {
         res
     }
 
-    /// Поддерживает адаптивный размер батча:
+    /// Адаптивно подстраивает размер батча для flush:
     ///
-    ///   — если с последней активности прошло > 5 с, уменьшаем batch в 2x (но не ниже 4)
-    ///   — если последняя активность <1 с назад, увеличиваем batch в 2× (но не выше 1024)
+    /// - Если активности не было > 5 секунд, уменьшает batch в 2 раза (не ниже 4).
+    /// - При активности < 1 секунды назад может увеличить (не реализовано).
+    ///
+    /// Используется только при политике `Always`.
     fn adjust_batch_size(&self) {
         let now = Instant::now().elapsed().as_secs();
         let last = self.last_activity.load(Ordering::Relaxed);
         let mut cur = self.batch_size.load(Ordering::Relaxed);
-
-        // Сжимаем batch, если долго простаивали
         if now.saturating_sub(last) > 5 && cur > 4 {
             cur = (cur / 2).max(4);
             self.batch_size.store(cur, Ordering::Relaxed);
         }
-        // Не расширяем динамически
     }
 }
 
