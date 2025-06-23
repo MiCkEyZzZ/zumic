@@ -2,7 +2,11 @@ use std::{
     fs::{File, OpenOptions},
     io::{self, BufWriter, Read, Seek, Write},
     path::Path,
-    thread,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -15,43 +19,54 @@ const MAGIC: &[u8; 4] = b"AOF1";
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AofOp {
+    /// Установка значения (SET)
     Set = 1,
+    /// Удаление ключа (DEL)
     Del = 2,
 }
 
 /// Политика синхронизации — как часто сбрасывать буфер AOF на диск.
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
-    /// fsync/flush после каждой команды (максимальная надёжность, минимальная производительность).
+    /// fsync/flush после каждой команды (максимальная надёжность).
     Always,
-    /// сброс раз в секунду в фоне.
+    /// сброс раз в секунду в фоновом потоке.
     EverySec,
     /// не сбрасывать явно (полагаемся на ОС).
     No,
 }
 
-/// Журнал AOF (Append-Only File) с буферизованной записью и безопасным воспроизведением.
+/// Основная структура журнала AOF (Append-Only File).
+/// Поддерживает буферизованную запись, восстановление и компактацию.
 pub struct AofLog {
-    writer: BufWriter<File>,
+    /// Буферизованный writer, защищённый мьютексом для потокобезопасности.
+    writer: Arc<Mutex<BufWriter<File>>>,
+    /// Reader для воспроизведения операций из начала файла.
     reader: File,
+    /// Выбранная политика синхронизации.
     policy: SyncPolicy,
+    /// Канал для остановки фонового флешера (для EverySec).
+    flusher_stop_tx: Option<Sender<()>>,
+    /// Хэндл фонового потока флешера, чтобы ждать его завершения.
+    flusher_handle: Option<JoinHandle<()>>,
 }
 
 impl AofLog {
-    /// Открывает (или создаёт) файл AOF с заданной политикой синхронизации,
-    /// проверяет или записывает магический заголовок.
+    /// Открывает (или создаёт) файл AOF по пути `path`.
+    /// Проверяет или инициализирует магический заголовок.
+    /// Запускает фоновый flusher, если политика EverySec.
     pub fn open<P: AsRef<Path>>(
         path: P,
         policy: SyncPolicy,
     ) -> io::Result<Self> {
-        // Открываем файл для чтения и дозаписи.
+        // 1) Читаем или создаём файл для проверки заголовка и для replay.
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .append(true)
             .open(&path)?;
 
-        // Читаем или инициализируем магический заголовок.
+        // Читаем или инициализируем MAGIC
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
@@ -63,67 +78,84 @@ impl AofLog {
                     ));
                 }
             } else {
-                // Пустой файл — записываем заголовок.
                 file.seek(io::SeekFrom::Start(0))?;
                 file.write_all(MAGIC)?;
                 file.flush()?;
             }
         }
-
-        // Сброс курсора в начало для чтения.
         file.seek(io::SeekFrom::Start(0))?;
-        // Отдельный файл для записи.
-        let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
+        let reader = file;
 
-        let log = AofLog {
-            writer: BufWriter::new(writer_file),
-            reader: file,
+        // 2) Открываем отдельный дескриптор для записи и буферизуем его
+        let write_file = OpenOptions::new().create(true).append(true).open(&path)?;
+        // Оборачиваем BufWriter<File> в Arc<Mutex<_>>
+        let writer = Arc::new(Mutex::new(BufWriter::new(write_file)));
+
+        // 3) Собираем структуру без фонового потока
+        let mut log = AofLog {
+            writer: Arc::clone(&writer),
+            reader,
             policy,
+            flusher_stop_tx: None,
+            flusher_handle: None,
         };
 
-        // Если выбрана EverySec, запускаем фоновый flusher.
-        if let SyncPolicy::EverySec = log.policy {
-            let writer_clone = log.writer.get_ref().try_clone()?;
-            thread::spawn(move || {
-                let mut bufm = BufWriter::new(writer_clone);
+        // 4) Если политика EverySec — запускаем фоновый флешер
+        if let SyncPolicy::EverySec = policy {
+            let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
+            log.flusher_stop_tx = Some(tx);
+
+            let writer_clone = Arc::clone(&writer);
+            let handle = thread::spawn(move || {
                 loop {
-                    thread::sleep(Duration::from_secs(1));
-                    let _ = bufm.flush();
+                    // ждем секунду или сигнал остановки
+                    if rx.recv_timeout(Duration::from_secs(1)).is_ok() {
+                        break;
+                    }
+                    if let Ok(mut guard) = writer_clone.lock() {
+                        let _ = guard.flush();
+                    }
                 }
             });
+            log.flusher_handle = Some(handle);
         }
 
         Ok(log)
     }
 
-    /// Добавляет SET-операцию в журнал AOF.
+    /// Добавляет команду SET в журнал: [AofOp::Set][len_key][key][len_val][value]
+    /// Затем вызывает `maybe_flush` в зависимости от политики.
     pub fn append_set(
         &mut self,
         key: &[u8],
         value: &[u8],
     ) -> io::Result<()> {
-        self.writer.write_all(&[AofOp::Set as u8])?;
-        Self::write_32(&mut self.writer, key.len() as u32)?;
-        self.writer.write_all(key)?;
-        Self::write_32(&mut self.writer, value.len() as u32)?;
-        self.writer.write_all(value)?;
-        self.maybe_flush()?;
-        Ok(())
+        let mut buf = self.writer.lock().unwrap();
+        buf.write_all(&[AofOp::Set as u8])?;
+        Self::write_32(&mut *buf, key.len() as u32)?;
+        buf.write_all(key)?;
+        Self::write_32(&mut *buf, value.len() as u32)?;
+        buf.write_all(value)?;
+        drop(buf);
+        self.maybe_flush()
     }
 
-    /// Добавляет DEL-операцию в журнал AOF.
+    /// Добавляет команду DEL в журнал: [AofOp::Del][len_key][key]
+    /// Затем вызывает `maybe_flush` в зависимости от политики.
     pub fn append_del(
         &mut self,
         key: &[u8],
     ) -> io::Result<()> {
-        self.writer.write_all(&[AofOp::Del as u8])?;
-        Self::write_32(&mut self.writer, key.len() as u32)?;
-        self.writer.write_all(key)?;
-        self.maybe_flush()?;
-        Ok(())
+        let mut buf = self.writer.lock().unwrap();
+        buf.write_all(&[AofOp::Del as u8])?;
+        Self::write_32(&mut *buf, key.len() as u32)?;
+        buf.write_all(key)?;
+        drop(buf);
+        self.maybe_flush()
     }
 
-    /// Воспроизводит все операции из журнала, вызывая заданный callback для каждой записи.
+    /// Воспроизводит все операции из начала файла, вызывая `f(op, key, value)`.
+    /// Для DEL значение будет `None`.
     pub fn replay<F>(
         &mut self,
         mut f: F,
@@ -131,61 +163,41 @@ impl AofLog {
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
     {
-        // Сбрасываем считыватель в начало.
+        // возвращаем reader в начало
         self.reader.seek(io::SeekFrom::Start(0))?;
-
-        // Читаем и проверяем магический заголовок.
+        // проверяем MAGIC
         let mut header = [0u8; 4];
         self.reader.read_exact(&mut header)?;
         if &header != MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
         }
-
-        // Считываем полное содержимое журнала в память.
+        // читаем всё в память
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
         let mut pos = 0;
 
         while pos < buf.len() {
-            // Читаем код операции.
             let op = AofOp::try_from(buf[pos])?;
             pos += 1;
-
-            // Читаем ключ.
             let key_len = Self::read_u32(&buf, &mut pos)? as usize;
-            if pos + key_len > buf.len() {
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "Key truncated",
-                ));
-            }
             let key = buf[pos..pos + key_len].to_vec();
             pos += key_len;
-
-            // Если SET, читаем значение.
             let val = if op == AofOp::Set {
                 let vlen = Self::read_u32(&buf, &mut pos)? as usize;
-                if pos + vlen > buf.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "Value truncated",
-                    ));
-                }
                 let v = buf[pos..pos + vlen].to_vec();
                 pos += vlen;
                 Some(v)
             } else {
                 None
             };
-
             f(op, key, val);
         }
 
         Ok(())
     }
 
-    /// Сжимает (перезаписывает) AOF: оставляет только последние SET-операции из `live`,
-    /// записывает их в новый временный файл и атомарно заменяет текущий.
+    /// Компактация AOF: на основе итератора `live` создаём новый временный файл,
+    /// записываем в него только актуальные SET, и атомарно заменяем старый.
     pub fn rewrite<I, P>(
         &mut self,
         path: P,
@@ -226,8 +238,12 @@ impl AofLog {
             .open(path)?;
         file.seek(io::SeekFrom::Start(0))?;
         self.reader = file;
+
+        // Обновляем writer внутри Arc<Mutex<...>>
         let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
-        self.writer = BufWriter::new(writer_file);
+
+        let mut guard = self.writer.lock().unwrap();
+        *guard = BufWriter::new(writer_file);
 
         Ok(())
     }
@@ -262,7 +278,11 @@ impl AofLog {
     /// Выполняет flush согласно текущей политике синхронизации.
     fn maybe_flush(&mut self) -> io::Result<()> {
         match self.policy {
-            SyncPolicy::Always => self.writer.flush(),
+            SyncPolicy::Always => {
+                // Блокируем мьютекс и делегируем flush внутреннему BufWriter<File>
+                let mut w = self.writer.lock().unwrap();
+                w.flush()
+            }
             SyncPolicy::EverySec => Ok(()),
             SyncPolicy::No => Ok(()), // будет сброшено фоном
         }
@@ -279,6 +299,18 @@ impl TryFrom<u8> for AofOp {
                 io::ErrorKind::InvalidData,
                 format!("Unknown AOF op: {v}"),
             )),
+        }
+    }
+}
+
+impl Drop for AofLog {
+    fn drop(&mut self) {
+        // при дропе отсылаем сигнал остановки и ждём потока
+        if let Some(tx) = self.flusher_stop_tx.take() {
+            let _ = tx.send(()); // сигнал на выход.
+        }
+        if let Some(handle) = self.flusher_handle.take() {
+            let _ = handle.join();
         }
     }
 }
