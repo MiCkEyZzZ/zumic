@@ -7,17 +7,44 @@
 
 use std::{
     collections::HashSet,
-    io::{Error, ErrorKind, Read},
+    io::{self, Error, ErrorKind, Read},
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_FLOAT, TAG_HASH,
-    TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
+    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_EOF, TAG_FLOAT,
+    TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
+
+/// Итератор по парам <Key, Value> из потокового дампа.
+///
+/// Будет читать из `r` по одной записи, пока не встретит `TAG_EOF`.
+pub struct StreamReader<R: Read> {
+    inner: R,
+    done: bool,
+}
+
+impl<R: Read> StreamReader<R> {
+    /// Создаёт новый stream-reader, проверяя заголовок.
+    pub fn new(mut r: R) -> std::io::Result<Self> {
+        let mut magic = [0; 3];
+        r.read_exact(&mut magic)?;
+        if &magic != FILE_MAGIC {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad magic"));
+        }
+        let ver = r.read_u8()?;
+        if ver != DUMP_VERSION {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad version"));
+        }
+        Ok(Self {
+            inner: r,
+            done: false,
+        })
+    }
+}
 
 /// Десериализует значение [`Value`] из бинарного потока.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
@@ -160,9 +187,49 @@ pub fn read_dump<R: Read>(r: &mut R) -> std::io::Result<Vec<(Sds, Value)>> {
     Ok(items)
 }
 
+impl<R: Read> Iterator for StreamReader<R> {
+    type Item = std::io::Result<(Sds, Value)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Читаем следующий байт, чтобы узнать: это EOF или длина ключа?
+        let mut peek = [0u8; 1];
+        if let Err(e) = self.inner.read_exact(&mut peek) {
+            return Some(Err(e));
+        }
+        if peek[0] == TAG_EOF {
+            self.done = true;
+            return None;
+        }
+
+        // Это первая байт длины ключа (big-endian u32), а не EOF.
+        // Так как мы уже съели первый байт длины, соберём полный u32:
+        let mut len_buf = [0u8; 4];
+        len_buf[0] = peek[0];
+        if let Err(e) = self.inner.read_exact(&mut len_buf[1..]) {
+            return Some(Err(e));
+        }
+        let klen = u32::from_be_bytes(len_buf) as usize;
+        let mut kb = vec![0; klen];
+        if let Err(e) = self.inner.read_exact(&mut kb) {
+            return Some(Err(e));
+        }
+        let key = Sds::from_vec(kb);
+
+        // Десериализуем само значение
+        match read_value(&mut self.inner) {
+            Ok(val) => Some(Ok((key, val))),
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::engine::{compress_block, write_dump};
+    use crate::engine::{compress_block, write_dump, write_stream};
 
     use super::*;
     use std::io::Cursor;
@@ -522,5 +589,28 @@ mod tests {
         buf.extend(&0u32.to_be_bytes());
         let err = super::read_dump(&mut &buf[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_stream_roundtrip() {
+        let items = vec![
+            (Sds::from_str("a"), Value::Int(1)),
+            (Sds::from_str("b"), Value::Str(Sds::from_str("c"))),
+        ];
+        let mut buf = Vec::new();
+        write_stream(&mut buf, items.clone().into_iter()).unwrap();
+
+        let reader = StreamReader::new(&buf[..]).unwrap();
+        let got: Vec<_> = reader.map(|res| res.unwrap()).collect();
+        assert_eq!(got, items);
+    }
+
+    #[test]
+    fn test_stream_empty() {
+        let mut buf = Vec::new();
+        write_stream(&mut buf, Vec::<(Sds, Value)>::new().into_iter()).unwrap();
+
+        let mut reader = StreamReader::new(&buf[..]).unwrap();
+        assert!(reader.next().is_none());
     }
 }

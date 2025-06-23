@@ -10,8 +10,9 @@ use std::io::Write;
 use byteorder::{BigEndian, WriteBytesExt};
 
 use super::{
-    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_FLOAT,
-    TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR, TAG_ZSET,
+    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_EOF,
+    TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR,
+    TAG_ZSET,
 };
 use crate::{Sds, Value};
 
@@ -163,10 +164,32 @@ pub fn write_dump<W: Write>(
     Ok(())
 }
 
+/// Пишет в `w` потоковую сериализацию дампа:
+/// - магия + версия;
+/// - затем N записей <ключ,значение>;
+/// - в конце — `TAG_EOF`.
+pub fn write_stream<W: Write>(
+    w: &mut W,
+    kvs: impl Iterator<Item = (Sds, Value)>,
+) -> std::io::Result<()> {
+    w.write_all(FILE_MAGIC)?;
+    w.write_u8(DUMP_VERSION)?;
+
+    for (key, val) in kvs {
+        let kb = key.as_bytes();
+        w.write_u32::<BigEndian>(kb.len() as u32)?;
+        w.write_all(kb)?;
+        write_value(w, &val)?;
+    }
+
+    w.write_u8(TAG_EOF)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        engine::{decompress_block, read_value},
+        engine::{decompress_block, read_value, StreamReader},
         Sds,
     };
 
@@ -272,5 +295,28 @@ mod tests {
         let err = decompress_block(&bad).unwrap_err();
         // error kind is Other (from zstd)
         assert_eq!(err.kind(), std::io::ErrorKind::Other);
+    }
+
+    #[test]
+    fn test_stream_roundtrip() {
+        let items = vec![
+            (Sds::from_str("a"), Value::Int(1)),
+            (Sds::from_str("b"), Value::Str(Sds::from_str("c"))),
+        ];
+        let mut buf = Vec::new();
+        write_stream(&mut buf, items.clone().into_iter()).unwrap();
+
+        let reader = StreamReader::new(&buf[..]).unwrap();
+        let got: Vec<_> = reader.map(|res| res.unwrap()).collect();
+        assert_eq!(got, items);
+    }
+
+    #[test]
+    fn test_stream_empty() {
+        let mut buf = Vec::new();
+        write_stream(&mut buf, Vec::<(Sds, Value)>::new().into_iter()).unwrap();
+
+        let mut reader = StreamReader::new(&buf[..]).unwrap();
+        assert!(reader.next().is_none());
     }
 }
