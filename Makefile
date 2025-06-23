@@ -1,4 +1,4 @@
-.PHONY: build fmt check clippy test clean help
+.PHONY: build fmt check clippy test bench clean help
 
 build: ## Собрать проект в debug-режиме
 	cargo build
@@ -12,6 +12,8 @@ clippy: ## Статический анализ кода с Clippy
 	cargo clippy -- -D warnings
 test: ## Запустить все тесты
 	cargo test
+bench: ## Запустить бенчмарк (требует ночной сборки Rust)
+	cargo bench
 clean: ## Очистить проект
 	cargo clean
 
@@ -23,4 +25,5 @@ help: ## Показать доступные команды
 	@echo "  make check       - быстрая проверка кода"
 	@echo "  make clippy      - статический анализ"
 	@echo "  make test        - запуск тестов"
+	@echo "  make bench       - запуск бенчмарков"
 	@echo "  make clean       - очистка сборки"

@@ -61,6 +61,7 @@ pub struct AofLog {
     flusher_stop_tx: Option<Sender<()>>,
     /// Хэндл фонового потока флешера, чтобы ждать его завершения.
     flusher_handle: Option<JoinHandle<()>>,
+    pending_ops: AtomicUsize,
     // Метрики
     metrics_ops_total: AtomicUsize,
     metrics_ops_set: AtomicUsize,
@@ -71,6 +72,9 @@ pub struct AofLog {
 }
 
 impl AofLog {
+    /// Размер батча перед flush в режиме Always.
+    const BATCH_SIZE: usize = 32;
+
     /// Открывает (или создаёт) файл AOF по пути `path`.
     /// Проверяет или инициализирует магический заголовок.
     /// Запускает фоновый flusher, если политика EverySec.
@@ -117,6 +121,7 @@ impl AofLog {
             policy,
             flusher_stop_tx: None,
             flusher_handle: None,
+            pending_ops: AtomicUsize::new(0),
             metrics_ops_total: AtomicUsize::new(0),
             metrics_ops_set: AtomicUsize::new(0),
             metrics_ops_del: AtomicUsize::new(0),
@@ -174,7 +179,17 @@ impl AofLog {
         buf.write_all(value)?;
         drop(buf);
 
-        self.maybe_flush()
+        // Бэьчинг или обычный flush
+        if let SyncPolicy::Always = self.policy {
+            let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
+            if count >= Self::BATCH_SIZE {
+                self.flush_immediate()?;
+                self.pending_ops.store(0, Ordering::Relaxed);
+            }
+            Ok(())
+        } else {
+            self.maybe_flush()
+        }
     }
 
     /// Добавляет команду DEL в журнал: [AofOp::Del][len_key][key]
@@ -194,7 +209,17 @@ impl AofLog {
         buf.write_all(key)?;
         drop(buf);
 
-        self.maybe_flush()
+        // Бэьчинг или обычный flush
+        if let SyncPolicy::Always = self.policy {
+            let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
+            if count >= Self::BATCH_SIZE {
+                self.flush_immediate()?;
+                self.pending_ops.store(0, Ordering::Relaxed);
+            }
+            Ok(())
+        } else {
+            self.maybe_flush()
+        }
     }
 
     /// Воспроизводит все операции из начала файла, вызывая `f(op, key, value)`.
@@ -349,6 +374,22 @@ impl AofLog {
             flush_errors: self.metrics_flush_errors.load(Ordering::Relaxed),
             flush_total_ns: self.metrics_flush_total_ns.load(Ordering::Relaxed),
         }
+    }
+
+    /// Немедленный flush с обновлением метрик (используется только для батчинга в Always).
+    fn flush_immediate(&self) -> io::Result<()> {
+        let start = Instant::now();
+        let mut buf = self.writer.lock().unwrap();
+        let res = buf.flush();
+        let dur = start.elapsed().as_nanos() as u64;
+
+        self.metrics_flush_count.fetch_add(1, Ordering::Relaxed);
+        self.metrics_flush_total_ns
+            .fetch_add(dur, Ordering::Relaxed);
+        if res.is_err() {
+            self.metrics_flush_errors.fetch_add(1, Ordering::Relaxed);
+        }
+        res
     }
 }
 
@@ -523,20 +564,31 @@ mod tests {
         assert_eq!(m0.ops_del, 0);
         assert_eq!(m0.flush_count, 0);
         assert_eq!(m0.flush_errors, 0);
+        assert_eq!(m0.flush_total_ns, 0);
 
-        // Делаем SET и DEL
+        // Делаем меньше BATCH_SIZE операций: flush не должен вызываться
         log.append_set(b"k1", b"v1")?;
         log.append_del(b"k1")?;
 
-        // Считаем метрики
+        // Проверяем, что flush_count по-прежнему 0
         let m1 = log.metrics();
         assert_eq!(m1.ops_total, 2, "должно быть 2 операций");
         assert_eq!(m1.ops_set, 1, "одна SET");
         assert_eq!(m1.ops_del, 1, "один DEL");
-        // При Always каждый append вызывает flush
-        assert!(m1.flush_count >= 2, "минимум 2 flush");
+        assert_eq!(m1.flush_count, 0, "flush не должен быть вызван");
         assert_eq!(m1.flush_errors, 0, "ошибок flush быть не должно");
-        assert!(m1.flush_total_ns > 0, "текущее время flush замеряется");
+        assert_eq!(m1.flush_total_ns, 0, "время flush должно быть 0");
+
+        // Теперь делаем ещё BATCH_SIZE операций, чтобы вызвать flush
+        for _i in 0..AofLog::BATCH_SIZE {
+            log.append_set(b"k", b"v")?;
+        }
+
+        let m2 = log.metrics();
+        assert!(
+            m2.flush_count >= 1,
+            "должен произойти хотя бы один flush после BATCH_SIZE операций"
+        );
 
         Ok(())
     }
