@@ -62,6 +62,10 @@ pub struct AofLog {
     /// Хэндл фонового потока флешера, чтобы ждать его завершения.
     flusher_handle: Option<JoinHandle<()>>,
     pending_ops: AtomicUsize,
+    /// Текущий порог батча (количество операций до flush)
+    batch_size: AtomicUsize,
+    /// Время последней операции (секунды с UNIX epoch)
+    last_activity: AtomicU64,
     // Метрики
     metrics_ops_total: AtomicUsize,
     metrics_ops_set: AtomicUsize,
@@ -72,8 +76,8 @@ pub struct AofLog {
 }
 
 impl AofLog {
-    /// Размер батча перед flush в режиме Always.
-    const BATCH_SIZE: usize = 32;
+    /// Изначальный размер батча перед flush в режиме Always.
+    const INITIAL_BATCH: usize = 32;
 
     /// Открывает (или создаёт) файл AOF по пути `path`.
     /// Проверяет или инициализирует магический заголовок.
@@ -122,6 +126,8 @@ impl AofLog {
             flusher_stop_tx: None,
             flusher_handle: None,
             pending_ops: AtomicUsize::new(0),
+            batch_size: AtomicUsize::new(Self::INITIAL_BATCH),
+            last_activity: AtomicU64::new(Instant::now().elapsed().as_secs()),
             metrics_ops_total: AtomicUsize::new(0),
             metrics_ops_set: AtomicUsize::new(0),
             metrics_ops_del: AtomicUsize::new(0),
@@ -142,13 +148,8 @@ impl AofLog {
                     if rx.recv_timeout(Duration::from_secs(1)).is_ok() {
                         break;
                     }
-                    match writer_clone.lock() {
-                        Ok(ref mut guard) => {
-                            let _ = guard.flush();
-                        }
-                        Err(_) => {
-                            eprintln!("AOF flusher poisoned");
-                        }
+                    if let Ok(mut guard) = writer_clone.lock() {
+                        let _ = guard.flush();
                     }
                 }
             });
@@ -171,21 +172,30 @@ impl AofLog {
         self.metrics_ops_set
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let mut buf = self.writer.lock().unwrap();
-        buf.write_all(&[AofOp::Set as u8])?;
-        Self::write_32(&mut *buf, key.len() as u32)?;
-        buf.write_all(key)?;
-        Self::write_32(&mut *buf, value.len() as u32)?;
-        buf.write_all(value)?;
-        drop(buf);
+        // Нужен lock на writer
+        {
+            let mut buf = self.writer.lock().unwrap();
+            buf.write_all(&[AofOp::Set as u8])?;
+            Self::write_32(&mut *buf, key.len() as u32)?;
+            buf.write_all(key)?;
+            Self::write_32(&mut *buf, value.len() as u32)?;
+            buf.write_all(value)?;
+        }
 
-        // Бэьчинг или обычный flush
+        // обновляем время последней активности.
+        let now_s = Instant::now().elapsed().as_secs();
+        self.last_activity.store(now_s, Ordering::Relaxed);
+
+        // Политика Always — адаптивный батч
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
-            if count >= Self::BATCH_SIZE {
+            let threshold = self.batch_size.load(Ordering::Relaxed);
+            if count >= threshold {
                 self.flush_immediate()?;
                 self.pending_ops.store(0, Ordering::Relaxed);
             }
+            // После каждого append пробуем скорректировать batch_size
+            self.adjust_batch_size();
             Ok(())
         } else {
             self.maybe_flush()
@@ -203,19 +213,24 @@ impl AofLog {
         self.metrics_ops_del
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let mut buf = self.writer.lock().unwrap();
-        buf.write_all(&[AofOp::Del as u8])?;
-        Self::write_32(&mut *buf, key.len() as u32)?;
-        buf.write_all(key)?;
-        drop(buf);
+        {
+            let mut buf = self.writer.lock().unwrap();
+            buf.write_all(&[AofOp::Del as u8])?;
+            Self::write_32(&mut *buf, key.len() as u32)?;
+            buf.write_all(key)?;
+        }
 
-        // Бэьчинг или обычный flush
+        let now_s = Instant::now().elapsed().as_secs();
+        self.last_activity.store(now_s, Ordering::Relaxed);
+
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
-            if count >= Self::BATCH_SIZE {
+            let threshold = self.batch_size.load(Ordering::Relaxed);
+            if count >= threshold {
                 self.flush_immediate()?;
                 self.pending_ops.store(0, Ordering::Relaxed);
             }
+            self.adjust_batch_size();
             Ok(())
         } else {
             self.maybe_flush()
@@ -239,6 +254,7 @@ impl AofLog {
         if &header != MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
         }
+
         // читаем всё в память
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
@@ -345,22 +361,23 @@ impl AofLog {
 
     /// Выполняет flush согласно текущей политике синхронизации.
     fn maybe_flush(&self) -> io::Result<()> {
-        if let SyncPolicy::Always = self.policy {
-            let start = Instant::now();
-            let mut buf = self.writer.lock().unwrap();
-            let res = buf.flush();
-            let dur = start.elapsed().as_nanos() as u64;
-
-            // обновляем метрики flush
-            self.metrics_flush_count.fetch_add(1, Ordering::Relaxed);
-            self.metrics_flush_total_ns
-                .fetch_add(dur, Ordering::Relaxed);
-            if res.is_err() {
-                self.metrics_flush_errors.fetch_add(1, Ordering::Relaxed);
+        match self.policy {
+            SyncPolicy::Always => {
+                // Синхронный flush и метрики
+                let start = Instant::now();
+                let mut buf = self.writer.lock().unwrap();
+                let res = buf.flush();
+                let dur = start.elapsed().as_nanos() as u64;
+                self.metrics_flush_count.fetch_add(1, Ordering::Relaxed);
+                self.metrics_flush_total_ns
+                    .fetch_add(dur, Ordering::Relaxed);
+                if res.is_err() {
+                    self.metrics_flush_errors.fetch_add(1, Ordering::Relaxed);
+                }
+                res
             }
-            res
-        } else {
-            Ok(())
+            SyncPolicy::EverySec => Ok(()),
+            SyncPolicy::No => Ok(()),
         }
     }
 
@@ -390,6 +407,23 @@ impl AofLog {
             self.metrics_flush_errors.fetch_add(1, Ordering::Relaxed);
         }
         res
+    }
+
+    /// Поддерживает адаптивный размер батча:
+    ///
+    ///   — если с последней активности прошло > 5 с, уменьшаем batch в 2x (но не ниже 4)
+    ///   — если последняя активность <1 с назад, увеличиваем batch в 2× (но не выше 1024)
+    fn adjust_batch_size(&self) {
+        let now = Instant::now().elapsed().as_secs();
+        let last = self.last_activity.load(Ordering::Relaxed);
+        let mut cur = self.batch_size.load(Ordering::Relaxed);
+
+        // Сжимаем batch, если долго простаивали
+        if now.saturating_sub(last) > 5 && cur > 4 {
+            cur = (cur / 2).max(4);
+            self.batch_size.store(cur, Ordering::Relaxed);
+        }
+        // Не расширяем динамически
     }
 }
 
@@ -579,8 +613,7 @@ mod tests {
         assert_eq!(m1.flush_errors, 0, "ошибок flush быть не должно");
         assert_eq!(m1.flush_total_ns, 0, "время flush должно быть 0");
 
-        // Теперь делаем ещё BATCH_SIZE операций, чтобы вызвать flush
-        for _i in 0..AofLog::BATCH_SIZE {
+        for _i in 0..AofLog::INITIAL_BATCH {
             log.append_set(b"k", b"v")?;
         }
 
