@@ -11,6 +11,7 @@
 pub mod compression;
 pub mod decode;
 pub mod encode;
+pub mod file;
 pub mod tags;
 
 // Публичный экспорт всех типов ошибок и функций из вложенных модулей,
@@ -18,4 +19,5 @@ pub mod tags;
 pub use compression::*;
 pub use decode::*;
 pub use encode::*;
+pub use file::*;
 pub use tags::*;

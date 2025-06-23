@@ -14,9 +14,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block,
-    tags::{TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET},
-    TAG_COMPRESSED,
+    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_FLOAT, TAG_HASH,
+    TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
@@ -123,8 +122,48 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
     }
 }
 
+pub fn read_dump<R: Read>(r: &mut R) -> std::io::Result<Vec<(Sds, Value)>> {
+    // 1) Читаем и проверяем магию
+    let mut magic = [0u8; 3];
+    r.read_exact(&mut magic)?;
+    if &magic != FILE_MAGIC {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Bad file magic: {magic:?}"),
+        ));
+    }
+
+    // 2) Читаем версию
+    let ver = r.read_u8()?;
+    if ver != DUMP_VERSION {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Unsupported dump version: {ver}"),
+        ));
+    }
+
+    // 3) Читаем число записей
+    let count = r.read_u32::<BigEndian>()? as usize;
+    let mut items = Vec::with_capacity(count);
+
+    // 4) Десериализуем пары
+    for _ in 0..count {
+        let klen = r.read_u32::<BigEndian>()? as usize;
+        let mut kb = vec![0; klen];
+        r.read_exact(&mut kb)?;
+        let key = Sds::from_vec(kb);
+
+        let val = read_value(r)?;
+        items.push((key, val));
+    }
+
+    Ok(items)
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::engine::{compress_block, write_dump};
+
     use super::*;
     use std::io::Cursor;
 
@@ -425,5 +464,63 @@ mod tests {
         let err = read_value(&mut cursor).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("Unknown tag"));
+    }
+
+    #[test]
+    fn test_read_compressed_str() {
+        // подготовим обычную строку и сожмём её
+        let raw =
+            b"some longer string that will be compressed because length > MIN_COMPRESSION_SIZE";
+        // вручную: сначала сериализуем TAG_STR + длину + данные
+        let mut inner = Vec::new();
+        inner.push(TAG_STR);
+        inner.extend(&(raw.len() as u32).to_be_bytes());
+        inner.extend(raw);
+
+        // теперь используем compress_block из super
+        let compressed = compress_block(&inner).expect("compress failed");
+        let mut data = Vec::new();
+        data.push(TAG_COMPRESSED);
+        data.extend(&(compressed.len() as u32).to_be_bytes());
+        data.extend(&compressed);
+
+        let mut cursor = Cursor::new(data);
+        let val = super::read_value(&mut cursor).unwrap();
+        assert_eq!(val, Value::Str(Sds::from_vec(raw.to_vec())));
+    }
+
+    #[test]
+    fn test_read_dump_roundtrip() {
+        // создаём два ключа
+        let items = vec![
+            (Sds::from_str("k1"), Value::Int(123)),
+            (Sds::from_str("k2"), Value::Str(Sds::from_str("v2"))),
+        ];
+        let mut buf = Vec::new();
+        write_dump(&mut buf, items.clone().into_iter()).unwrap();
+
+        let got = read_dump(&mut &buf[..]).unwrap();
+        assert_eq!(got, items);
+    }
+
+    #[test]
+    fn test_read_dump_bad_magic() {
+        let mut buf = Vec::new();
+        // неправильная магия
+        buf.extend(b"BAD");
+        buf.push(super::DUMP_VERSION);
+        buf.extend(&0u32.to_be_bytes());
+        let err = super::read_dump(&mut &buf[..]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_read_dump_wrong_version() {
+        let mut buf = Vec::new();
+        buf.extend(super::FILE_MAGIC);
+        buf.push(super::DUMP_VERSION + 1); // не та версия
+        buf.extend(&0u32.to_be_bytes());
+        let err = super::read_dump(&mut &buf[..]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 }

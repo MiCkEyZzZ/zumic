@@ -10,14 +10,10 @@ use std::io::Write;
 use byteorder::{BigEndian, WriteBytesExt};
 
 use super::{
-    compress_block, should_compress,
-    tags::{
-        TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
-        TAG_STR, TAG_ZSET,
-    },
-    TAG_COMPRESSED,
+    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_FLOAT,
+    TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
-use crate::Value;
+use crate::{Sds, Value};
 
 /// Сериализует значение [`Value`] в поток `Write` с автоматическим сжатием.
 pub fn write_value<W: Write>(
@@ -71,7 +67,7 @@ pub fn write_value_inner<W: Write>(
             // считаем длину
             w.write_u32::<BigEndian>(list.len() as u32)?;
             for item in list.iter() {
-                write_value(w, &Value::Str(item.clone()))?;
+                write_value_inner(w, &Value::Str(item.clone()))?;
             }
             Ok(())
         }
@@ -144,9 +140,35 @@ pub fn write_value_inner<W: Write>(
     }
 }
 
+pub fn write_dump<W: Write>(
+    w: &mut W,
+    kvs: impl Iterator<Item = (Sds, Value)>,
+) -> std::io::Result<()> {
+    // Заголовок: ZDB + версия.
+    w.write_all(FILE_MAGIC)?;
+    w.write_u8(DUMP_VERSION)?;
+
+    // Теперь - число записей (ключей) или сразу данные?
+    // Например, пишем число пар <ключ, значение>:
+    w.write_u32::<BigEndian>(kvs.size_hint().0 as u32)?;
+
+    // Итерируем пары и сериализуем
+    for (key, val) in kvs {
+        let kb = key.as_bytes();
+        w.write_u32::<BigEndian>(kb.len() as u32)?;
+        w.write_all(kb)?;
+        write_value(w, &val)?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{engine::read_value, Sds};
+    use crate::{
+        engine::{decompress_block, read_value},
+        Sds,
+    };
 
     use super::*;
     use std::io::Cursor;
@@ -211,5 +233,44 @@ mod tests {
         let decoded = read_value(&mut cursor).unwrap();
 
         assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_should_compress_threshold() {
+        assert!(!should_compress(0));
+        assert!(!should_compress(63));
+        assert!(!should_compress(64 - 1));
+        assert!(should_compress(64));
+        assert!(should_compress(1000));
+    }
+
+    #[test]
+    fn test_compress_decompress_roundtrip_small() {
+        let data = b"short data";
+        // small data: compress_block still works, but write logic won't use it
+        let compressed = compress_block(data).expect("compress failed");
+        let decompressed = decompress_block(&compressed).expect("decompress failed");
+        assert_eq!(&decompressed, data);
+    }
+
+    #[test]
+    fn test_compress_decompress_roundtrip_large() {
+        // generate > MIN_COMPRESSION_SIZE bytes
+        let data: Vec<u8> = (0..200).map(|i| (i % 256) as u8).collect();
+        assert!(should_compress(data.len()));
+        let compressed = compress_block(&data).expect("compress failed");
+        // compressed buffer must be smaller or at least non-zero
+        assert!(!compressed.is_empty());
+        let decompressed = decompress_block(&compressed).expect("decompress failed");
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_decompress_invalid_data() {
+        // random bytes should error
+        let bad = vec![0u8; 10];
+        let err = decompress_block(&bad).unwrap_err();
+        // error kind is Other (from zstd)
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
     }
 }
