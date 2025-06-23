@@ -5,9 +5,10 @@
 //!
 //! Используется BigEndian-формат для чисел.
 
-use std::io::Write;
+use std::io::{self, Write};
 
 use byteorder::{BigEndian, WriteBytesExt};
+use crc32fast::Hasher;
 
 use super::{
     compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_EOF,
@@ -141,26 +142,36 @@ pub fn write_value_inner<W: Write>(
     }
 }
 
+/// Записывает дамп с проверкой целостности: магия, версия, записи и CRC32 в конце.
+///
+/// Формат:
+///   [magic][ver][count]
+///   ... пары <key, value> ...
+///   [crc32: u32 BE]
 pub fn write_dump<W: Write>(
     w: &mut W,
     kvs: impl Iterator<Item = (Sds, Value)>,
-) -> std::io::Result<()> {
-    // Заголовок: ZDB + версия.
-    w.write_all(FILE_MAGIC)?;
-    w.write_u8(DUMP_VERSION)?;
-
-    // Теперь - число записей (ключей) или сразу данные?
-    // Например, пишем число пар <ключ, значение>:
-    w.write_u32::<BigEndian>(kvs.size_hint().0 as u32)?;
-
-    // Итерируем пары и сериализуем
+) -> io::Result<()> {
+    // 1) Собираем «тело» дампа в буфер
+    let mut buf = Vec::new();
+    buf.extend_from_slice(FILE_MAGIC);
+    buf.push(DUMP_VERSION);
+    buf.write_u32::<BigEndian>(kvs.size_hint().0 as u32)?;
     for (key, val) in kvs {
         let kb = key.as_bytes();
-        w.write_u32::<BigEndian>(kb.len() as u32)?;
-        w.write_all(kb)?;
-        write_value(w, &val)?;
+        buf.write_u32::<BigEndian>(kb.len() as u32)?;
+        buf.write_all(kb)?;
+        write_value(&mut buf, &val)?;
     }
 
+    // 2) Вычисляем CRC32 от всего буфера
+    let mut hasher = Hasher::new();
+    hasher.update(&buf);
+    let crc = hasher.finalize();
+
+    // 3) Пишем буфер и CRC32
+    w.write_all(&buf)?;
+    w.write_u32::<BigEndian>(crc)?;
     Ok(())
 }
 
@@ -189,7 +200,7 @@ pub fn write_stream<W: Write>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        engine::{decompress_block, read_value, StreamReader},
+        engine::{decompress_block, read_dump, read_value, StreamReader},
         Sds,
     };
 
@@ -318,5 +329,52 @@ mod tests {
 
         let mut reader = StreamReader::new(&buf[..]).unwrap();
         assert!(reader.next().is_none());
+    }
+
+    /// Проверяет, что дамп с CRC проходит полный круг: write_dump → read_dump.
+    #[test]
+    fn doc_test_dump_roundtrip_crc() {
+        let items = vec![
+            (Sds::from_str("foo"), Value::Int(123)),
+            (Sds::from_str("bar"), Value::Str(Sds::from_str("baz"))),
+        ];
+        let mut buf = Vec::new();
+        write_dump(&mut buf, items.clone().into_iter()).unwrap();
+        let got = read_dump(&mut &buf[..]).unwrap();
+        assert_eq!(got, items);
+    }
+
+    /// Проверяет, что при повреждении CRC в конце read_dump падает с ошибкой.
+    #[test]
+    fn doc_test_dump_crc_mismatch() {
+        let items = vec![(Sds::from_str("key"), Value::Bool(false))];
+        let mut buf = Vec::new();
+        write_dump(&mut buf, items.into_iter()).unwrap();
+
+        // «Поломаем» последний (CRC) байт
+        let last = buf.len() - 1;
+        buf[last] ^= 0xFF;
+
+        let err = read_dump(&mut &buf[..]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("CRC mismatch"));
+    }
+
+    #[test]
+    fn doc_test_dump_empty() {
+        let mut buf = Vec::new();
+        write_dump(&mut buf, Vec::<(Sds, Value)>::new().into_iter()).unwrap();
+        let got = read_dump(&mut &buf[..]).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn doc_test_dump_bad_magic() {
+        let mut buf = Vec::new();
+        buf.extend(b"BAD"); // неправильная магия
+        buf.push(DUMP_VERSION);
+        buf.extend(&0u32.to_be_bytes()); // count = 0
+                                         // CRC32 ещё не добавлен — read_dump должен упасть на too small
+        assert!(read_dump(&mut &buf[..]).is_err());
     }
 }

@@ -11,6 +11,7 @@ use std::{
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
+use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
@@ -149,41 +150,62 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
     }
 }
 
-pub fn read_dump<R: Read>(r: &mut R) -> std::io::Result<Vec<(Sds, Value)>> {
-    // 1) Читаем и проверяем магию
+/// Читает дамп с CRC32 в конце, проверяет его и возвращает пары <Key, Value>.
+///
+/// Ожидает формат:
+///   [magic][ver][count]
+///   ... пары <key, value> ...
+///   [crc32: u32 BE]
+pub fn read_dump<R: Read>(r: &mut R) -> io::Result<Vec<(Sds, Value)>> {
+    // Считываем весь поток в буфере.
+    let mut data = Vec::new();
+    r.read_to_end(&mut data)?;
+    if data.len() < 4 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Dump too small"));
+    }
+
+    // Отделяем CRC32 (последние 4 байта)
+    let body_len = data.len() - 4;
+    let (body, crc_bytes) = data.split_at(body_len);
+    let recorded_crc = (&crc_bytes[..4]).read_u32::<BigEndian>()?;
+
+    // Проверяем CRC32
+    let mut hasher = Hasher::new();
+    hasher.update(body);
+    let calc_crc = hasher.finalize();
+    if calc_crc != recorded_crc {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "CRC mismatch"));
+    }
+
+    // Парсим тело через Cursor
+    let mut cursor = body;
+
+    // Проверяем магию и версию.
     let mut magic = [0u8; 3];
-    r.read_exact(&mut magic)?;
+    cursor.read_exact(&mut magic)?;
     if &magic != FILE_MAGIC {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Bad file magic: {magic:?}"),
-        ));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad file magic"));
     }
-
-    // 2) Читаем версию
-    let ver = r.read_u8()?;
+    let ver = cursor.read_u8()?;
     if ver != DUMP_VERSION {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Unsupported dump version: {ver}"),
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Unsupported dump version",
         ));
     }
 
-    // 3) Читаем число записей
-    let count = r.read_u32::<BigEndian>()? as usize;
+    // Читаем count и элементы
+    let count = cursor.read_u32::<BigEndian>()? as usize;
     let mut items = Vec::with_capacity(count);
-
-    // 4) Десериализуем пары
     for _ in 0..count {
-        let klen = r.read_u32::<BigEndian>()? as usize;
+        let klen = cursor.read_u32::<BigEndian>()? as usize;
         let mut kb = vec![0; klen];
-        r.read_exact(&mut kb)?;
+        cursor.read_exact(&mut kb)?;
         let key = Sds::from_vec(kb);
 
-        let val = read_value(r)?;
+        let val = read_value(&mut cursor)?;
         items.push((key, val));
     }
-
     Ok(items)
 }
 
@@ -612,5 +634,50 @@ mod tests {
 
         let mut reader = StreamReader::new(&buf[..]).unwrap();
         assert!(reader.next().is_none());
+    }
+
+    /// Проверяет, что read_dump корректно читает валидный дамп с CRC.
+    #[test]
+    fn doc_test_read_dump_with_crc() {
+        let items = vec![
+            (Sds::from_str("foo"), Value::Int(42)),
+            (Sds::from_str("bar"), Value::Str(Sds::from_str("baz"))),
+        ];
+        let mut buf = Vec::new();
+        write_dump(&mut buf, items.clone().into_iter()).unwrap();
+        let got = read_dump(&mut &buf[..]).unwrap();
+        assert_eq!(got, items);
+    }
+
+    /// Проверяет, что при повреждении хотя бы одного байта CRC-проверка падает.
+    #[test]
+    fn doc_test_read_dump_crc_mismatch() {
+        let items = vec![(Sds::from_str("key"), Value::Int(1))];
+        let mut buf = Vec::new();
+        write_dump(&mut buf, items.into_iter()).unwrap();
+
+        // испортим последний CRC-байт
+        let len = buf.len();
+        buf[len - 1] ^= 0xFF;
+
+        let err = read_dump(&mut &buf[..]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("CRC mismatch"));
+    }
+
+    #[test]
+    fn doc_test_dump_empty_crc() {
+        let mut buf = Vec::new();
+        write_dump(&mut buf, Vec::<(Sds, Value)>::new().into_iter()).unwrap();
+        let got = read_dump(&mut &buf[..]).unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn doc_test_read_dump_too_small() {
+        // Буфер меньше 4 байт → сразу ошибка «Dump too small»
+        let err = read_dump(&mut &b"\x00\x01\x02"[..]).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("Dump too small"));
     }
 }

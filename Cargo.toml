@@ -25,6 +25,7 @@ byteorder = "1.5.0"
 bytes = { version = "1.10.1", features = ["serde"] }
 config = "0.15.11"
 crc16 = "0.4.0"
+crc32fast = "1.4.2"
 dashmap = "6.1.0"
 glob = "0.3"
 globset = "0.4.16"
