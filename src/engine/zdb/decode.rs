@@ -13,15 +13,14 @@ use std::{
 use byteorder::{BigEndian, ReadBytesExt};
 use ordered_float::OrderedFloat;
 
-use super::tags::{
-    TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
+use super::{
+    decompress_block,
+    tags::{TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET},
+    TAG_COMPRESSED,
 };
-use crate::{database::hll::DENSE_SIZE, Dict, Hll, Sds, SkipList, SmartHash, Value};
+use crate::{Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
 /// Десериализует значение [`Value`] из бинарного потока.
-///
-/// Возвращает ошибку, если входные данные некорректны
-/// или нарушают ожидаемый формат.
 pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
     let tag = r.read_u8()?;
     match tag {
@@ -45,6 +44,14 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
             Ok(Value::Bool(b))
         }
         TAG_NULL => Ok(Value::Null),
+        TAG_COMPRESSED => {
+            let len = r.read_u32::<BigEndian>()? as usize;
+            let mut compressed = vec![0; len];
+            r.read_exact(&mut compressed)?;
+            let decompressed = decompress_block(&compressed)?;
+            let mut slice = decompressed.as_slice();
+            read_value(&mut slice)
+        }
         TAG_HASH => {
             let n = r.read_u32::<BigEndian>()? as usize;
             let mut map = SmartHash::new();

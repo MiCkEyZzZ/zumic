@@ -25,3 +25,5 @@ pub const TAG_SET: u8 = 0x08;
 pub const TAG_HLL: u8 = 0x09;
 /// Поток (Stream)
 pub const TAG_SSTREAM: u8 = 0x0A;
+/// Сжатый блок данных (zstd)
+pub const TAG_COMPRESSED: u8 = 0x0C;

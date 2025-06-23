@@ -9,16 +9,40 @@ use std::io::Write;
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use super::tags::{
-    TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
-    TAG_STR, TAG_ZSET,
+use super::{
+    compress_block, should_compress,
+    tags::{
+        TAG_BOOL, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
+        TAG_STR, TAG_ZSET,
+    },
+    TAG_COMPRESSED,
 };
 use crate::Value;
 
-/// Сериализует значение [`Value`] в поток `Write`.
-///
-/// Возвращает ошибку, если запись не удалась.
+/// Сериализует значение [`Value`] в поток `Write` с автоматическим сжатием.
 pub fn write_value<W: Write>(
+    w: &mut W,
+    v: &Value,
+) -> std::io::Result<()> {
+    // Сначала сериализуем значение во внутренний буфер
+    let mut buf = Vec::new();
+    write_value_inner(&mut buf, v)?;
+
+    // Если буфер большой — сжимаем его
+    if should_compress(buf.len()) {
+        let compressed = compress_block(&buf)?;
+        w.write_u8(TAG_COMPRESSED)?;
+        w.write_u32::<BigEndian>(compressed.len() as u32)?;
+        w.write_all(&compressed)?;
+        return Ok(());
+    }
+
+    // Иначе пишем как есть
+    w.write_all(&buf)
+}
+
+/// Внутренняя сериализация значения без упаковки в сжатый блок
+pub fn write_value_inner<W: Write>(
     w: &mut W,
     v: &Value,
 ) -> std::io::Result<()> {
