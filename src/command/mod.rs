@@ -1,18 +1,18 @@
-//! Command definitions and execution logic.
+//! Определения команд и логика их выполнения.
 //!
-//! This module contains the implementation of supported database commands,
-//! organized by functionality:
+//! Этот модуль содержит реализацию поддерживаемых команд базы данных,
+//! структурированную по функциональным группам:
 //!
-//! - `auth`: authentication-related commands.
-//! - `basic`: general utility commands (e.g., `ping`, `echo`, `select`).
-//! - `execute`: command dispatcher and command registration.
-//! - `float`: commands for floating-point operations.
-//! - `hash`: commands for manipulating hash-like structures.
-//! - `int`: commands for integer and counter operations.
-//! - `list`: list-related commands (push, pop, range, etc.).
-//! - `set`: commands for working with unordered sets.
-//! - `string`: commands for string manipulation and storage.
-//! - `zset`: commands for working with sorted sets.
+//! - `auth`: команды, связанные с аутентификацией.
+//! - `basic`: основные утилитные команды (например, `ping`, `echo`, `select`).
+//! - `execute`: диспетчер команд и их регистрация.
+//! - `float`: команды для операций с числами с плавающей точкой.
+//! - `hash`: команды для работы со структурами, подобными хешам.
+//! - `int`: команды для целочисленных операций и счётчиков.
+//! - `list`: команды для списков (push, pop, range и т. д.).
+//! - `set`: команды для работы с неупорядоченными множествами.
+//! - `string`: команды для работы со строками и их хранения.
+//! - `zset`: команды для работы с отсортированными множествами.
 
 pub mod auth;
 pub mod basic;

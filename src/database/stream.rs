@@ -12,8 +12,10 @@ use crate::Value;
 /// Состоит из времени в миллисекундах и порядкового номера (sequence).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StreamId {
-    pub ms_time: u64,  // Время создания записи в миллисекундах с эпохи UNIX
-    pub sequence: u64, // Порядковый номер записи в пределах одной миллисекунды
+    /// Время создания записи в миллисекундах с эпохи UNIX
+    pub ms_time: u64,
+    /// Порядковый номер записи в пределах одной миллисекунды
+    pub sequence: u64,
 }
 
 /// Запись потока — содержит идентификатор и данные.
@@ -28,8 +30,10 @@ pub struct StreamEntry {
 /// Использует атомарный счётчик для генерации уникальных идентификаторов.
 #[derive(Debug, Default)]
 pub struct Stream {
-    entries: VecDeque<StreamEntry>, // Очередь записей
-    next_sequence: AtomicU64,       // Атомарный счетчик для sequence
+    /// Очередь записей
+    entries: VecDeque<StreamEntry>,
+    /// Атомарный счетчик для sequence
+    next_sequence: AtomicU64,
 }
 
 impl Stream {
@@ -136,7 +140,8 @@ mod tests {
         let id2 = stream.add(data2.clone());
         assert_eq!(stream.len(), 2);
 
-        // Проверяем, что время ms_time одинаковое (тест может сломаться, если время изменится между вызовами)
+        // Проверяем, что время ms_time одинаковое (тест может сломаться, если
+        // время изменится между вызовами)
         assert_eq!(id2.ms_time, id1.ms_time);
         // Проверяем, что sequence увеличился на 1
         assert_eq!(id2.sequence, id1.sequence + 1);
