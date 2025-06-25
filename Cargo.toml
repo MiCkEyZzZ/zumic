@@ -29,6 +29,7 @@ crc32fast = "1.4.2"
 dashmap = "6.1.0"
 glob = "0.3"
 globset = "0.4.16"
+loom = "0.7.2"
 lru = "0.14.0"
 memchr = "2.7.4"
 mlua = { version = "0.10", features = [

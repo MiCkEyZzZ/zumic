@@ -1,7 +1,14 @@
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
+/// Команда `INCR key`.
+///
+/// Увеличивает целочисленное значение по ключу на 1.
+/// Если ключ не существует, создаётся со значением 1.
+/// Возвращает новое значение или ошибку `InvalidType`
+/// если под этим ключом лежит не целое число.
 #[derive(Debug)]
 pub struct IncrCommand {
+    /// Ключ, значение по которому нужно увеличить
     pub key: String,
 }
 
@@ -14,12 +21,14 @@ impl CommandExecute for IncrCommand {
 
         match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
+                // Существующее целочисленное значение — увеличиваем
                 let new_value = current + 1;
                 store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
+                // Ключа нет — создаём со значением 1
                 store.set(&key_bytes, Value::Int(1))?;
                 Ok(Value::Int(1))
             }
@@ -27,9 +36,16 @@ impl CommandExecute for IncrCommand {
     }
 }
 
+/// Команда `INCRBY key increment`.
+///
+/// Увеличивает целочисленное значение по ключу на `increment`.
+/// Если ключа нет — создаёт со значением `increment`.
+/// Ошибка `InvalidType`, если по этому ключу лежит не целое число.
 #[derive(Debug)]
 pub struct IncrByCommand {
+    /// Ключ, значение по которому увеличиваем
     pub key: String,
+    /// Величина прироста
     pub increment: i64,
 }
 
@@ -42,12 +58,14 @@ impl CommandExecute for IncrByCommand {
 
         match store.get(&keys_bytes)? {
             Some(Value::Int(current)) => {
+                // Существующее целочисленное значение — увеличиваем на increment
                 let new_value = current + self.increment;
                 store.set(&keys_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
+                // Ключа нет — создаём со значением increment
                 store.set(&keys_bytes, Value::Int(self.increment))?;
                 Ok(Value::Int(self.increment))
             }
@@ -55,8 +73,14 @@ impl CommandExecute for IncrByCommand {
     }
 }
 
+/// Команда `DECR key`.
+///
+/// Уменьшает целочисленное значение под `key` на 1.
+/// - Если ключ не существует, создаётся со значением -1.
+/// - Если значение под ключом — не `Int`, возвращает `StoreError::InvalidType`.
 #[derive(Debug)]
 pub struct DecrCommand {
+    /// Ключ, значение по которому нужно уменьшить.
     pub key: String,
 }
 
@@ -69,22 +93,31 @@ impl CommandExecute for DecrCommand {
 
         match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
+                // Существующее целочисленное значение — уменьшаем
                 let new_value = current - 1;
                 store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
+                // Если ключ не существует, установите его равным -1
                 store.set(&key_bytes, Value::Int(-1))?;
-                Ok(Value::Int(-1)) // Если ключ не существует, установите его равным -1
+                Ok(Value::Int(-1))
             }
         }
     }
 }
 
+/// Команда `DECRBY key decrement`.
+///
+/// Уменьшает целочисленное значение под `key` на `decrement`.
+/// - Если ключ не существует, создаётся со значением `-decrement`.
+/// - Если значение под ключом — не `Int`, возвращает `StoreError::InvalidType`.
 #[derive(Debug)]
 pub struct DecrByCommand {
+    /// Ключ, значение по которому нужно уменьшить.
     pub key: String,
+    /// Величина уменьшения.
     pub decrement: i64,
 }
 
@@ -97,12 +130,14 @@ impl CommandExecute for DecrByCommand {
 
         match store.get(&key_bytes)? {
             Some(Value::Int(current)) => {
+                // Существующее целочисленное значение — уменьшаем на decrement
                 let new_value = current - self.decrement;
                 store.set(&key_bytes, Value::Int(new_value))?;
                 Ok(Value::Int(new_value))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
+                // Ключа нет — создаём со значением -decrement
                 store.set(&key_bytes, Value::Int(-self.decrement))?;
                 Ok(Value::Int(-self.decrement))
             }
