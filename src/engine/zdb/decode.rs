@@ -15,8 +15,8 @@ use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_BOOL, TAG_COMPRESSED, TAG_EOF, TAG_FLOAT,
-    TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
+    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BOOL, TAG_COMPRESSED, TAG_EOF,
+    TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
@@ -141,6 +141,15 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
             let mut data = [0u8; DENSE_SIZE];
             data[..n.min(DENSE_SIZE)].copy_from_slice(&regs[..n.min(DENSE_SIZE)]);
             Ok(Value::HyperLogLog(Box::new(Hll { data })))
+        }
+
+        TAG_ARRAY => {
+            let len = r.read_u32::<BigEndian>()? as usize;
+            let mut items = Vec::with_capacity(len);
+            for _ in 0..len {
+                items.push(read_value(r)?);
+            }
+            Ok(Value::Array(items))
         }
 
         other => Err(std::io::Error::new(

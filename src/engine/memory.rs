@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-use crate::{Sds, Storage, StoreError, StoreResult, Value};
+use crate::{GeoPoint, GeoSet, Sds, Storage, StoreError, StoreResult, Value};
 
 /// Потокобезопасное in-memory хранилище ключ-значение.
 ///
@@ -14,6 +14,9 @@ use crate::{Sds, Storage, StoreError, StoreResult, Value};
 pub struct InMemoryStore {
     #[allow(clippy::arc_with_non_send_sync)]
     pub data: Arc<DashMap<Sds, Value>>,
+    // GEO-ключи → GeoSet
+    #[allow(clippy::arc_with_non_send_sync)]
+    geo: Arc<DashMap<Sds, GeoSet>>,
 }
 
 impl InMemoryStore {
@@ -22,6 +25,8 @@ impl InMemoryStore {
         Self {
             #[allow(clippy::arc_with_non_send_sync)]
             data: Arc::new(DashMap::new()),
+            #[allow(clippy::arc_with_non_send_sync)]
+            geo: Arc::new(DashMap::new()),
         }
     }
 
@@ -136,6 +141,106 @@ impl Storage for InMemoryStore {
     fn flushdb(&self) -> StoreResult<()> {
         self.data.clear();
         Ok(())
+    }
+
+    fn geo_add(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        let mut entry = self.geo.entry(key.clone()).or_default();
+        let member_str = member.as_str()?;
+        let existed = entry.get(member_str).is_some();
+        entry.add(member.to_string(), lon, lat);
+        Ok(!existed)
+    }
+
+    fn geo_dist(
+        &self,
+        key: &Sds,
+        member1: &Sds,
+        member2: &Sds,
+        unit: &str,
+    ) -> StoreResult<Option<f64>> {
+        let set = match self.geo.get(key) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let meters = set.dist(&member1.to_string(), &member2.to_string());
+        let converted = meters.map(|d| match unit {
+            "km" => d / 1000.0,
+            "mi" => d / 1609.344,
+            "ft" => d / 3.28084,
+            _ => d,
+        });
+        Ok(converted)
+    }
+
+    fn geo_pos(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<Option<GeoPoint>> {
+        let set = match self.geo.get(key) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let member_str = member.as_str()?;
+        Ok(set.get(member_str))
+    }
+
+    fn geo_radius(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        let set = match self.geo.get(key) {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+        // получаем (member, dist_m)
+        let mut raw = set.radius(lon, lat, radius);
+        // конвертируем в нужные единицы и добавляем GeoPoint
+        let mut out = Vec::with_capacity(raw.len());
+        for (member, dist_m) in raw.drain(..) {
+            let d = match unit {
+                "km" => dist_m / 1000.0,
+                "mi" => dist_m / 1609.344,
+                "ft" => dist_m * 3.28084,
+                _ => dist_m,
+            };
+            // точка уже внутри entry
+            let point = set.get(&member).unwrap();
+            out.push((member, d, point));
+        }
+        Ok(out)
+    }
+
+    fn geo_radius_by_member(
+        &self,
+        key: &Sds,
+        member: &Sds,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        let set = match self.geo.get(key) {
+            Some(s) => s,
+            None => return Ok(vec![]),
+        };
+
+        // Преобразуем member в &str, распаковывая Result
+        let member_str = member.as_str()?;
+
+        let center = match set.get(member_str) {
+            Some(p) => p,
+            None => return Ok(vec![]),
+        };
+        self.geo_radius(key, center.lon, center.lat, radius, unit)
     }
 }
 

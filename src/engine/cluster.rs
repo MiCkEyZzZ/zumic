@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::Storage;
-use crate::{Sds, StoreError, StoreResult, Value};
+use crate::{GeoPoint, Sds, StoreError, StoreResult, Value};
 
 /// Количество слотов в кластере.
 pub const SLOT_COUNT: usize = 16384;
@@ -166,6 +166,56 @@ impl Storage for InClusterStore {
             shard.flushdb()?;
         }
         Ok(())
+    }
+
+    fn geo_add(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        self.get_shard(key).geo_add(key, lon, lat, member)
+    }
+
+    fn geo_dist(
+        &self,
+        key: &Sds,
+        m1: &Sds,
+        m2: &Sds,
+        unit: &str,
+    ) -> StoreResult<Option<f64>> {
+        self.get_shard(key).geo_dist(key, m1, m2, unit)
+    }
+
+    fn geo_pos(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<Option<GeoPoint>> {
+        self.get_shard(key).geo_pos(key, member)
+    }
+
+    fn geo_radius(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        self.get_shard(key).geo_radius(key, lon, lat, radius, unit)
+    }
+
+    fn geo_radius_by_member(
+        &self,
+        key: &Sds,
+        member: &Sds,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        self.get_shard(key)
+            .geo_radius_by_member(key, member, radius, unit)
     }
 }
 

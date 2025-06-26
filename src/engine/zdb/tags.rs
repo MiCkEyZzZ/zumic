@@ -29,3 +29,5 @@ pub const TAG_SSTREAM: u8 = 0x0A;
 pub const TAG_COMPRESSED: u8 = 0x0C;
 /// Маркер конца потока (EOF) в streaming-формате дампа.
 pub const TAG_EOF: u8 = 0xFF;
+/// Общий массив произвольных значений (`Value::Array`)
+pub const TAG_ARRAY: u8 = 0x0D;

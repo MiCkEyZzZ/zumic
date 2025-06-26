@@ -4,7 +4,7 @@ use super::{
     aof::{AofOp, SyncPolicy},
     AofLog, Storage,
 };
-use crate::{Sds, StoreError, StoreResult, Value};
+use crate::{GeoPoint, Sds, StoreError, StoreResult, Value};
 
 /// Хранилище с поддержкой постоянства через AOF (Append-Only File).
 /// Ключи и значения находятся в памяти, но изменения логируются на диск.
@@ -175,6 +175,63 @@ impl Storage for InPersistentStore {
         let mut map = self.index.lock().unwrap();
         map.clear();
         Ok(())
+    }
+
+    fn geo_add(
+        &self,
+        _key: &Sds,
+        _lon: f64,
+        _lat: f64,
+        _member: &Sds,
+    ) -> StoreResult<bool> {
+        // Для простоты храним в AOF те же операции, а в памяти держим
+        // сериализованный GeoSet под ключом key:
+        // Дешёвый вариант: просто делегируем на InMemory+реиндекс.
+        // Но если вы храните GeoSet внутри map, то:
+        // 1) достать текущее значение (или создать GeoSet::new)
+        // 2) вызвать add
+        // 3) перезаписать в map и AOF.
+        // Здесь для примера просто вернём ошибку (чтобы вы дописали логику)
+        Err(StoreError::NotImplemented("No implemented".to_string()))
+    }
+
+    fn geo_dist(
+        &self,
+        _key: &Sds,
+        _member1: &Sds,
+        _member2: &Sds,
+        _unit: &str,
+    ) -> StoreResult<Option<f64>> {
+        Err(StoreError::NotImplemented("No implemented".to_string()))
+    }
+
+    fn geo_pos(
+        &self,
+        _key: &Sds,
+        _member: &Sds,
+    ) -> StoreResult<Option<GeoPoint>> {
+        Err(StoreError::NotImplemented("No implemented".to_string()))
+    }
+
+    fn geo_radius(
+        &self,
+        _key: &Sds,
+        _lon: f64,
+        _lat: f64,
+        _radius: f64,
+        _unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        Err(StoreError::NotImplemented("No implemented".to_string()))
+    }
+
+    fn geo_radius_by_member(
+        &self,
+        _key: &Sds,
+        _member: &Sds,
+        _radius: f64,
+        _unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        Err(StoreError::NotImplemented("No implemented".to_string()))
     }
 }
 

@@ -3,8 +3,15 @@ use std::io::{self};
 use super::{InClusterStore, InMemoryStore, InPersistentStore};
 use crate::{
     config::settings::{StorageConfig, StorageType},
-    Sds, Storage, StoreResult, Value,
+    GeoPoint, Sds, Storage, StoreResult, Value,
 };
+
+/// Координата для географических данных.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GeoCoord {
+    pub longitude: f64,
+    pub latitude: f64,
+}
 
 /// Перечисление движков хранилища данных.
 /// Может представлять хранилище в памяти, кластерное хранилище
@@ -151,6 +158,78 @@ impl StorageEngine {
             Self::Memory(store) => store,
             Self::Cluster(store) => store,
             Self::Persistent(store) => store,
+        }
+    }
+
+    /// Добавляет координату для гео-ключа.
+    pub fn geo_add(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        match self {
+            StorageEngine::Memory(store) => store.geo_add(key, lon, lat, member),
+            StorageEngine::Cluster(store) => store.geo_add(key, lon, lat, member),
+            StorageEngine::Persistent(store) => store.geo_add(key, lon, lat, member),
+        }
+    }
+
+    pub fn geo_dist(
+        &self,
+        key: &Sds,
+        member1: &Sds,
+        member2: &Sds,
+        unit: &str,
+    ) -> StoreResult<Option<f64>> {
+        match self {
+            StorageEngine::Memory(store) => store.geo_dist(key, member1, member2, unit),
+            StorageEngine::Cluster(store) => store.geo_dist(key, member1, member2, unit),
+            StorageEngine::Persistent(store) => store.geo_dist(key, member1, member2, unit),
+        }
+    }
+
+    pub fn geo_pos(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<Option<GeoPoint>> {
+        match self {
+            StorageEngine::Memory(store) => store.geo_pos(key, member),
+            StorageEngine::Cluster(store) => store.geo_pos(key, member),
+            StorageEngine::Persistent(store) => store.geo_pos(key, member),
+        }
+    }
+
+    pub fn geo_radius_by_member(
+        &self,
+        key: &Sds,
+        member: &Sds,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        match self {
+            StorageEngine::Memory(store) => store.geo_radius_by_member(key, member, radius, unit),
+            StorageEngine::Cluster(store) => store.geo_radius_by_member(key, member, radius, unit),
+            StorageEngine::Persistent(store) => {
+                store.geo_radius_by_member(key, member, radius, unit)
+            }
+        }
+    }
+
+    pub fn geo_radius(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
+        match self {
+            StorageEngine::Memory(store) => store.geo_radius(key, lon, lat, radius, unit),
+            StorageEngine::Cluster(store) => store.geo_radius(key, lon, lat, radius, unit),
+            StorageEngine::Persistent(store) => store.geo_radius(key, lon, lat, radius, unit),
         }
     }
 }

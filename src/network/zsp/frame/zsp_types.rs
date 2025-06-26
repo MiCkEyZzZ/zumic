@@ -58,6 +58,7 @@ impl TryFrom<Value> for ZspFrame<'_> {
             Value::Hash(smart_hash) => convert_smart_hash(smart_hash),
             Value::ZSet { dict, .. } => convert_zset(dict),
             Value::Null => Ok(ZspFrame::Null),
+            Value::Array(arr) => convert_array(arr),
             Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
         }
     }
@@ -127,6 +128,19 @@ pub fn convert_zset<'a>(dict: Dict<Sds, f64>) -> Result<ZspFrame<'a>, String> {
         pairs.push((key, score));
     }
     Ok(ZspFrame::ZSet(pairs))
+}
+
+/// Помогает конвертировать Vec<Value> в ZspFrame::Array,
+/// рекурсивно обрабатывая каждый элемент.
+#[inline]
+fn convert_array<'a>(arr: Vec<Value>) -> Result<ZspFrame<'a>, String> {
+    let mut frames = Vec::with_capacity(arr.len());
+    for v in arr {
+        frames.push(
+            ZspFrame::try_from(v).map_err(|e| format!("Converting Array element failed: {e}"))?,
+        );
+    }
+    Ok(ZspFrame::Array(frames))
 }
 
 #[cfg(test)]
