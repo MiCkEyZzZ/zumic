@@ -86,7 +86,7 @@ fn bench_read_value_variants(c: &mut Criterion) {
 
 fn bench_read_dump(c: &mut Criterion) {
     let items: Vec<(Sds, Value)> = (0..1000)
-        .map(|i| (Sds::from_str(&format!("key{}", i)), Value::Int(i)))
+        .map(|i| (Sds::from_str(&format!("key{i}")), Value::Int(i)))
         .collect();
     let mut buf = Vec::new();
     write_dump(&mut buf, items.clone().into_iter()).unwrap();
@@ -101,7 +101,7 @@ fn bench_read_dump(c: &mut Criterion) {
 
 fn bench_stream_reader(c: &mut Criterion) {
     let items: Vec<(Sds, Value)> = (0..1000)
-        .map(|i| (Sds::from_str(&format!("key{}", i)), Value::Int(i)))
+        .map(|i| (Sds::from_str(&format!("key{i}")), Value::Int(i)))
         .collect();
     let mut buf = Vec::new();
     write_stream(&mut buf, items.clone().into_iter()).unwrap();
