@@ -178,3 +178,158 @@ impl CommandExecute for GeoRadiusByMemberCommand {
         Ok(Value::Array(result))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::InMemoryStore;
+
+    use super::*;
+
+    /// Вспомогалка: создаём память и заполняем точками.
+    fn setup_store() -> StorageEngine {
+        let engine = StorageEngine::Memory(InMemoryStore::new());
+        let key = "places";
+        engine
+            .geo_add(&Sds::from_str(key), 0.0, 0.0, &Sds::from_str("origin"))
+            .unwrap();
+        engine
+            .geo_add(&Sds::from_str(key), 0.001, 0.0, &Sds::from_str("east"))
+            .unwrap();
+        engine
+            .geo_add(&Sds::from_str(key), 0.0, 0.001, &Sds::from_str("north"))
+            .unwrap();
+        engine
+    }
+
+    #[test]
+    fn test_geoadd_command() {
+        let mut engine = StorageEngine::Memory(InMemoryStore::new());
+        let cmd = GeoAddCommand {
+            key: "cities".into(),
+            points: vec![
+                (2.3522, 48.8566, "paris".into()),
+                (13.4050, 52.5200, "berlin".into()),
+            ],
+        };
+        let res = cmd.execute(&mut engine).unwrap();
+        assert_eq!(res, Value::Int(2));
+        // повторная вставка ни к чему не добавит
+        let res2 = cmd.execute(&mut engine).unwrap();
+        assert_eq!(res2, Value::Int(0));
+    }
+
+    #[test]
+    fn test_geodist_command() {
+        let mut engine = setup_store();
+        let cmd = GetDistCommand {
+            key: "places".into(),
+            member1: "origin".into(),
+            member2: "east".into(),
+            unit: Some("m".into()),
+        };
+        let res = cmd.execute(&mut engine).unwrap();
+        if let Value::Float(d) = res {
+            // около 111 метров
+            assert!((d - 111.0).abs() < 10.0);
+        } else {
+            panic!("Expected Float");
+        }
+
+        // непонятный член -> Null
+        let cmd2 = GetDistCommand {
+            key: "places".into(),
+            member1: "origin".into(),
+            member2: "missing".into(),
+            unit: None,
+        };
+        assert_eq!(cmd2.execute(&mut engine).unwrap(), Value::Null);
+    }
+
+    #[test]
+    fn test_geopos_command() {
+        let mut engine = setup_store();
+        let cmd = GeoPosCommand {
+            key: "places".into(),
+            members: vec!["origin".into(), "missing".into()],
+        };
+        let res = cmd.execute(&mut engine).unwrap();
+        if let Value::Array(arr) = res {
+            // первый элемент — [0.0,0.0], второй — Null
+            assert_eq!(
+                arr[0],
+                Value::Array(vec![Value::Float(0.0), Value::Float(0.0)])
+            );
+            assert_eq!(arr[1], Value::Null);
+        } else {
+            panic!("Expected Array");
+        }
+    }
+
+    #[test]
+    fn test_georadius_command() {
+        let mut engine = setup_store();
+        let cmd = GeoRadiusCommand {
+            key: "places".into(),
+            lon: 0.0,
+            lat: 0.0,
+            radius: 200.0, // метров
+            unit: Some("m".into()),
+        };
+        let res = cmd.execute(&mut engine).unwrap();
+        if let Value::Array(arr) = res {
+            // origin (0m) и east (~111m) и north (~111m) войдут
+            let members: Vec<String> = arr
+                .into_iter()
+                .map(|item| {
+                    if let Value::Array(inner) = item {
+                        if let Value::Str(s) = &inner[0] {
+                            s.to_string()
+                        } else {
+                            panic!()
+                        }
+                    } else {
+                        panic!()
+                    }
+                })
+                .collect();
+            assert!(members.contains(&"origin".to_string()));
+            assert!(members.contains(&"east".to_string()));
+            assert!(members.contains(&"north".to_string()));
+        } else {
+            panic!("Expected Array");
+        }
+    }
+
+    #[test]
+    fn test_georadiusbymember_command() {
+        let mut engine = setup_store();
+        let cmd = GeoRadiusByMemberCommand {
+            key: "places".into(),
+            member: "origin".into(),
+            radius: 200.0,
+            unit: None, // по умолчанию метры
+        };
+        let res = cmd.execute(&mut engine).unwrap();
+        if let Value::Array(arr) = res {
+            let members: Vec<String> = arr
+                .into_iter()
+                .map(|item| {
+                    if let Value::Array(inner) = item {
+                        if let Value::Str(s) = &inner[0] {
+                            s.to_string()
+                        } else {
+                            panic!()
+                        }
+                    } else {
+                        panic!()
+                    }
+                })
+                .collect();
+            assert!(members.contains(&"origin".to_string()));
+            assert!(members.contains(&"east".to_string()));
+            assert!(members.contains(&"north".to_string()));
+        } else {
+            panic!("Expected Array");
+        }
+    }
+}
