@@ -442,4 +442,52 @@ mod tests {
         store.set(&long_key, long_value.clone()).unwrap();
         assert_eq!(store.get(&long_key).unwrap(), Some(long_value));
     }
+
+    #[test]
+    fn test_geo_add_and_pos() {
+        let store = InMemoryStore::new();
+        let cities_key = key("cities");
+        let paris_member = key("paris");
+
+        let added = store
+            .geo_add(&cities_key, 2.3522, 48.8566, &paris_member)
+            .unwrap();
+        assert!(added);
+
+        let added_again = store
+            .geo_add(&cities_key, 2.3522, 48.8566, &paris_member)
+            .unwrap();
+        assert!(!added_again);
+
+        let pos = store.geo_pos(&cities_key, &paris_member).unwrap();
+        assert!(pos.is_some());
+        let point = pos.unwrap();
+        assert!((point.lon - 2.3522).abs() < 1e-6);
+        assert!((point.lat - 48.8566).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_geo_dist() {
+        let store = InMemoryStore::new();
+        let cities_key = key("cities");
+        let paris = key("paris");
+        let berlin = key("berlin");
+
+        store.geo_add(&cities_key, 2.3522, 48.8566, &paris).unwrap();
+        store
+            .geo_add(&cities_key, 13.4050, 52.5200, &berlin)
+            .unwrap();
+
+        let dist_km = store
+            .geo_dist(&cities_key, &paris, &berlin, "km")
+            .unwrap()
+            .unwrap();
+        assert!((dist_km - 878.0).abs() < 10.0);
+
+        let dist_m = store
+            .geo_dist(&cities_key, &paris, &berlin, "m")
+            .unwrap()
+            .unwrap();
+        assert!((dist_m - 878_000.0).abs() < 20_000.0);
+    }
 }
