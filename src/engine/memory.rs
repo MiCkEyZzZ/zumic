@@ -203,20 +203,26 @@ impl Storage for InMemoryStore {
             Some(s) => s,
             None => return Ok(vec![]),
         };
-        // получаем (member, dist_m)
-        let mut raw = set.radius(lon, lat, radius);
-        // конвертируем в нужные единицы и добавляем GeoPoint
+        // 1. convert to meters
+        let radius_m = match unit {
+            "km" => radius * 1000.0,
+            "mi" => radius * 1609.344,
+            "ft" => radius / 3.28084,
+            _ => radius, // assume meters
+        };
+        // filter in meters
+        let mut raw = set.radius(lon, lat, radius_m);
+        // 2. convert back for output
         let mut out = Vec::with_capacity(raw.len());
         for (member, dist_m) in raw.drain(..) {
-            let d = match unit {
+            let dist_out = match unit {
                 "km" => dist_m / 1000.0,
                 "mi" => dist_m / 1609.344,
                 "ft" => dist_m * 3.28084,
                 _ => dist_m,
             };
-            // точка уже внутри entry
             let point = set.get(&member).unwrap();
-            out.push((member, d, point));
+            out.push((member, dist_out, point));
         }
         Ok(out)
     }
@@ -232,11 +238,8 @@ impl Storage for InMemoryStore {
             Some(s) => s,
             None => return Ok(vec![]),
         };
-
-        // Преобразуем member в &str, распаковывая Result
-        let member_str = member.as_str()?;
-
-        let center = match set.get(member_str) {
+        let m_str = member.as_str()?;
+        let center = match set.get(m_str) {
             Some(p) => p,
             None => return Ok(vec![]),
         };
@@ -489,5 +492,60 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!((dist_m - 878_000.0).abs() < 20_000.0);
+    }
+
+    #[test]
+    fn test_geo_radius() {
+        let store = InMemoryStore::new();
+        let landmarks_key = key("landmarks");
+
+        store
+            .geo_add(&landmarks_key, 0.0, 0.0, &key("center"))
+            .unwrap();
+        store
+            .geo_add(&landmarks_key, 0.001, 0.001, &key("near"))
+            .unwrap();
+        store
+            .geo_add(&landmarks_key, 10.0, 10.0, &key("far"))
+            .unwrap();
+
+        // Радиус 200 м (0.2 км)
+        let results = store
+            .geo_radius(&landmarks_key, 0.0, 0.0, 0.2, "km")
+            .unwrap();
+        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(members.contains(&"center".to_string()));
+        assert!(members.contains(&"near".to_string()));
+        assert!(!members.contains(&"far".to_string()));
+    }
+
+    #[test]
+    fn test_geo_radius_by_member() {
+        let store = InMemoryStore::new();
+        let points_key = key("points");
+
+        store
+            .geo_add(&points_key, 0.0, 0.0, &key("origin"))
+            .unwrap();
+        store
+            .geo_add(&points_key, 0.002, 0.0, &key("east"))
+            .unwrap();
+        store
+            .geo_add(&points_key, 0.0, 0.002, &key("north"))
+            .unwrap();
+        store
+            .geo_add(&points_key, 1.0, 1.0, &key("faraway"))
+            .unwrap();
+
+        let results = store
+            .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
+            .unwrap();
+        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(members.contains(&"origin".to_string()));
+        assert!(members.contains(&"east".to_string()));
+        assert!(members.contains(&"north".to_string()));
+        assert!(!members.contains(&"faraway".to_string()));
     }
 }

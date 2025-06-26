@@ -327,4 +327,97 @@ mod tests {
         assert_eq!(sa, sb);
         assert_eq!(sb, sc);
     }
+
+    /// Тест проверяем, что geo_add/geo_pos через кластер тоже работают
+    #[test]
+    fn test_cluster_geo_add_and_pos() {
+        let cluster = make_cluster();
+        let key = Sds::from_str("cities");
+        let paris = Sds::from_str("paris");
+        let berlin = Sds::from_str("berlin");
+
+        // Добавляем в кластер
+        assert!(cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap());
+        assert!(cluster.geo_add(&key, 13.4050, 52.5200, &berlin).unwrap());
+
+        // Повторное добавление того же члена должно вернуть false
+        assert!(!cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap());
+
+        // geo_pos
+        let p = cluster.geo_pos(&key, &paris).unwrap().unwrap();
+        assert!((p.lon - 2.3522).abs() < 1e-6);
+        assert!((p.lat - 48.8566).abs() < 1e-6);
+    }
+
+    /// Тест проверяем geo_dist через кластер
+    #[test]
+    fn test_cluster_geo_dist() {
+        let cluster = make_cluster();
+        let key = Sds::from_str("cities");
+        let paris = Sds::from_str("paris");
+        let berlin = Sds::from_str("berlin");
+
+        cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap();
+        cluster.geo_add(&key, 13.4050, 52.5200, &berlin).unwrap();
+
+        let d_km = cluster
+            .geo_dist(&key, &paris, &berlin, "km")
+            .unwrap()
+            .unwrap();
+        assert!((d_km - 878.0).abs() < 10.0);
+
+        let d_m = cluster
+            .geo_dist(&key, &paris, &berlin, "m")
+            .unwrap()
+            .unwrap();
+        assert!((d_m - 878_000.0).abs() < 20_000.0);
+    }
+
+    /// Тест проверяем geo_radius через кластер
+    #[test]
+    fn test_cluster_geo_radius() {
+        let cluster = make_cluster();
+        let key = Sds::from_str("landmarks");
+        let center = Sds::from_str("center");
+        let near = Sds::from_str("near");
+        let far = Sds::from_str("far");
+
+        cluster.geo_add(&key, 0.0, 0.0, &center).unwrap();
+        cluster.geo_add(&key, 0.001, 0.001, &near).unwrap();
+        cluster.geo_add(&key, 10.0, 10.0, &far).unwrap();
+
+        // radius = 0.2 km
+        let results = cluster.geo_radius(&key, 0.0, 0.0, 0.2, "km").unwrap();
+        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(members.contains(&"center".to_string()));
+        assert!(members.contains(&"near".to_string()));
+        assert!(!members.contains(&"far".to_string()));
+    }
+
+    /// Проверяем geo_radius_by_member через кластер
+    #[test]
+    fn test_cluster_geo_radius_by_member() {
+        let cluster = make_cluster();
+        let key = Sds::from_str("points");
+        let origin = Sds::from_str("origin");
+        let east = Sds::from_str("east");
+        let north = Sds::from_str("north");
+        let faraway = Sds::from_str("faraway");
+
+        cluster.geo_add(&key, 0.0, 0.0, &origin).unwrap();
+        cluster.geo_add(&key, 0.002, 0.0, &east).unwrap();
+        cluster.geo_add(&key, 0.0, 0.002, &north).unwrap();
+        cluster.geo_add(&key, 1.0, 1.0, &faraway).unwrap();
+
+        let results = cluster
+            .geo_radius_by_member(&key, &origin, 0.3, "km")
+            .unwrap();
+        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(members.contains(&"origin".to_string()));
+        assert!(members.contains(&"east".to_string()));
+        assert!(members.contains(&"north".to_string()));
+        assert!(!members.contains(&"faraway".to_string()));
+    }
 }
