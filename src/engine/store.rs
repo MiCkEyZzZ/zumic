@@ -401,4 +401,99 @@ mod tests {
         let got = store_mut.get(&key("x")).unwrap();
         assert_eq!(got, Some(Value::Int(42)));
     }
+
+    /// Тест проверяет методы гео на уровне StorageEngine.
+    #[test]
+    fn test_engine_geo_add_and_pos() {
+        let engine = StorageEngine::Memory(InMemoryStore::new());
+        let paris_key = key("cities");
+        let paris = key("paris");
+
+        // Добавляем координаты.
+        let added = engine.geo_add(&paris_key, 2.3522, 48.8566, &paris).unwrap();
+        assert!(added, "Первое добавление должно вернуть true");
+        let added_again = engine.geo_add(&paris_key, 2.3522, 48.8566, &paris).unwrap();
+        assert!(
+            !added_again,
+            "Повторное добавление того же члена должно вернуть false"
+        );
+
+        // Позиция
+        let pos = engine.geo_pos(&paris_key, &paris).unwrap().unwrap();
+        assert!((pos.lon - 2.3522).abs() < 1e-6);
+        assert!((pos.lat - 48.8566).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_engine_geo_dist() {
+        let engine = StorageEngine::Memory(InMemoryStore::new());
+        let cities_key = key("cities");
+        let a = key("a"); // пусть это Париж
+        let b = key("b"); // пусть это Берлин
+
+        engine.geo_add(&cities_key, 2.3522, 48.8566, &a).unwrap();
+        engine.geo_add(&cities_key, 13.4050, 52.5200, &b).unwrap();
+
+        // Расстояние в километрах
+        let d_km = engine.geo_dist(&cities_key, &a, &b, "km").unwrap().unwrap();
+        assert!((d_km - 878.0).abs() < 10.0);
+
+        // Расстояние в метрах
+        let d_m = engine.geo_dist(&cities_key, &a, &b, "m").unwrap().unwrap();
+        assert!((d_m - 878_000.0).abs() < 20_000.0);
+    }
+
+    #[test]
+    fn test_engine_geo_radius() {
+        let engine = StorageEngine::Memory(InMemoryStore::new());
+        let landmarks_key = key("landmarks");
+
+        engine
+            .geo_add(&landmarks_key, 0.0, 0.0, &key("center"))
+            .unwrap();
+        engine
+            .geo_add(&landmarks_key, 0.001, 0.001, &key("near"))
+            .unwrap();
+        engine
+            .geo_add(&landmarks_key, 10.0, 10.0, &key("far"))
+            .unwrap();
+
+        // Ищем в радиусе 0.2 km (200 м)
+        let res = engine
+            .geo_radius(&landmarks_key, 0.0, 0.0, 0.2, "km")
+            .unwrap();
+        let names: Vec<_> = res.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(names.contains(&"center".to_string()));
+        assert!(names.contains(&"near".to_string()));
+        assert!(!names.contains(&"far".to_string()));
+    }
+
+    #[test]
+    fn test_engine_geo_radius_by_member() {
+        let engine = StorageEngine::Memory(InMemoryStore::new());
+        let points_key = key("points");
+
+        engine
+            .geo_add(&points_key, 0.0, 0.0, &key("origin"))
+            .unwrap();
+        engine
+            .geo_add(&points_key, 0.002, 0.0, &key("east"))
+            .unwrap();
+        engine
+            .geo_add(&points_key, 0.0, 0.002, &key("north"))
+            .unwrap();
+        engine.geo_add(&points_key, 1.0, 1.0, &key("far")).unwrap();
+
+        // Радиус 0.3 km от "origin"
+        let res = engine
+            .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
+            .unwrap();
+        let names: Vec<_> = res.iter().map(|(m, _, _)| m.clone()).collect();
+
+        assert!(names.contains(&"origin".to_string()));
+        assert!(names.contains(&"east".to_string()));
+        assert!(names.contains(&"north".to_string()));
+        assert!(!names.contains(&"far".to_string()));
+    }
 }
