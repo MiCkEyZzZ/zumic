@@ -112,8 +112,7 @@ mod tests {
         // И теперь ожидаем именно `Closed`
         assert!(
             matches!(res, Err(tokio::sync::broadcast::error::RecvError::Closed)),
-            "Expected channel to be closed, got {:?}",
-            res
+            "Expected channel to be closed, got {res:?}"
         );
     }
 

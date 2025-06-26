@@ -34,7 +34,8 @@ fn bench_write_dump(c: &mut Criterion) {
     // сгенерируем несколько пар
     let items: Vec<(Sds, Value)> = (0..100)
         .map(|i| {
-            let key = Sds::from_str(&format!("key{}", i));
+            // изменено форматирование — теперь Clippy не ругается
+            let key = Sds::from_str(&format!("key{i}"));
             let val = Value::Int(i);
             (key, val)
         })

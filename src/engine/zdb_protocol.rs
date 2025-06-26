@@ -97,23 +97,19 @@ mod tests {
         let loaded_count = loaded.iter().count();
         assert_eq!(
             store_count, loaded_count,
-            "Key count mismatch: {} vs {}",
-            store_count, loaded_count
+            "Key count mismatch: {store_count} vs {loaded_count}"
         );
 
         // 5. Проверяем, что все пары ключ->значение совпадают
         for (k, v) in store.iter() {
             // вызов .get() возвращает Result<Option<Value>, _>, unwrap() гарантирует panic при Err
             let loaded_val = loaded.get(&k).unwrap();
-            assert!(loaded_val.is_some(), "Key {:?} not found after loading", k);
+            assert!(loaded_val.is_some(), "Key {k:?} not found after loading");
             // сравниваем значение: клонируем v, чтобы получить Value, и оборачиваем в Some
             assert_eq!(
                 loaded_val,
                 Some(v.clone()),
-                "Value mismatch for key {:?}: expected {:?}, got {:?}",
-                k,
-                v,
-                loaded_val
+                "Value mismatch for key {k:?}: expected {v:?}, got {loaded_val:?}"
             );
         }
     }
