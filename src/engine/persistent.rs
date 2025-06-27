@@ -382,7 +382,7 @@ mod tests {
         InPersistentStore::new(temp_file.path())
     }
 
-    /// This test checks if the `set` and `get` methods works correctly.
+    /// Тест проверяет, правильно ли работают методы `set` и `get`.
     #[test]
     fn test_set_and_get() -> StoreResult<()> {
         let store = new_store()?;
@@ -397,7 +397,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks if the `del` method works correctly.
+    /// Тест проверяет, правильно ли работает метод `del`.
     #[test]
     fn test_del() -> StoreResult<()> {
         let store = new_store()?;
@@ -416,7 +416,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks if the `mset` and `mget` methods work correctly.
+    /// Тест проверяет, правильно ли работают методы `mset` и `get`.
     #[test]
     fn test_mset_and_mget() -> StoreResult<()> {
         let store = new_store()?;
@@ -445,7 +445,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks if the `rename` method works correctly.
+    /// Тест проверяет, правильно ли работает метод "rename".
     #[test]
     fn test_rename() -> StoreResult<()> {
         let store = new_store()?;
@@ -467,7 +467,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks if the `renamenx` method works correctly.
+    /// Тест проверяет, правильно ли работает метод "renamenx".
     #[test]
     fn test_renamenx() -> StoreResult<()> {
         let store = new_store()?;
@@ -489,7 +489,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test checks if the `flushdb` method works correctly.
+    /// Тест проверяет, правильно ли работает метод `flushdb`.
     #[test]
     fn test_flushdb() -> StoreResult<()> {
         let store = new_store()?;
@@ -512,7 +512,7 @@ mod tests {
         Ok(())
     }
 
-    /// Тестирует методы geo_add и geo_pos для постоянного хранилища.
+    /// Тест проверяет, методы geo_add и geo_pos для постоянного хранилища.
     #[test]
     fn test_persistent_geo_add_and_pos() -> StoreResult<()> {
         let store = new_store()?;
@@ -533,7 +533,7 @@ mod tests {
         Ok(())
     }
 
-    /// Тестирует метод geo_dist для постоянного хранилища.
+    /// Тест проверяет, метод geo_dist для постоянного хранилища.
     #[test]
     fn test_persistent_geo_dist() -> StoreResult<()> {
         let store = new_store()?;
@@ -554,7 +554,7 @@ mod tests {
         Ok(())
     }
 
-    /// Тестирует метод geo_radius для постоянного хранилища.
+    /// Тест проверяет, метод geo_radius для постоянного хранилища.
     #[test]
     fn test_persistent_geo_radius() -> StoreResult<()> {
         let store = new_store()?;
@@ -573,7 +573,7 @@ mod tests {
         Ok(())
     }
 
-    /// Тестирует метод geo_radius_by_member для постоянного хранилища.
+    /// Тест проверяет, метод geo_radius_by_member для постоянного хранилища.
     #[test]
     fn test_persistent_geo_radius_by_member() -> StoreResult<()> {
         let store = new_store()?;
