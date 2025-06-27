@@ -161,7 +161,10 @@ impl StorageEngine {
         }
     }
 
-    /// Добавляет координату для гео-ключа.
+    /// Добавляет точку `(lon, lat)` с именем `member` в гео-набор под ключом `key`.
+    ///
+    /// Возвращает `Ok(true)`, если `member` был добавлен впервые,
+    /// и `Ok(false)`, если он уже присутствовал.
     pub fn geo_add(
         &self,
         key: &Sds,
@@ -176,6 +179,10 @@ impl StorageEngine {
         }
     }
 
+    /// Возвращает расстояние между `member1` и `member2` в единицах `unit`:
+    /// `"m"` (метры), `"km"`, `"mi"`, `"ft"`.
+    ///
+    /// Если один из членов отсутствует — возвращает `Ok(None)`.
     pub fn geo_dist(
         &self,
         key: &Sds,
@@ -190,6 +197,8 @@ impl StorageEngine {
         }
     }
 
+    /// Возвращает координаты `(lon, lat)` для данного `member`,
+    /// или `Ok(None)`, если его нет.
     pub fn geo_pos(
         &self,
         key: &Sds,
@@ -202,6 +211,11 @@ impl StorageEngine {
         }
     }
 
+    /// Ищет всех членов в радиусе `radius` от точки `(lon, lat)`.
+    ///
+    /// `unit` может быть `"m"`, `"km"`, `"mi"`, `"ft"`.
+    ///
+    /// Возвращает массив кортежей `(member, distance, GeoPoint)`.
     pub fn geo_radius_by_member(
         &self,
         key: &Sds,
@@ -218,6 +232,9 @@ impl StorageEngine {
         }
     }
 
+    /// То же, что `geo_radius`, но центр задаётся координатами уже существующего `member`.
+    ///
+    /// Если `member` не найден — возвращает пустой вектор.
     pub fn geo_radius(
         &self,
         key: &Sds,
@@ -402,7 +419,7 @@ mod tests {
         assert_eq!(got, Some(Value::Int(42)));
     }
 
-    /// Тест проверяет методы гео на уровне StorageEngine.
+    /// Тестирует geo_add и geo_pos: добавление точки и получение её координат.
     #[test]
     fn test_engine_geo_add_and_pos() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -424,6 +441,7 @@ mod tests {
         assert!((pos.lat - 48.8566).abs() < 1e-6);
     }
 
+    /// Тестирует geo_dist: вычисление расстояния между двумя точками.
     #[test]
     fn test_engine_geo_dist() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -443,6 +461,7 @@ mod tests {
         assert!((d_m - 878_000.0).abs() < 20_000.0);
     }
 
+    /// Тестирует geo_radius: поиск точек в радиусе от координаты.
     #[test]
     fn test_engine_geo_radius() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -469,6 +488,7 @@ mod tests {
         assert!(!names.contains(&"far".to_string()));
     }
 
+    /// Тестирует geo_radius_by_member: поиск по координатам заданного члена.
     #[test]
     fn test_engine_geo_radius_by_member() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
