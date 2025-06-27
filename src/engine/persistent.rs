@@ -1,10 +1,10 @@
-use std::{collections::HashMap, path::Path, sync::Mutex};
+use std::{collections::HashMap, io::Cursor, path::Path, sync::Mutex};
 
 use super::{
     aof::{AofOp, SyncPolicy},
-    AofLog, Storage,
+    write_stream, AofLog, Storage, StreamReader,
 };
-use crate::{GeoPoint, Sds, StoreError, StoreResult, Value};
+use crate::{GeoPoint, GeoSet, Sds, StoreError, StoreResult, Value};
 
 /// Хранилище с поддержкой постоянства через AOF (Append-Only File).
 /// Ключи и значения находятся в памяти, но изменения логируются на диск.
@@ -177,61 +177,197 @@ impl Storage for InPersistentStore {
         Ok(())
     }
 
+    /// Добавляет точку (member, lon, lat) в гео-множество по ключу.
+    /// Возвращает `true`, если member был добавлен впервые.
     fn geo_add(
         &self,
-        _key: &Sds,
-        _lon: f64,
-        _lat: f64,
-        _member: &Sds,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        member: &Sds,
     ) -> StoreResult<bool> {
-        // Для простоты храним в AOF те же операции, а в памяти держим
-        // сериализованный GeoSet под ключом key:
-        // Дешёвый вариант: просто делегируем на InMemory+реиндекс.
-        // Но если вы храните GeoSet внутри map, то:
-        // 1) достать текущее значение (или создать GeoSet::new)
-        // 2) вызвать add
-        // 3) перезаписать в map и AOF.
-        // Здесь для примера просто вернём ошибку (чтобы вы дописали логику)
-        Err(StoreError::NotImplemented("No implemented".to_string()))
+        let key_b = key.as_bytes();
+        let mut map = self.index.lock().unwrap();
+
+        // 1) собрать существующий GeoSet из streaming-данных
+        let mut gs = if let Some(raw) = map.get(key_b) {
+            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+            let mut tmp = GeoSet::new();
+            while let Some(Ok((_, val))) = rdr.next() {
+                if let Value::Array(arr) = val {
+                    if let [Value::Str(m), Value::Float(dlon), Value::Float(dlat)] = &arr[..] {
+                        tmp.add(m.to_string(), *dlon, *dlat);
+                    }
+                }
+            }
+            tmp
+        } else {
+            GeoSet::new()
+        };
+
+        // 2) собственно add
+        let existed = gs.get(member.as_str()?).is_some();
+        gs.add(member.to_string(), lon, lat);
+        let added = !existed;
+
+        // 3) сериализовать обратно в streaming-формате
+        let mut buf = Vec::new();
+        let entries = gs.iter().map(|(m, point)| {
+            let v = Value::Array(vec![
+                Value::Str(Sds::from_str(m)),
+                Value::Float(point.lon),
+                Value::Float(point.lat),
+            ]);
+            (Sds::from_str(m), v)
+        });
+        write_stream(&mut buf, entries).map_err(StoreError::Io)?;
+
+        // 4) лог и сохранение
+        {
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_set(key_b, &buf).map_err(StoreError::Io)?;
+        }
+        map.insert(key_b.to_vec(), buf);
+        Ok(added)
     }
 
+    /// Вычисляет расстояние между двумя членами множества в единицах `unit`.
+    /// Если один из членов не найден, возвращает `None`.
     fn geo_dist(
         &self,
-        _key: &Sds,
-        _member1: &Sds,
-        _member2: &Sds,
-        _unit: &str,
+        key: &Sds,
+        member1: &Sds,
+        member2: &Sds,
+        unit: &str,
     ) -> StoreResult<Option<f64>> {
-        Err(StoreError::NotImplemented("No implemented".to_string()))
+        let key_b = key.as_bytes();
+        let map = self.index.lock().unwrap();
+        let raw = match map.get(key_b) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // Восстанавливаем GeoSet
+        let mut gs = GeoSet::new();
+        let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+        while let Some(Ok((_, val))) = rdr.next() {
+            if let Value::Array(arr) = val {
+                if let [Value::Str(m), Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                    gs.add(m.to_string(), *lon0, *lat0);
+                }
+            }
+        }
+
+        // Конвертируем Sds → &str
+        let m1 = member1.as_str()?;
+        let m2 = member2.as_str()?;
+
+        // Считаем и переводим в нужные единицы
+        let meters = gs.dist(m1, m2);
+        let res = meters.map(|m| match unit {
+            "km" => m / 1000.0,
+            "mi" => m / 1609.344,
+            "ft" => m * 3.28084,
+            _ => m,
+        });
+        Ok(res)
     }
 
+    /// Возвращает координаты `member` в GeoPoint, или `None`, если member не найден.
     fn geo_pos(
         &self,
-        _key: &Sds,
-        _member: &Sds,
+        key: &Sds,
+        member: &Sds,
     ) -> StoreResult<Option<GeoPoint>> {
-        Err(StoreError::NotImplemented("No implemented".to_string()))
+        let key_b = key.as_bytes();
+        let map = self.index.lock().unwrap();
+        let raw = match map.get(key_b) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+        while let Some(Ok((k, val))) = rdr.next() {
+            if k.as_str()? == member.as_str()? {
+                if let Value::Array(arr) = val {
+                    if let [Value::Float(lon), Value::Float(lat)] = &arr[..] {
+                        return Ok(Some(GeoPoint {
+                            lon: *lon,
+                            lat: *lat,
+                        }));
+                    }
+                }
+            }
+        }
+        Ok(None)
     }
 
+    /// Находит всех членов в радиусе `radius` вокруг точки `(lon, lat)`.
+    /// Возвращает вектор `(member, distance, GeoPoint)` в единицах `unit`.
     fn geo_radius(
         &self,
-        _key: &Sds,
-        _lon: f64,
-        _lat: f64,
-        _radius: f64,
-        _unit: &str,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        Err(StoreError::NotImplemented("No implemented".to_string()))
+        let key_b = key.as_bytes();
+        let map = self.index.lock().unwrap();
+        let raw = match map.get(key_b) {
+            Some(r) => r,
+            None => return Ok(vec![]),
+        };
+
+        // восстановить GeoSet
+        let mut gs = GeoSet::new();
+        let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+        while let Some(Ok((_, val))) = rdr.next() {
+            if let Value::Array(arr) = val {
+                if let [Value::Str(m), Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                    gs.add(m.to_string(), *lon0, *lat0);
+                }
+            }
+        }
+
+        // radius → метры
+        let r_m = match unit {
+            "km" => radius * 1000.0,
+            "mi" => radius * 1609.344,
+            "ft" => radius / 3.28084,
+            _ => radius,
+        };
+
+        let mut out = Vec::new();
+        for (m, dist_m) in gs.radius(lon, lat, r_m) {
+            let dist = match unit {
+                "km" => dist_m / 1000.0,
+                "mi" => dist_m / 1609.344,
+                "ft" => dist_m * 3.28084,
+                _ => dist_m,
+            };
+            let pt = gs.get(&m).unwrap();
+            out.push((m, dist, pt));
+        }
+
+        Ok(out)
     }
 
+    /// Аналогично `geo_radius`, но центр задаётся существующим `member`.
     fn geo_radius_by_member(
         &self,
-        _key: &Sds,
-        _member: &Sds,
-        _radius: f64,
-        _unit: &str,
+        key: &Sds,
+        member: &Sds,
+        radius: f64,
+        unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        Err(StoreError::NotImplemented("No implemented".to_string()))
+        // сначала позиция
+        let center = self.geo_pos(key, member)?;
+        if let Some(GeoPoint { lon, lat }) = center {
+            self.geo_radius(key, lon, lat, radius, unit)
+        } else {
+            Ok(vec![])
+        }
     }
 }
 

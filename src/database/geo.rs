@@ -95,6 +95,13 @@ impl GeoSet {
             })
             .collect()
     }
+
+    /// Возвращает итератор по всем элементам: `(member, GeoPoint)`.
+    ///
+    /// Используется, например, для сериализации всего множества.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &GeoPoint)> {
+        self.entries.iter().map(|e| (&e.member, &e.point))
+    }
 }
 
 /// refine_bit - сужает диапазон и возвращает 0/1.
