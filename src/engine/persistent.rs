@@ -189,14 +189,15 @@ impl Storage for InPersistentStore {
         let key_b = key.as_bytes();
         let mut map = self.index.lock().unwrap();
 
-        // 1) собрать существующий GeoSet из streaming-данных
+        // Восстановить предыдущий GeoSet из streaming-данных
         let mut gs = if let Some(raw) = map.get(key_b) {
             let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
             let mut tmp = GeoSet::new();
-            while let Some(Ok((_, val))) = rdr.next() {
+            while let Some(Ok((m_sds, val))) = rdr.next() {
                 if let Value::Array(arr) = val {
-                    if let [Value::Str(m), Value::Float(dlon), Value::Float(dlat)] = &arr[..] {
-                        tmp.add(m.to_string(), *dlon, *dlat);
+                    if let [Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                        let m = m_sds.as_str()?;
+                        tmp.add(m.to_string(), *lon0, *lat0);
                     }
                 }
             }
@@ -205,24 +206,21 @@ impl Storage for InPersistentStore {
             GeoSet::new()
         };
 
-        // 2) собственно add
+        // Добавить новую точку
         let existed = gs.get(member.as_str()?).is_some();
         gs.add(member.to_string(), lon, lat);
         let added = !existed;
 
-        // 3) сериализовать обратно в streaming-формате
+        // Сериализовать в streaming-формате: ключ=member, значение=[lon,lat]
         let mut buf = Vec::new();
-        let entries = gs.iter().map(|(m, point)| {
-            let v = Value::Array(vec![
-                Value::Str(Sds::from_str(m)),
-                Value::Float(point.lon),
-                Value::Float(point.lat),
-            ]);
-            (Sds::from_str(m), v)
+        let entries = gs.entries.iter().map(|e| {
+            let key = Sds::from_str(&e.member);
+            let v = Value::Array(vec![Value::Float(e.point.lon), Value::Float(e.point.lat)]);
+            (key, v)
         });
         write_stream(&mut buf, entries).map_err(StoreError::Io)?;
 
-        // 4) лог и сохранение
+        // Записать в AOF и в память
         {
             let mut aof = self.aof.lock().unwrap();
             aof.append_set(key_b, &buf).map_err(StoreError::Io)?;
@@ -247,30 +245,30 @@ impl Storage for InPersistentStore {
             None => return Ok(None),
         };
 
-        // Восстанавливаем GeoSet
+        // Восстановить GeoSet
         let mut gs = GeoSet::new();
         let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
-        while let Some(Ok((_, val))) = rdr.next() {
+        while let Some(Ok((m_sds, val))) = rdr.next() {
             if let Value::Array(arr) = val {
-                if let [Value::Str(m), Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                if let [Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                    let m = m_sds.as_str()?;
                     gs.add(m.to_string(), *lon0, *lat0);
                 }
             }
         }
 
-        // Конвертируем Sds → &str
+        // Конвертировать Sds → &str и посчитать дистанцию
         let m1 = member1.as_str()?;
         let m2 = member2.as_str()?;
-
-        // Считаем и переводим в нужные единицы
         let meters = gs.dist(m1, m2);
-        let res = meters.map(|m| match unit {
+
+        // Перевести в нужные единицы
+        Ok(meters.map(|m| match unit {
             "km" => m / 1000.0,
             "mi" => m / 1609.344,
             "ft" => m * 3.28084,
             _ => m,
-        });
-        Ok(res)
+        }))
     }
 
     /// Возвращает координаты `member` в GeoPoint, или `None`, если member не найден.
@@ -287,8 +285,8 @@ impl Storage for InPersistentStore {
         };
 
         let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
-        while let Some(Ok((k, val))) = rdr.next() {
-            if k.as_str()? == member.as_str()? {
+        while let Some(Ok((m_sds, val))) = rdr.next() {
+            if m_sds.as_str()? == member.as_str()? {
                 if let Value::Array(arr) = val {
                     if let [Value::Float(lon), Value::Float(lat)] = &arr[..] {
                         return Ok(Some(GeoPoint {
@@ -319,18 +317,19 @@ impl Storage for InPersistentStore {
             None => return Ok(vec![]),
         };
 
-        // восстановить GeoSet
+        // Восстановить GeoSet
         let mut gs = GeoSet::new();
         let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
-        while let Some(Ok((_, val))) = rdr.next() {
+        while let Some(Ok((m_sds, val))) = rdr.next() {
             if let Value::Array(arr) = val {
-                if let [Value::Str(m), Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                if let [Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
+                    let m = m_sds.as_str()?;
                     gs.add(m.to_string(), *lon0, *lat0);
                 }
             }
         }
 
-        // radius → метры
+        // Перевести radius в метры
         let r_m = match unit {
             "km" => radius * 1000.0,
             "mi" => radius * 1609.344,
@@ -338,6 +337,7 @@ impl Storage for InPersistentStore {
             _ => radius,
         };
 
+        // Сформировать результат
         let mut out = Vec::new();
         for (m, dist_m) in gs.radius(lon, lat, r_m) {
             let dist = match unit {
@@ -349,7 +349,6 @@ impl Storage for InPersistentStore {
             let pt = gs.get(&m).unwrap();
             out.push((m, dist, pt));
         }
-
         Ok(out)
     }
 
@@ -361,7 +360,7 @@ impl Storage for InPersistentStore {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        // сначала позиция
+        // Сначала получаем позицию
         let center = self.geo_pos(key, member)?;
         if let Some(GeoPoint { lon, lat }) = center {
             self.geo_radius(key, lon, lat, radius, unit)
@@ -510,6 +509,88 @@ mod tests {
         assert_eq!(retrieved1, None);
         assert_eq!(retrieved2, None);
 
+        Ok(())
+    }
+
+    /// Тестирует методы geo_add и geo_pos для постоянного хранилища.
+    #[test]
+    fn test_persistent_geo_add_and_pos() -> StoreResult<()> {
+        let store = new_store()?;
+        let key = Sds::from_str("cities");
+        let paris = Sds::from_str("paris");
+
+        // Первое добавление должно вернуть true
+        assert!(store.geo_add(&key, 2.3522, 48.8566, &paris)?);
+        // Повторное добавление того же члена — false
+        assert!(!store.geo_add(&key, 2.3522, 48.8566, &paris)?);
+
+        // Проверяем позицию
+        let pos = store
+            .geo_pos(&key, &paris)?
+            .expect("paris должен присутствовать");
+        assert!((pos.lon - 2.3522).abs() < 1e-6);
+        assert!((pos.lat - 48.8566).abs() < 1e-6);
+        Ok(())
+    }
+
+    /// Тестирует метод geo_dist для постоянного хранилища.
+    #[test]
+    fn test_persistent_geo_dist() -> StoreResult<()> {
+        let store = new_store()?;
+        let key = Sds::from_str("cities");
+        let a = Sds::from_str("a");
+        let b = Sds::from_str("b");
+
+        store.geo_add(&key, 0.0, 0.0, &a)?;
+        store.geo_add(&key, 0.0, 1.0, &b)?;
+
+        // расстояние в метрах
+        let d_m = store.geo_dist(&key, &a, &b, "m")?.unwrap();
+        assert!((d_m - 111_195.0).abs() < 100.0);
+
+        // расстояние в километрах
+        let d_km = store.geo_dist(&key, &a, &b, "km")?.unwrap();
+        assert!((d_km - 111.195).abs() < 0.1);
+        Ok(())
+    }
+
+    /// Тестирует метод geo_radius для постоянного хранилища.
+    #[test]
+    fn test_persistent_geo_radius() -> StoreResult<()> {
+        let store = new_store()?;
+        let key = Sds::from_str("landmarks");
+
+        store.geo_add(&key, 0.0, 0.0, &Sds::from_str("center"))?;
+        store.geo_add(&key, 0.001, 0.001, &Sds::from_str("near"))?;
+        store.geo_add(&key, 10.0, 10.0, &Sds::from_str("far"))?;
+
+        // радиус 200 м = 0.2 км
+        let result = store.geo_radius(&key, 0.0, 0.0, 0.2, "km")?;
+        let members: Vec<_> = result.iter().map(|(m, _, _)| m.clone()).collect();
+        assert!(members.contains(&"center".to_string()));
+        assert!(members.contains(&"near".to_string()));
+        assert!(!members.contains(&"far".to_string()));
+        Ok(())
+    }
+
+    /// Тестирует метод geo_radius_by_member для постоянного хранилища.
+    #[test]
+    fn test_persistent_geo_radius_by_member() -> StoreResult<()> {
+        let store = new_store()?;
+        let key = Sds::from_str("points");
+
+        store.geo_add(&key, 0.0, 0.0, &Sds::from_str("origin"))?;
+        store.geo_add(&key, 0.002, 0.0, &Sds::from_str("east"))?;
+        store.geo_add(&key, 0.0, 0.002, &Sds::from_str("north"))?;
+        store.geo_add(&key, 1.0, 1.0, &Sds::from_str("faraway"))?;
+
+        // радиус 0.3 км
+        let result = store.geo_radius_by_member(&key, &Sds::from_str("origin"), 0.3, "km")?;
+        let members: Vec<_> = result.iter().map(|(m, _, _)| m.clone()).collect();
+        assert!(members.contains(&"origin".to_string()));
+        assert!(members.contains(&"east".to_string()));
+        assert!(members.contains(&"north".to_string()));
+        assert!(!members.contains(&"faraway".to_string()));
         Ok(())
     }
 }

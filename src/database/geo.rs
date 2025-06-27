@@ -16,7 +16,7 @@ pub struct GeoEntry {
 /// Основная структура для хранения GEO-объектов.
 #[derive(Debug, Default)]
 pub struct GeoSet {
-    entries: Vec<GeoEntry>,
+    pub entries: Vec<GeoEntry>,
 }
 
 impl GeoSet {
