@@ -143,6 +143,12 @@ impl Storage for InMemoryStore {
         Ok(())
     }
 
+    /// Добавляет участника с координатами в гео-набор по ключу.
+    ///
+    /// Если гео-набор по данному ключу не существует, он создаётся.
+    ///
+    /// Возвращает `Ok(true)`, если участник добавлен впервые, и
+    /// `Ok(false)`, если он уже существовал.
     fn geo_add(
         &self,
         key: &Sds,
@@ -157,6 +163,13 @@ impl Storage for InMemoryStore {
         Ok(!existed)
     }
 
+    /// Вычисляет расстояние между двумя участниками в гео-наборе.
+    ///
+    /// Расстояние возвращается в указанной единице: `"m"` (по умолчанию),
+    /// `"km"`, `"mi"`, или `"ft"`.
+    ///
+    /// Возвращает `Ok(Some(dist))`, если оба участника найдены, иначе
+    /// `Ok(None)`.
     fn geo_dist(
         &self,
         key: &Sds,
@@ -178,6 +191,10 @@ impl Storage for InMemoryStore {
         Ok(converted)
     }
 
+    /// Возвращает координаты участника из гео-набора.
+    ///
+    /// Если участник присутствует, возвращает `Ok(Some(GeoPoint))`,
+    /// иначе `Ok(None)`.
     fn geo_pos(
         &self,
         key: &Sds,
@@ -191,6 +208,13 @@ impl Storage for InMemoryStore {
         Ok(set.get(member_str))
     }
 
+    /// Возвращает всех участников гео-набора, находящихся в радиусе
+    /// от заданной точки.
+    ///
+    /// Параметры: широта/долгота центра, радиус и единица измерения
+    /// (`"m"`, `"km"`, `"mi"`, `"ft"`).
+    ///
+    /// Возвращает список кортежей `(member, distance, GeoPoint)`.
     fn geo_radius(
         &self,
         key: &Sds,
@@ -203,16 +227,16 @@ impl Storage for InMemoryStore {
             Some(s) => s,
             None => return Ok(vec![]),
         };
-        // 1. convert to meters
+        // 1. перевести в метры
         let radius_m = match unit {
             "km" => radius * 1000.0,
             "mi" => radius * 1609.344,
             "ft" => radius / 3.28084,
             _ => radius, // assume meters
         };
-        // filter in meters
+        // фильтр в метрах
         let mut raw = set.radius(lon, lat, radius_m);
-        // 2. convert back for output
+        // 2. преобразуйте обратно для вывода
         let mut out = Vec::with_capacity(raw.len());
         for (member, dist_m) in raw.drain(..) {
             let dist_out = match unit {
@@ -227,6 +251,13 @@ impl Storage for InMemoryStore {
         Ok(out)
     }
 
+    /// Возвращает всех участников, находящихся в радиусе от указанного
+    /// участника.
+    ///
+    /// Радиус задаётся в указанной единице (`"m"`, `"km"`, `"mi"`, `"ft"`).
+    ///
+    /// Возвращает список кортежей `(member, distance, GeoPoint)` от
+    /// исходного участника.
     fn geo_radius_by_member(
         &self,
         key: &Sds,
@@ -261,8 +292,8 @@ mod tests {
         Sds::from(data.as_bytes())
     }
 
-    /// Основной тест на установку и получение значения.
-    /// Проверяет, что значение можно корректно записать и получить из хранилища.
+    /// Тест: установка и получение значения.
+    /// Проверяет, что после `set` значение можно забрать через `get`.
     #[test]
     fn test_set_and_get() {
         let store = InMemoryStore::new();
@@ -274,9 +305,8 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Проверяет, что повторная установка значения по тому же ключу
-    /// перезаписывает старое значение.
-    /// Удостоверяется, что вызов `set` на уже существующем ключе обновляет значение.
+    /// Тест: перезапись значения.
+    /// Проверяет, что второй `set` по тому же ключу обновляет значение.
     #[test]
     fn test_overwrite_value() {
         let store = InMemoryStore::new();
@@ -289,8 +319,8 @@ mod tests {
         assert_eq!(got, Some(Value::Str(Sds::from_str("two"))));
     }
 
-    /// Проверяет, что ключ можно удалить, и после этого он становится недоступным.
-    /// Удостоверяется, что после вызова `del` ключ больше не извлекается.
+    /// Тест: удаление ключа.
+    /// Проверяет, что `del` удаляет ключ и `get` возвращает `None`.
     #[test]
     fn test_delete() {
         let store = InMemoryStore::new();
@@ -304,8 +334,8 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Проверяет, что попытка получить значение по несуществующему ключу возвращает None.
-    /// Удостоверяется, что получение отсутствующего ключа возвращает `None`.
+    /// Тест: получение несуществующего ключа.
+    /// Проверяет, что `get` на отсутствии возвращает `None`.
     #[test]
     fn test_get_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -313,8 +343,8 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Проверяет, что удаление несуществующего ключа не вызывает ошибку.
-    /// Удостоверяется, что вызов `del` на несуществующем ключе проходит без ошибки.
+    /// Тест: удаление несуществующего ключа.
+    /// Проверяет, что `del` на отсутствии не падает.
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -322,9 +352,8 @@ mod tests {
         assert!(store.del(&key("nope")).is_ok());
     }
 
-    /// Тестирует массовую установку и получение значений.
-    /// Проверяет, что можно установить и получить несколько пар ключ-значение одновременно,
-    /// и что отсутствующие ключи возвращают `None`.
+    /// Тест: множественная вставка и получение.
+    /// Проверяет `mset` и `mget` для нескольких пар.
     #[test]
     fn test_mset_and_mget() {
         let store = InMemoryStore::new();
@@ -355,8 +384,8 @@ mod tests {
         );
     }
 
-    /// Проверяет, что переименование существующего ключа работает корректно.
-    /// Удостоверяется, что ключ переносится на новое имя, а старый ключ становится недоступным.
+    /// Тест: переименование ключа.
+    /// Проверяет, что `rename` меняет имя ключа.
     #[test]
     fn test_rename() {
         let store = InMemoryStore::new();
@@ -367,9 +396,8 @@ mod tests {
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(123)));
     }
 
-    /// Проверяет, что попытка переименовать несуществующий ключ вызывает ошибку
-    /// с кодом KeyNotFound.
-    /// Удостоверяется, что переименование отсутствующего ключа возвращает ошибку.
+    /// Тест: rename несуществующего ключа.
+    /// Проверяет, что `rename` возвращает ошибку `KeyNotFound`.
     #[test]
     fn test_rename_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -377,9 +405,8 @@ mod tests {
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
-    /// Тестирует метод renamenx: переименование происходит только
-    /// если целевой ключ не существует.
-    /// Удостоверяется, что переименование работает, только если целевой ключ отсутствует.
+    /// Тест: renamenx успешен.
+    /// Проверяет, что `renamenx` переименовывает, если целевой ключ отсутствует.
     #[test]
     fn test_renamenx_success() {
         let store = InMemoryStore::new();
@@ -396,8 +423,8 @@ mod tests {
         );
     }
 
-    /// Проверяет, что renamenx не выполняется, если целевой ключ уже существует.
-    /// Удостоверяется, что переименование не происходит, если целевой ключ занят.
+    /// Тест: renamenx при существующем целевом ключе.
+    /// Проверяет, что `renamenx` возвращает `false`.
     #[test]
     fn test_renamenx_existing_target() {
         let store = InMemoryStore::new();
@@ -410,8 +437,8 @@ mod tests {
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(2)));
     }
 
-    /// Проверяет, что метод flushdb удаляет все ключи и значения из хранилища.
-    /// Удостоверяется, что вызов `flushdb` полностью очищает хранилище.
+    /// Тест: flushdb очищает всё.
+    /// Проверяет, что после `flushdb` база пуста.
     #[test]
     fn test_flushdb() {
         let store = InMemoryStore::new();
@@ -424,8 +451,8 @@ mod tests {
         assert!(store.get(&key("two")).unwrap().is_none());
     }
 
-    /// Проверяет корректную обработку пустого ключа.
-    /// Удостоверяется, что пустой ключ можно сохранить и получить из хранилища.
+    /// Тест: пустой ключ.
+    /// Проверяет, что можно использовать пустую строку как ключ.
     #[test]
     fn test_empty_key() {
         let store = InMemoryStore::new();
@@ -434,8 +461,8 @@ mod tests {
         assert_eq!(store.get(&empty).unwrap(), Some(Value::Int(42)));
     }
 
-    /// Проверяет обработку очень длинных ключей и значений.
-    /// Удостоверяется, что хранилище может работать с ключами и значениями произвольной длины.
+    /// Тест: длинные ключи и значения.
+    /// Проверяет работу с большими данными.
     #[test]
     fn test_very_long_key_and_value() {
         let store = InMemoryStore::new();
@@ -446,6 +473,8 @@ mod tests {
         assert_eq!(store.get(&long_key).unwrap(), Some(long_value));
     }
 
+    /// Тест: geo_add и geo_pos.
+    /// Проверяет добавление точки и получение её координат.
     #[test]
     fn test_geo_add_and_pos() {
         let store = InMemoryStore::new();
@@ -469,6 +498,8 @@ mod tests {
         assert!((point.lat - 48.8566).abs() < 1e-6);
     }
 
+    /// Тест: geo_dist.
+    /// Проверяет расстояние между Парижем и Берлином.
     #[test]
     fn test_geo_dist() {
         let store = InMemoryStore::new();
@@ -494,6 +525,8 @@ mod tests {
         assert!((dist_m - 878_000.0).abs() < 20_000.0);
     }
 
+    /// Тест: geo_radius вокруг точки.
+    /// Проверяет, что возвращаются точки внутри заданного радиуса.
     #[test]
     fn test_geo_radius() {
         let store = InMemoryStore::new();
@@ -520,6 +553,8 @@ mod tests {
         assert!(!members.contains(&"far".to_string()));
     }
 
+    /// Тест: geo_radius_by_member вокруг участника.
+    /// Проверяет, что возвращаются соседи внутри радиуса вокруг origin.
     #[test]
     fn test_geo_radius_by_member() {
         let store = InMemoryStore::new();
