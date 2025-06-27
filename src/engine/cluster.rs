@@ -168,6 +168,10 @@ impl Storage for InClusterStore {
         Ok(())
     }
 
+    /// Добавляет точку `(lon, lat)` с именем `member` в гео-набор по ключу `key`.
+    ///
+    /// Возвращает `Ok(true)`, если `member` был добавлен впервые,
+    /// и `Ok(false)`, если он уже присутствовал в наборе.
     fn geo_add(
         &self,
         key: &Sds,
@@ -178,6 +182,10 @@ impl Storage for InClusterStore {
         self.get_shard(key).geo_add(key, lon, lat, member)
     }
 
+    /// Вычисляет расстояние между двумя членами `member1` и `member2` в указанной единице `unit`.
+    ///
+    /// Поддерживаемые единицы: `"m"` (метры), `"km"`, `"mi"`, `"ft"`.
+    /// Если один из членов не найден или ключ отсутствует, возвращает `Ok(None)`.
     fn geo_dist(
         &self,
         key: &Sds,
@@ -188,6 +196,9 @@ impl Storage for InClusterStore {
         self.get_shard(key).geo_dist(key, m1, m2, unit)
     }
 
+    /// Возвращает координаты `[lon, lat]` для каждого запрошенного `member`.
+    ///
+    /// Если член не найден, в возвращаемом массиве на его месте будет `Value::Null`.
     fn geo_pos(
         &self,
         key: &Sds,
@@ -196,6 +207,10 @@ impl Storage for InClusterStore {
         self.get_shard(key).geo_pos(key, member)
     }
 
+    /// Ищет всех членов в радиусе `radius` от точки `(lon, lat)`.
+    ///
+    /// `radius` задаётся в единицах `unit` (`"m"`, `"km"`, `"mi"`, `"ft"`).
+    /// Возвращает вектор кортежей `(member, distance, GeoPoint)`.
     fn geo_radius(
         &self,
         key: &Sds,
@@ -207,6 +222,9 @@ impl Storage for InClusterStore {
         self.get_shard(key).geo_radius(key, lon, lat, radius, unit)
     }
 
+    /// То же, что `geo_radius`, но центр радиуса определяется по координатам `member`.
+    ///
+    /// Если `member` не найден, возвращает пустой вектор.
     fn geo_radius_by_member(
         &self,
         key: &Sds,
@@ -235,7 +253,8 @@ mod tests {
         InClusterStore::new(vec![s1, s2])
     }
 
-    /// Проверяет, что слот, получаемый из ключа, всегда в пределах диапазона [0, SLOT_COUNT).
+    /// Тест проверяет, что слот, получаемый из ключа, всегда в пределах
+    /// диапазона [0, SLOT_COUNT).
     #[test]
     fn test_key_slot_range() {
         let key = Sds::from_str("kin");
@@ -243,7 +262,7 @@ mod tests {
         assert!(slot < SLOT_COUNT);
     }
 
-    /// Убеждаемся, что ключи направляются к правильным шардам при `set` и `get`.
+    /// Тест проверяет, что ключи направляются к правильным шардам при `set` и `get`.
     #[test]
     fn test_set_get_routes_to_correct_shard() {
         let cluster = make_cluster();
@@ -260,7 +279,7 @@ mod tests {
         assert_eq!(cluster.get(&k2).unwrap(), Some(v2));
     }
 
-    /// Проверяет, что `rename` срабатывает, если ключи находятся на одном шарде.
+    /// Тест проверяет, что `rename` срабатывает, если ключи находятся на одном шарде.
     #[test]
     fn test_rename_same_shard_succeeds() {
         let cluster = make_cluster();
@@ -279,7 +298,7 @@ mod tests {
         assert_eq!(cluster.get(&to).unwrap(), Some(Value::Int(42)));
     }
 
-    /// Убеждаемся, что попытка `rename` между разными шардами вызывает ошибку `WrongShard`.
+    /// Тест проверяет, что попытка `rename` между разными шардами вызывает ошибку `WrongShard`.
     #[test]
     fn test_rename_different_shards_errors() {
         let mut cluster = make_cluster();
@@ -297,7 +316,7 @@ mod tests {
         assert!(matches!(err, StoreError::WrongShard));
     }
 
-    /// Проверяет, что `flushdb` очищает все шарды.
+    /// Тест проверяет, что `flushdb` очищает все шарды.
     #[test]
     fn test_flushdb_clears_all_shards() {
         let cluster = make_cluster();
@@ -313,7 +332,7 @@ mod tests {
         assert_eq!(cluster.get(&Sds::from_str("two")).unwrap(), None);
     }
 
-    /// Проверяет, что ключи с одинаковым хеш-тегом `{tag}` направляются в
+    /// Тест проверяет, что ключи с одинаковым хеш-тегом `{tag}` направляются в
     /// один и тот же слот, даже если остальные части ключа отличаются.
     #[test]
     fn test_key_slot_tag_ignores_outside() {
@@ -328,7 +347,7 @@ mod tests {
         assert_eq!(sb, sc);
     }
 
-    /// Тест проверяем, что geo_add/geo_pos через кластер тоже работают
+    /// Тест для geo_add и geo_pos: проверяем добавление точки и её получение.
     #[test]
     fn test_cluster_geo_add_and_pos() {
         let cluster = make_cluster();
@@ -349,7 +368,7 @@ mod tests {
         assert!((p.lat - 48.8566).abs() < 1e-6);
     }
 
-    /// Тест проверяем geo_dist через кластер
+    /// Тест для geo_dist: проверяем вычисление расстояния между двумя точками.
     #[test]
     fn test_cluster_geo_dist() {
         let cluster = make_cluster();
@@ -373,7 +392,7 @@ mod tests {
         assert!((d_m - 878_000.0).abs() < 20_000.0);
     }
 
-    /// Тест проверяем geo_radius через кластер
+    /// Тест для geo_radius: проверяем поиск точек в радиусе.
     #[test]
     fn test_cluster_geo_radius() {
         let cluster = make_cluster();
@@ -395,7 +414,7 @@ mod tests {
         assert!(!members.contains(&"far".to_string()));
     }
 
-    /// Проверяем geo_radius_by_member через кластер
+    /// Тест для geo_radius_by_member: поиск по существующему члену.
     #[test]
     fn test_cluster_geo_radius_by_member() {
         let cluster = make_cluster();
