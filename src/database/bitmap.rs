@@ -5,6 +5,18 @@
 
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
+/// Lookup-таблица для подсчёта битов в байте (0..=255)
+const BIT_COUNT_TABLE: [u8; 256] = [
+    0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
+    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
+    3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8,
+];
+
 /// Структура для хранения битов, реализованная как вектор байт.
 ///
 /// Позволяет работать с битами по индексам и выполнять побитовые
@@ -80,7 +92,40 @@ impl Bitmap {
         start: usize,
         end: usize,
     ) -> usize {
-        (start..end).filter(|&i| self.get_bit(i)).count()
+        let end = end.min(self.bit_len());
+        let start = start.min(end);
+        let start_byte = start / 8;
+        // end_byte — индекс первого «за» последним байтом диапазона
+        let end_byte = end.div_ceil(8);
+
+        // подсчёт дополнительных ссылок.
+        let mut count = self.bytes[start_byte..end_byte]
+            .iter()
+            .map(|&b| BIT_COUNT_TABLE[b as usize] as usize)
+            .sum();
+
+        // коррекция для неполных байтов на границах.
+        let start_bit = start % 8;
+        let end_bit = end % 8;
+
+        // если всё в одном байте, сразу точная маса
+        if start_byte == end_byte - 1 {
+            let mask = (0xFFu8 >> start_bit) & (0xFFu8 << (8 - end_bit));
+            return BIT_COUNT_TABLE[(self.bytes[start_byte] & mask) as usize] as usize;
+        }
+
+        // Первый байт (начиная с битa start_bit)
+        if start_bit != 0 {
+            let mask = 0xFFu8 >> start_bit;
+            count -= BIT_COUNT_TABLE[(self.bytes[start_byte] & !mask) as usize] as usize;
+        }
+
+        // Последний байт (заканчивая битом end_bit)
+        if end_bit != 0 {
+            let mask = 0xFFu8 << (8 - end_bit);
+            count -= BIT_COUNT_TABLE[(self.bytes[end_byte - 1] & !mask) as usize] as usize;
+        }
+        count
     }
 
     /// Возвращает длину битмапа в битах.
