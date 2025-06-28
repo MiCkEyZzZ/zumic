@@ -22,7 +22,7 @@ impl Bitmap {
 
     /// Создаёт Bitmap с заданной длиной в битах (все биты обнулены).
     pub fn with_capacity(bits: usize) -> Self {
-        let byte_len = (bits + 7) / 8;
+        let byte_len = bits.div_ceil(8);
         Self {
             bytes: vec![0u8; byte_len],
         }
@@ -80,13 +80,7 @@ impl Bitmap {
         start: usize,
         end: usize,
     ) -> usize {
-        let mut count = 0;
-        for i in start..end {
-            if self.get_bit(i) {
-                count += 1;
-            }
-        }
-        count
+        (start..end).filter(|&i| self.get_bit(i)).count()
     }
 
     /// Возвращает длину битмапа в битах.
@@ -109,12 +103,14 @@ impl BitAnd for &Bitmap {
         self,
         rhs: Self,
     ) -> Self::Output {
-        let len = self.bytes.len().min(rhs.bytes.len());
-        let mut result = vec![0u8; len];
-        for i in 0..len {
-            result[i] = self.bytes[i] & rhs.bytes[i];
+        Bitmap {
+            bytes: self
+                .bytes
+                .iter()
+                .zip(rhs.bytes.iter())
+                .map(|(a, b)| a & b)
+                .collect(),
         }
-        Bitmap { bytes: result }
     }
 }
 
@@ -126,11 +122,11 @@ impl BitOr for &Bitmap {
         rhs: Self,
     ) -> Self::Output {
         let len = self.bytes.len().max(rhs.bytes.len());
-        let mut result = vec![0u8; len];
+        let mut result = Vec::with_capacity(len);
         for i in 0..len {
-            let a = *self.bytes.get(i).unwrap_or(&0);
-            let b = *rhs.bytes.get(i).unwrap_or(&0);
-            result[i] = a | b;
+            let a = self.bytes.get(i).copied().unwrap_or(0);
+            let b = rhs.bytes.get(i).copied().unwrap_or(0);
+            result.push(a | b);
         }
         Bitmap { bytes: result }
     }
@@ -144,11 +140,11 @@ impl BitXor for &Bitmap {
         rhs: Self,
     ) -> Self::Output {
         let len = self.bytes.len().max(rhs.bytes.len());
-        let mut result = vec![0u8; len];
+        let mut result = Vec::with_capacity(len);
         for i in 0..len {
-            let a = *self.bytes.get(i).unwrap_or(&0);
-            let b = *rhs.bytes.get(i).unwrap_or(&0);
-            result[i] = a ^ b;
+            let a = self.bytes.get(i).copied().unwrap_or(0);
+            let b = rhs.bytes.get(i).copied().unwrap_or(0);
+            result.push(a ^ b);
         }
         Bitmap { bytes: result }
     }
@@ -158,7 +154,14 @@ impl Not for &Bitmap {
     type Output = Bitmap;
 
     fn not(self) -> Self::Output {
-        let result = self.bytes.iter().map(|b| !b).collect();
-        Bitmap { bytes: result }
+        Bitmap {
+            bytes: self.bytes.iter().map(|b| !b).collect(),
+        }
+    }
+}
+
+impl Default for Bitmap {
+    fn default() -> Self {
+        Self::new()
     }
 }
