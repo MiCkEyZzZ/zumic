@@ -1,6 +1,7 @@
 use super::{
     AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
-    FlushDbCommand, GetCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand,
+    FlushDbCommand, GeoAddCommand, GeoPosCommand, GeoRadiusByMemberCommand, GeoRadiusCommand,
+    GetCommand, GetDistCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand,
     HSetCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand,
     LPushCommand, LRangeCommand, MGetCommand, MSetCommand, RPopCommand, RPushCommand,
     RenameCommand, RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand,
@@ -64,6 +65,11 @@ pub enum Command {
     LLen(LLenCommand),
     LRange(LRangeCommand),
     Auth(AuthCommand),
+    GeoAdd(GeoAddCommand),
+    GeoDist(GetDistCommand),
+    GeoPos(GeoPosCommand),
+    GeoRadius(GeoRadiusCommand),
+    GeoRadiusByMember(GeoRadiusByMemberCommand),
 }
 
 impl CommandExecute for Command {
@@ -114,6 +120,11 @@ impl CommandExecute for Command {
             Command::LLen(cmd) => cmd.execute(store),
             Command::LRange(cmd) => cmd.execute(store),
             Command::Auth(cmd) => cmd.execute(store),
+            Command::GeoAdd(cmd) => cmd.execute(store),
+            Command::GeoDist(cmd) => cmd.execute(store),
+            Command::GeoPos(cmd) => cmd.execute(store),
+            Command::GeoRadius(cmd) => cmd.execute(store),
+            Command::GeoRadiusByMember(cmd) => cmd.execute(store),
         }
     }
 }
