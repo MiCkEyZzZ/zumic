@@ -165,3 +165,62 @@ impl Default for Bitmap {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_get_bit() {
+        let mut bitmap = Bitmap::new();
+        assert!(!bitmap.set_bit(5, true));
+        assert!(bitmap.get_bit(5));
+        assert!(bitmap.set_bit(5, false));
+        assert!(!bitmap.get_bit(5));
+    }
+
+    #[test]
+    fn test_bitcount() {
+        let mut bitmap = Bitmap::new();
+        bitmap.set_bit(0, true);
+        bitmap.set_bit(3, true);
+        bitmap.set_bit(15, true);
+        assert_eq!(bitmap.bitcount(0, 16), 3);
+        assert_eq!(bitmap.bitcount(4, 15), 0);
+    }
+
+    #[test]
+    fn test_bitop_and_or_xor() {
+        let mut a = Bitmap::new();
+        let mut b = Bitmap::new();
+
+        a.set_bit(1, true);
+        a.set_bit(3, true);
+        b.set_bit(3, true);
+        b.set_bit(4, true);
+
+        let and = &a & &b;
+        let or = &a | &b;
+        let xor = &a ^ &b;
+
+        assert!(and.get_bit(3));
+        assert!(!and.get_bit(1));
+        assert!(or.get_bit(1));
+        assert!(or.get_bit(4));
+        assert!(xor.get_bit(1));
+        assert!(!xor.get_bit(3));
+        assert!(xor.get_bit(4));
+    }
+
+    #[test]
+    fn test_bitop_not() {
+        let mut bitmap = Bitmap::with_capacity(8);
+        bitmap.set_bit(1, true);
+        bitmap.set_bit(7, true);
+        let not = &bitmap.not();
+
+        assert!(!not.get_bit(1));
+        assert!(not.get_bit(0));
+        assert!(!not.get_bit(7));
+    }
+}
