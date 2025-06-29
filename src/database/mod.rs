@@ -20,6 +20,7 @@
 
 pub mod bitmap;
 pub mod dict;
+pub mod expire;
 pub mod geo;
 pub mod hll;
 pub mod int_set;
@@ -37,6 +38,7 @@ pub mod types;
 // чтобы упростить доступ к ним из внешнего кода.
 pub use bitmap::*;
 pub use dict::*;
+pub use expire::*;
 pub use geo::*;
 pub use hll::*;
 pub use int_set::*;

@@ -483,7 +483,7 @@ impl TryFrom<u8> for AofOp {
 
 impl Drop for AofLog {
     fn drop(&mut self) {
-        // при дропе отсылаем сигнал остановки и ждём потока
+        // при drop отсылаем сигнал остановки и ждём потока
         if let Some(tx) = self.flusher_stop_tx.take() {
             let _ = tx.send(()); // сигнал на выход.
         }

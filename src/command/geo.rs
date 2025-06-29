@@ -1,7 +1,7 @@
 use super::CommandExecute;
 use crate::{GeoPoint, Sds, StorageEngine, StoreError, Value};
 
-/// Комманда `GEOADD key lon lat member [lon lat member ...]`
+/// Команда `GEOADD key lon lat member [lon lat member ...]`
 ///
 /// Добавляет одну или несколько точек в гео-набор под ключом
 /// `key`. Для каждого `member` вычисляет geohash и сохраняет
@@ -10,7 +10,7 @@ use crate::{GeoPoint, Sds, StorageEngine, StoreError, Value};
 #[derive(Debug)]
 pub struct GeoAddCommand {
     pub key: String,
-    /// Срез трёхкортежей (lon, lat, member)
+    /// Срез трёх кортежей (lon, lat, member)
     pub points: Vec<(f64, f64, String)>,
 }
 
@@ -33,7 +33,7 @@ impl CommandExecute for GeoAddCommand {
 
 /// Команда `GEODIST key member1 member2 [unit]`
 ///
-/// Вовзращает расстояние между `member1` и `member2`
+/// Возвращает расстояние между `member1` и `member2`
 /// в единицах `unit` (`m`, `km`, `mi`, `ft`), по умолчанию
 /// метры.
 /// Если один из членов не найден — возвращает `Null`.
@@ -65,7 +65,7 @@ impl CommandExecute for GetDistCommand {
 
 /// Команда `GEOPOS key member [member ...]`
 ///
-/// Вовзращает для каждого `member` координаты
+/// Возвращает для каждого `member` координаты
 /// `[lon, lat]`, или `Null`, если  не найден.
 #[derive(Debug)]
 pub struct GeoPosCommand {
@@ -98,7 +98,7 @@ impl CommandExecute for GeoPosCommand {
 /// Команда `GEORADIUS key lon lat radius [uint]`
 ///
 /// Ищет всех членов в радиусе `radius` вокруг точки `(lon, lat)`.
-/// Возврвщает массив членов, опционально можно расширить до `[member, dist, lon, lat]`.
+/// Возвращает массив членов, опционально можно расширить до `[member, dist, lon, lat]`.
 #[derive(Debug)]
 pub struct GeoRadiusCommand {
     pub key: String,

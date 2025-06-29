@@ -1,8 +1,8 @@
 //! Hash table (Dict) with incremental rehashing.
 //!
-//! Implementation of a dictionary (associative array) based on a
-//! chained hash table with two tables and smooth
-//! rehashing without pauses.
+//! Implementation of a dictionary (associative array)
+//! based on a chained hash table with two tables and
+//! smooth rehashing without pauses.
 
 use std::{
     collections::hash_map::DefaultHasher,
