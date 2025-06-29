@@ -63,3 +63,9 @@ impl ExpireMap {
         expired
     }
 }
+
+impl Default for ExpireMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
