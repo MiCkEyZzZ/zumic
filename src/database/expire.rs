@@ -106,3 +106,75 @@ impl Default for ExpireMap {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::thread::sleep;
+
+    use super::*;
+
+    fn key(s: &str) -> Vec<u8> {
+        s.as_bytes().to_vec()
+    }
+
+    #[test]
+    fn test_set_and_get() {
+        let mut map = ExpireMap::new();
+        map.set(key("foo"), Duration::from_secs(1));
+
+        assert!(map.get(b"foo"));
+        assert!(!map.get(b"bar"));
+    }
+
+    #[test]
+    fn test_expire_after_duration() {
+        let mut map = ExpireMap::new();
+        map.set(key("expiring"), Duration::from_millis(100));
+
+        assert!(map.get(b"expiring"));
+        sleep(Duration::from_millis(120));
+        assert!(!map.get(b"expiring"));
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut map = ExpireMap::new();
+        map.set(key("delete_me"), Duration::from_secs(10));
+        assert!(map.get(b"delete_me"));
+
+        map.remove(b"delete_me");
+        assert!(!map.get(b"delete_me"));
+    }
+
+    #[test]
+    fn test_purge_returns_expired_keys() {
+        let mut map = ExpireMap::new();
+        map.set(key("a"), Duration::from_millis(50));
+        map.set(key("b"), Duration::from_secs(1));
+
+        sleep(Duration::from_millis(70));
+        let expired = map.purge();
+
+        assert!(expired.contains(&key("a")));
+        assert!(!expired.contains(&key("b")));
+        assert!(!map.get(b"a"));
+        assert!(map.get(b"b"));
+    }
+
+    #[test]
+    fn test_reinsert_key_updates_deadline() {
+        let mut map = ExpireMap::new();
+        map.set(key("foo"), Duration::from_millis(50));
+        sleep(Duration::from_millis(30));
+        map.set(key("foo"), Duration::from_secs(1));
+
+        sleep(Duration::from_millis(40));
+        assert!(map.get(b"foo"));
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let mut map: ExpireMap = Default::default();
+        assert!(!map.get(b"nope"));
+    }
+}
