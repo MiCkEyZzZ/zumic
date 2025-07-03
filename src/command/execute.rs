@@ -1,12 +1,13 @@
 use super::{
-    AppendCommand, AuthCommand, DecrByCommand, DecrCommand, DelCommand, ExistsCommand,
-    FlushDbCommand, GeoAddCommand, GeoPosCommand, GeoRadiusByMemberCommand, GeoRadiusCommand,
-    GetCommand, GetDistCommand, GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand,
-    HSetCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand,
-    LPushCommand, LRangeCommand, MGetCommand, MSetCommand, RPopCommand, RPushCommand,
-    RenameCommand, RenameNxCommand, SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand,
-    SRemCommand, SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand,
-    ZCardCommand, ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
+    AppendCommand, AuthCommand, BitCountCommand, BitOpCommand, DecrByCommand, DecrCommand,
+    DelCommand, ExistsCommand, FlushDbCommand, GeoAddCommand, GeoPosCommand,
+    GeoRadiusByMemberCommand, GeoRadiusCommand, GetBitCommand, GetCommand, GetDistCommand,
+    GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand, IncrByCommand,
+    IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand, LPushCommand, LRangeCommand,
+    MGetCommand, MSetCommand, RPopCommand, RPushCommand, RenameCommand, RenameNxCommand,
+    SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand, SetBitCommand,
+    SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand,
+    ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 use crate::{StorageEngine, StoreError, Value};
 
@@ -70,6 +71,10 @@ pub enum Command {
     GeoPos(GeoPosCommand),
     GeoRadius(GeoRadiusCommand),
     GeoRadiusByMember(GeoRadiusByMemberCommand),
+    SetBit(SetBitCommand),
+    GetBit(GetBitCommand),
+    BitCount(BitCountCommand),
+    BitOp(BitOpCommand),
 }
 
 impl CommandExecute for Command {
@@ -125,6 +130,10 @@ impl CommandExecute for Command {
             Command::GeoPos(cmd) => cmd.execute(store),
             Command::GeoRadius(cmd) => cmd.execute(store),
             Command::GeoRadiusByMember(cmd) => cmd.execute(store),
+            Command::SetBit(cmd) => cmd.execute(store),
+            Command::GetBit(cmd) => cmd.execute(store),
+            Command::BitCount(cmd) => cmd.execute(store),
+            Command::BitOp(cmd) => cmd.execute(store),
         }
     }
 }

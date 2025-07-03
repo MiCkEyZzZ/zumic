@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     dict::Dict, hll::Hll, quicklist::QuickList, sds::Sds, skiplist::SkipList,
-    smart_hash::SmartHash, stream::StreamEntry,
+    smart_hash::SmartHash, stream::StreamEntry, Bitmap,
 };
 
 /// Представляет универсальное значение в движке хранения данных.
@@ -55,6 +55,8 @@ pub enum Value {
     HyperLogLog(Box<Hll>),
     /// Поток записей, каждая из которых идентифицируется ID и набором полей.
     SStream(Vec<StreamEntry>),
+    /// Битовый массив для команд SETBIT/GETBIT/BITCOUNT/BITOP
+    Bitmap(Bitmap),
 }
 
 impl Value {

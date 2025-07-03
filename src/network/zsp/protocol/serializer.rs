@@ -82,7 +82,11 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
                 .collect();
             ZspFrame::Array(frames)
         }
+
+        Value::Bitmap(bmp) => ZspFrame::BinaryString(Some(bmp.as_bytes().to_vec())),
+
         Value::HyperLogLog(_) => ZspFrame::InlineString("Hll(NotImplemented)".into()),
+
         Value::SStream(_) => ZspFrame::InlineString("SStream(NotImplemented)".into()),
     }
 }

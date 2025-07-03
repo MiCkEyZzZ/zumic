@@ -1,4 +1,4 @@
-.PHONY: build fmt check clippy test bench clean help
+.PHONY: build fmt check clippy test bench clean help fmt-toml check-toml
 
 build: ## Собрать проект в debug-режиме
 	cargo build
@@ -16,6 +16,10 @@ bench: ## Запустить бенчмарк (требует ночной сб�
 	cargo bench
 clean: ## Очистить проект
 	cargo clean
+fmt-toml: ## Отформатируйте все файлы TOML.
+	taplo format
+check-toml: ## Проверьте все файлы TOML.
+	taplo format --check
 
 help: ## Показать доступные команды
 	@echo "Доступные команды:"
@@ -27,3 +31,5 @@ help: ## Показать доступные команды
 	@echo "  make test        - запуск тестов"
 	@echo "  make bench       - запуск бенчмарков"
 	@echo "  make clean       - очистка сборки"
+	@echo "  make fmt-toml    - форматирование всех файлов TOML"
+	@echo "  make check-toml  - проверка всех файлов TOML"

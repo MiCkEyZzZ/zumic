@@ -15,10 +15,10 @@ use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BOOL, TAG_COMPRESSED, TAG_EOF,
-    TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
+    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED,
+    TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
-use crate::{Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
+use crate::{database::Bitmap, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
 /// Итератор по парам <Key, Value> из потокового дампа.
 ///
@@ -150,6 +150,15 @@ pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
                 items.push(read_value(r)?);
             }
             Ok(Value::Array(items))
+        }
+
+        TAG_BITMAP => {
+            let byte_len = r.read_u32::<BigEndian>()? as usize;
+            let mut buf = vec![0u8; byte_len];
+            r.read_exact(&mut buf)?;
+            let mut bmp = Bitmap::new();
+            bmp.bytes = buf;
+            Ok(Value::Bitmap(bmp))
         }
 
         other => Err(std::io::Error::new(

@@ -59,6 +59,7 @@ impl TryFrom<Value> for ZspFrame<'_> {
             Value::ZSet { dict, .. } => convert_zset(dict),
             Value::Null => Ok(ZspFrame::Null),
             Value::Array(arr) => convert_array(arr),
+            Value::Bitmap(bmp) => Ok(ZspFrame::BinaryString(Some(bmp.as_bytes().to_vec()))),
             Value::HyperLogLog(_) | Value::SStream(_) => Err("Unsupported data type".into()),
         }
     }

@@ -31,3 +31,5 @@ pub const TAG_COMPRESSED: u8 = 0x0C;
 pub const TAG_EOF: u8 = 0xFF;
 /// Общий массив произвольных значений (`Value::Array`)
 pub const TAG_ARRAY: u8 = 0x0D;
+/// Битовый массив (`Value::Bitmap`)
+pub const TAG_BITMAP: u8 = 0x0E;

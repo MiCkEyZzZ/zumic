@@ -11,9 +11,9 @@ use byteorder::{BigEndian, WriteBytesExt};
 use crc32fast::Hasher;
 
 use super::{
-    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BOOL, TAG_COMPRESSED,
-    TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET, TAG_SSTREAM,
-    TAG_STR, TAG_ZSET,
+    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL,
+    TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET,
+    TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
 use crate::{Sds, Value};
 
@@ -146,6 +146,13 @@ pub fn write_value_inner<W: Write>(
                     write_value(w, val)?;
                 }
             }
+            Ok(())
+        }
+        Value::Bitmap(bm) => {
+            w.write_u8(TAG_BITMAP)?;
+            let bytes = bm.as_bytes();
+            w.write_u32::<BigEndian>(bytes.len() as u32)?;
+            w.write_all(bytes)?;
             Ok(())
         }
     }

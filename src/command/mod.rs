@@ -16,6 +16,7 @@
 
 pub mod auth;
 pub mod basic;
+pub mod bitmap;
 pub mod execute;
 pub mod float;
 pub mod geo;
@@ -30,6 +31,7 @@ pub mod zset;
 // чтобы упростить доступ к ним из внешнего кода.
 pub use auth::*;
 pub use basic::*;
+pub use bitmap::*;
 pub use execute::*;
 pub use float::*;
 pub use geo::*;

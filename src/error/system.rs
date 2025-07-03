@@ -73,4 +73,7 @@ pub enum StoreError {
 
     #[error("Serialization or deserialization failed: {0}")]
     SerdeError(String),
+
+    #[error("Unknown BITOP: {0}")]
+    Syntax(String),
 }

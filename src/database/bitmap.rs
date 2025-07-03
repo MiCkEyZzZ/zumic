@@ -11,6 +11,8 @@
 
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
+use serde::{Deserialize, Serialize};
+
 /// Lookup-таблица для подсчёта количества установленных битов
 /// в байтах от 0 до 255.
 const BIT_COUNT_TABLE: [u8; 256] = [
@@ -28,9 +30,9 @@ const BIT_COUNT_TABLE: [u8; 256] = [
 ///
 /// Используется для хранения и обработки битов с возможностью
 /// побитовых операций и подсчёта.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Bitmap {
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
 }
 
 impl Bitmap {
