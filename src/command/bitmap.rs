@@ -110,3 +110,188 @@ impl CommandExecute for BitOpCommand {
         Ok(Value::Int(result.bit_len() as i64))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::InMemoryStore;
+
+    use super::*;
+
+    #[test]
+    fn test_setbit_and_getbit() {
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
+        let key = "foo".to_string();
+
+        // изначально бита нет => old = 0
+        let set0 = SetBitCommand {
+            key: key.clone(),
+            offset: 5,
+            value: true,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(set0, Value::Int(0));
+
+        // теперь бит установлен => old = 1
+        let set1 = SetBitCommand {
+            key: key.clone(),
+            offset: 5,
+            value: false,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(set1, Value::Int(1));
+
+        // GETBIT должен вернуть текущее значение (0)
+        let get = GetBitCommand {
+            key: key.clone(),
+            offset: 5,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(get, Value::Int(0));
+
+        // GETBIT вне диапазона всегда 0
+        let get2 = GetBitCommand {
+            key: key.clone(),
+            offset: 100,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(get2, Value::Int(0));
+    }
+
+    #[test]
+    fn test_bitcount_range() {
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
+        let key = "bar".to_string();
+
+        // установим биты 0, 3, 7
+        for &off in &[0, 3, 7] {
+            SetBitCommand {
+                key: key.clone(),
+                offset: off,
+                value: true,
+            }
+            .execute(&mut store)
+            .unwrap();
+        }
+
+        // считаем с 0 до 8 -> должно быть 3
+        let cnt_all = BitCountCommand {
+            key: key.clone(),
+            start: 0,
+            end: 8,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(cnt_all, Value::Int(3));
+
+        // с 1 до 3 -> только бит 3 -> 1
+        let cnt_sub = BitCountCommand {
+            key: key.clone(),
+            start: 1,
+            end: 4,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(cnt_sub, Value::Int(1));
+    }
+
+    #[test]
+    fn test_bitop_commands() {
+        let mut store = StorageEngine::Memory(InMemoryStore::new());
+
+        // A = 1010 (bits 1,3), B = 0110 (bits 1,2)
+        let key_a = "A".to_string();
+        let key_b = "B".to_string();
+        for &off in &[1, 3] {
+            SetBitCommand {
+                key: key_a.clone(),
+                offset: off,
+                value: true,
+            }
+            .execute(&mut store)
+            .unwrap();
+        }
+        for &off in &[1, 2] {
+            SetBitCommand {
+                key: key_b.clone(),
+                offset: off,
+                value: true,
+            }
+            .execute(&mut store)
+            .unwrap();
+        }
+
+        // NOT A => 0101… length = 4
+        let not_len = BitOpCommand {
+            op: "NOT".into(),
+            dest: "X".into(),
+            keys: vec![key_a.clone()],
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(not_len, Value::Int(8)); // битовая длина байта = 8
+
+        // AND => bits {1}
+        BitOpCommand {
+            op: "AND".into(),
+            dest: "AND".into(),
+            keys: vec![key_a.clone(), key_b.clone()],
+        }
+        .execute(&mut store)
+        .unwrap();
+        let and_cnt = BitCountCommand {
+            key: "AND".into(),
+            start: 0,
+            end: 8,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(and_cnt, Value::Int(1));
+
+        // OR => bits {1,2,3} => 3
+        BitOpCommand {
+            op: "OR".into(),
+            dest: "OR".into(),
+            keys: vec![key_a.clone(), key_b.clone()],
+        }
+        .execute(&mut store)
+        .unwrap();
+        let or_cnt = BitCountCommand {
+            key: "OR".into(),
+            start: 0,
+            end: 8,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(or_cnt, Value::Int(3));
+
+        // XOR => bits {2,3} => 2
+        BitOpCommand {
+            op: "XOR".into(),
+            dest: "XOR".into(),
+            keys: vec![key_a.clone(), key_b.clone()],
+        }
+        .execute(&mut store)
+        .unwrap();
+        let xor_cnt = BitCountCommand {
+            key: "XOR".into(),
+            start: 0,
+            end: 8,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(xor_cnt, Value::Int(2));
+
+        // неизвестная операция
+        let err = BitOpCommand {
+            op: "FOO".into(),
+            dest: "Z".into(),
+            keys: vec![key_a.clone()],
+        }
+        .execute(&mut store);
+        assert!(err.is_err());
+    }
+}

@@ -129,38 +129,40 @@ impl Bitmap {
     ) -> usize {
         let end = end.min(self.bit_len());
         let start = start.min(end);
+        if start >= end {
+            return 0;
+        }
+
         let start_byte = start / 8;
-        // end_byte — индекс первого «за» последним байтом диапазона
-        let end_byte = end.div_ceil(8);
+        let end_byte = (end - 1) / 8;
 
-        // подсчёт дополнительных ссылок.
-        let mut count = self.bytes[start_byte..end_byte]
-            .iter()
-            .map(|&b| BIT_COUNT_TABLE[b as usize] as usize)
-            .sum();
-
-        // коррекция для неполных байтов на границах.
-        let start_bit = start % 8;
-        let end_bit = end % 8;
-
-        // если всё в одном байте, сразу точная масса
-        if start_byte == end_byte - 1 {
-            let mask = (0xFFu8 >> start_bit) & (0xFFu8 << (8 - end_bit));
+        // Если всё в одном байте, применяем один маск
+        if start_byte == end_byte {
+            let sb = start % 8;
+            let eb = end % 8;
+            // для eb==0 считаем, что нужно взять все биты до конца байта
+            let mask = if eb == 0 {
+                0xFFu8 >> sb
+            } else {
+                (0xFFu8 >> sb) & (0xFFu8 << (8 - eb))
+            };
             return BIT_COUNT_TABLE[(self.bytes[start_byte] & mask) as usize] as usize;
         }
 
-        // Первый байт (начиная с бита start_bit)
-        if start_bit != 0 {
-            let mask = 0xFFu8 >> start_bit;
-            count -= BIT_COUNT_TABLE[(self.bytes[start_byte] & !mask) as usize] as usize;
+        // Первый (частичный) байт
+        let sb = start % 8;
+        let first_mask = 0xFFu8 >> sb;
+        let mut count = BIT_COUNT_TABLE[(self.bytes[start_byte] & first_mask) as usize] as usize;
+
+        // Все целые байты между
+        for &b in &self.bytes[start_byte + 1..end_byte] {
+            count += BIT_COUNT_TABLE[b as usize] as usize;
         }
 
-        // Последний байт (заканчивая битом end_bit)
-        if end_bit != 0 {
-            let mask = 0xFFu8 << (8 - end_bit);
-            count -= BIT_COUNT_TABLE[(self.bytes[end_byte - 1] & !mask) as usize] as usize;
-        }
-        count
+        // Последний (частичный) байт
+        let eb = end % 8;
+        let last_mask = if eb == 0 { 0xFFu8 } else { 0xFFu8 << (8 - eb) };
+        count + BIT_COUNT_TABLE[(self.bytes[end_byte] & last_mask) as usize] as usize
     }
 
     /// Возвращает длину битового массива в битах (всегда кратно 8).
