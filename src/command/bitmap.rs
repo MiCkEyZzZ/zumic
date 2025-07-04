@@ -117,6 +117,9 @@ mod tests {
 
     use super::*;
 
+    /// Тест проверяет корректность установки и получения значения бита.
+    /// - Устанавливает бит и ожидает старое значение.
+    /// - Получает текущие значения установленных и неустановленных битов.
     #[test]
     fn test_setbit_and_getbit() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());
@@ -161,6 +164,9 @@ mod tests {
         assert_eq!(get2, Value::Int(0));
     }
 
+    /// Тест проверяет подсчёт количества установленных битов в заданном диапазоне.
+    /// - Устанавливает биты в определённых позициях.
+    /// - Проверяет bitcount для полного и частичного диапазона.
     #[test]
     fn test_bitcount_range() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());
@@ -198,6 +204,10 @@ mod tests {
         assert_eq!(cnt_sub, Value::Int(1));
     }
 
+    /// Тест проверяет побитовые операции: NOT, AND, OR, XOR.
+    /// - Устанавливает два битмапа и выполняет операции.
+    /// - Проверяет результат через подсчёт установленных битов.
+    /// - Также проверяет обработку некорректной операции.
     #[test]
     fn test_bitop_commands() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());

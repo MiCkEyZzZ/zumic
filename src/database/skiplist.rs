@@ -279,7 +279,7 @@ where
     }
 
     /// Возвращает итератор по (&K, &V) в порядке возрастания ключа.
-    pub fn iter(&self) -> SkipListIter<K, V> {
+    pub fn iter<'a>(&'a self) -> SkipListIter<'a, K, V> {
         SkipListIter {
             current: self.head.forward[0],
             _marker: PhantomData,
@@ -287,8 +287,7 @@ where
     }
 
     /// Возвращает итератор по элементам в обратном порядке.
-    pub fn iter_rev(&self) -> ReverseIter<K, V> {
-        // Определяем хвост, используя метод last_node()
+    pub fn iter_rev<'a>(&'a self) -> ReverseIter<'a, K, V> {
         ReverseIter {
             current: self.last_node(),
             head: self.head.as_ref() as *const Node<K, V>,
@@ -297,11 +296,11 @@ where
     }
 
     /// Возвращает итератор по диапазону: от ключа `start` до ключа `end` (не включая end).
-    pub fn range(
-        &self,
+    pub fn range<'a>(
+        &'a self,
         start: &K,
         end: &K,
-    ) -> RangeIter<K, V> {
+    ) -> RangeIter<'a, K, V> {
         unsafe {
             let mut current = self.head.as_ref();
 

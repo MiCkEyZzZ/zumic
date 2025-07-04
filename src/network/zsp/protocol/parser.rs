@@ -94,6 +94,7 @@ fn parse_from_str_command(
             Ok(ZSPCommand::Del { key })
         }
         "mset" => {
+            #[allow(clippy::manual_is_multiple_of)]
             if items.len() < 3 || items.len() % 2 == 0 {
                 return Err(ParseError::MSetWrongArgCount);
             }

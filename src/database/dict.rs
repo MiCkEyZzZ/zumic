@@ -217,7 +217,7 @@ where
         self.rehash_idx = -1;
     }
 
-    pub fn iter(&self) -> DictIter<K, V> {
+    pub fn iter<'a>(&'a self) -> DictIter<'a, K, V> {
         DictIter {
             tables: [&self.ht[0], &self.ht[1]],
             table_idx: 0,
