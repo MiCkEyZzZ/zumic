@@ -201,6 +201,9 @@ mod tests {
         engine
     }
 
+    /// Тест проверяет, что команда `GEOADD`:
+    /// - добавляет новые точки и возвращает число добавленных
+    /// - при повторной вставке тех же точек возвращает 0
     #[test]
     fn test_geoadd_command() {
         let mut engine = StorageEngine::Memory(InMemoryStore::new());
@@ -218,6 +221,9 @@ mod tests {
         assert_eq!(res2, Value::Int(0));
     }
 
+    /// Тест проверяет, что команда `GEODIST`:
+    /// - правильно считает расстояние между двумя точками
+    /// - возвращает `Null`, если один из участников не найден
     #[test]
     fn test_geodist_command() {
         let mut engine = setup_store();
@@ -245,6 +251,9 @@ mod tests {
         assert_eq!(cmd2.execute(&mut engine).unwrap(), Value::Null);
     }
 
+    /// Тест проверяет, что команда `GEOPOS`:
+    /// - возвращает координаты существующего участника
+    /// - возвращает `Null`, если участник не найден
     #[test]
     fn test_geopos_command() {
         let mut engine = setup_store();
@@ -265,6 +274,9 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что команда `GEORADIUS`:
+    /// - возвращает всех участников в радиусе 200м от заданной точки
+    /// - включены origin, east, north
     #[test]
     fn test_georadius_command() {
         let mut engine = setup_store();
@@ -300,6 +312,9 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что команда `GEORADIUSBYMEMBER`:
+    /// - использует координаты указанного участника (origin)
+    /// - возвращает участников в радиусе 200м от него
     #[test]
     fn test_georadiusbymember_command() {
         let mut engine = setup_store();
