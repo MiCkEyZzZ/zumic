@@ -99,21 +99,21 @@ mod tests {
 
     use super::*;
 
-    /// Проверяет сериализацию `Response::Ok` в `ZspFrame::InlineString("OK")`
+    /// Тест проверяет сериализацию `Response::Ok` в `ZspFrame::InlineString("OK")`
     #[test]
     fn test_serialize_ok() {
         let frame = serialize_response(Response::Ok);
         assert_eq!(frame, ZspFrame::InlineString("OK".into()));
     }
 
-    /// Проверяет сериализацию `Response::Error("fail")` в `ZspFrame::FrameError("fail")`
+    /// Тест проверяет сериализацию `Response::Error("fail")` в `ZspFrame::FrameError("fail")`
     #[test]
     fn test_serialize_error() {
         let frame = serialize_response(Response::Error("fail".into()));
         assert_eq!(frame, ZspFrame::FrameError("fail".into()));
     }
 
-    /// Проверяет сериализацию `Value::Str` в `ZspFrame::BinaryString`
+    /// Тест проверяет сериализацию `Value::Str` в `ZspFrame::BinaryString`
     #[test]
     fn test_serialize_str() {
         let value = Value::Str(Sds::from_str("hello"));
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    /// Проверяет сериализацию `Value::Int` в `ZspFrame::Integer`
+    /// Тест проверяет сериализацию `Value::Int` в `ZspFrame::Integer`
     #[test]
     fn test_serialize_int() {
         let value = Value::Int(123);
@@ -129,7 +129,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Integer(123));
     }
 
-    /// Проверяет сериализацию `Value::Float` в `ZspFrame::Float`
+    /// Тест проверяет сериализацию `Value::Float` в `ZspFrame::Float`
     #[test]
     fn test_serialize_float() {
         let value = Value::Float(2.14);
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(2.14));
     }
 
-    /// Проверяет сериализацию `Value::Null` в `ZspFrame::Null`
+    /// Тест проверяет сериализацию `Value::Null` в `ZspFrame::Null`
     #[test]
     fn test_serialize_null() {
         let value = Value::Null;
@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Null);
     }
 
-    /// Проверяет сериализацию `Value::List` (QuickList) в `ZspFrame::Array`
+    /// Тест проверяет сериализацию `Value::List` (QuickList) в `ZspFrame::Array`
     #[test]
     fn test_serialize_list() {
         let mut list = QuickList::new(4);
@@ -163,7 +163,7 @@ mod tests {
         );
     }
 
-    /// Проверяет сериализацию `Value::Set` (HashSet) в `ZspFrame::Array` со строками
+    /// Тест проверяет сериализацию `Value::Set` (HashSet) в `ZspFrame::Array` со строками
     #[test]
     fn test_serialize_set() {
         let mut set = HashSet::new();
@@ -188,7 +188,7 @@ mod tests {
         }
     }
 
-    /// Проверяет сериализацию `Value::Hash` (SmartHash) в `ZspFrame::Dictionary`
+    /// Тест проверяет сериализацию `Value::Hash` (SmartHash) в `ZspFrame::Dictionary`
     #[test]
     fn test_serialize_hash() {
         let mut sh = SmartHash::new();
@@ -207,7 +207,7 @@ mod tests {
         }
     }
 
-    /// Проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZspFrame::ZSet`
+    /// Тест проверяет сериализацию `Value::ZSet` (dict + SkipList) в `ZspFrame::ZSet`
     #[test]
     fn test_serialize_zset() {
         let mut dict = Dict::new();
@@ -230,7 +230,7 @@ mod tests {
         }
     }
 
-    /// Проверяет сериализацию `Value::HyperLogLog` в `ZspFrame::InlineString("HLL(NotImplemented)")`
+    /// Тест проверяет сериализацию `Value::HyperLogLog` в `ZspFrame::InlineString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
         let hll = Hll { data: [0; 12288] };
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::InlineString("Hll(NotImplemented)".into()));
     }
 
-    /// Проверяет сериализацию `Value::SStream` в `ZspFrame::InlineString("SStream(NotImplemented)")`
+    /// Тест проверяет сериализацию `Value::SStream` в `ZspFrame::InlineString("SStream(NotImplemented)")`
     #[test]
     fn test_serialize_sstream() {
         let value = Value::SStream(vec![]);

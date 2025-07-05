@@ -5,8 +5,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::{Broker, Subscription};
 
-// Подставьте здесь ваше имя крайта и пути к модулям:
-
 fn bench_subscribe(c: &mut Criterion) {
     let broker = Broker::new(100);
     c.bench_function("subscribe", |b| {

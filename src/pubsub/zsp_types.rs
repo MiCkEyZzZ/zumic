@@ -5,9 +5,11 @@
 //! а также конверсии из внутренних типов, таких как `Value`,
 //! `Sds`, `SmartHash` и других.
 
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+};
 
 use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
@@ -132,7 +134,7 @@ mod tests {
 
     use super::*;
 
-    /// Пример теста для проверки конвертации Value::Hash (теперь с SmartHash)
+    /// Тест проверяет конвертации Value::Hash (теперь с SmartHash)
     #[test]
     fn test_convert_smart_hash() {
         // Создаем SmartHash с несколькими записями.
@@ -155,7 +157,7 @@ mod tests {
         }
     }
 
-    /// Тестирует обработку Sds как с допустимыми данными UTF-8, так и с двоичными данными.
+    /// Тест проверяет обработку Sds как с допустимыми данными UTF-8, так и с двоичными данными.
     #[test]
     fn handle_sds_utf8_and_binary() {
         let utf8 = Sds::from_str("hello");
@@ -167,7 +169,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(bin.to_vec())));
     }
 
-    /// Тестирует преобразование QuickList<Sds> в ZspFrame::Array BinaryStrings.
+    /// Тест проверяет преобразование QuickList<Sds> в ZspFrame::Array BinaryStrings.
     #[test]
     fn convert_quicklist_to_array() {
         let mut ql = QuickList::new(16);
@@ -192,7 +194,7 @@ mod tests {
         }
     }
 
-    /// Тестирует преобразование HashSet<String> в ZSPFrame::Array InlineStrings.
+    /// Тест проверяет преобразование HashSet<String> в ZSPFrame::Array InlineStrings.
     #[test]
     fn convert_hashset_order_independent() {
         let mut hs = HashSet::new();
@@ -216,7 +218,7 @@ mod tests {
         }
     }
 
-    /// Тестирует TryFrom<Value> для ZspFrame с различными типами, такими как Int и Null.
+    /// Тест проверяет TryFrom<Value> для ZspFrame с различными типами, такими как Int и Null.
     #[test]
     fn try_from_value_various() {
         assert_eq!(
@@ -226,7 +228,7 @@ mod tests {
         assert_eq!(ZspFrame::try_from(Value::Null).unwrap(), ZspFrame::Null);
     }
 
-    /// Тестирует преобразование ZSet (HashMap<Sds, f64>) в ZspFrame::ZSet.
+    /// Тест проверяет преобразование ZSet (HashMap<Sds, f64>) в ZspFrame::ZSet.
     #[test]
     fn convert_zset_to_frame() {
         let mut zs = Dict::new();
@@ -245,7 +247,7 @@ mod tests {
         }
     }
 
-    /// Проверяет TryFrom<Value::Str> как на допустимые, так и на недопустимые UTF-8 Sds.
+    /// Тест проверяет TryFrom<Value::Str> как на допустимые, так и на недопустимые UTF-8 Sds.
     #[test]
     fn try_from_value_str_valid_and_invalid_utf8() {
         let valid = Sds::from_str("abc");
@@ -260,7 +262,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(invalid.to_vec())));
     }
 
-    /// Тестовое преобразование пустого Quicklist в пустой фрейм массива.
+    /// Тест проверяет преобразование пустого Quicklist в пустой фрейм массива.
     #[test]
     fn test_empty_quicklist() {
         let ql = QuickList::new(16);
@@ -268,7 +270,7 @@ mod tests {
         assert_eq!(zsp, ZspFrame::Array(vec![]));
     }
 
-    /// Тестовое преобразование пустого HashSet в пустой фрейм массива.
+    /// Тест проверяет преобразование пустого HashSet в пустой фрейм массива.
     #[test]
     fn convert_empty_hashset() {
         let hs = HashSet::new();
@@ -276,7 +278,7 @@ mod tests {
         assert_eq!(zsp, ZspFrame::Array(vec![]));
     }
 
-    /// Тестовое преобразование пустого HashMap в пустой фрейм словаря.
+    /// Тест проверяет преобразование пустого HashMap в пустой фрейм словаря.
     #[test]
     fn convert_empty_hashmap() {
         let hm: HashMap<Sds, Sds> = HashMap::new();
@@ -285,7 +287,7 @@ mod tests {
         assert_eq!(zsp, ZspFrame::Dictionary(HashMap::new()));
     }
 
-    /// Проверьте, что преобразование HashMap с недопустимым ключом UTF-8 возвращает ошибку.
+    /// Тест проверяет, что преобразование HashMap с недопустимым ключом UTF-8 возвращает ошибку.
     #[test]
     fn convert_hashmap_with_invalid_utf8_key() {
         let mut hm = HashMap::new();
@@ -295,7 +297,7 @@ mod tests {
         assert!(err.contains("Invalid hash key"));
     }
 
-    /// Проверьте, что преобразование ZSet с недопустимым ключом UTF-8 возвращает ошибку.
+    /// Тест проверяет, что преобразование ZSet с недопустимым ключом UTF-8 возвращает ошибку.
     #[test]
     fn convert_zset_with_invalid_utf8_key() {
         let mut zs = Dict::new();
@@ -305,7 +307,7 @@ mod tests {
         assert!(err.contains("ZSet key error"));
     }
 
-    /// Проверяем, что Sds преобразуется в BinaryString с помощью `From` impl.
+    /// Тест проверяет, что Sds преобразуется в BinaryString с помощью `From` impl.
     #[test]
     fn arcbytes_into_binarytring() {
         let arc = Sds::from_str("hello");

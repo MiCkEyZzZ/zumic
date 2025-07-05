@@ -26,7 +26,7 @@ pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
 mod tests {
     use super::*;
 
-    /// Проверяет, что первый вызов создаёт `Arc<str>` с правильным содержимым,
+    /// Тест проверяет, что первый вызов создаёт `Arc<str>` с правильным содержимым,
     /// а повторный вызов возвращает тот же самый объект (без копирования).
     #[test]
     fn intern_new_and_repeats() {
@@ -39,7 +39,7 @@ mod tests {
         assert!(Arc::ptr_eq(&a1, &a2), "Should return the same Arc instance");
     }
 
-    /// Проверяет, что разные имена каналов дают разные `Arc<str>`.
+    /// Тест проверяет, что разные имена каналов дают разные `Arc<str>`.
     #[test]
     fn intern_different_keys() {
         // Два разных имени → два разных Arc
@@ -53,7 +53,7 @@ mod tests {
         );
     }
 
-    /// Проверяет, что `String` и строковый литерал с одинаковым содержимым
+    /// Тест проверяет, что `String` и строковый литерал с одинаковым содержимым
     /// интернируются в один и тот же `Arc<str>`.
     #[test]
     fn intern_mixed_static_and_string() {
@@ -64,7 +64,7 @@ mod tests {
         assert!(Arc::ptr_eq(&a1, &a2), "Arc instances should be identical");
     }
 
-    /// Проверяет, что параллельные вызовы `intern_channel`
+    /// Тест проверяет, что параллельные вызовы `intern_channel`
     /// с одним и тем же ключом из разных потоков возвращают один и тот же `Arc<str>`.
     #[test]
     fn intern_concurrent() {

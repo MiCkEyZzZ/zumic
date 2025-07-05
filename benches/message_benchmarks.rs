@@ -5,8 +5,6 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use zumic::Message;
 
-// Предполагаем, что ваш crate называется `pubsub` и там лежит модуль message
-
 fn bench_new_string_vec(c: &mut Criterion) {
     let payload = vec![42u8; 1024];
     c.bench_function("Message::new(&str, Vec<u8>)", |b| {

@@ -72,7 +72,7 @@ mod tests {
 
     use crate::{pubsub::PatternSubscription, Broker, Subscription};
 
-    /// Проверяет, что поле `channel` содержит правильное имя канала.
+    /// Тест проверяет, что поле `channel` содержит правильное имя канала.
     #[tokio::test]
     async fn test_subscription_channel_name() {
         let sub = {
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(&*sub.channel, "mychan");
     }
 
-    /// Проверяет, что опубликованное сообщение приходит подписчику.
+    /// Тест проверяет, что опубликованное сообщение приходит подписчику.
     #[tokio::test]
     async fn test_receive_message_via_subscription() {
         let broker = Broker::new(10);
@@ -100,7 +100,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Проверяет, что дроп подписки уменьшает счётчик слушателей.
+    /// Тест проверяет, что дроп подписки уменьшает счётчик слушателей.
     #[test]
     fn test_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(5);
@@ -114,7 +114,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что метод `unsubscribe` явно отписывает подписчика.
+    /// Тест проверяет, что метод `unsubscribe` явно отписывает подписчика.
     #[test]
     fn test_explicit_unsubscribe_consumes_subscription() {
         let (tx, rx) = broadcast::channel(5);
@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что шаблонная подписка получает сообщение.
+    /// Тест проверяет, что шаблонная подписка получает сообщение.
     #[tokio::test]
     async fn test_pattern_subscription_receives_message() {
         let broker = Broker::new(10);
@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"xyz"));
     }
 
-    /// Проверяет, что после `punsubscribe` сообщения не приходят.
+    /// Тест проверяет, что после `punsubscribe` сообщения не приходят.
     #[tokio::test]
     async fn test_pattern_unsubscribe_stops_reception() {
         let broker = Broker::new(10);
@@ -158,7 +158,7 @@ mod tests {
         );
     }
 
-    /// Проверяет, что несколько шаблонных подписок получают одно и то же сообщение.
+    /// Тест проверяет, что несколько шаблонных подписок получают одно и то же сообщение.
     #[tokio::test]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(msg2.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Проверяет, что дроп шаблонной подписки уменьшает число слушателей.
+    /// Тест проверяет, что дроп шаблонной подписки уменьшает число слушателей.
     #[test]
     fn test_pattern_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(3);
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что метод `unsubscribe` у шаблонной подписки отписывает.
+    /// Тест проверяет, что метод `unsubscribe` у шаблонной подписки отписывает.
     #[test]
     fn test_pattern_explicit_unsubscribe_consumes() {
         let (tx, rx) = broadcast::channel(3);
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Проверяет, что две подписки на один канал обе получают сообщения.
+    /// Тест проверяет, что две подписки на один канал обе получают сообщения.
     #[tokio::test]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new(5);
@@ -223,7 +223,7 @@ mod tests {
         );
     }
 
-    /// Проверяет, что отписка от несуществующего канала или шаблона не паникует.
+    /// Тест проверяет, что отписка от несуществующего канала или шаблона не паникует.
     #[test]
     fn test_unsubscribe_nonexistent() {
         let broker = Broker::new(5);
@@ -232,7 +232,7 @@ mod tests {
         broker.punsubscribe("no*pat").unwrap();
     }
 
-    /// Проверяет, что при некорректном шаблоне возвращается ошибка.
+    /// Тест проверяет, что при некорректном шаблоне возвращается ошибка.
     #[test]
     fn test_invalid_glob_pattern() {
         let broker = Broker::new(5);

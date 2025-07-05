@@ -2,7 +2,7 @@ use std::{hint::black_box, sync::Arc};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use zumic::{InClusterStore, InMemoryStore, Sds, Storage, Value}; // замени `your_crate` на имя твоего крейта
+use zumic::{InClusterStore, InMemoryStore, Sds, Storage, Value};
 
 fn make_cluster() -> InClusterStore {
     #[allow(clippy::arc_with_non_send_sync)]

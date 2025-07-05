@@ -58,7 +58,7 @@ impl Message {
 mod tests {
     use super::*;
 
-    /// Проверяет создание сообщения из строки и вектора: правильность канала
+    /// Тест проверяет создание сообщения из строки и вектора: правильность канала
     /// и преобразование полезной нагрузки в `Bytes`.
     #[test]
     fn test_from_and_vec() {
@@ -69,7 +69,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from(pl_vec));
     }
 
-    /// Проверяет создание из `String` и `Bytes`, включая совпадение ссылок и содержимого.
+    /// Тест проверяет создание из `String` и `Bytes`, включая совпадение ссылок и содержимого.
     #[test]
     fn new_from_string_and_bytes() {
         let ch_string = String::from("updates");
@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(msg.payload, pl_bytes);
     }
 
-    /// Проверяет, что клонирование сохраняет указатели (Arc и Bytes) без копирования.
+    /// Тест проверяет, что клонирование сохраняет указатели (Arc и Bytes) без копирования.
     #[test]
     fn clone_preserves_arc_and_bytes_zero_copy() {
         let msg1 = Message::new("chan", Bytes::from_static(b"x"));
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(msg2.payload.as_ptr(), bytes_ptr);
     }
 
-    /// Проверяет создание из статических данных без копирования (`from_static`).
+    /// Тест проверяет создание из статических данных без копирования (`from_static`).
     #[test]
     fn from_static_zero_copy() {
         let msg = Message::from_static("static_chan", b"data");
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"data"));
     }
 
-    /// Сравнивает поведение `new` и `from_static`: каналы равны по значению,
+    /// Тест проверяет сравние поведения `new` и `from_static`: каналы равны по значению,
     /// а указатели совпадают из-за интернирования.
     #[test]
     fn mix_new_and_from_static() {
@@ -110,7 +110,7 @@ mod tests {
         assert!(Arc::ptr_eq(&m1.channel, &m2.channel));
     }
 
-    /// Проверяет корректную работу с пустым каналом и полезной нагрузкой (new и from_static).
+    /// Тест проверяет корректную работу с пустым каналом и полезной нагрузкой (new и from_static).
     #[test]
     fn empty_channel_and_payload() {
         let m = Message::new("", Vec::<u8>::new());
@@ -122,7 +122,7 @@ mod tests {
         assert!(m_static.payload.is_empty());
     }
 
-    /// Проверяет создание из среза и `Bytes`, сравнивая полезную нагрузку.
+    /// Тест проверяет создание из среза и `Bytes`, сравнивая полезную нагрузку.
     #[test]
     fn new_from_slice_and_bytes_clone() {
         // slice имеет тип &[u8; 10]
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(m2.payload, bytes);
     }
 
-    /// Проверяет создание из вектора и статического среза, сравнивая полезную нагрузку с ожидаемой.
+    /// Тест проверяет создание из вектора и статического среза, сравнивая полезную нагрузку с ожидаемой.
     #[test]
     fn new_from_vec_and_static() {
         let v = vec![9u8; 10];
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(m2.payload, Bytes::from_static(s));
     }
 
-    /// Проверяет, что два сообщения с одинаковыми каналами и полезной нагрузкой равны.
+    /// Тест проверяет, что два сообщения с одинаковыми каналами и полезной нагрузкой равны.
     #[test]
     fn message_equality() {
         let a = Message::new("a", b"x".to_vec());
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(a, b);
     }
 
-    /// Проверяет, что `Debug` вывод содержит канал и полезную нагрузку.
+    /// Тест проверяет, что `Debug` вывод содержит канал и полезную нагрузку.
     #[test]
     fn debug_contains_channel_and_payload() {
         let m = Message::new("dbg", b"z".to_vec());
@@ -166,7 +166,7 @@ mod tests {
         assert!(s.contains("dbg"));
     }
 
-    /// Проверяет, что клонирование большого payload не копирует данные (zero-copy).
+    /// Тест проверяет, что клонирование большого payload не копирует данные (zero-copy).
     #[test]
     fn large_payload_clone_zero_copy() {
         let big = vec![0u8; 1_000_000];
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(m2.payload.len(), big.len());
     }
 
-    /// Проверяет, что создание из `Arc<str>` сохраняет указатель.
+    /// Тест проверяет, что создание из `Arc<str>` сохраняет указатель.
     #[test]
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(&*arc, &*m.channel);
     }
 
-    /// Проверяет, что вызовы `from_static` с одинаковыми именами каналов
+    /// Тест проверяет, что вызовы `from_static` с одинаковыми именами каналов
     /// возвращают один и тот же `Arc<str>`, несмотря на разные полезные нагрузки.
     #[test]
     fn static_messages_share_pointer() {
@@ -197,7 +197,7 @@ mod tests {
         );
     }
 
-    /// Проверяет, что `Message::new` и `Message::from_static` с одинаковыми именами
+    /// Тест проверяет, что `Message::new` и `Message::from_static` с одинаковыми именами
     /// используют один и тот же интернированный `Arc<str>` для канала.
     #[test]
     fn new_and_from_static_share_pointer() {

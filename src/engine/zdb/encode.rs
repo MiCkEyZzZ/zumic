@@ -347,7 +347,7 @@ mod tests {
         assert!(reader.next().is_none());
     }
 
-    /// Проверяет, что дамп с CRC проходит полный круг: write_dump → read_dump.
+    /// Тест проверяет, что дамп с CRC проходит полный круг: write_dump → read_dump.
     #[test]
     fn doc_test_dump_roundtrip_crc() {
         let items = vec![
@@ -360,7 +360,7 @@ mod tests {
         assert_eq!(got, items);
     }
 
-    /// Проверяет, что при повреждении CRC в конце read_dump падает с ошибкой.
+    /// Тест проверяет, что при повреждении CRC в конце read_dump падает с ошибкой.
     #[test]
     fn doc_test_dump_crc_mismatch() {
         let items = vec![(Sds::from_str("key"), Value::Bool(false))];

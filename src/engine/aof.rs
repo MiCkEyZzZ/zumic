@@ -528,25 +528,25 @@ mod tests {
         Ok(())
     }
 
-    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::Always
+    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::Always
     #[test]
     fn test_always_policy() {
         run_append_replay(SyncPolicy::Always).unwrap();
     }
 
-    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::EverySec
+    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::EverySec
     #[test]
     fn test_everysec_policy() {
         run_append_replay(SyncPolicy::EverySec).unwrap();
     }
 
-    /// Проверяет поведение добавления и воспроизведения с помощью SyncPolicy::No
+    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::No
     #[test]
     fn test_no_policy() {
         run_append_replay(SyncPolicy::No).unwrap();
     }
 
-    /// Тестирует несколько операций SET при всех политиках синхронизации и проверяет порядок воспроизведения.
+    /// Тест проверяет несколько операций SET при всех политиках синхронизации и проверяет порядок воспроизведения.
     #[test]
     fn test_append_multiple_set_under_all_policies() {
         for policy in &[SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No] {
@@ -575,7 +575,7 @@ mod tests {
         }
     }
 
-    /// Проверяет, что `rewrite()` сжимает AOF, сохраняя только последние операции SET и
+    /// Тест проверяет, что `rewrite()` сжимает AOF, сохраняя только последние операции SET и
     /// удаляя перезаписанные или удаленные ключи.
     #[test]
     fn test_rewrite_compacts_log() -> io::Result<()> {
@@ -624,7 +624,7 @@ mod tests {
         Ok(())
     }
 
-    /// Проверяет, что метрики операций и flush корректно считаются при SyncPolicy::Always.
+    /// Тест проверяет, что метрики операций и flush корректно считаются при SyncPolicy::Always.
     #[test]
     fn test_metrics_always_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;
@@ -660,13 +660,13 @@ mod tests {
         let m2 = log.metrics();
         assert!(
             m2.flush_count >= 1,
-            "должен произойти хотя бы один flush после BATCH_SIZE операций"
+            "there must be at least one flush after BATCH_SIZE operations"
         );
 
         Ok(())
     }
 
-    /// Проверяет, что при SyncPolicy::No flush не происходит автоматически.
+    /// Тест проверяет, что при SyncPolicy::No flush не происходит автоматически.
     #[test]
     fn test_metrics_no_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;
@@ -681,7 +681,7 @@ mod tests {
         assert_eq!(m.ops_set, 1);
         assert_eq!(m.ops_del, 1);
         // При No flush_count остаётся 0
-        assert_eq!(m.flush_count, 0, "ни один flush не должен быть вызван");
+        assert_eq!(m.flush_count, 0, "no flush should be called");
         assert_eq!(m.flush_errors, 0);
         assert_eq!(m.flush_total_ns, 0);
 
