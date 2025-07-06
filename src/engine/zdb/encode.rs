@@ -216,6 +216,7 @@ pub fn write_stream<W: Write>(
 #[cfg(test)]
 mod tests {
     use crate::{
+        database::Bitmap,
         engine::{decompress_block, read_dump, read_value, StreamReader},
         Sds,
     };
@@ -223,6 +224,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
+    /// Тест проверяет сериализацию и десериализацию целого числа.
     #[test]
     fn test_write_read_int() {
         let original = Value::Int(-123456);
@@ -234,6 +236,7 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    /// Тест проверяет сериализацию и десериализацию числа с плавающей точкой.
     #[test]
     fn test_write_read_float() {
         let original = Value::Float(std::f64::consts::PI);
@@ -249,6 +252,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет сериализацию и десериализацию булевого значения.
     #[test]
     fn test_write_read_bool() {
         let original = Value::Bool(true);
@@ -261,6 +265,7 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    /// Тест проверяет сериализацию и десериализацию null-значения.
     #[test]
     fn test_write_read_null() {
         let original = Value::Null;
@@ -273,6 +278,7 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    /// Тест проверяет сериализацию и десериализацию строки.
     #[test]
     fn test_write_read_str() {
         let original = Value::Str(Sds::from_str("hello"));
@@ -285,6 +291,7 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    /// Тест проверяет поведение `should_compress` при различных размерах входных данных.
     #[test]
     fn test_should_compress_threshold() {
         assert!(!should_compress(0));
@@ -294,6 +301,7 @@ mod tests {
         assert!(should_compress(1000));
     }
 
+    /// Тест проверяет, что маленькие данные можно сжать и успешно распаковать.
     #[test]
     fn test_compress_decompress_roundtrip_small() {
         let data = b"short data";
@@ -303,6 +311,7 @@ mod tests {
         assert_eq!(&decompressed, data);
     }
 
+    /// Тест проверяет, что большие данные корректно сжимаются и распаковываются.
     #[test]
     fn test_compress_decompress_roundtrip_large() {
         // generate > MIN_COMPRESSION_SIZE bytes
@@ -315,6 +324,7 @@ mod tests {
         assert_eq!(decompressed, data);
     }
 
+    /// Тест проверяет обработку ошибки при попытке распаковать случайные данные.
     #[test]
     fn test_decompress_invalid_data() {
         // random bytes should error
@@ -324,6 +334,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::Other);
     }
 
+    /// Тест проверяет корректность записи и чтения потока данных (stream roundtrip).
     #[test]
     fn test_stream_roundtrip() {
         let items = vec![
@@ -338,6 +349,7 @@ mod tests {
         assert_eq!(got, items);
     }
 
+    /// Тест проверяет сериализацию и десериализацию пустого потока.
     #[test]
     fn test_stream_empty() {
         let mut buf = Vec::new();
@@ -376,6 +388,7 @@ mod tests {
         assert!(err.to_string().contains("CRC mismatch"));
     }
 
+    /// Тест проверяет запись и чтение пустого дампа.
     #[test]
     fn doc_test_dump_empty() {
         let mut buf = Vec::new();
@@ -384,6 +397,7 @@ mod tests {
         assert!(got.is_empty());
     }
 
+    /// Тест проверяет ошибку при чтении дампа с некорректной магией.
     #[test]
     fn doc_test_dump_bad_magic() {
         let mut buf = Vec::new();
@@ -392,5 +406,48 @@ mod tests {
         buf.extend(&0u32.to_be_bytes()); // count = 0
                                          // CRC32 ещё не добавлен — read_dump должен упасть на too small
         assert!(read_dump(&mut &buf[..]).is_err());
+    }
+
+    /// Проверяет сериализацию и десериализацию массива через TAG_ARRAY.
+    #[test]
+    fn test_write_read_array() {
+        let original = Value::Array(vec![Value::Int(42), Value::Str(Sds::from_str("foo"))]);
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    /// Проверяет сериализацию и десериализацию битмапы через TAG_BITMAP.
+    #[test]
+    fn test_write_read_bitmap() {
+        let mut bm = Bitmap::new();
+        bm.bytes = vec![0xAA, 0xBB, 0xCC];
+        let original = Value::Bitmap(bm.clone());
+        let mut buf = Vec::new();
+        write_value(&mut buf, &original).unwrap();
+
+        let mut cursor = Cursor::new(buf);
+        let decoded = read_value(&mut cursor).unwrap();
+        if let Value::Bitmap(decoded_bm) = decoded {
+            assert_eq!(decoded_bm.as_bytes(), &bm.bytes[..]);
+        } else {
+            panic!("Expected Bitmap");
+        }
+    }
+
+    /// Проверяет, что потоковая сериализация останавливается на TAG_EOF.
+    #[test]
+    fn test_write_stream_eof() {
+        let mut buf = Vec::new();
+        // Записываем только магию, версию и EOF
+        buf.extend(FILE_MAGIC);
+        buf.push(DUMP_VERSION);
+        buf.push(TAG_EOF);
+
+        let mut reader = StreamReader::new(&buf[..]).unwrap();
+        assert!(reader.next().is_none());
     }
 }

@@ -275,6 +275,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
+    /// Тест проверяет, что чтение строки даст `Value::Str("hello")`
     #[test]
     fn test_read_str() {
         let s = b"hello";
@@ -288,6 +289,7 @@ mod tests {
         assert_eq!(val, Value::Str(Sds::from_vec(b"hello".to_vec())));
     }
 
+    /// Тест проверяет, что чтение пустой строки даст `Value::Str("")`
     #[test]
     fn test_read_empty_str() {
         let mut data = vec![TAG_STR];
@@ -298,6 +300,7 @@ mod tests {
         assert_eq!(val, Value::Str(Sds::from_vec(Vec::new())));
     }
 
+    /// Тест проверяет, что чтение целого числа даст `Value::Int(i)`
     #[test]
     fn test_read_int() {
         let i = -123456i64;
@@ -310,6 +313,7 @@ mod tests {
         assert_eq!(val, Value::Int(i));
     }
 
+    /// Тест проверяет, что чтение числа с плавающей точкой даст `Value::Float(f)`
     #[test]
     fn test_read_float() {
         use std::f64::consts::PI;
@@ -327,6 +331,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение булевого `true` даст `Value::Bool(true)`
     #[test]
     fn test_read_bool_true() {
         let data = vec![TAG_BOOL, 1];
@@ -336,6 +341,7 @@ mod tests {
         assert_eq!(val, Value::Bool(true));
     }
 
+    /// Тест проверяет, что чтение булевого `false` даст `Value::Bool(false)`
     #[test]
     fn test_read_bool_false() {
         let data = vec![TAG_BOOL, 0];
@@ -345,6 +351,7 @@ mod tests {
         assert_eq!(val, Value::Bool(false));
     }
 
+    /// Тест проверяет, что чтение `null` даст `Value::Null`
     #[test]
     fn test_read_null() {
         let data = vec![TAG_NULL];
@@ -354,6 +361,7 @@ mod tests {
         assert_eq!(val, Value::Null);
     }
 
+    /// Тест проверяет, что чтение пустого хэша даст пустой `Value::Hash`
     #[test]
     fn test_read_hash_empty() {
         let mut data = Vec::new();
@@ -368,6 +376,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение хэша с одной записью вернёт корректную пару `ключ -> строка`
     #[test]
     fn test_read_hash_with_one_entry() {
         let key = b"key";
@@ -400,6 +409,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что при чтении хэша со значением не-строкой возвращается ошибка `InvalidData`
     #[test]
     fn test_read_hash_value_not_str_error() {
         // создадим хеш с ключом, но значением не строка (например, Int)
@@ -423,6 +433,7 @@ mod tests {
         assert!(err.to_string().contains("Expected Str for Hash value"));
     }
 
+    /// Тест проверяет, что чтение пустого ZSet даст пустой `Value::ZSet`
     #[test]
     fn test_read_zset_empty() {
         let mut data = Vec::new();
@@ -440,6 +451,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение ZSet с записями вернёт корректные `dict` и `sorted`
     #[test]
     fn test_read_zset_with_entries() {
         let key1 = b"key1";
@@ -476,6 +488,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение пустого множества даст пустой `Value::Set`
     #[test]
     fn test_read_set_empty() {
         let mut data = Vec::new();
@@ -490,6 +503,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение множества с записями вернёт все элементы
     #[test]
     fn test_read_set_with_entries() {
         let elems: &[&[u8]] = &[b"one", b"two", b"three"];
@@ -516,6 +530,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение HLL меньше `DENSE_SIZE` заполнит остаток нулями
     #[test]
     fn test_read_hll_with_less_than_dense_size() {
         let n = 2usize; // меньше DENSE_SIZE
@@ -541,6 +556,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что чтение HLL ровно `DENSE_SIZE` вернёт все данные без изменений
     #[test]
     fn test_read_hll_with_exact_dense_size() {
         let regs = vec![7u8; DENSE_SIZE];
@@ -564,6 +580,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что неизвестный тег вызывает ошибку `InvalidData` с сообщением "Unknown tag"
     #[test]
     fn test_read_unknown_tag_error() {
         let data = vec![255]; // несуществующий тег
@@ -574,6 +591,7 @@ mod tests {
         assert!(err.to_string().contains("Unknown tag"));
     }
 
+    /// Тест проверяет, что чтение сжатой строки через `TAG_COMPRESSED` вернёт оригинальные данные
     #[test]
     fn test_read_compressed_str() {
         // подготовим обычную строку и сожмём её
@@ -597,6 +615,7 @@ mod tests {
         assert_eq!(val, Value::Str(Sds::from_vec(raw.to_vec())));
     }
 
+    /// Тест проверяет, что round-trip дампа через `write_dump` и `read_dump` возвращает исходные данные
     #[test]
     fn test_read_dump_roundtrip() {
         // создаём два ключа
@@ -611,6 +630,7 @@ mod tests {
         assert_eq!(got, items);
     }
 
+    /// Тест проверяет, что при неправильной магии в дампе возникает ошибка `InvalidData`
     #[test]
     fn test_read_dump_bad_magic() {
         let mut buf = Vec::new();
@@ -622,6 +642,7 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 
+    /// Тест проверяет, что при неверной версии дампа возникает ошибка `InvalidData`
     #[test]
     fn test_read_dump_wrong_version() {
         let mut buf = Vec::new();
@@ -632,6 +653,8 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 
+    /// Тест проверяет, что round-trip потокового дампа через `write_stream` и
+    /// `StreamReader` возвращает исходные данные
     #[test]
     fn test_stream_roundtrip() {
         let items = vec![
@@ -646,6 +669,7 @@ mod tests {
         assert_eq!(got, items);
     }
 
+    /// Тест проверяет, что пустой поток возвращает `None` сразу при чтении
     #[test]
     fn test_stream_empty() {
         let mut buf = Vec::new();
@@ -684,6 +708,7 @@ mod tests {
         assert!(err.to_string().contains("CRC mismatch"));
     }
 
+    /// Тест проверяет, что пустой дамп с CRC возвращает пустой вектор
     #[test]
     fn doc_test_dump_empty_crc() {
         let mut buf = Vec::new();
@@ -692,11 +717,66 @@ mod tests {
         assert!(got.is_empty());
     }
 
+    /// Тест проверяет, что дамп размером <4 байт вызывает ошибку `InvalidData` "Dump too small"
     #[test]
     fn doc_test_read_dump_too_small() {
         // Буфер меньше 4 байт → сразу ошибка «Dump too small»
         let err = read_dump(&mut &b"\x00\x01\x02"[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("Dump too small"));
+    }
+
+    /// Тест: чтение массива через TAG_ARRAY должно вернуть Value::Array с вложенными элементами
+    #[test]
+    fn test_read_array() {
+        // формируем: [TAG_ARRAY][len=2][вложенный TAG_INT + data][вложенный TAG_STR + data]
+        let mut data = Vec::new();
+        data.push(TAG_ARRAY);
+        data.extend(&(2u32).to_be_bytes());
+        // введите два вложенных значения, например Int(5) и Str("x")
+        data.push(TAG_INT);
+        data.extend(&5i64.to_be_bytes());
+        data.push(TAG_STR);
+        let s = b"x";
+        data.extend(&(s.len() as u32).to_be_bytes());
+        data.extend(s);
+
+        let mut cursor = Cursor::new(data);
+        let val = read_value(&mut cursor).unwrap();
+        assert_eq!(
+            val,
+            Value::Array(vec![Value::Int(5), Value::Str(Sds::from_str("x"))])
+        );
+    }
+
+    /// Тест: чтение битмапы через TAG_BITMAP должно вернуть Value::Bitmap с правильными байтами
+    #[test]
+    fn test_read_bitmap() {
+        // формируем: [TAG_BITMAP][len=3][bytes 0x01,0x02,0x03]
+        let mut data = Vec::new();
+        data.push(TAG_BITMAP);
+        data.extend(&(3u32).to_be_bytes());
+        data.extend(&[1u8, 2, 3]);
+
+        let mut cursor = Cursor::new(data);
+        let val = read_value(&mut cursor).unwrap();
+        if let Value::Bitmap(bm) = val {
+            assert_eq!(bm.as_bytes(), &[1, 2, 3]);
+        } else {
+            panic!("Expected Bitmap");
+        }
+    }
+
+    /// Тест: StreamReader останавливается на TAG_EOF
+    #[test]
+    fn test_stream_reader_eof() {
+        let mut buf = Vec::new();
+        buf.extend(FILE_MAGIC);
+        buf.push(DUMP_VERSION);
+        // сразу EOF
+        buf.push(TAG_EOF);
+
+        let mut reader = StreamReader::new(&buf[..]).unwrap();
+        assert!(reader.next().is_none());
     }
 }
