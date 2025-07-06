@@ -12,14 +12,10 @@ static CHANNEL_INTERN: Lazy<DashMap<String, Arc<str>>> = Lazy::new(DashMap::new)
 #[inline(always)]
 pub(crate) fn intern_channel<S: AsRef<str>>(chan: S) -> Arc<str> {
     let key = chan.as_ref();
-    if let Some(existing) = CHANNEL_INTERN.get(key) {
-        existing.clone()
-    } else {
-        let s = key.to_string();
-        let arc: Arc<str> = Arc::from(s.clone());
-        CHANNEL_INTERN.insert(s, arc.clone());
-        arc
-    }
+    let entry = CHANNEL_INTERN
+        .entry(key.to_string())
+        .or_insert_with(|| Arc::from(key.to_string()));
+    entry.clone()
 }
 
 #[cfg(test)]
