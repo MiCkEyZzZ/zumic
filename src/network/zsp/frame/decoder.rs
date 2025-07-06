@@ -535,8 +535,7 @@ mod tests {
     use super::*;
     use crate::network::zsp::frame::encoder::ZspEncoder;
 
-    /// Тест для строк в формате inline
-    /// Проверка декодирования строки, начинающейся с '+'
+    /// Тест проверяет декодирование простой inline-строки с префиксом '+'.
     #[test]
     fn test_simple_string() {
         let mut decoder = ZspDecoder::new();
@@ -546,8 +545,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::InlineString("OK".into()));
     }
 
-    /// Тест для бинарных строк
-    /// Проверка декодирования строки, начинающейся с '$'
+    /// Тест проверяет декодирование бинарной строки, начинающейся с '$'.
     #[test]
     fn test_binary_string() {
         let mut decoder = ZspDecoder::new();
@@ -557,8 +555,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    /// Тест для частичной бинарной строки
-    /// Проверка декодирования бинарной строки в два шага
+    /// Тест проверяет декодирование бинарной строки в два этапа (partial).
     #[test]
     fn test_partial_binary_string() {
         let mut decoder = ZspDecoder::new();
@@ -575,8 +572,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    /// Тест для пустого словаря
-    /// Проверка декодирования словаря без элементов
+    /// Тест проверяет декодирование пустого словаря.
     #[test]
     fn test_empty_dictionary() {
         let mut decoder = ZspDecoder::new();
@@ -586,8 +582,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Dictionary(HashMap::new()));
     }
 
-    /// Тест для словаря с одним элементом
-    /// Проверка декодирования словаря с одним ключом и значением
+    /// Тест проверяет декодирование словаря с одним элементом.
     #[test]
     fn test_single_item_dictionary() {
         let mut decoder = ZspDecoder::new();
@@ -604,8 +599,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Dictionary(expected_dict));
     }
 
-    /// Тест для словаря с несколькими элементами
-    /// Проверка декодирования словаря с несколькими парами ключ-значение
+    /// Тест проверяет декодирование словаря с несколькими элементами.
     #[test]
     fn test_multiple_items_dictionary() {
         use std::collections::HashMap;
@@ -630,8 +624,7 @@ mod tests {
         assert_eq!(original, decoded);
     }
 
-    /// Тест для неверного словаря (неверный ключ)
-    /// Проверка, что возникает ошибка при использовании неверного ключа в словаре
+    /// Тест проверяет, что возникает ошибка при неверном ключе словаря.
     #[test]
     fn test_invalid_dictionary_key() {
         let mut decoder = ZspDecoder::new();
@@ -641,8 +634,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Тест для неверного словаря (неполный словарь)
-    /// Проверка поведения, когда недостаточно данных для декодирования всего словаря
+    /// Тест проверяет поведение декодера при неполных данных словаря.
     #[test]
     fn test_incomplete_dictionary() {
         let mut decoder = ZspDecoder::new();
@@ -652,7 +644,7 @@ mod tests {
         assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
     }
 
-    /// Тест для проверки на положительное число.
+    /// Тест проверяет декодирование положительного числа с плавающей точкой.
     #[test]
     fn test_parse_float_valid_positive() {
         let mut decoder = ZspDecoder::new();
@@ -661,7 +653,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(PI));
     }
 
-    /// Тест для проверки на корректное отрицательное число.
+    /// Тест проверяет декодирование корректного отрицательного числа с плавающей точкой.
     #[test]
     fn test_parse_float_valid_negative() {
         let mut decoder = ZspDecoder::new();
@@ -670,7 +662,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(-0.5));
     }
 
-    /// Тест для проверки на некорректное значение - ожидаем ошибку.
+    /// Тест проверяет, что при некорректном значении возникает ошибка.
     #[test]
     fn test_parse_float_integer_style() {
         let mut decoder = ZspDecoder::new();
@@ -678,7 +670,7 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Null-ZSet (len = -1) декодируется в пустой вектор.
+    /// Тест проверяет декодирование Null-ZSet с длиной -1 как пустой вектор.
     #[test]
     fn test_parse_zset_null() {
         let mut decoder = ZspDecoder::new();
@@ -687,7 +679,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::ZSet(Vec::new()));
     }
 
-    /// Пустой ZSet (len = 0)
+    /// Тест проверяет декодирование пустого ZSet с длиной 0.
     #[test]
     fn test_parse_zset_empty() {
         let mut decoder = ZspDecoder::new();
@@ -696,7 +688,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::ZSet(Vec::new()));
     }
 
-    /// Один элемент member="foo", score=2.5
+    /// Тест проверяет декодирование ZSet с одним элементом.
     #[test]
     fn test_parse_zset_single() {
         let mut decoder = ZspDecoder::new();
@@ -706,7 +698,7 @@ mod tests {
         assert_eq!(frame, ZspFrame::ZSet(vec![("foo".to_string(), 2.5)]));
     }
 
-    /// Два элемента: один через BinaryString, второй через InlineString и Integer-приведение
+    /// Тест проверяет декодирование ZSet с несколькими элементами.
     #[test]
     fn test_parse_zset_multiple() {
         let mut decoder = ZspDecoder::new();
@@ -719,7 +711,7 @@ mod tests {
         );
     }
 
-    /// Некорректная длина ZSet → ошибка
+    /// Тест проверяет, что при некорректной длине ZSet возникает ошибка.
     #[test]
     fn test_parse_zset_invalid_length() {
         let mut decoder = ZspDecoder::new();
@@ -727,7 +719,7 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Неподходящий тип member (Integer вместо строки) → ошибка
+    /// Тест проверяет ошибку при неверном типе member в ZSet.
     #[test]
     fn test_parse_zset_invalid_member_type() {
         let mut decoder = ZspDecoder::new();
@@ -735,7 +727,7 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Неподходящий тип score (String вместо числа) → ошибка
+    /// Тест проверяет ошибку при неверном типе score в ZSet.
     #[test]
     fn test_parse_zset_invalid_score_type() {
         let mut decoder = ZspDecoder::new();
@@ -743,7 +735,7 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Частичные данные → сначала None, затем полное декодирование
+    /// Тест проверяет частичное декодирование ZSet с последующим полным.
     #[test]
     fn test_parse_zset_partial() {
         let mut decoder = ZspDecoder::new();
@@ -760,6 +752,8 @@ mod tests {
         );
     }
 
+    /// Тест проверяет корректный разбор (декодирование) булевого значения `true` из байтового потока.
+    /// Проверяет, что строка "#t\r\n" декодируется в `ZspFrame::Bool(true)`.
     #[test]
     fn test_parse_bool_true() {
         let mut dec = ZspDecoder::new();
@@ -768,6 +762,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::Bool(true));
     }
 
+    /// Тест проверяет корректный разбор (декодирование) булевого значения `false` из байтового потока.
+    /// Проверяет, что строка "#f\r\n" декодируется в `ZspFrame::Bool(false)`.
     #[test]
     fn test_parse_bool_false() {
         let mut dec = ZspDecoder::new();
