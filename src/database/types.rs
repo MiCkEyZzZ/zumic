@@ -8,10 +8,7 @@ use crate::{
     StoreError, StoreResult,
 };
 
-use super::{
-    dict::Dict, hll::Hll, quicklist::QuickList, sds::Sds, skiplist::SkipList,
-    smart_hash::SmartHash, stream::StreamEntry, Bitmap,
-};
+use super::{Bitmap, Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
 
 /// Представляет универсальное значение в движке хранения данных.
 ///
