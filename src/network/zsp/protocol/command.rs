@@ -20,6 +20,25 @@ pub enum Command {
     Auth { user: Option<String>, pass: String },
 }
 
+impl Command {
+    /// Возвращает имя команды (тот самый ключ для Registry).
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::Ping => "ping",
+            Command::Echo(_) => "echo",
+            Command::Set { .. } => "set",
+            Command::Get { .. } => "get",
+            Command::Del { .. } => "del",
+            Command::MSet { .. } => "mset",
+            Command::MGet { .. } => "mget",
+            Command::SetNx { .. } => "setnx",
+            Command::Rename { .. } => "rename",
+            Command::RenameNx { .. } => "renamenx",
+            Command::Auth { .. } => "auth",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Response {
     Ok,
@@ -30,4 +49,10 @@ pub enum Response {
     Float(f64),
     Bool(bool),
     String(String),
+}
+
+impl Response {
+    pub fn error(msg: impl Into<String>) -> Self {
+        Response::Error(msg.into())
+    }
 }

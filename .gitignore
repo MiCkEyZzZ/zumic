@@ -1,4 +1,4 @@
-# Rust build artifacts
+# Артефакты сборки Rust
 target/
 dist
 book
@@ -8,7 +8,7 @@ tmp
 
 **/*.DS_Store
 
-# IDE and editors
+# IDE и редакторы
 .idea/
 .vscode/
 .zed/
@@ -16,28 +16,28 @@ tmp
 *.iml
 out/
 
-# System files
+# Системные файлы
 .DS_Store
 
 debug/
 
-# Logs and profilers
+# Журналы и профили
 /logs
 /Flamegraph
 
-# Documentation readable by generators
+# Документация, читаемая генераторами
 /docs/
 book
 doc**/*
 
-# Secrets and environment
+# Секреты и окружающая среда
 .env
 zumic.conf
 
-# Vscode workspace
+# Рабочее пространство Vscode
 *.code-workspace
 
-# Web artifacts
+# Веб-артефакты
 *.wasm
 
 # Тестовые файлы

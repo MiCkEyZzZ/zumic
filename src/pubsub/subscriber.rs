@@ -7,10 +7,12 @@ use super::Message;
 
 /// Подписка на конкретный канал Pub/Sub.
 ///
-/// Обёртка над [`broadcast::Receiver`], привязанная к имени канала (`Arc<str>`),
-/// позволяет получать сообщения из этого канала.
+/// Обёртка над [`broadcast::Receiver`], привязанная к имени
+/// канала (`Arc<str>`), позволяет получать сообщения из этого
+/// канала.
 ///
-/// Отписка происходит автоматически при `Drop` или явно через [`Subscription::unsubscribe`].
+/// Отписка происходит автоматически при `Drop` или явно через
+/// [`Subscription::unsubscribe`].
 pub struct Subscription {
     /// Название канала, на который подписаны.
     pub channel: Arc<str>,
@@ -20,11 +22,11 @@ pub struct Subscription {
 
 /// Подписка по шаблону на несколько каналов.
 ///
-/// Использует [`globset::Glob`] для сопоставления имён каналов и получает
-/// сообщения из всех каналов, подходящих под шаблон.
+/// Использует [`globset::Glob`] для сопоставления имён каналов
+/// и получает сообщения из всех каналов, подходящих под шаблон.
 ///
-/// Отписка также происходит автоматически при `Drop` или явно через
-/// [`PatternSubscription::unsubscribe`].
+/// Отписка также происходит автоматически при `Drop` или явно
+/// через [`PatternSubscription::unsubscribe`].
 pub struct PatternSubscription {
     /// Шаблон glob для сопоставления имён каналов.
     pub pattern: Glob,
@@ -56,7 +58,8 @@ impl PatternSubscription {
 
     /// Явно отписаться от шаблона.
     ///
-    /// После вызова больше не будут приходить сообщения по этому шаблону.
+    /// После вызова больше не будут приходить сообщения по
+    /// этому шаблону.
     pub fn unsubscribe(self) {
         // При drop Receiver отписывается сам
     }
@@ -72,7 +75,8 @@ mod tests {
 
     use crate::{pubsub::PatternSubscription, Broker, Subscription};
 
-    /// Тест проверяет, что поле `channel` содержит правильное имя канала.
+    /// Тест проверяет, что поле `channel` содержит правильное
+    /// имя канала.
     #[tokio::test]
     async fn test_subscription_channel_name() {
         let sub = {
@@ -86,7 +90,8 @@ mod tests {
         assert_eq!(&*sub.channel, "mychan");
     }
 
-    /// Тест проверяет, что опубликованное сообщение приходит подписчику.
+    /// Тест проверяет, что опубликованное сообщение приходит
+    /// подписчику.
     #[tokio::test]
     async fn test_receive_message_via_subscription() {
         let broker = Broker::new(10);
@@ -114,7 +119,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Тест проверяет, что метод `unsubscribe` явно отписывает подписчика.
+    /// Тест проверяет, что метод `unsubscribe` явно отписывает
+    /// подписчика.
     #[test]
     fn test_explicit_unsubscribe_consumes_subscription() {
         let (tx, rx) = broadcast::channel(5);
@@ -145,7 +151,8 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"xyz"));
     }
 
-    /// Тест проверяет, что после `punsubscribe` сообщения не приходят.
+    /// Тест проверяет, что после `punsubscribe` сообщения не
+    /// приходят.
     #[tokio::test]
     async fn test_pattern_unsubscribe_stops_reception() {
         let broker = Broker::new(10);
@@ -158,7 +165,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что несколько шаблонных подписок получают одно и то же сообщение.
+    /// Тест проверяет, что несколько шаблонных подписок получают
+    /// одно и то же сообщение.
     #[tokio::test]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
@@ -182,7 +190,8 @@ mod tests {
         assert_eq!(msg2.payload, Bytes::from_static(b"hello"));
     }
 
-    /// Тест проверяет, что дроп шаблонной подписки уменьшает число слушателей.
+    /// Тест проверяет, что дроп шаблонной подписки уменьшает
+    /// число слушателей.
     #[test]
     fn test_pattern_unsubscribe_drops_receiver() {
         let (tx, rx) = broadcast::channel(3);
@@ -194,7 +203,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Тест проверяет, что метод `unsubscribe` у шаблонной подписки отписывает.
+    /// Тест проверяет, что метод `unsubscribe` у шаблонной
+    /// подписки отписывает.
     #[test]
     fn test_pattern_explicit_unsubscribe_consumes() {
         let (tx, rx) = broadcast::channel(3);
@@ -206,7 +216,8 @@ mod tests {
         assert_eq!(tx.receiver_count(), 0);
     }
 
-    /// Тест проверяет, что две подписки на один канал обе получают сообщения.
+    /// Тест проверяет, что две подписки на один канал обе
+    /// получают сообщения.
     #[tokio::test]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new(5);
@@ -223,7 +234,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что отписка от несуществующего канала или шаблона не паникует.
+    /// Тест проверяет, что отписка от несуществующего канала
+    /// или шаблона не паникует.
     #[test]
     fn test_unsubscribe_nonexistent() {
         let broker = Broker::new(5);
@@ -232,7 +244,8 @@ mod tests {
         broker.punsubscribe("no*pat").unwrap();
     }
 
-    /// Тест проверяет, что при некорректном шаблоне возвращается ошибка.
+    /// Тест проверяет, что при некорректном шаблоне возвращается
+    /// ошибка.
     #[test]
     fn test_invalid_glob_pattern() {
         let broker = Broker::new(5);

@@ -13,8 +13,8 @@ use crate::error::auth::AclError;
 static DEFAULT_GLOB: Lazy<Glob> = Lazy::new(|| Glob::new("*").unwrap());
 
 bitflags::bitflags! {
-    /// Битовая маска категорий команд, используемая для обозначения групп команд,
-    /// например, `@read`, `@write`, `@admin`.
+    /// Битовая маска категорий команд, используемая для обозначения
+    /// групп команд, например, `@read`, `@write`, `@admin`.
     #[derive(Copy, Clone, Debug)]
     pub struct CmdCategory: u32 {
         /// Команды для операций чтения.
@@ -172,7 +172,8 @@ impl AclUser {
         Ok(())
     }
 
-    /// Добавляет новый шаблон ключей для разрешения и помечает паттерны "dirty".
+    /// Добавляет новый шаблон ключей для разрешения и помечает
+    /// паттерны "dirty".
     pub fn allow_key_pattern(
         &mut self,
         pat: &str,
@@ -184,7 +185,8 @@ impl AclUser {
         Ok(())
     }
 
-    /// Добавляет новый шаблон ключей в список запретов и помечает паттерны "dirty".
+    /// Добавляет новый шаблон ключей в список запретов и помечает
+    /// паттерны "dirty".
     pub fn deny_key_pattern(
         &mut self,
         pat: &str,
@@ -196,7 +198,8 @@ impl AclUser {
         Ok(())
     }
 
-    /// Добавляет новый шаблон каналов для разрешения и помечает паттерны "dirty".
+    /// Добавляет новый шаблон каналов для разрешения и помечает
+    /// паттерны "dirty".
     pub fn allow_channel_pattern(
         &mut self,
         pat: &str,
@@ -207,7 +210,8 @@ impl AclUser {
         Ok(())
     }
 
-    /// Добавляет новый шаблон каналов в список запретов и помечает паттерны "dirty".
+    /// Добавляет новый шаблон каналов в список запретов и помечает
+    /// паттерны "dirty".
     pub fn deny_channel_pattern(
         &mut self,
         pat: &str,
@@ -219,7 +223,8 @@ impl AclUser {
     }
 
     /// Проверяет, имеет ли пользователь право выполнить команду.
-    /// Горячий путь: принимает уже разобранную категорию и опциональный индекс команды.
+    /// Горячий путь: принимает уже разобранную категорию и
+    /// опциональный индекс команды.
     pub fn check_idx(
         &self,
         category: CmdCategory,
@@ -260,7 +265,8 @@ impl AclUser {
         }
     }
 
-    /// Проверяет доступность Pub/Sub-канала на основе заданных шаблонов.
+    /// Проверяет доступность Pub/Sub-канала на основе заданных
+    /// шаблонов.
     pub fn check_channel(
         &self,
         channel: &str,
@@ -293,15 +299,18 @@ impl AclUser {
         self.raw_channel_patterns.clear();
         self.raw_deny_channel_patterns.clear();
 
-        // Мгновенно пересобираем пустые множества — теперь key_patterns и channel_patterns пусты,
-        // и check_key/check_channel всегда вернут false, пока не добавятся новые паттерны.
+        // Мгновенно пересобираем пустые множества — теперь
+        // key_patterns и channel_patterns пусты, и
+        // check_key/check_channel всегда вернут false, пока
+        // не добавятся новые паттерны.
         let _ = self.rebuild_all_patterns();
         let _ = self.rebuild_all_deny_patterns();
     }
 }
 
 impl Acl {
-    /// Устанавливает или обновляет пользователя с набором правил ACL.
+    /// Устанавливает или обновляет пользователя с набором
+    /// правил ACL.
     pub fn acl_setuser(
         &self,
         username: &str,
@@ -364,7 +373,8 @@ impl Acl {
             .ok_or(AclError::UserNotFound)
     }
 
-    /// Возвращает список имен всех зарегистрированных пользователей ACL.
+    /// Возвращает список имен всех зарегистрированных
+    /// пользователей ACL.
     pub fn acl_users(&self) -> Vec<String> {
         self.users.iter().map(|e| e.key().clone()).collect()
     }
@@ -416,8 +426,9 @@ impl FromStr for AclRule {
 mod tests {
     use super::*;
 
-    /// Тест проверяет, что пользователь по умолчанию (`AclUser::new`) включён,
-    /// имеет доступ ко всем категориям, командам, ключам и каналам.
+    /// Тест проверяет, что пользователь по умолчанию (`AclUser::new`)
+    /// включён, имеет доступ ко всем категориям, командам, ключам и
+    /// каналам.
     #[test]
     fn default_user_allows_everything() {
         // AclUser::new создаёт пользователя с enabled = true,
@@ -449,8 +460,9 @@ mod tests {
     }
 
     /// Тест проверяет применение правил:
-    /// включение пользователя, разрешение категории @read, добавление команды +get,
-    /// запрет команды -del. Проверяем приоритеты между категориями и командами.
+    /// включение пользователя, разрешение категории @read, добавление
+    /// команды +get, запрет команды -del. Проверяем приоритеты между
+    /// категориями и командами.
     #[test]
     fn setuser_read_and_individual_commands() {
         let acl = Acl::default();
@@ -478,7 +490,8 @@ mod tests {
         assert!(!u.check_idx(cat_write, lookup_cmd_idx("del")));
     }
 
-    /// Тест проверяет работу шаблонов ключей (~pattern) и каналов (&pattern).
+    /// Тест проверяет работу шаблонов ключей (~pattern) и каналов
+    /// (&pattern).
     #[test]
     fn key_and_channel_patterns() {
         let acl = Acl::default();
@@ -500,8 +513,9 @@ mod tests {
         assert!(!u.check_channel("channel"));
     }
 
-    /// Тест проверяет, что выключенный пользователь (`off`) не имеет доступ ни к чему,
-    /// даже если разрешены все команды и шаблоны.
+    /// Тест проверяет, что выключенный пользователь (`off`) не
+    /// имеет доступ ни к чему, даже если разрешены все команды
+    /// и шаблоны.
     #[test]
     fn disabling_user_blocks_everything() {
         let acl = Acl::default();
@@ -522,7 +536,8 @@ mod tests {
         assert!(!u.check_channel("chan"));
     }
 
-    /// Тест проверяет, что пользователь удаляется и больше не доступен через `acl_getuser`.
+    /// Тест проверяет, что пользователь удаляется и больше не
+    /// доступен через `acl_getuser`.
     #[test]
     fn removing_user_works() {
         let acl = Acl::default();
@@ -532,7 +547,8 @@ mod tests {
         assert!(acl.acl_getuser("anton").is_none());
     }
 
-    /// Тест проверяет, что при установке неизвестного правила возвращается ошибка `InvalidAclRule`.
+    /// Тест проверяет, что при установке неизвестного правила
+    /// возвращается ошибка `InvalidAclRule`.
     #[test]
     fn unknown_rule_returns_error() {
         let acl = Acl::default();
@@ -540,7 +556,8 @@ mod tests {
         assert!(matches!(err, Err(AclError::InvalidAclRule(_))));
     }
 
-    /// Тест проверяет, что `AclUser::new` создаёт пользователя с корректными значениями по умолчанию.
+    /// Тест проверяет, что `AclUser::new` создаёт пользователя с
+    /// корректными значениями по умолчанию.
     #[test]
     fn test_create_user_and_check_defaults() {
         // Создаём нового пользователя и проверяем базовые поля
@@ -571,7 +588,8 @@ mod tests {
         assert!(user.check_channel("anychannel"));
     }
 
-    /// Тест проверяет перезапись правил пользователя при повторном вызове `acl_setuser`.
+    /// Тест проверяет перезапись правил пользователя при повторном
+    /// вызове `acl_setuser`.
     #[test]
     fn test_acl_overwrite_existing_user() {
         let acl = Acl::default();
@@ -601,7 +619,8 @@ mod tests {
         assert!(!u2.check_key("x99"));
     }
 
-    /// Тест проверяет список пользователей и удаление через `acl_deluser`.
+    /// Тест проверяет список пользователей и удаление через
+    /// `acl_deluser`.
     #[test]
     fn test_acl_user_deletion_and_listing() {
         let acl = Acl::default();
@@ -618,7 +637,8 @@ mod tests {
         assert!(users.contains(&"boris".to_string()));
     }
 
-    /// Тест проверяет независимость ACL-настроек для нескольких пользователей.
+    /// Тест проверяет независимость ACL-настроек для нескольких
+    /// пользователей.
     #[test]
     fn test_multiple_users() {
         let acl = Acl::default();
@@ -674,7 +694,8 @@ mod tests {
         assert!(!u.check_channel("channel"));
     }
 
-    /// Тест проверяет добавление нескольких хешей паролей через правила ">hash".
+    /// Тест проверяет добавление нескольких хешей паролей через
+    /// правила ">hash".
     #[test]
     fn test_user_with_multiple_passwords() {
         let acl = Acl::default();
@@ -704,7 +725,8 @@ mod tests {
         assert!(acl.acl_getuser("user").is_none());
     }
 
-    /// Тест проверяет, что ленивый rebuild паттерн ключей отрабатывает один раз.
+    /// Тест проверяет, что ленивый rebuild паттерн ключей
+    /// отрабатывает один раз.
     #[test]
     fn lazy_key_rebuild_once() {
         let mut user = AclUser::new("u").unwrap();
@@ -718,7 +740,8 @@ mod tests {
         assert!(user.check_key("dzadza456"));
     }
 
-    /// Тест проверяет, что ленивый rebuild паттернов каналов отрабатывает один раз.
+    /// Тест проверяет, что ленивый rebuild паттернов каналов
+    /// отрабатывает один раз.
     #[test]
     fn lazy_channel_rebuild_once() {
         let mut user = AclUser::new("u").unwrap();
@@ -730,7 +753,8 @@ mod tests {
         assert!(user.check_channel("topic123"));
     }
 
-    /// Тест проверяет, что reset_rules очищает всё и запрещает любые операции.
+    /// Тест проверяет, что reset_rules очищает всё и запрещает
+    /// любые операции.
     #[test]
     fn test_reset_rules_behavior() {
         let mut user = AclUser::new("u").unwrap();
@@ -753,7 +777,8 @@ mod tests {
         assert!(!user.check_channel("dzadzaXYZ"));
     }
 
-    /// Тест проверяет, что добавление дубликатов паттернов не ломает сборщик.
+    /// Тест проверяет, что добавление дубликатов паттернов не
+    /// ломает сборщик.
     #[test]
     fn test_duplicate_patterns_no_panic() {
         let mut user = AclUser::new("u").unwrap();
@@ -767,7 +792,8 @@ mod tests {
         assert!(user.check_channel("kinchan123"));
     }
 
-    /// Тест проверяет, что при невалидном glob метод возвращает Err, а состояние не меняется.
+    /// Тест проверяет, что при невалидном glob метод возвращает
+    /// Err, а состояние не меняется.
     #[test]
     fn test_invalid_glob_returns_err_and_state_unchanged() {
         let mut user = AclUser::new("u").unwrap();

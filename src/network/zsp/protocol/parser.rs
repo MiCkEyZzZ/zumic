@@ -35,7 +35,8 @@ impl IntoExecutable for ZSPCommand {
     }
 }
 
-/// Main entry point: parsing a frame and converting it into an executable command.
+/// Main entry point: parsing a frame and converting it into an
+/// executable command.
 pub fn parse_command(frame: ZspFrame) -> Result<StoreCommand, ParseError> {
     let raw_cmd = parse_raw_command(frame)?;
     raw_cmd.into_executable()
@@ -61,7 +62,8 @@ fn parse_raw_command(frame: ZspFrame) -> Result<ZSPCommand, ParseError> {
     }
 }
 
-/// Parsing command string and arguments from ZspFrame array → RawCommand
+/// Parsing command string and arguments from ZspFrame array →
+/// RawCommand
 fn parse_from_str_command(
     cmd: &str,
     items: &[ZspFrame],
@@ -197,7 +199,8 @@ mod tests {
 
     use super::*;
 
-    /// Тест проверяет корректный парсинг команды SET с двумя строковыми аргументами (ключ и значение)
+    /// Тест проверяет корректный парсинг команды SET с двумя
+    /// строковыми аргументами (ключ и значение)
     #[test]
     fn test_parse_set_command() {
         let frame = ZspFrame::Array(vec![
@@ -217,7 +220,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет парсинг команды GET с аргументом в виде BinaryString
+    /// Тест проверяет парсинг команды GET с аргументом в виде
+    /// BinaryString
     #[test]
     fn test_parse_get_command_with_bulk_key() {
         let frame = ZspFrame::Array(vec![
@@ -235,7 +239,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет парсинг команды DEL с ключом в виде InlineString
+    /// Тест проверяет парсинг команды DEL с ключом в виде
+    /// InlineString
     #[test]
     fn test_parse_del_command_with_simple_key() {
         let frame = ZspFrame::Array(vec![
@@ -282,7 +287,8 @@ mod tests {
         assert_eq!(err.to_string(), "Unknown command");
     }
 
-    /// Тест проверяет ошибку при слишком большом числе аргументов в GET
+    /// Тест проверяет ошибку при слишком большом числе
+    /// аргументов в GET
     #[test]
     fn test_get_command_with_too_many_args() {
         let frame = ZspFrame::Array(vec![
@@ -295,7 +301,8 @@ mod tests {
         assert_eq!(err.to_string(), "GET requires 1 argument(s)");
     }
 
-    /// Тест проверяет ошибку, если ключ передан некорректного типа (Integer)
+    /// Тест проверяет ошибку, если ключ передан некорректного
+    /// типа (Integer)
     #[test]
     fn test_set_command_with_invalid_key_type() {
         let frame = ZspFrame::Array(vec![
@@ -308,7 +315,8 @@ mod tests {
         assert_eq!(err.to_string(), "SET: invalid key");
     }
 
-    /// Тест проверяет ошибку, если команда не представлена массивом
+    /// Тест проверяет ошибку, если команда не представлена
+    /// массивом
     #[test]
     fn test_command_not_array() {
         let frame = ZspFrame::InlineString(Cow::Borrowed("SET"));

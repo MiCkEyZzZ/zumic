@@ -50,7 +50,8 @@ impl Broker {
 impl Broker {
     /// Подписка на паттерн (glob), например "kin.*" или "a?c".
     ///
-    /// Повторная подписка на один и тот же паттерн возвращает тот же канал отправки.
+    /// Повторная подписка на один и тот же паттерн возвращает
+    /// тот же канал отправки.
     pub fn psubscribe(
         &self,
         pattern: &str,
@@ -102,8 +103,8 @@ impl Broker {
     /// 1. Отправка в точный канал (если есть)
     /// 2. Отправка всем подписчикам по подходящим паттернам
     ///
-    /// Если в точном канале нет подписчиков, увеличивается счётчик ошибок,
-    /// и канал удаляется.
+    /// Если в точном канале нет подписчиков, увеличивается
+    /// счётчик ошибок, и канал удаляется.
     pub fn publish(
         &self,
         channel: &str,
@@ -158,7 +159,8 @@ mod tests {
 
     use super::*;
 
-    /// Helper: создает брокера и подписывается на него, возвращая (брокеру, получателю)
+    /// Helper: создает брокера и подписывается на него, возвращая
+    /// (брокеру, получателю)
     async fn setup_one() -> (Broker, tokio::sync::broadcast::Receiver<Message>) {
         let broker = Broker::new(5);
         let Subscription { inner: rx, .. } = broker.subscribe("chan");
@@ -194,7 +196,8 @@ mod tests {
         assert!(!broker.channels.contains_key("nochan"));
     }
 
-    /// Тест проверяет, что все подписчики канала получают сообщение.
+    /// Тест проверяет, что все подписчики канала получают
+    /// сообщение.
     #[tokio::test]
     async fn test_multiple_subscribers_receive() {
         let broker = Broker::new(5);
@@ -216,8 +219,9 @@ mod tests {
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
     }
 
-    /// Тест проверяет, что если подписка сброшена и никто не слушает,
-    /// публикация увеличивает счётчик ошибок, а канал удаляется.
+    /// Тест проверяет, что если подписка сброшена и никто не
+    /// слушает, публикация увеличивает счётчик ошибок, а канал
+    /// удаляется.
     #[tokio::test]
     async fn test_auto_remove_empty_channel_and_error_count() {
         // 1) подпишитесь и немедленно прекратите подписку
@@ -236,7 +240,8 @@ mod tests {
         assert!(!broker.channels.contains_key("temp"));
     }
 
-    /// Тест проверяет, что после `unsubscribe_all` публикации игнорируются.
+    /// Тест проверяет, что после `unsubscribe_all` публикации
+    /// игнорируются.
     #[tokio::test]
     async fn test_unsubscribe_all() {
         let broker = Broker::new(5);
@@ -253,7 +258,8 @@ mod tests {
         assert!(!broker.channels.contains_key("gone"));
     }
 
-    /// Тест проверяет, что подписки по паттернам (psubscribe) получают сообщения.
+    /// Тест проверяет, что подписки по паттернам (psubscribe)
+    /// получают сообщения.
     #[tokio::test]
     async fn test_psubscribe_and_receive() {
         let broker = Broker::new(5);
@@ -265,7 +271,8 @@ mod tests {
         assert_eq!(msg.payload, Bytes::from_static(b"X"));
     }
 
-    /// Тест проверяет, что обычные и паттерн-подписки работают вместе.
+    /// Тест проверяет, что обычные и паттерн-подписки работают
+    /// вместе.
     #[tokio::test]
     async fn test_sub_and_psub_together() {
         let broker = Broker::new(5);
@@ -282,7 +289,8 @@ mod tests {
         assert_eq!(m2.payload, Bytes::from_static(b"Z"));
     }
 
-    /// Тест проверяет, что после `punsubscribe` приёмник закрывается.
+    /// Тест проверяет, что после `punsubscribe` приёмник
+    /// закрывается.
     #[tokio::test]
     async fn test_punsubscribe_no_receive() {
         let broker = Broker::new(5);
@@ -355,7 +363,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что psubscribe возвращает ошибку на неправильный паттерн.
+    /// Тест проверяет, что psubscribe возвращает ошибку на
+    /// неправильный паттерн.
     #[tokio::test]
     async fn test_psubscribe_invalid_pattern() {
         let broker = Broker::new(5);
@@ -363,8 +372,8 @@ mod tests {
         assert!(res.is_err());
     }
 
-    /// Тест проверяет, что после `unsubscribe_all` канал не создаётся заново,
-    /// а статистика обновляется правильно.
+    /// Тест проверяет, что после `unsubscribe_all` канал не
+    /// создаётся заново, а статистика обновляется правильно.
     #[tokio::test]
     async fn test_publish_after_unsubscribe_all_does_not_create_channel() {
         let broker = Broker::new(5);

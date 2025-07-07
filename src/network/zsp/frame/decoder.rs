@@ -422,8 +422,8 @@ impl<'a> ZspDecoder<'a> {
     }
 
     /// Декодирует фрейм ZSet (префикс `^`).
-    /// Содержит <count> пар "член-оценка", где оценка — число с плавающей
-    /// точкой:contentReference[oaicite:7]{index=7}.
+    /// Содержит <count> пар "член-оценка", где оценка — число
+    /// с плавающей точкой:contentReference[oaicite:7]{index=7}.
     /// Пример: `^2\r\n$3\r\nfoo\r\n,1.23\r\n$3\r\nbar\r\n,4.56\r\n`.
     fn parse_zset(
         &mut self,
@@ -535,7 +535,8 @@ mod tests {
     use super::*;
     use crate::network::zsp::frame::encoder::ZspEncoder;
 
-    /// Тест проверяет декодирование простой inline-строки с префиксом '+'.
+    /// Тест проверяет декодирование простой inline-строки с
+    /// префиксом '+'.
     #[test]
     fn test_simple_string() {
         let mut decoder = ZspDecoder::new();
@@ -545,7 +546,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::InlineString("OK".into()));
     }
 
-    /// Тест проверяет декодирование бинарной строки, начинающейся с '$'.
+    /// Тест проверяет декодирование бинарной строки, начинающей
+    /// ся с '$'.
     #[test]
     fn test_binary_string() {
         let mut decoder = ZspDecoder::new();
@@ -555,7 +557,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::BinaryString(Some(b"hello".to_vec())));
     }
 
-    /// Тест проверяет декодирование бинарной строки в два этапа (partial).
+    /// Тест проверяет декодирование бинарной строки в два этапа
+    /// (partial).
     #[test]
     fn test_partial_binary_string() {
         let mut decoder = ZspDecoder::new();
@@ -599,7 +602,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::Dictionary(expected_dict));
     }
 
-    /// Тест проверяет декодирование словаря с несколькими элементами.
+    /// Тест проверяет декодирование словаря с несколькими
+    /// элементами.
     #[test]
     fn test_multiple_items_dictionary() {
         use std::collections::HashMap;
@@ -624,7 +628,8 @@ mod tests {
         assert_eq!(original, decoded);
     }
 
-    /// Тест проверяет, что возникает ошибка при неверном ключе словаря.
+    /// Тест проверяет, что возникает ошибка при неверном ключе
+    /// словаря.
     #[test]
     fn test_invalid_dictionary_key() {
         let mut decoder = ZspDecoder::new();
@@ -634,7 +639,8 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Тест проверяет поведение декодера при неполных данных словаря.
+    /// Тест проверяет поведение декодера при неполных данных
+    /// словаря.
     #[test]
     fn test_incomplete_dictionary() {
         let mut decoder = ZspDecoder::new();
@@ -644,7 +650,8 @@ mod tests {
         assert!(matches!(result, Ok(None))); // Ожидаем Ok(None)
     }
 
-    /// Тест проверяет декодирование положительного числа с плавающей точкой.
+    /// Тест проверяет декодирование положительного числа с
+    /// плавающей точкой.
     #[test]
     fn test_parse_float_valid_positive() {
         let mut decoder = ZspDecoder::new();
@@ -653,7 +660,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(PI));
     }
 
-    /// Тест проверяет декодирование корректного отрицательного числа с плавающей точкой.
+    /// Тест проверяет декодирование корректного отрицательного
+    /// числа с плавающей точкой.
     #[test]
     fn test_parse_float_valid_negative() {
         let mut decoder = ZspDecoder::new();
@@ -662,7 +670,8 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(-0.5));
     }
 
-    /// Тест проверяет, что при некорректном значении возникает ошибка.
+    /// Тест проверяет, что при некорректном значении возникает
+    /// ошибка.
     #[test]
     fn test_parse_float_integer_style() {
         let mut decoder = ZspDecoder::new();
@@ -670,7 +679,8 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Тест проверяет декодирование Null-ZSet с длиной -1 как пустой вектор.
+    /// Тест проверяет декодирование Null-ZSet с длиной -1 как
+    /// пустой вектор.
     #[test]
     fn test_parse_zset_null() {
         let mut decoder = ZspDecoder::new();
@@ -711,7 +721,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что при некорректной длине ZSet возникает ошибка.
+    /// Тест проверяет, что при некорректной длине ZSet возникает
+    /// ошибка.
     #[test]
     fn test_parse_zset_invalid_length() {
         let mut decoder = ZspDecoder::new();
@@ -735,7 +746,8 @@ mod tests {
         assert!(decoder.decode(&mut slice).is_err());
     }
 
-    /// Тест проверяет частичное декодирование ZSet с последующим полным.
+    /// Тест проверяет частичное декодирование ZSet с последующим
+    /// полным.
     #[test]
     fn test_parse_zset_partial() {
         let mut decoder = ZspDecoder::new();
@@ -752,8 +764,10 @@ mod tests {
         );
     }
 
-    /// Тест проверяет корректный разбор (декодирование) булевого значения `true` из байтового потока.
-    /// Проверяет, что строка "#t\r\n" декодируется в `ZspFrame::Bool(true)`.
+    /// Тест проверяет корректный разбор (декодирование) булевого
+    /// значения `true` из байтового потока.
+    /// Проверяет, что строка "#t\r\n" декодируется в
+    /// `ZspFrame::Bool(true)`.
     #[test]
     fn test_parse_bool_true() {
         let mut dec = ZspDecoder::new();
@@ -762,8 +776,10 @@ mod tests {
         assert_eq!(frame, ZspFrame::Bool(true));
     }
 
-    /// Тест проверяет корректный разбор (декодирование) булевого значения `false` из байтового потока.
-    /// Проверяет, что строка "#f\r\n" декодируется в `ZspFrame::Bool(false)`.
+    /// Тест проверяет корректный разбор (декодирование) булевого
+    /// значения `false` из байтового потока.
+    /// Проверяет, что строка "#f\r\n" декодируется в
+    /// `ZspFrame::Bool(false)`.
     #[test]
     fn test_parse_bool_false() {
         let mut dec = ZspDecoder::new();

@@ -22,7 +22,8 @@ static ARGON2: Lazy<Argon2> = Lazy::new(|| {
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
 
-/// Хэширует `password`, опционально добавляя `pepper` (секрет из конфига).
+/// Хэширует `password`, опционально добавляя `pepper` (секрет
+/// из конфига).
 pub fn hash_password(
     password: &str,
     pepper: Option<&str>,
@@ -42,7 +43,8 @@ pub fn hash_password(
         .map_err(|_| PasswordError::Hash)
 }
 
-/// Проверяет, что `password` (+ тот же `pepper`) соответствует ранее сгенерированному `hash`.
+/// Проверяет, что `password` (+ тот же `pepper`) соответствует
+/// ранее сгенерированному `hash`.
 pub fn verify_password(
     hash: &str,
     password: &str,
@@ -64,7 +66,8 @@ mod tests {
 
     const TEST_PEPPER: &str = "super_pepper";
 
-    /// Проверяет, что хеширование и верификация без pepper работают корректно.
+    /// Проверяет, что хеширование и верификация без pepper
+    /// работают корректно.
     #[test]
     fn test_hash_and_verify_no_pepper() {
         let password = "password123";
@@ -72,7 +75,8 @@ mod tests {
         assert!(verify_password(&hash, password, None).unwrap());
     }
 
-    /// Проверяет, что хеширование с pepper требует передавать тот же pepper для верификации.
+    /// Проверяет, что хеширование с pepper требует передавать
+    /// тот же pepper для верификации.
     #[test]
     fn test_hash_and_verify_with_pepper() {
         let password = "password123";
@@ -81,14 +85,16 @@ mod tests {
         assert!(verify_password(&hash, password, Some(TEST_PEPPER)).unwrap());
     }
 
-    /// Проверяет, что верификация неверного пароля возвращает false.
+    /// Проверяет, что верификация неверного пароля возвращает
+    /// false.
     #[test]
     fn test_verify_password_failure() {
         let hash = hash_password("correct", None).unwrap();
         assert!(!verify_password(&hash, "wrong", None).unwrap());
     }
 
-    /// Проверяет, что передача некорректного формата хеша приводит к ошибке.
+    /// Проверяет, что передача некорректного формата хеша приводит
+    /// к ошибке.
     #[test]
     fn test_verify_invalid_hash() {
         assert!(verify_password("invalid_hash", "any", None).is_err());

@@ -1,8 +1,8 @@
-//! Hash table (Dict) with incremental rehashing.
+//! Хеш-таблица (Dict) с инкрементным рехешированием.
 //!
-//! Implementation of a dictionary (associative array)
-//! based on a chained hash table with two tables and
-//! smooth rehashing without pauses.
+//! Реализация словаря (ассоциативного массива),
+//! основанного на хеш-таблице с цепочками, двумя таблицами и
+//! плавным рехешированием без пауз.
 
 use std::{
     collections::hash_map::DefaultHasher,
@@ -11,11 +11,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-/// Hash table parameters
+/// Параметры хеш-таблицы
 const INITIAL_SIZE: usize = 4;
 const REHASH_BATCH: usize = 1;
 
-/// One element in a collision chain.
+/// Один элемент в цепочке коллизий.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Entry<K, V> {
     key: K,
@@ -23,7 +23,7 @@ struct Entry<K, V> {
     next: Option<Box<Entry<K, V>>>,
 }
 
-/// One hash table: vector of buckets, size mask, and number of used elements.
+/// Одна хеш-таблица: вектор бакетов, маска размера и количество занятых элементов.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct HashTable<K, V> {
     buckets: Vec<Option<Box<Entry<K, V>>>>,
@@ -31,13 +31,14 @@ struct HashTable<K, V> {
     used: usize,
 }
 
-/// Main dictionary with two hash tables for rehashing.
+/// Основной словарь с двумя таблицами для рехеширования.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct Dict<K, V> {
     ht: [HashTable<K, V>; 2],
-    rehash_idx: isize, // -1 = no rehashing, otherwise index in ht[0]
+    rehash_idx: isize, // -1 = без рехеширования, иначе индекс в ht[0]
 }
 
+/// Итератор по словарю `Dict`.
 pub struct DictIter<'a, K, V> {
     tables: [&'a HashTable<K, V>; 2],
     table_idx: usize,
@@ -46,6 +47,7 @@ pub struct DictIter<'a, K, V> {
 }
 
 impl<K, V> Entry<K, V> {
+    /// Создаёт новый элемент цепочки.
     fn new(
         key: K,
         val: V,
@@ -56,7 +58,7 @@ impl<K, V> Entry<K, V> {
 }
 
 impl<K, V> HashTable<K, V> {
-    /// Creates a table with capacity `cap` (rounded up to the next power of two, at least INITIAL_SIZE).
+    /// Создаёт таблицу ёмкостью `cap` (округляется вверх до ближайшей степени двойки, минимум INITIAL_SIZE).
     fn with_capacity(cap: usize) -> Self {
         let sz = cap.next_power_of_two().max(INITIAL_SIZE);
         let mut buckets = Vec::with_capacity(sz);
@@ -69,7 +71,7 @@ impl<K, V> HashTable<K, V> {
         }
     }
 
-    /// Resets the table to an empty state.
+    /// Сбрасывает таблицу в пустое состояние.
     fn clear(&mut self) {
         self.buckets.clear();
         self.size_mask = 0;
@@ -81,6 +83,7 @@ impl<K, V> Default for Dict<K, V>
 where
     K: Hash + Eq,
 {
+    /// Создаёт словарь по умолчанию.
     fn default() -> Self {
         Self::new()
     }
@@ -90,7 +93,7 @@ impl<K, V> Dict<K, V>
 where
     K: Hash + Eq,
 {
-    /// Creates a new empty dictionary.
+    /// Создаёт новый пустой словарь.
     pub fn new() -> Self {
         Dict {
             ht: [HashTable::with_capacity(0), HashTable::with_capacity(0)],
@@ -98,7 +101,7 @@ where
         }
     }
 
-    /// Inserts (key, val). If key exists — updates it and returns false.
+    /// Вставляет (key, val). Если ключ уже существует — обновляет значение и возвращает false.
     pub fn insert(
         &mut self,
         key: K,
@@ -111,7 +114,7 @@ where
         let mask = self.ht[table_idx].size_mask;
         let slot = (Self::hash_key(&key) as usize) & mask;
 
-        // check if key already exists
+        // проверка существования ключа
         {
             let mut cur = &mut self.ht[table_idx].buckets[slot];
             while let Some(ref mut e) = cur {
@@ -123,7 +126,7 @@ where
             }
         }
 
-        // insert new entry at the head of the chain
+        // вставка нового элемента в начало цепочки
         let next = self.ht[table_idx].buckets[slot].take();
         let new_entry = Entry::new(key, val, next);
         self.ht[table_idx].buckets[slot] = Some(new_entry);
@@ -131,7 +134,7 @@ where
         true
     }
 
-    /// Returns `&V` for the given key or None.
+    /// Возвращает `&V` для указанного ключа или None.
     pub fn get(
         &mut self,
         key: &K,
@@ -158,17 +161,15 @@ where
         None
     }
 
-    /// Removes a key. Returns true if the key was removed.
+    /// Удаляет ключ. Возвращает true, если удаление произошло.
     pub fn remove(
         &mut self,
         key: &K,
     ) -> bool {
-        // perform a rehash step if needed
         if self.is_rehashing() {
             self.rehash_step();
         }
 
-        // try each table
         for table_idx in 0..=1 {
             let table = &mut self.ht[table_idx];
             if table.size_mask == 0 {
@@ -177,11 +178,8 @@ where
 
             let slot = (Self::hash_key(key) as usize) & table.size_mask;
 
-            // extract the whole chain
             let old_chain = std::mem::take(&mut table.buckets[slot]);
-            // remove the element from it
             let (new_chain, removed) = Self::remove_from_chain(old_chain, key);
-            // restore the chain (possibly without the removed node)
             table.buckets[slot] = new_chain;
 
             if removed {
@@ -196,7 +194,7 @@ where
         false
     }
 
-    /// Returns total number of elements (across all tables).
+    /// Возвращает общее количество элементов во всех таблицах.
     pub fn len(&self) -> usize {
         let mut total = self.ht[0].used;
         if self.is_rehashing() {
@@ -205,18 +203,19 @@ where
         total
     }
 
-    /// Returns `true` if the dictionary has no elements.
+    /// Возвращает `true`, если словарь пуст.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Clears the dictionary and resets rehashing.
+    /// Очищает словарь и сбрасывает рехешинг.
     pub fn clear(&mut self) {
         self.ht[0].clear();
         self.ht[1].clear();
         self.rehash_idx = -1;
     }
 
+    /// Возвращает итератор по словарю.
     pub fn iter<'a>(&'a self) -> DictIter<'a, K, V> {
         DictIter {
             tables: [&self.ht[0], &self.ht[1]],
@@ -226,8 +225,8 @@ where
         }
     }
 
-    /// Recursively processes a chain: removes the first node with the key `key`.
-    /// Returns (new_chain, was_removed).
+    /// Рекурсивно обрабатывает цепочку: удаляет первый узел с ключом `key`.
+    /// Возвращает (новая_цепочка, был_удалён).
     fn remove_from_chain(
         chain: Option<Box<Entry<K, V>>>,
         key: &K,
@@ -248,33 +247,31 @@ where
         }
     }
 
-    /// Returns true if rehashing is in progress.
+    /// Возвращает true, если в процессе рехеширования.
     #[inline]
     fn is_rehashing(&self) -> bool {
         self.rehash_idx != -1
     }
 
-    /// Hashes the key to u64.
+    /// Вычисляет хеш ключа как u64.
     fn hash_key(key: &K) -> u64 {
         let mut h = DefaultHasher::new();
         key.hash(&mut h);
         h.finish()
     }
 
-    /// Performs one incremental rehash step.
+    /// Выполняет один шаг инкрементного рехеширования.
     fn rehash_step(&mut self) {
         if !self.is_rehashing() {
             return;
         }
         for _ in 0..REHASH_BATCH {
             let idx = self.rehash_idx as usize;
-            // if we've finished all buckets — complete migration
             if idx >= self.ht[0].buckets.len() {
                 self.ht[0] = std::mem::replace(&mut self.ht[1], HashTable::with_capacity(0));
                 self.rehash_idx = -1;
                 return;
             }
-            // move the entire chain from ht[0].buckets[idx]
             let mut entry_opt = self.ht[0].buckets[idx].take();
             while let Some(mut e) = entry_opt {
                 entry_opt = e.next.take();
@@ -288,7 +285,7 @@ where
         }
     }
 
-    /// Starts or expands rehashing if the load factor exceeds 1.
+    /// Запускает или расширяет рехеширование, если load factor превышает 1.
     fn expand_if_needed(&mut self) {
         if self.is_rehashing() {
             return;
@@ -345,7 +342,7 @@ where
 mod tests {
     use super::*;
 
-    /// Verifies basic insertion and key-based value retrieval operations.
+    /// Тест проверяет базовые операции вставки и получения значений по ключу.
     #[test]
     fn basic_insert_get() {
         let mut d = Dict::new();
@@ -358,7 +355,7 @@ mod tests {
         assert_eq!(d.get(&"a"), Some(&10));
     }
 
-    /// Verifies value update when reinserting with the same key.
+    /// Тест проверяет обновление значения при повторной вставке с тем же ключом.
     #[test]
     fn insert_updates_existing_key() {
         let mut d = Dict::new();
@@ -367,7 +364,7 @@ mod tests {
         assert_eq!(d.get(&"key"), Some(&100));
     }
 
-    /// Verifies correct removal behavior: value is removed, and repeated removal returns false.
+    /// Тест проверяет удаление: значение удаляется, повторное удаление возвращает false.
     #[test]
     fn removal() {
         let mut d = Dict::new();
@@ -378,7 +375,7 @@ mod tests {
         assert!(!d.remove(&"x"));
     }
 
-    /// Verifies dictionary behavior with many insertions and subsequent access.
+    /// Тест проверяет корректную работу словаря при большом количестве вставок и доступе к значениям.
     #[test]
     fn rehash_behavior() {
         let mut d = Dict::new();
@@ -391,7 +388,7 @@ mod tests {
         assert_eq!(d.len(), 100);
     }
 
-    /// Verifies correct removal of keys during rehashing.
+    /// Тест проверяет корректное удаление ключей во время рехеширования.
     #[test]
     fn rehash_with_removal() {
         let mut d = Dict::new();
@@ -412,7 +409,7 @@ mod tests {
         }
     }
 
-    /// Verifies that the dictionary is properly cleared.
+    /// Тест проверяет, что словарь корректно очищается.
     #[test]
     fn clear_dict() {
         let mut d = Dict::new();
@@ -422,7 +419,7 @@ mod tests {
         assert_eq!(d.get(&"k"), None);
     }
 
-    /// Verifies that the dictionary can be reused after being cleared.
+    /// Тест проверяет, что словарь можно повторно использовать после очистки.
     #[test]
     fn clear_and_reuse() {
         let mut d = Dict::new();
@@ -433,7 +430,7 @@ mod tests {
         assert_eq!(d.get(&"a"), Some(&2));
     }
 
-    /// Verifies correct operation of the dictionary iterator.
+    /// Тест проверяет корректную работу итератора по словарю.
     #[test]
     fn iteration_work() {
         let mut d = Dict::new();
@@ -450,7 +447,7 @@ mod tests {
         assert_eq!(seen, vec![(&"x", 1), (&"y", 2), (&"z", 3)]);
     }
 
-    /// Verifies that the iterator over an empty dictionary yields no elements.
+    /// Тест проверяет, что итератор по пустому словарю не возвращает элементов.
     #[test]
     fn empty_iterator() {
         let d: Dict<&str, i32> = Dict::new();
