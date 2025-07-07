@@ -1,0 +1,41 @@
+name: Crash report
+description: Submit a crash report for Zumic
+title: "[CRASH] <short description>"
+labels: ["crash"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Notice!**
+        - If a Zumic module or plugin was involved, please open an issue in the module's repo instead!
+        - If you're using Docker on Apple Silicon (M1/M2), make sure the image was compiled for ARM!
+
+        Please provide as much detail as possible to help us diagnose the crash.
+
+  - type: textarea
+    id: crash_log
+    attributes:
+      label: Crash log
+      description: |
+        Paste the complete crash log here. Please include a few lines from the log preceding the crash for context.
+      placeholder: |
+        ```
+        [Paste your crash log here]
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: Additional information
+      description: |
+        1. OS distribution and version
+        2. Steps to reproduce (if any)
+        3. Any other relevant context (hardware, configuration, etc.)
+      placeholder: |
+        1. Ubuntu 22.04
+        2. Run `zumic --start`, then execute `SET foo bar`
+        3. Running inside Docker on Apple M1
+    validations:
+      required: true
