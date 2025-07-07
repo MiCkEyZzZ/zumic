@@ -1,8 +1,7 @@
 name: 🐞 Bug report
-about: Report a bug in the Zumic database
+description: Report a bug in the Zumic database
 title: "[BUG]"
-labels: bug
-assignees: ""
+labels: [bug]
 
 body:
   - type: markdown
@@ -16,7 +15,6 @@ body:
       label: What went wrong?
       description: Describe the bug in detail.
       placeholder: The database panicked when I called `SET foo bar`…
-      required: true
 
   - type: input
     id: steps
@@ -27,7 +25,6 @@ body:
         1. Start zumic
         2. Run `SET foo bar`
         3. Observe panic
-      required: true
 
   - type: textarea
     id: environment
