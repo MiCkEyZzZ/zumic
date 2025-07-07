@@ -1,0 +1,33 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # Запускать только на пуш тега вида v1.2.3
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          mkdir dist
+          cp target/release/zumic dist/
+          cd dist
+          tar czf zumic-${GITHUB_REF_NAME}.tar.gz zumic
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/zumic-${GITHUB_REF_NAME}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
