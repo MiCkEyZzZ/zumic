@@ -17,7 +17,6 @@ body:
         Clearly describe the problem or need that this new feature would address.
         Why is it important to add this feature to Zumic?
         Did you consider alternative solutions outside of Zumic?
-    # required: true  # Можно добавить, если хочешь сделать поле обязательным
 
   - type: textarea
     id: feature
@@ -25,7 +24,6 @@ body:
       label: What does the feature do?
       description: |
         Give a high-level overview of what the feature should do and how it might work in Zumic.
-    # required: true
 
   - type: textarea
     id: implementation
@@ -33,4 +31,3 @@ body:
       label: Implementation ideas or challenges
       description: |
         If you have thoughts on how to implement the feature, or foresee any particular challenges, describe them here.
-    # required: false
