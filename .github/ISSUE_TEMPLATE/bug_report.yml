@@ -1,4 +1,4 @@
-name: 🐞 Bug report
+name: Bug report
 description: Report a bug in the Zumic database
 title: "[BUG]"
 labels: [bug]
