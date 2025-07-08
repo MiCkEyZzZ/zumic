@@ -1,14 +1,14 @@
-# Артефакты сборки Rust
+# Rust build artifacts
 target/
 dist
-book
 tmp
 /bin
 **/cargo-target
 
-**/*.DS_Store
+# mdBook output
+book/
 
-# IDE и редакторы
+# Editor directories and files
 .idea/
 .vscode/
 .zed/
@@ -16,29 +16,32 @@ tmp
 *.iml
 out/
 
-# Системные файлы
+# macOS
 .DS_Store
 
 debug/
 
-# Журналы и профили
+# Logs and profiles
 /logs
 /Flamegraph
 
-# Документация, читаемая генераторами
+# Documentation readable by generators
 /docs/
-book
 doc**/*
 
-# Секреты и окружающая среда
+# Env files and secrets
 .env
 zumic.conf
 
-# Рабочее пространство Vscode
+# Vscode workspace
 *.code-workspace
 
-# Веб-артефакты
+# WebAssembly build
 *.wasm
 
-# Тестовые файлы
+# Test artifacts
 test_zdb_roundtrip.**
+
+# Misc
+out/
+debug/
