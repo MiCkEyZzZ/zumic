@@ -1,25 +1,23 @@
 # Zumic Security Policy
 
-## Support Versions
+## Supported Versions
 
-| Version   | Supported | Notes
-| --------- | --------- |-----------------------------------------------------------------------|
-| >= v0.1.0 | ✅        | Активно поддерживаемые версии, исправляем найденные уязвимости и баги |
-| < v0.1.0  | ❌         | Устаревшие версии, без поддержки безопасности                         |
+| Version   | Supported | Notes                                                                   |
+| --------- | --------- | ------------------------------------------------------------------------|
+| >= v0.1.0 | ✅        | Actively supported versions; we fix discovered vulnerabilities and bugs |
+| < v0.1.0  | ❌         | Legacy versions; not receiving security updates                         |
 
 ## Reporting a Vulnerability
 
-Безопасность Zumic для нас — в приоритете. Если вы обнаружили
-уязвимость в коде, сборках или инфраструктуре Zumic, пожалуйста,
-свяжитесь с нами напрямую.
+Security is a top priority for us at Zumic.
+If you discover a vulnerability in Zumic’s code, builds, or infrastructure,
+please contact us directly.
 
-Мы просим не публиковать информацию о проблеме публично (например,
-в GitHub Issues), чтобы не подвергать пользователей риску. Вместо
-этого отправьте нам письмо на адрес: `security@zumic.io`
+We kindly ask you **not to disclose the issue publicly** (e.g., via GitHub Issues),
+to avoid putting users at risk. Instead, email us at: `security@zumic.io`
 
-Пожалуйста, укажите:
+Please include the following information:
 
-1. Версию Zumic, где обнаружена проблема
-2. Подробное описание уязвимости и шаги для её воспроизведения
-3. Любые дополнительные детали, которые помогут быстрее понять и
-исправить проблему
+1. The version of Zumic where the issue was found
+2. A detailed description of the vulnerability and steps to reproduce it
+3. Any additional context that may help us understand and resolve the issue more quickly

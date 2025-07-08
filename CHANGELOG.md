@@ -1,6 +1,19 @@
 # Changelog
 
-## [Unreleased] - 0000-00-00
+[Unreleased]
+
+### Добавлено
+
+- **Основные команды**:
+  - **CI/CD и шаблоны GitHub**:
+    - Добавлены шаблоны Issues: `enhancement.yml`, `feature.yml`, `question.yml`, `config.yml`.
+    - Добавлен workflow `release.yml` для автоматизации публикаций релизов.
+
+### Изменено
+
+  - Внёс улучшения в файл SECURITY.md;
+
+## [v0.1.0] - 2025-08-06
 
 ### Добавлено
 
@@ -23,6 +36,7 @@
   - Добавил дополнительные методы для типа `SkipList`: `contains`, `is_empty`, `clear`, `front`, `back`.
   - Добавил тесты для всех методов `SkipList`.
   - Добавил дополнительные методы для типа `SmartHash`: `keys`, `values`, `entries`, `do_downgrade`.
+
 - **Бенчмарки**:
 
   - Добавлены бенчмарки для следующих команд: `basic`, `float`, `int`, `string`, `hash`, `set`, `list`, `zset`.
