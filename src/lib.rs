@@ -74,3 +74,5 @@ pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
     PasswordError, StoreError, StoreResult,
 };
+
+pub use config::settings::{Settings, StorageConfig, StorageType};

@@ -10,6 +10,20 @@
     - Добавлен workflow `release.yml` для автоматизации публикаций релизов.
   - **book**
     - Добавлены базовые главы и их описание.
+  - **Environment configuration** (`.env`)
+    ```dotenv
+      ZUMIC_LISTEN_ADDRESS=**
+     ZUMIC_MAX_CONNECTIONS=**
+     ZUMIC_AOF_PATH=**
+     ZUMIC_DSNAPSHOT_PATH=**
+     ZUMIC_SNAPSHOT_FREQ=**
+     ZUMIC_MAX_MEMORY=**
+     ZUMIC_LOG_LEVEL=**
+     ZUMIC_PASSWORD=**
+     ZUMIC_TLS_CERT=**
+     ZUMIC_TLS_KEY=**
+     ZUMIC_THREAD_POOL=*
+    ```
 
 ### Изменено
 

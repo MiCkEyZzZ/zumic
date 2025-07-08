@@ -1,0 +1,8 @@
+listen_address = "0.0.0.0:6379"
+max_connections = 200
+storage_type = "persistent"
+aof_path = "./data/dump.aof"
+snapshot_freq = 300
+max_memory = "1G"
+log_level = "info"
+thread_pool_size = 8
