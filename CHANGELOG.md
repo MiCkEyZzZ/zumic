@@ -8,10 +8,13 @@
   - **CI/CD и шаблоны GitHub**:
     - Добавлены шаблоны Issues: `enhancement.yml`, `feature.yml`, `question.yml`, `config.yml`.
     - Добавлен workflow `release.yml` для автоматизации публикаций релизов.
+  - **book**
+    - Добавлены базовые главы и их описание.
 
 ### Изменено
 
-  - Внёс улучшения в файл SECURITY.md;
+  - Внёс улучшения в файл `SECURITY.md`;
+  - Вынес файл `pull_request_template.md` в корень .github;
 
 ## [v0.1.0] - 2025-08-06
 
