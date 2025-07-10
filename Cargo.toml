@@ -58,6 +58,7 @@ tracing-subscriber = { version = "0.3", features = [
     "json",
     "registry",
 ] }
+wasmtime = "34.0.1"
 zstd = "0.13.3"
 
 [build-dependencies]

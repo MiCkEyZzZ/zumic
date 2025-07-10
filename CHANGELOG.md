@@ -4,15 +4,17 @@
 
 ### Добавлено
 
-- **Основные команды**:
+- **GitHub Action**:
   - **CI/CD и шаблоны GitHub**:
     - Добавлены шаблоны Issues: `enhancement.yml`, `feature.yml`, `question.yml`, `config.yml`.
     - Добавлен workflow `release.yml` для автоматизации публикаций релизов.
   - **book**
     - Добавлены базовые главы и их описание.
+
+- **Env**
   - **Environment configuration** (`.env`)
     ```dotenv
-      ZUMIC_LISTEN_ADDRESS=**
+     ZUMIC_LISTEN_ADDRESS=**
      ZUMIC_MAX_CONNECTIONS=**
      ZUMIC_AOF_PATH=**
      ZUMIC_DSNAPSHOT_PATH=**
@@ -24,6 +26,13 @@
      ZUMIC_TLS_KEY=**
      ZUMIC_THREAD_POOL=*
     ```
+
+- **Модули**
+  - Добавлены каркас и менеджер плагинов:
+    - Файл `modules/api.rs` с трэйтом `Module`.
+    - Файл `modules/loader.rs` с динамической загрузкой `.so/.dll`.
+    - Файл `modules/wasm.rs` с обёрткой для WASM.
+    - Файл `modules/plugin_manager.rs` (раньше `mod.rs`) с `Plugin` и `Manager`.
 
 ### Изменено
 

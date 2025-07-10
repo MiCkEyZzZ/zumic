@@ -25,6 +25,7 @@ pub mod engine;
 pub mod error;
 /// Гибкая система логирования (форматирование, фильтры, вывод).
 pub mod logging;
+pub mod modules;
 /// Работа с сетью: протокол ZSP и сервер на Tokio.
 pub mod network;
 /// Pub/Sub: брокер, подписки, сообщения.
@@ -76,3 +77,5 @@ pub use error::{
 };
 
 pub use config::settings::{Settings, StorageConfig, StorageType};
+
+pub use modules::{DynamicModule, Manager, Module, Plugin, WasmPlugin};
