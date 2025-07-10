@@ -1,8 +1,8 @@
-use crate::Module;
-
 use std::path::Path;
 
 use libloading::{Library, Symbol};
+
+use crate::Module;
 
 pub struct DynamicModule {
     _lib: Library,
