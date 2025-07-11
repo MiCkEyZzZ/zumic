@@ -56,7 +56,7 @@ mod tests {
 
         let del_result = ctx.del(key.clone());
         assert!(del_result.is_ok());
-        assert_eq!(del_result.unwrap(), true);
+        assert!(del_result.unwrap());
 
         let get_after_del = ctx.get(key.clone());
         assert!(get_after_del.is_ok());
