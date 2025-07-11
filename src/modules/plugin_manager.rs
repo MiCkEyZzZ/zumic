@@ -100,6 +100,31 @@ impl Manager {
             let _ = plugin.handle(cmd, data);
         }
     }
+
+    pub fn load_module(
+        &mut self,
+        module: &mut dyn Module,
+    ) -> Result<(), String> {
+        module.on_load()?;
+        module.init()?;
+        Ok(())
+    }
+
+    pub fn unload_module(
+        &mut self,
+        module: &mut dyn Module,
+    ) -> Result<(), String> {
+        module.on_unload()?;
+        Ok(())
+    }
+
+    pub fn reload_module(
+        &mut self,
+        module: &mut dyn Module,
+    ) -> Result<(), String> {
+        module.on_reload()?;
+        Ok(())
+    }
 }
 
 impl Default for Manager {

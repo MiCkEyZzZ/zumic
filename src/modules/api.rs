@@ -10,4 +10,19 @@ pub trait Module {
         command: &str,
         data: &[u8],
     ) -> Result<Vec<u8>, String>;
+
+    /// Вызывается при загрузке модуля (жизненный цикл)
+    fn on_load(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Вызывается при выгрузке модуля (жизненный цикл)
+    fn on_unload(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Вызывается при перезагрузке модуля (жизненный цикл)
+    fn on_reload(&mut self) -> Result<(), String> {
+        Ok(())
+    }
 }
