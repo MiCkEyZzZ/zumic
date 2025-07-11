@@ -1,6 +1,6 @@
 use wasmtime::{Engine, Instance, Module as WasmModule, Store};
 
-use crate::Module;
+use crate::{command_registry::CommandRegistry, db_context::DbContext, Module};
 
 /// Обёртка для WASM-модулей, реализующих тот же интерфейс.
 pub struct WasmPlugin {
@@ -24,12 +24,14 @@ impl WasmPlugin {
 
 impl Module for WasmPlugin {
     fn name(&self) -> &str {
-        // Здесь просто возвращаем статическое имя,
-        // чтобы не требовать &mut для name()
         "WASM"
     }
 
-    fn init(&mut self) -> Result<(), String> {
+    fn init(
+        &mut self,
+        _registry: &mut CommandRegistry,
+        _ctx: &mut DbContext,
+    ) -> Result<(), String> {
         if let Ok(init_fn) = self
             .instance
             .get_typed_func::<(), ()>(&mut self.store, "init")
@@ -45,13 +47,48 @@ impl Module for WasmPlugin {
         &mut self,
         _command: &str,
         _data: &[u8],
+        _ctx: &mut DbContext,
     ) -> Result<Vec<u8>, String> {
-        // Если нужно брать мутабельный store, делаем handle(&mut self)
-        // Здесь можете вызывать, например, функцию `handle` из WASM:
-        // let func = self.instance
-        //     .get_typed_func::<(i32,i32), i32>(&mut self.store, "handle")
-        //     .map_err(|e| format!("WASM handle not found: {}", e))?;
-        // ... и конвертировать command/data в память WASM ...
         Err("WASM handle not implemented".into())
+    }
+
+    fn on_load(
+        &mut self,
+        _registry: &mut CommandRegistry,
+        _ctx: &mut DbContext,
+    ) -> Result<(), String> {
+        if let Ok(f) = self
+            .instance
+            .get_typed_func::<(), ()>(&mut self.store, "on_load")
+        {
+            f.call(&mut self.store, ()).ok();
+        }
+        Ok(())
+    }
+
+    fn on_unload(
+        &mut self,
+        _ctx: &mut DbContext,
+    ) -> Result<(), String> {
+        if let Ok(f) = self
+            .instance
+            .get_typed_func::<(), ()>(&mut self.store, "on_unload")
+        {
+            f.call(&mut self.store, ()).ok();
+        }
+        Ok(())
+    }
+
+    fn on_reload(
+        &mut self,
+        _ctx: &mut DbContext,
+    ) -> Result<(), String> {
+        if let Ok(f) = self
+            .instance
+            .get_typed_func::<(), ()>(&mut self.store, "on_reload")
+        {
+            f.call(&mut self.store, ()).ok();
+        }
+        Ok(())
     }
 }
