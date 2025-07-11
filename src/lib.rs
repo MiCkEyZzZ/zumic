@@ -15,10 +15,12 @@
 pub mod auth;
 /// Разбор и выполнение команд: SET, GET, INCR и др.
 pub mod command;
+pub mod command_registry;
 /// Загрузка конфигурации сервера.
 pub mod config;
 /// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
 pub mod database;
+pub mod db_context;
 /// Абстракции и реализации движков хранения (InMemory, Persistent, Cluster).
 pub mod engine;
 /// Типы ошибок: кодирование/декодирование, парсинг, хранение.
