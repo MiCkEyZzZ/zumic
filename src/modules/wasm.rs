@@ -1,30 +1,23 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
 
-use wasmtime::{Engine, Instance, InterruptHandle, Memory, Module as WasmModule, Store, TypedFunc};
+use wasmtime::{Engine, Instance, Memory, Module as WasmModule, Store, TypedFunc};
 
 use crate::{command_registry::CommandRegistry, db_context::DbContext, Module};
 
-/// Обёртка для WASM-плагинов.
-///
-/// Контракт плагина (WAT/wasm):
-/// ```wat
-/// (memory (export "memory") 2)
-/// (func (export "malloc") (param i32) (result i32))
-/// (func (export "free")   (param i32) (param i32))
-/// (func (export "handle") (param i32 i32) (result i64))
-/// (func (export "init")   ...)
-/// (func (export "on_load") ...)
-/// ...
-/// ```
 pub struct WasmPlugin {
     instance: Instance,
     store: Store<()>,
-    interrupt: StoreInterruptHandle,
+    engine: Engine,
     allocated: HashSet<i32>,
 }
 
 impl WasmPlugin {
-    /// Загружает WASM-модуль и инициализирует окружение с возможностью прерывания.
+    /// Загружает и инициализирует WASM-модуль.
     pub fn load(
         path: &str,
         engine: &Engine,
@@ -32,27 +25,25 @@ impl WasmPlugin {
         let module =
             WasmModule::from_file(engine, path).map_err(|e| format!("WASM load error: {e}"))?;
         let mut store = Store::new(engine, ());
-        let interrupt = store
-            .interrupt_handle()
-            .map_err(|e| format!("interrupt_handle failed: {e}"))?;
+        store.set_epoch_deadline(1); // прерывание при первой проверке
         let instance = Instance::new(&mut store, &module, &[])
             .map_err(|e| format!("WASM instantiate error: {e}"))?;
-        Ok(WasmPlugin {
+        Ok(Self {
             instance,
             store,
-            interrupt,
+            engine: engine.clone(),
             allocated: HashSet::new(),
         })
     }
 
-    /// Получает память WASM-модуля.
+    /// Получает экспортированную память WASM-модуля.
     fn memory(&mut self) -> Result<Memory, String> {
         self.instance
             .get_memory(&mut self.store, "memory")
             .ok_or_else(|| "WASM memory not found".into())
     }
 
-    /// Вызывает malloc в WASM, возвращает указатель.
+    /// Вызывает `malloc` внутри WASM, возвращает указатель.
     fn malloc(
         &mut self,
         size: i32,
@@ -65,7 +56,7 @@ impl WasmPlugin {
             .map_err(|e| format!("malloc failed: {e}"))
     }
 
-    /// Вызывает free в WASM, проверяя двойное освобождение.
+    /// Вызывает `free` внутри WASM, предотвращает двойное освобождение.
     fn free(
         &mut self,
         ptr: i32,
@@ -83,7 +74,7 @@ impl WasmPlugin {
             .map_err(|e| format!("free failed: {e}"))
     }
 
-    /// Записывает данные в память WASM и возвращает (ptr, len).
+    /// Записывает данные в память WASM-модуля. Возвращает (ptr, len).
     fn write_raw(
         &mut self,
         data: &[u8],
@@ -103,7 +94,7 @@ impl WasmPlugin {
         Ok((ptr, data.len() as i32))
     }
 
-    /// Читает данные из памяти WASM по указателю и длине.
+    /// Читает данные из памяти WASM-модуля.
     fn read_raw(
         &mut self,
         ptr: i32,
@@ -118,7 +109,7 @@ impl WasmPlugin {
         Ok(buf[ptr as usize..end].to_vec())
     }
 
-    /// Вызывает функцию WASM с таймаутом, прерывая при превышении лимита.
+    /// Вызывает WASM-функцию с прерыванием по таймауту.
     fn call_with_timeout(
         &mut self,
         func: TypedFunc<(i32, i32), i64>,
@@ -126,23 +117,20 @@ impl WasmPlugin {
         timeout: Duration,
     ) -> Result<i64, String> {
         let done = Arc::new(Mutex::new(false));
-        let done_clone = done.clone();
-        let int = self.interrupt.clone();
+        let done_clone = Arc::clone(&done);
+        let engine = self.engine.clone();
 
-        // фоновый таймер для прерывания
         let handle = thread::spawn(move || {
             thread::sleep(timeout);
             if !*done_clone.lock().unwrap() {
-                let _ = int.interrupt();
+                engine.increment_epoch();
             }
         });
 
-        // собственно вызов
         let result = func
             .call(&mut self.store, args)
             .map_err(|e| format!("WASM handle call failed: {e}"))?;
 
-        // пометим, что успешно завершилось
         *done.lock().unwrap() = true;
         let _ = handle.join();
         Ok(result)
@@ -154,6 +142,7 @@ impl Module for WasmPlugin {
         "WASM"
     }
 
+    /// Инициализация модуля (вызывает опциональный экспорт `init`).
     fn init(
         &mut self,
         _registry: &mut CommandRegistry,
@@ -169,13 +158,13 @@ impl Module for WasmPlugin {
         Ok(())
     }
 
+    /// Обрабатывает команду, передавая её в `handle`.
     fn handle(
         &mut self,
         command: &str,
         data: &[u8],
         _ctx: &mut DbContext,
     ) -> Result<Vec<u8>, String> {
-        // CBOR-сериализация (command, data)
         let mut input = Vec::new();
         serde_cbor::to_writer(&mut input, &(command, data)).map_err(|e| e.to_string())?;
 
@@ -190,13 +179,12 @@ impl Module for WasmPlugin {
         let out_len = ((ret >> 32) as u32) as i32;
         let output = self.read_raw(out_ptr, out_len)?;
 
-        // освобождаем
         self.free(in_ptr, in_len)?;
         self.free(out_ptr, out_len)?;
-
         Ok(output)
     }
 
+    /// Вызывается при загрузке модуля (опциональный экспорт `on_load`).
     fn on_load(
         &mut self,
         _reg: &mut CommandRegistry,
@@ -210,6 +198,8 @@ impl Module for WasmPlugin {
         }
         Ok(())
     }
+
+    /// Вызывается при выгрузке модуля (опциональный экспорт `on_unload`).
     fn on_unload(
         &mut self,
         _ctx: &mut DbContext,
@@ -222,6 +212,8 @@ impl Module for WasmPlugin {
         }
         Ok(())
     }
+
+    /// Вызывается при перезагрузке модуля (опциональный экспорт `on_reload`).
     fn on_reload(
         &mut self,
         _ctx: &mut DbContext,

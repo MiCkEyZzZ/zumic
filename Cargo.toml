@@ -62,8 +62,7 @@ tracing-subscriber = { version = "0.3", features = [
 zstd = "0.13.3"
 
 [dependencies.wasmtime]
-version = "34.0.1"           # or whatever major version you’re on
-features = ["interruptable"]
+version = "34.0.1"
 
 [build-dependencies]
 wasmtime-wit-bindgen = "31.0.0"
