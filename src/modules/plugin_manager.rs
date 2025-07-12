@@ -228,6 +228,8 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что модуль можно добавить в менеджер и корректно
+    /// инициализировать через `init_all`.
     #[test]
     fn test_manager_add_and_init_native() {
         let mut manager = Manager::new();
@@ -243,6 +245,8 @@ mod tests {
         // Но для этого нужно вернуть объект DummyModule наружу или хранить Arc флаги в тесте
     }
 
+    /// Тест проверяет, что вызов `handle` у модуля через менеджер работает
+    /// корректно и возвращает ожидаемый результат.
     #[test]
     fn test_manager_handle_native() {
         let mut manager = Manager::new();
@@ -260,6 +264,8 @@ mod tests {
         assert_eq!(res.unwrap(), b"ok".to_vec());
     }
 
+    /// Тест проверяет, что вызовы `unload_all` и `reload_all` работают без
+    /// ошибок на базовом уровне.
     #[test]
     fn test_manager_unload_and_reload() {
         let mut manager = Manager::new();
