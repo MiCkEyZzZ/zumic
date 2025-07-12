@@ -9,15 +9,30 @@ use wasmtime::{Engine, Instance, Memory, Module as WasmModule, Store, TypedFunc}
 
 use crate::{command_registry::CommandRegistry, db_context::DbContext, Module};
 
+/// Плагин, исполняющий WebAssembly-модуль и реализующий интерфейс `Module`.
+///
+/// Обеспечивает загрузку, инициализацию, вызов функций и управление памятью
+/// WASM-модуля через `wasmtime`.
 pub struct WasmPlugin {
+    /// Экземпляр загруженного WASM-модуля.
     instance: Instance,
+    /// Контекст выполнения модуля.
     store: Store<()>,
+    /// Движок выполнения WASM (используется для прерываний и создания Store).
     engine: Engine,
+    /// Множество указателей, выделенных через `malloc`, чтобы избежать двойного `free`.
     allocated: HashSet<i32>,
 }
 
 impl WasmPlugin {
-    /// Загружает и инициализирует WASM-модуль.
+    /// Загружает и инициализирует WASM-модуль из указанного файла.
+    ///
+    /// # Аргументы
+    /// * `path` — путь к `.wasm`-файлу.
+    /// * `engine` — экземпляр `wasmtime::Engine`, используемый для создания Store и контроля эпохи.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку, если модуль не удалось загрузить или создать экземпляр.
     pub fn load(
         path: &str,
         engine: &Engine,
@@ -36,14 +51,17 @@ impl WasmPlugin {
         })
     }
 
-    /// Получает экспортированную память WASM-модуля.
+    /// Возвращает экспортированную память WASM-модуля.
     fn memory(&mut self) -> Result<Memory, String> {
         self.instance
             .get_memory(&mut self.store, "memory")
             .ok_or_else(|| "WASM memory not found".into())
     }
 
-    /// Вызывает `malloc` внутри WASM, возвращает указатель.
+    /// Вызывает `malloc` внутри WASM-модуля и возвращает указатель.
+    ///
+    /// # Аргументы
+    /// * `size` — размер в байтах, который нужно выделить.
     fn malloc(
         &mut self,
         size: i32,
@@ -56,7 +74,11 @@ impl WasmPlugin {
             .map_err(|e| format!("malloc failed: {e}"))
     }
 
-    /// Вызывает `free` внутри WASM, предотвращает двойное освобождение.
+    /// Вызывает `free` внутри WASM-модуля. Предотвращает двойное освобождение.
+    ///
+    /// # Аргументы
+    /// * `ptr` — указатель на освобождаемую область.
+    /// * `len` — длина освобождаемой области.
     fn free(
         &mut self,
         ptr: i32,
@@ -74,7 +96,10 @@ impl WasmPlugin {
             .map_err(|e| format!("free failed: {e}"))
     }
 
-    /// Записывает данные в память WASM-модуля. Возвращает (ptr, len).
+    /// Записывает данные в память WASM-модуля и возвращает `(ptr, len)`.
+    ///
+    /// # Ошибки
+    /// Возвращает ошибку, если данные превышают лимит размера или выходят за пределы памяти.
     fn write_raw(
         &mut self,
         data: &[u8],
@@ -94,7 +119,7 @@ impl WasmPlugin {
         Ok((ptr, data.len() as i32))
     }
 
-    /// Читает данные из памяти WASM-модуля.
+    /// Читает данные из памяти WASM-модуля по указателю и длине.
     fn read_raw(
         &mut self,
         ptr: i32,
@@ -109,7 +134,14 @@ impl WasmPlugin {
         Ok(buf[ptr as usize..end].to_vec())
     }
 
-    /// Вызывает WASM-функцию с прерыванием по таймауту.
+    /// Вызывает WASM-функцию с возможностью прерывания по таймауту.
+    ///
+    /// Использует механизм `epoch` в wasmtime для остановки долгих вычислений.
+    ///
+    /// # Аргументы
+    /// * `func` — вызываемая функция.
+    /// * `args` — аргументы `(ptr, len)`.
+    /// * `timeout` — максимальное время выполнения.
     fn call_with_timeout(
         &mut self,
         func: TypedFunc<(i32, i32), i64>,
@@ -142,7 +174,9 @@ impl Module for WasmPlugin {
         "WASM"
     }
 
-    /// Инициализация модуля (вызывает опциональный экспорт `init`).
+    /// Вызывает экспортированную функцию `init`, если она определена.
+    ///
+    /// Используется для инициализации WASM-модуля.
     fn init(
         &mut self,
         _registry: &mut CommandRegistry,
@@ -158,7 +192,9 @@ impl Module for WasmPlugin {
         Ok(())
     }
 
-    /// Обрабатывает команду, передавая её в `handle`.
+    /// Передаёт команду и данные в WASM-функцию `handle`, сериализует ввод и десериализует результат.
+    ///
+    /// Использует формат CBOR.
     fn handle(
         &mut self,
         command: &str,
@@ -184,7 +220,7 @@ impl Module for WasmPlugin {
         Ok(output)
     }
 
-    /// Вызывается при загрузке модуля (опциональный экспорт `on_load`).
+    /// Вызывает функцию `on_load`, если она определена в модуле.
     fn on_load(
         &mut self,
         _reg: &mut CommandRegistry,
@@ -199,7 +235,7 @@ impl Module for WasmPlugin {
         Ok(())
     }
 
-    /// Вызывается при выгрузке модуля (опциональный экспорт `on_unload`).
+    /// Вызывает функцию `on_unload`, если она определена в модуле.
     fn on_unload(
         &mut self,
         _ctx: &mut DbContext,
@@ -213,7 +249,7 @@ impl Module for WasmPlugin {
         Ok(())
     }
 
-    /// Вызывается при перезагрузке модуля (опциональный экспорт `on_reload`).
+    /// Вызывает функцию `on_reload`, если она определена в модуле.
     fn on_reload(
         &mut self,
         _ctx: &mut DbContext,
