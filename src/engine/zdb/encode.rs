@@ -11,7 +11,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use crc32fast::Hasher;
 
 use super::{
-    compress_block, should_compress, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL,
+    compress_block, should_compress, FormatVersion, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL,
     TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET,
     TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
@@ -171,7 +171,7 @@ pub fn write_dump<W: Write>(
     // 1) Собираем «тело» дампа в буфер
     let mut buf = Vec::new();
     buf.extend_from_slice(FILE_MAGIC);
-    buf.push(DUMP_VERSION);
+    buf.push(FormatVersion::V1 as u8);
     buf.write_u32::<BigEndian>(kvs.size_hint().0 as u32)?;
     for (key, val) in kvs {
         let kb = key.as_bytes();
@@ -200,7 +200,7 @@ pub fn write_stream<W: Write>(
     kvs: impl Iterator<Item = (Sds, Value)>,
 ) -> std::io::Result<()> {
     w.write_all(FILE_MAGIC)?;
-    w.write_u8(DUMP_VERSION)?;
+    w.write_u8(FormatVersion::V1 as u8)?;
 
     for (key, val) in kvs {
         let kb = key.as_bytes();
@@ -402,9 +402,10 @@ mod tests {
     fn doc_test_dump_bad_magic() {
         let mut buf = Vec::new();
         buf.extend(b"BAD"); // неправильная магия
-        buf.push(DUMP_VERSION);
+        buf.push(FormatVersion::V1 as u8);
         buf.extend(&0u32.to_be_bytes()); // count = 0
-                                         // CRC32 ещё не добавлен — read_dump должен упасть на too small
+        buf.extend(&0u32.to_be_bytes()); // фиктивный CRC32
+
         assert!(read_dump(&mut &buf[..]).is_err());
     }
 
@@ -442,9 +443,8 @@ mod tests {
     #[test]
     fn test_write_stream_eof() {
         let mut buf = Vec::new();
-        // Записываем только магию, версию и EOF
         buf.extend(FILE_MAGIC);
-        buf.push(DUMP_VERSION);
+        buf.push(FormatVersion::V1 as u8);
         buf.push(TAG_EOF);
 
         let mut reader = StreamReader::new(&buf[..]).unwrap();

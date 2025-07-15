@@ -75,5 +75,5 @@ criterion = { version = "0.6.0", features = ["async"] }
 opt-level = 3
 
 [[bench]]
-name = "bitmap_benchmarks"
+name = "decode_benchmarks"
 harness = false

@@ -16,7 +16,7 @@ use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, DUMP_VERSION, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED,
+    decompress_block, FormatVersion, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED,
     TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{database::Bitmap, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
@@ -31,16 +31,17 @@ pub struct StreamReader<R: Read> {
 
 impl<R: Read> StreamReader<R> {
     /// Создаёт новый stream-reader, проверяя заголовок.
-    pub fn new(mut r: R) -> std::io::Result<Self> {
+    pub fn new(mut r: R) -> io::Result<Self> {
+        // проверяем magic
         let mut magic = [0; 3];
         r.read_exact(&mut magic)?;
         if &magic != FILE_MAGIC {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad magic"));
         }
+
+        // явно читаем и валидируем версию
         let ver = r.read_u8()?;
-        if ver != DUMP_VERSION {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad version"));
-        }
+        let _ver: FormatVersion = FormatVersion::try_from(ver)?;
         Ok(Self {
             inner: r,
             done: false,
@@ -49,7 +50,7 @@ impl<R: Read> StreamReader<R> {
 }
 
 /// Десериализует значение [`Value`] из бинарного потока.
-pub fn read_value<R: Read>(r: &mut R) -> std::io::Result<Value> {
+pub fn read_value<R: Read>(r: &mut R) -> io::Result<Value> {
     let tag = r.read_u8()?;
     match tag {
         TAG_STR => {
@@ -206,12 +207,7 @@ pub fn read_dump<R: Read>(r: &mut R) -> io::Result<Vec<(Sds, Value)>> {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad file magic"));
     }
     let ver = cursor.read_u8()?;
-    if ver != DUMP_VERSION {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Unsupported dump version",
-        ));
-    }
+    let _ver: FormatVersion = FormatVersion::try_from(ver)?;
 
     // Читаем count и элементы
     let count = cursor.read_u32::<BigEndian>()? as usize;
@@ -636,21 +632,29 @@ mod tests {
         let mut buf = Vec::new();
         // неправильная магия
         buf.extend(b"BAD");
-        buf.push(super::DUMP_VERSION);
+        // пишем корректную версию через FormatVersion
+        buf.push(FormatVersion::V1 as u8);
+        // count = 0
         buf.extend(&0u32.to_be_bytes());
-        let err = super::read_dump(&mut &buf[..]).unwrap_err();
+        // CRC32 (создаём некорректный, чтобы подпись была короче, read_dump упадёт на too small)
+        // либо добавьте 4 нуля: buf.extend(&0u32.to_be_bytes());
+        let err = read_dump(&mut &buf[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     /// Тест проверяет, что при неверной версии дампа возникает ошибка `InvalidData`
     #[test]
     fn test_read_dump_wrong_version() {
         let mut buf = Vec::new();
-        buf.extend(super::FILE_MAGIC);
-        buf.push(super::DUMP_VERSION + 1); // не та версия
+        buf.extend(FILE_MAGIC);
+        // пишем неподдерживаемую версию
+        buf.push((FormatVersion::V1 as u8) + 1);
         buf.extend(&0u32.to_be_bytes());
-        let err = super::read_dump(&mut &buf[..]).unwrap_err();
+        // CRC32 тоже можно захардкодить, но read_dump упадёт сразу на Unsupported version
+        let err = read_dump(&mut &buf[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     /// Тест проверяет, что round-trip потокового дампа через `write_stream` и
@@ -772,7 +776,7 @@ mod tests {
     fn test_stream_reader_eof() {
         let mut buf = Vec::new();
         buf.extend(FILE_MAGIC);
-        buf.push(DUMP_VERSION);
+        buf.push(FormatVersion::V1 as u8);
         // сразу EOF
         buf.push(TAG_EOF);
 
