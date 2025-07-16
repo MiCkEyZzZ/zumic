@@ -16,8 +16,9 @@ use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, FormatVersion, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED,
-    TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET, TAG_STR, TAG_ZSET,
+    decompress_block, CompatibilityInfo, FormatVersion, VersionUtils, FILE_MAGIC, TAG_ARRAY,
+    TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL,
+    TAG_SET, TAG_STR, TAG_ZSET,
 };
 use crate::{database::Bitmap, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
@@ -26,213 +27,378 @@ use crate::{database::Bitmap, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_
 /// Будет читать из `r` по одной записи, пока не встретит `TAG_EOF`.
 pub struct StreamReader<R: Read> {
     inner: R,
+    version: FormatVersion,
     done: bool,
+    compatibility_info: CompatibilityInfo,
 }
 
 impl<R: Read> StreamReader<R> {
-    /// Создаёт новый stream-reader, проверяя заголовок.
-    pub fn new(mut r: R) -> io::Result<Self> {
-        // проверяем magic
+    /// Создаёт новый stream-reader с проверкой совместимости версий.
+    pub fn new(r: R) -> io::Result<Self> {
+        Self::new_with_version(r, FormatVersion::current())
+    }
+    /// Создаёт stream-reader с явно указанной версией читателя.
+    pub fn new_with_version(
+        mut r: R,
+        reader_version: FormatVersion,
+    ) -> io::Result<Self> {
+        // Проверяем magic
         let mut magic = [0; 3];
         r.read_exact(&mut magic)?;
         if &magic != FILE_MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad magic"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid ZDB dump: bad magic number",
+            ));
         }
 
-        // явно читаем и валидируем версию
-        let ver = r.read_u8()?;
-        let _ver: FormatVersion = FormatVersion::try_from(ver)?;
+        // Читаем версию дампа
+        let version_byte = r.read_u8()?;
+        let dump_version = FormatVersion::try_from(version_byte)?;
+
+        // Проверяем совместимость
+        let compatibility_info =
+            VersionUtils::validate_compatibility(reader_version, dump_version)?;
+
         Ok(Self {
             inner: r,
+            version: dump_version,
             done: false,
+            compatibility_info,
         })
+    }
+
+    /// Возвращает версию дампа.
+    pub fn version(&self) -> FormatVersion {
+        self.version
+    }
+
+    /// Возвращает информацию о совместимости
+    pub fn compatibility_info(&self) -> &CompatibilityInfo {
+        &self.compatibility_info
+    }
+
+    /// Возвращает предупреждения о совместимости
+    pub fn warnings(&self) -> &[String] {
+        &self.compatibility_info.warnings
     }
 }
 
 /// Десериализует значение [`Value`] из бинарного потока.
 pub fn read_value<R: Read>(r: &mut R) -> io::Result<Value> {
+    read_value_with_version(r, FormatVersion::current())
+}
+
+/// Собственно реализация с явной версией.
+/// Можете переименовать старый `read_value` в `read_value_with_version`.
+pub fn read_value_with_version<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
     let tag = r.read_u8()?;
+
     match tag {
-        TAG_STR => {
-            let len = r.read_u32::<BigEndian>()? as usize;
-            let mut buf = vec![0; len];
-            r.read_exact(&mut buf)?;
-            Ok(Value::Str(Sds::from_vec(buf)))
-        }
-        TAG_INT => {
-            let i = r.read_i64::<BigEndian>()?;
-            Ok(Value::Int(i))
-        }
-        TAG_FLOAT => {
-            let f = r.read_f64::<BigEndian>()?;
-            Ok(Value::Float(f))
-        }
-        TAG_BOOL => {
-            // Булево: 1 => true, 0 => false
-            let b = r.read_u8()? != 0;
-            Ok(Value::Bool(b))
-        }
+        TAG_STR => read_string_value(r, version),
+        TAG_INT => read_int_value(r, version),
+        TAG_FLOAT => read_float_value(r, version),
+        TAG_BOOL => read_bool_value(r, version),
         TAG_NULL => Ok(Value::Null),
-        TAG_COMPRESSED => {
-            let len = r.read_u32::<BigEndian>()? as usize;
-            let mut compressed = vec![0; len];
-            r.read_exact(&mut compressed)?;
-            let decompressed = decompress_block(&compressed)?;
-            let mut slice = decompressed.as_slice();
-            read_value(&mut slice)
-        }
-        TAG_HASH => {
-            let n = r.read_u32::<BigEndian>()? as usize;
-            let mut map = SmartHash::new();
-            for _ in 0..n {
-                // читаем ключ
-                let klen = r.read_u32::<BigEndian>()? as usize;
-                let mut kb = vec![0; klen];
-                r.read_exact(&mut kb)?;
-                let key = Sds::from_vec(kb);
-
-                // читаем значение как Value
-                let raw = read_value(r)?;
-                // проверяем, что Value::Str и берём из него Sds
-                let val = if let Value::Str(s) = raw {
-                    s
-                } else {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
-                        "Expected Str for Hash value",
-                    ));
-                };
-
-                map.insert(key, val);
-            }
-            Ok(Value::Hash(map))
-        }
-        TAG_ZSET => {
-            let n = r.read_u32::<BigEndian>()? as usize;
-            let mut dict = Dict::new();
-            let mut sorted = SkipList::new();
-            for _ in 0..n {
-                let klen = r.read_u32::<BigEndian>()? as usize;
-                let mut kb = vec![0; klen];
-                r.read_exact(&mut kb)?;
-                let key = Sds::from_vec(kb);
-                let score = r.read_f64::<BigEndian>()?;
-                dict.insert(key.clone(), score);
-                sorted.insert(OrderedFloat(score), key);
-            }
-            Ok(Value::ZSet { dict, sorted })
-        }
-        TAG_SET => {
-            let n = r.read_u32::<BigEndian>()? as usize;
-            let mut set = HashSet::new();
-            for _ in 0..n {
-                let klen = r.read_u32::<BigEndian>()? as usize;
-                let mut kb = vec![0; klen];
-                r.read_exact(&mut kb)?;
-                set.insert(Sds::from_vec(kb));
-            }
-            Ok(Value::Set(set))
-        }
-        TAG_HLL => {
-            let n = r.read_u32::<BigEndian>()? as usize;
-            // читаем ровно n байт (тест может передавать n = 2)
-            let mut regs = vec![0u8; n];
-            r.read_exact(&mut regs)?;
-            // копируем прочитанное в фиксированный буфер HLL.data (DENSE_SIZE),
-            // дополняя нулями, если n < DENSE_SIZE
-            let mut data = [0u8; DENSE_SIZE];
-            data[..n.min(DENSE_SIZE)].copy_from_slice(&regs[..n.min(DENSE_SIZE)]);
-            Ok(Value::HyperLogLog(Box::new(Hll { data })))
-        }
-
-        TAG_ARRAY => {
-            let len = r.read_u32::<BigEndian>()? as usize;
-            let mut items = Vec::with_capacity(len);
-            for _ in 0..len {
-                items.push(read_value(r)?);
-            }
-            Ok(Value::Array(items))
-        }
-
-        TAG_BITMAP => {
-            let byte_len = r.read_u32::<BigEndian>()? as usize;
-            let mut buf = vec![0u8; byte_len];
-            r.read_exact(&mut buf)?;
-            let mut bmp = Bitmap::new();
-            bmp.bytes = buf;
-            Ok(Value::Bitmap(bmp))
-        }
-
+        TAG_COMPRESSED => read_compressed_value(r, version),
+        TAG_HASH => read_hash_value(r, version),
+        TAG_ZSET => read_zset_value(r, version),
+        TAG_SET => read_set_value(r, version),
+        TAG_HLL => read_hll_value(r, version),
+        TAG_ARRAY => read_array_value(r, version),
+        TAG_BITMAP => read_bitmap_value(r, version),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Unknown tag {other}"),
+            format!("Unknown tag {other} in format version {version}"),
         )),
     }
 }
 
-/// Читает дамп с CRC32 в конце, проверяет его и возвращает пары <Key, Value>.
-///
-/// Ожидает формат:
-///   [magic][ver][count]
-///   ... пары <key, value> ...
-///   [crc32: u32 BE]
+/// Расширенная функция чтения дампа с проверкой совместимости версий.
 pub fn read_dump<R: Read>(r: &mut R) -> io::Result<Vec<(Sds, Value)>> {
-    // Считываем весь поток в буфере.
+    read_dump_with_version(r, FormatVersion::current())
+}
+
+/// Читает дамп с явно указанной версией читателя.
+pub fn read_dump_with_version<R: Read>(
+    r: &mut R,
+    reader_version: FormatVersion,
+) -> io::Result<Vec<(Sds, Value)>> {
+    // 1) Считываем весь поток в буфере
     let mut data = Vec::new();
     r.read_to_end(&mut data)?;
-    if data.len() < 4 {
+    if data.len() < 7 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Dump too small"));
     }
 
-    // Отделяем CRC32 (последние 4 байта)
+    // 2) Отделяем CRC32 и проверяем
     let body_len = data.len() - 4;
     let (body, crc_bytes) = data.split_at(body_len);
     let recorded_crc = (&crc_bytes[..4]).read_u32::<BigEndian>()?;
-
-    // Проверяем CRC32
     let mut hasher = Hasher::new();
     hasher.update(body);
-    let calc_crc = hasher.finalize();
-    if calc_crc != recorded_crc {
+    if hasher.finalize() != recorded_crc {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "CRC mismatch"));
     }
 
-    // Парсим тело через Cursor
-    let mut cursor = body;
-
-    // Проверяем магию и версию.
+    // 3) Работем по Cursor
+    let mut cursor = io::Cursor::new(body);
+    // проверяем магию
     let mut magic = [0u8; 3];
     cursor.read_exact(&mut magic)?;
     if &magic != FILE_MAGIC {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad file magic"));
     }
-    let ver = cursor.read_u8()?;
-    let _ver: FormatVersion = FormatVersion::try_from(ver)?;
+    // читаем и валидируем версию
+    let dump_version = FormatVersion::try_from(cursor.read_u8()?)?;
+    // проверяем совместимость
+    let _compat = VersionUtils::validate_compatibility(reader_version, dump_version)?;
 
-    // Читаем count и элементы
+    // 4) Читаем count
     let count = cursor.read_u32::<BigEndian>()? as usize;
     let mut items = Vec::with_capacity(count);
     for _ in 0..count {
+        // ключ
         let klen = cursor.read_u32::<BigEndian>()? as usize;
         let mut kb = vec![0; klen];
         cursor.read_exact(&mut kb)?;
         let key = Sds::from_vec(kb);
-
-        let val = read_value(&mut cursor)?;
+        // значение
+        let val = read_value_with_version(&mut cursor, dump_version)?;
         items.push((key, val));
     }
+
     Ok(items)
 }
 
+fn read_string_value<R: Read>(
+    r: &mut R,
+    _version: FormatVersion,
+) -> io::Result<Value> {
+    let len = r.read_u32::<BigEndian>()? as usize;
+    let mut buf = vec![0; len];
+    r.read_exact(&mut buf)?;
+    Ok(Value::Str(Sds::from_vec(buf)))
+}
+
+fn read_int_value<R: Read>(
+    r: &mut R,
+    _version: FormatVersion,
+) -> io::Result<Value> {
+    let i = r.read_i64::<BigEndian>()?;
+    Ok(Value::Int(i))
+}
+
+fn read_float_value<R: Read>(
+    r: &mut R,
+    _version: FormatVersion,
+) -> io::Result<Value> {
+    let f = r.read_f64::<BigEndian>()?;
+    Ok(Value::Float(f))
+}
+
+fn read_bool_value<R: Read>(
+    r: &mut R,
+    _version: FormatVersion,
+) -> io::Result<Value> {
+    // Булево: 1 => true, 0 => false
+    let b = r.read_u8()? != 0;
+    Ok(Value::Bool(b))
+}
+
+fn read_compressed_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let len = r.read_u32::<BigEndian>()? as usize;
+    let mut compressed = vec![0; len];
+    r.read_exact(&mut compressed)?;
+    let decompressed = match version {
+        FormatVersion::Legacy => {
+            // Legacy версия может не поддерживать сжатие
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Compressed blocks not supported in legacy format",
+            ));
+        }
+        FormatVersion::V1 => decompress_block(&compressed)?,
+        FormatVersion::V2 => {
+            // V2 может иметь улучшенный алгоритм сжатия
+            decompress_block(&compressed)?
+        }
+    };
+
+    let mut slice = decompressed.as_slice();
+    read_value_with_version(&mut slice, version)
+}
+
+fn read_hash_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let n = r.read_u32::<BigEndian>()? as usize;
+    let mut map = SmartHash::new();
+
+    for _ in 0..n {
+        // читаем ключ
+        let klen = r.read_u32::<BigEndian>()? as usize;
+        let mut kb = vec![0; klen];
+        r.read_exact(&mut kb)?;
+        let key = Sds::from_vec(kb);
+
+        // читаем значение как Value
+        let raw = read_value_with_version(r, version)?;
+        // проверяем, что Value::Str и берём из него Sds
+        let val = match raw {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Expected Str for Hash value in format version {version}"),
+                ))
+            }
+        };
+
+        map.insert(key, val);
+    }
+    Ok(Value::Hash(map))
+}
+
+fn read_zset_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let n = r.read_u32::<BigEndian>()? as usize;
+    let mut dict = Dict::new();
+    let mut sorted = SkipList::new();
+
+    for _ in 0..n {
+        let klen = r.read_u32::<BigEndian>()? as usize;
+        let mut kb = vec![0; klen];
+        r.read_exact(&mut kb)?;
+        let key = Sds::from_vec(kb);
+
+        let score = match version {
+            FormatVersion::Legacy => {
+                // Legacy может использовать 32-битные числа для score
+                r.read_f32::<BigEndian>()? as f64
+            }
+            FormatVersion::V1 | FormatVersion::V2 => r.read_f64::<BigEndian>()?,
+        };
+
+        dict.insert(key.clone(), score);
+        sorted.insert(OrderedFloat(score), key);
+    }
+    Ok(Value::ZSet { dict, sorted })
+}
+
+fn read_set_value<R: Read>(
+    r: &mut R,
+    _version: FormatVersion,
+) -> io::Result<Value> {
+    let n = r.read_u32::<BigEndian>()? as usize;
+    let mut set = HashSet::new();
+
+    for _ in 0..n {
+        let klen = r.read_u32::<BigEndian>()? as usize;
+        let mut kb = vec![0; klen];
+        r.read_exact(&mut kb)?;
+        set.insert(Sds::from_vec(kb));
+    }
+
+    Ok(Value::Set(set))
+}
+
+fn read_hll_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let n = r.read_u32::<BigEndian>()? as usize;
+
+    // Проверяем корректность размера в зависимости от версии
+    match version {
+        FormatVersion::Legacy => {
+            if n > DENSE_SIZE {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("HLL size {n} exceeds maximum {DENSE_SIZE} in legacy format"),
+                ));
+            }
+        }
+        FormatVersion::V1 | FormatVersion::V2 => {
+            // Более современные версии могут поддерживать переменные размеры
+        }
+    }
+
+    // читаем ровно n байт (тест может передавать n = 2)
+    let mut regs = vec![0u8; n];
+    r.read_exact(&mut regs)?;
+
+    // копируем прочитанное в фиксированный буфер HLL.data (DENSE_SIZE),
+    // дополняя нулями, если n < DENSE_SIZE
+    let mut data = [0u8; DENSE_SIZE];
+    data[..n.min(DENSE_SIZE)].copy_from_slice(&regs[..n.min(DENSE_SIZE)]);
+
+    Ok(Value::HyperLogLog(Box::new(Hll { data })))
+}
+
+fn read_array_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let len = r.read_u32::<BigEndian>()? as usize;
+    let mut items = Vec::with_capacity(len);
+
+    for _ in 0..len {
+        items.push(read_value_with_version(r, version)?);
+    }
+
+    Ok(Value::Array(items))
+}
+
+fn read_bitmap_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<Value> {
+    let byte_len = r.read_u32::<BigEndian>()? as usize;
+
+    // Проверяем ограничения в зависимости от версии
+    match version {
+        FormatVersion::Legacy => {
+            // Legacy может иметь ограничения на размер bitmap
+            if byte_len > 1024 * 1024 {
+                // 1MB limit
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    "Bitmap too large for legacy format",
+                ));
+            }
+        }
+        FormatVersion::V1 | FormatVersion::V2 => {
+            // Более новые версии поддерживают большие bitmap
+        }
+    }
+
+    let mut buf = vec![0u8; byte_len];
+    r.read_exact(&mut buf)?;
+
+    let mut bmp = Bitmap::new();
+    bmp.bytes = buf;
+
+    Ok(Value::Bitmap(bmp))
+}
+
 impl<R: Read> Iterator for StreamReader<R> {
-    type Item = std::io::Result<(Sds, Value)>;
+    type Item = io::Result<(Sds, Value)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
             return None;
         }
-
-        // Читаем следующий байт, чтобы узнать: это EOF или длина ключа?
+        // проверяем EOF
         let mut peek = [0u8; 1];
         if let Err(e) = self.inner.read_exact(&mut peek) {
             return Some(Err(e));
@@ -241,9 +407,7 @@ impl<R: Read> Iterator for StreamReader<R> {
             self.done = true;
             return None;
         }
-
-        // Это первая байт длины ключа (big-endian u32), а не EOF.
-        // Так как мы уже съели первый байт длины, соберём полный u32:
+        // это первая байта длины ключа
         let mut len_buf = [0u8; 4];
         len_buf[0] = peek[0];
         if let Err(e) = self.inner.read_exact(&mut len_buf[1..]) {
@@ -255,10 +419,9 @@ impl<R: Read> Iterator for StreamReader<R> {
             return Some(Err(e));
         }
         let key = Sds::from_vec(kb);
-
-        // Десериализуем само значение
-        match read_value(&mut self.inner) {
-            Ok(val) => Some(Ok((key, val))),
+        // читаем значение с учётом версии
+        match read_value_with_version(&mut self.inner, self.version) {
+            Ok(v) => Some(Ok((key, v))),
             Err(e) => Some(Err(e)),
         }
     }
@@ -281,7 +444,7 @@ mod tests {
         data.extend(s);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Str(Sds::from_vec(b"hello".to_vec())));
     }
 
@@ -292,7 +455,7 @@ mod tests {
         data.extend(&(0u32).to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Str(Sds::from_vec(Vec::new())));
     }
 
@@ -305,7 +468,7 @@ mod tests {
         data.extend(&i.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Int(i));
     }
 
@@ -320,7 +483,7 @@ mod tests {
         data.extend(&f.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::Float(v) => assert!((v - f).abs() < 1e-10),
             _ => panic!("Expected Value::Float"),
@@ -333,7 +496,7 @@ mod tests {
         let data = vec![TAG_BOOL, 1];
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Bool(true));
     }
 
@@ -343,7 +506,7 @@ mod tests {
         let data = vec![TAG_BOOL, 0];
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Bool(false));
     }
 
@@ -353,7 +516,7 @@ mod tests {
         let data = vec![TAG_NULL];
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Null);
     }
 
@@ -365,7 +528,7 @@ mod tests {
         data.extend(&(0u32).to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::Hash(map) => assert!(map.is_empty()),
             _ => panic!("Expected Value::Hash"),
@@ -392,7 +555,7 @@ mod tests {
         data.extend(val_str);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::Hash(mut m) => {
                 assert_eq!(m.len(), 1);
@@ -424,7 +587,7 @@ mod tests {
         data.extend(&(123i64).to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let err = read_value(&mut cursor).unwrap_err();
+        let err = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("Expected Str for Hash value"));
     }
@@ -437,7 +600,7 @@ mod tests {
         data.extend(&(0u32).to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::ZSet { dict, sorted } => {
                 assert!(dict.is_empty());
@@ -470,7 +633,7 @@ mod tests {
         data.extend(&score2.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::ZSet { mut dict, sorted } => {
                 assert_eq!(dict.len(), 2);
@@ -492,7 +655,7 @@ mod tests {
         data.extend(&(0u32).to_be_bytes());
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::Set(set) => assert!(set.is_empty()),
             _ => panic!("Expected Value::Set"),
@@ -514,7 +677,7 @@ mod tests {
         }
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         match val {
             Value::Set(set) => {
                 assert_eq!(set.len(), elems.len());
@@ -538,7 +701,7 @@ mod tests {
         data.extend(&regs);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         match val {
             Value::HyperLogLog(hll) => {
@@ -563,7 +726,7 @@ mod tests {
         data.extend(&regs);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         match val {
             Value::HyperLogLog(hll) => {
@@ -582,7 +745,7 @@ mod tests {
         let data = vec![255]; // несуществующий тег
 
         let mut cursor = Cursor::new(data);
-        let err = read_value(&mut cursor).unwrap_err();
+        let err = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("Unknown tag"));
     }
@@ -607,7 +770,7 @@ mod tests {
         data.extend(&compressed);
 
         let mut cursor = Cursor::new(data);
-        let val = super::read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(val, Value::Str(Sds::from_vec(raw.to_vec())));
     }
 
@@ -746,7 +909,7 @@ mod tests {
         data.extend(s);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(
             val,
             Value::Array(vec![Value::Int(5), Value::Str(Sds::from_str("x"))])
@@ -763,7 +926,7 @@ mod tests {
         data.extend(&[1u8, 2, 3]);
 
         let mut cursor = Cursor::new(data);
-        let val = read_value(&mut cursor).unwrap();
+        let val = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         if let Value::Bitmap(bm) = val {
             assert_eq!(bm.as_bytes(), &[1, 2, 3]);
         } else {

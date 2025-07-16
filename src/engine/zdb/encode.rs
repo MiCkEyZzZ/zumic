@@ -217,7 +217,7 @@ pub fn write_stream<W: Write>(
 mod tests {
     use crate::{
         database::Bitmap,
-        engine::{decompress_block, read_dump, read_value, StreamReader},
+        engine::{decompress_block, read_dump, read_value_with_version, StreamReader},
         Sds,
     };
 
@@ -232,7 +232,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(decoded, original);
     }
 
@@ -244,7 +244,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         match decoded {
             Value::Float(f) => assert!((f - std::f64::consts::PI).abs() < 1e-10),
@@ -260,7 +260,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         assert_eq!(decoded, original);
     }
@@ -273,7 +273,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         assert_eq!(decoded, original);
     }
@@ -286,7 +286,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
 
         assert_eq!(decoded, original);
     }
@@ -417,7 +417,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         assert_eq!(decoded, original);
     }
 
@@ -431,7 +431,7 @@ mod tests {
         write_value(&mut buf, &original).unwrap();
 
         let mut cursor = Cursor::new(buf);
-        let decoded = read_value(&mut cursor).unwrap();
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
         if let Value::Bitmap(decoded_bm) = decoded {
             assert_eq!(decoded_bm.as_bytes(), &bm.bytes[..]);
         } else {

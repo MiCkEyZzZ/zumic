@@ -14,6 +14,7 @@ pub mod network;
 pub mod parser;
 /// Модуль системных ошибок — общие системные ошибки, не попадающие в другие категории.
 pub mod system;
+pub mod version;
 
 // Публичный экспорт всех типов ошибок и функций из вложенных модулей,
 // чтобы упростить доступ к ним из внешнего кода.
@@ -23,3 +24,4 @@ pub use encode::*;
 pub use network::*;
 pub use parser::*;
 pub use system::*;
+pub use version::*;
