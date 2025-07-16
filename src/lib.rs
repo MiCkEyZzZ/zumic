@@ -75,7 +75,7 @@ pub use pubsub::{Broker, Message, PatternSubscription, Subscription};
 
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
-    PasswordError, StoreError, StoreResult,
+    PasswordError, StoreError, StoreResult, VersionError,
 };
 
 pub use config::settings::{Settings, StorageConfig, StorageType};
