@@ -402,7 +402,7 @@ mod tests {
             found: 99,
             supported: vec![FormatVersion::V1, FormatVersion::V2],
         };
-        let msg = format!("{}", err);
+        let msg = format!("{err}");
         assert!(msg.contains("Unsupported ZDB dump version: 99"));
         assert!(msg.contains("V1"));
         assert!(msg.contains("V2"));
