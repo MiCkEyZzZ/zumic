@@ -1,5 +1,15 @@
+//! Базовые команды key-value для Zumic: SET, GET, DEL, EXISTS, MSET, MGET и др.
+//!
+//! Реализация основных команд для работы с ключами и значениями в хранилище Zumic.
+//! Каждая команда реализует трейт [`CommandExecute`].
+
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
+/// Команда SET — устанавливает значение по ключу.
+///
+/// # Поля
+/// * `key` — ключ, по которому сохраняется значение.
+/// * `value` — сохраняемое значение.
 #[derive(Debug)]
 pub struct SetCommand {
     pub key: String,
@@ -16,6 +26,10 @@ impl CommandExecute for SetCommand {
     }
 }
 
+/// Команда GET — получает значение по ключу.
+///
+/// # Поля
+/// * `key` — ключ, значение которого требуется получить.
 #[derive(Debug)]
 pub struct GetCommand {
     pub key: String,
@@ -35,6 +49,10 @@ impl CommandExecute for GetCommand {
     }
 }
 
+/// Команда DEL — удаляет значение по ключу.
+///
+/// # Поля
+/// * `key` — ключ, который требуется удалить.
 #[derive(Debug)]
 pub struct DelCommand {
     pub key: String,
@@ -50,6 +68,10 @@ impl CommandExecute for DelCommand {
     }
 }
 
+/// Команда EXISTS — проверяет существование одного или нескольких ключей.
+///
+/// # Поля
+/// * `keys` — список ключей для проверки.
 #[derive(Debug)]
 pub struct ExistsCommand {
     pub keys: Vec<String>,
@@ -72,6 +94,11 @@ impl CommandExecute for ExistsCommand {
     }
 }
 
+/// Команда SETNX — устанавливает значение по ключу, только если ключ не существует.
+///
+/// # Поля
+/// * `key` — ключ, по которому сохраняется значение.
+/// * `value` — сохраняемое значение.
 #[derive(Debug)]
 pub struct SetNxCommand {
     pub key: String,
@@ -93,6 +120,10 @@ impl CommandExecute for SetNxCommand {
     }
 }
 
+/// Команда MSET — устанавливает значения по нескольким ключам одновременно.
+///
+/// # Поля
+/// * `entries` — вектор пар (ключ, значение) для установки.
 #[derive(Debug)]
 pub struct MSetCommand {
     pub entries: Vec<(String, Value)>,
@@ -117,6 +148,10 @@ impl CommandExecute for MSetCommand {
     }
 }
 
+/// Команда MGET — получает значения по нескольким ключам одновременно.
+///
+/// # Поля
+/// * `keys` — список ключей для получения значений.
 #[derive(Debug)]
 pub struct MGetCommand {
     pub keys: Vec<String>,
@@ -157,6 +192,11 @@ impl CommandExecute for MGetCommand {
     }
 }
 
+/// Команда RENAME — переименовывает существующий ключ.
+///
+/// # Поля
+/// * `from` — исходный ключ.
+/// * `to` — новый ключ.
 #[derive(Debug)]
 pub struct RenameCommand {
     pub from: String,
@@ -173,6 +213,11 @@ impl CommandExecute for RenameCommand {
     }
 }
 
+/// Команда RENAMENX — переименовывает ключ, только если новый ключ не существует.
+///
+/// # Поля
+/// * `from` — исходный ключ.
+/// * `to` — новый ключ.
 #[derive(Debug)]
 pub struct RenameNxCommand {
     pub from: String,
@@ -189,6 +234,7 @@ impl CommandExecute for RenameNxCommand {
     }
 }
 
+/// Команда FLUSHDB — удаляет все ключи из текущей базы данных.
 #[derive(Debug)]
 pub struct FlushDbCommand;
 
