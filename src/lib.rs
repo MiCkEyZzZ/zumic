@@ -41,22 +41,12 @@ pub mod pubsub;
 // -----------------------------------------------------------------------------
 
 /// Реэкспорт основных структур и функций для работы с ACL и аутентификацией.
-///
-/// # Пример
-/// ```rust
-/// use zumic::{AuthManager, hash_password};
-/// ```
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
 
 /// Реэкспорт основных команд key-value.
-///
-/// # Пример
-/// ```rust
-/// use zumic::SetCommand;
-/// ```
 pub use command::{
     AppendCommand, AuthCommand, Command as StoreCommand, CommandExecute, DecrByCommand,
     DecrByFloatCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand,
@@ -69,22 +59,12 @@ pub use command::{
 };
 
 /// Реэкспорт встроенных структур данных.
-///
-/// # Пример
-/// ```rust
-/// use zumic::Dict;
-/// ```
 pub use database::{
     Dict, GeoEntry, GeoPoint, GeoSet, Hll, ListPack, QuickList, Sds, SkipList, SmartHash,
     StreamEntry, Value, DENSE_SIZE,
 };
 
 /// Реэкспорт движков хранения.
-///
-/// # Пример
-/// ```rust
-/// use zumic::InMemoryStore;
-/// ```
 pub use engine::{
     load_from_zdb, save_to_zdb, AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage,
     StorageEngine,
