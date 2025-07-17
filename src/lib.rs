@@ -15,11 +15,13 @@
 pub mod auth;
 /// Разбор и выполнение команд: SET, GET, INCR и др.
 pub mod command;
+/// Реестр всех поддерживаемых команд и их обработчиков.
 pub mod command_registry;
 /// Загрузка конфигурации сервера.
 pub mod config;
 /// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
 pub mod database;
+/// Контекст базы данных: управление состоянием, транзакциями и доступом к данным.
 pub mod db_context;
 /// Абстракции и реализации движков хранения (InMemory, Persistent, Cluster).
 pub mod engine;
@@ -27,6 +29,7 @@ pub mod engine;
 pub mod error;
 /// Гибкая система логирования (форматирование, фильтры, вывод).
 pub mod logging;
+/// Модули расширения: API для загрузки, управления и интеграции плагинов.
 pub mod modules;
 /// Работа с сетью: протокол ZSP и сервер на Tokio.
 pub mod network;
@@ -37,13 +40,23 @@ pub mod pubsub;
 //  Часто используемые публичные типы
 // -----------------------------------------------------------------------------
 
-/// Функции хеширования и проверки пароля, менеджер ACL.
+/// Реэкспорт основных структур и функций для работы с ACL и аутентификацией.
+///
+/// # Пример
+/// ```rust
+/// use zumic::{AuthManager, hash_password};
+/// ```
 pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
 
-/// Основные команды key-value: SET, GET, INCR, HSET, LPOP, ZADD и др.
+/// Реэкспорт основных команд key-value.
+///
+/// # Пример
+/// ```rust
+/// use zumic::SetCommand;
+/// ```
 pub use command::{
     AppendCommand, AuthCommand, Command as StoreCommand, CommandExecute, DecrByCommand,
     DecrByFloatCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand,
@@ -55,29 +68,42 @@ pub use command::{
     ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 
-/// Структуры данных: Dict, QuickList, SkipList, Sds и другие.
+/// Реэкспорт встроенных структур данных.
+///
+/// # Пример
+/// ```rust
+/// use zumic::Dict;
+/// ```
 pub use database::{
     Dict, GeoEntry, GeoPoint, GeoSet, Hll, ListPack, QuickList, Sds, SkipList, SmartHash,
     StreamEntry, Value, DENSE_SIZE,
 };
 
-/// Движки хранения: InMemoryStore, InPersistentStore, InClusterStore.
+/// Реэкспорт движков хранения.
+///
+/// # Пример
+/// ```rust
+/// use zumic::InMemoryStore;
+/// ```
 pub use engine::{
     load_from_zdb, save_to_zdb, AofLog, InClusterStore, InMemoryStore, InPersistentStore, Storage,
     StorageEngine,
 };
 
-/// Сетевой сервер и протокол.
+/// Реэкспорт сетевого сервера и протокола.
 pub use network::{server, zsp};
 
-/// API для Pub/Sub.
+/// Реэкспорт API для Pub/Sub.
 pub use pubsub::{Broker, Message, PatternSubscription, Subscription};
 
+/// Реэкспорт основных типов ошибок.
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
     PasswordError, StoreError, StoreResult, VersionError,
 };
 
+/// Реэкспорт настроек конфигурации.
 pub use config::settings::{Settings, StorageConfig, StorageType};
 
+/// Реэкспорт API для работы с модулями и плагинами.
 pub use modules::{DynamicModule, Manager, Module, Plugin, WasmPlugin};
