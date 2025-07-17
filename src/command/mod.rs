@@ -17,20 +17,6 @@
 //! - [`zset`] — отсортированные множества (sorted set).
 //!
 //! Все команды реализуют трейт [`CommandExecute`] и могут быть вызваны через единый интерфейс.
-//!
-//! # Публичные реэкспорты
-//! Все основные команды доступны напрямую из этого модуля для удобства импорта:
-//! ```rust
-//! use zumic::command::{SetCommand, GetCommand, LPushCommand};
-//! ```
-//!
-//! # Пример выполнения команды
-//! ```rust
-//! use zumic::command::{SetCommand, CommandExecute};
-//! let mut store = /* ваш StorageEngine */;
-//! let cmd = SetCommand { key: "foo".into(), value: /* ... */ };
-//! let result = cmd.execute(&mut store);
-//! ```
 
 pub mod auth;
 pub mod basic;
