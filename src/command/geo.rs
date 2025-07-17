@@ -1,12 +1,22 @@
+//! Команды для работы с географическими данными (GEO*) в Zumic.
+//!
+//! Реализует команды GEOADD, GEODIST, GEOPOS, GEORADIUS, GEORADIUSBYMEMBER для
+//! хранения, поиска и вычисления расстояний между точками.
+//! Каждая команда реализует трейт [`CommandExecute`].
+
 use super::CommandExecute;
 use crate::{GeoPoint, Sds, StorageEngine, StoreError, Value};
 
-/// Команда `GEOADD key lon lat member [lon lat member ...]`
+/// Команда GEOADD — добавляет одну или несколько точек в гео-набор.
 ///
-/// Добавляет одну или несколько точек в гео-набор под ключом
-/// `key`. Для каждого `member` вычисляет geohash и сохраняет
-/// в множестве.
-/// Возвращает общее число новых добавленных элементов.
+/// Формат: `GEOADD key lon lat member [lon lat member ...]`
+///
+/// # Поля
+/// * `key` — ключ гео-набора.
+/// * `points` — вектор кортежей (долгота, широта, имя точки).
+///
+/// # Возвращает
+/// Количество новых добавленных элементов.
 #[derive(Debug)]
 pub struct GeoAddCommand {
     pub key: String,
@@ -31,12 +41,18 @@ impl CommandExecute for GeoAddCommand {
     }
 }
 
-/// Команда `GEODIST key member1 member2 [unit]`
+/// Команда GEODIST — вычисляет расстояние между двумя точками.
 ///
-/// Возвращает расстояние между `member1` и `member2`
-/// в единицах `unit` (`m`, `km`, `mi`, `ft`), по умолчанию
-/// метры.
-/// Если один из членов не найден — возвращает `Null`.
+/// Формат: `GEODIST key member1 member2 [unit]`
+///
+/// # Поля
+/// * `key` — ключ гео-набора.
+/// * `member1` — имя первой точки.
+/// * `member2` — имя второй точки.
+/// * `unit` — единицы измерения (`m`, `km`, `mi`, `ft`), по умолчанию метры.
+///
+/// # Возвращает
+/// Расстояние между точками или `Null`, если одна из точек не найдена.
 #[derive(Debug)]
 pub struct GetDistCommand {
     pub key: String,
@@ -63,10 +79,16 @@ impl CommandExecute for GetDistCommand {
     }
 }
 
-/// Команда `GEOPOS key member [member ...]`
+/// Команда GEOPOS — возвращает координаты для указанных точек.
 ///
-/// Возвращает для каждого `member` координаты
-/// `[lon, lat]`, или `Null`, если  не найден.
+/// Формат: `GEOPOS key member [member ...]`
+///
+/// # Поля
+/// * `key` — ключ гео-набора.
+/// * `members` — список имён точек.
+///
+/// # Возвращает
+/// Для каждого member — координаты `[lon, lat]` или `Null`, если не найден.
 #[derive(Debug)]
 pub struct GeoPosCommand {
     pub key: String,
@@ -95,10 +117,19 @@ impl CommandExecute for GeoPosCommand {
     }
 }
 
-/// Команда `GEORADIUS key lon lat radius [uint]`
+/// Команда GEORADIUS — ищет точки в радиусе вокруг координат.
 ///
-/// Ищет всех членов в радиусе `radius` вокруг точки `(lon, lat)`.
-/// Возвращает массив членов, опционально можно расширить до `[member, dist, lon, lat]`.
+/// Формат: `GEORADIUS key lon lat radius [unit]`
+///
+/// # Поля
+/// * `key` — ключ гео-набора.
+/// * `lon` — долгота.
+/// * `lat` — широта.
+/// * `radius` — радиус поиска.
+/// * `unit` — единицы измерения (`m`, `km`, `mi`, `ft`), по умолчанию метры.
+///
+/// # Возвращает
+/// Массив найденных точек (может включать координаты и расстояния).
 #[derive(Debug)]
 pub struct GeoRadiusCommand {
     pub key: String,
@@ -135,10 +166,18 @@ impl CommandExecute for GeoRadiusCommand {
     }
 }
 
-/// Команда `GEORADIUSBYMEMBER key member radius [unit]`
+/// Команда GEORADIUSBYMEMBER — ищет точки в радиусе вокруг другой точки.
 ///
-/// То же, что GEORADIUS, но определяется координатами
-/// `member`.
+/// Формат: `GEORADIUSBYMEMBER key member radius [unit]`
+///
+/// # Поля
+/// * `key` — ключ гео-набора.
+/// * `member` — имя точки-центра.
+/// * `radius` — радиус поиска.
+/// * `unit` — единицы измерения (`m`, `km`, `mi`, `ft`), по умолчанию метры.
+///
+/// # Возвращает
+/// Массив найденных точек (может включать координаты и расстояния).
 #[derive(Debug)]
 pub struct GeoRadiusByMemberCommand {
     pub key: String,

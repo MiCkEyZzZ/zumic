@@ -1,5 +1,20 @@
+//! Команды для работы со строками (String) в Zumic.
+//!
+//! Реализует команды STRLEN, APPEND, GETRANGE для управления строковыми
+//! значениями по ключу.
+//! Каждая команда реализует трейт [`CommandExecute`].
+
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
+/// Команда STRLEN — возвращает длину строки по ключу.
+///
+/// Формат: `STRLEN key`
+///
+/// # Поля
+/// * `key` — ключ строки.
+///
+/// # Возвращает
+/// Длину строки (в байтах) или 0, если ключ не существует.
 #[derive(Debug)]
 pub struct StrLenCommand {
     pub key: String,
@@ -23,6 +38,16 @@ impl CommandExecute for StrLenCommand {
     }
 }
 
+/// Команда APPEND — добавляет данные к строке по ключу.
+///
+/// Формат: `APPEND key value`
+///
+/// # Поля
+/// * `key` — ключ строки.
+/// * `value` — добавляемое значение.
+///
+/// # Возвращает
+/// Новую длину строки после добавления.
 #[derive(Debug)]
 pub struct AppendCommand {
     pub key: String,
@@ -58,6 +83,17 @@ impl CommandExecute for AppendCommand {
     }
 }
 
+/// Команда GETRANGE — возвращает подстроку по диапазону индексов.
+///
+/// Формат: `GETRANGE key start end`
+///
+/// # Поля
+/// * `key` — ключ строки.
+/// * `start` — начальный индекс.
+/// * `end` — конечный индекс.
+///
+/// # Возвращает
+/// Подстроку в заданном диапазоне или `Null`, если ключ не существует.
 #[derive(Debug)]
 pub struct GetRangeCommand {
     pub key: String,

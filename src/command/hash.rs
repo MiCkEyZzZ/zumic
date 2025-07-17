@@ -1,5 +1,22 @@
+//! Команды для работы с хэш-таблицами (HASH) в Zumic.
+//!
+//! Реализует команды HSET, HGET, HDEL, HGETALL для управления полями
+//! и значениями в хэшах.
+//! Каждая команда реализует трейт [`CommandExecute`].
+
 use crate::{CommandExecute, QuickList, Sds, SmartHash, StorageEngine, StoreError, Value};
 
+/// Команда HSET — устанавливает значение поля в хэше.
+///
+/// Формат: `HSET key field value`
+///
+/// # Поля
+/// * `key` — ключ хэша.
+/// * `field` — имя поля.
+/// * `value` — значение поля.
+///
+/// # Возвращает
+/// 1, если поле было добавлено или обновлено.
 #[derive(Debug)]
 pub struct HSetCommand {
     pub key: String,
@@ -33,6 +50,16 @@ impl CommandExecute for HSetCommand {
     }
 }
 
+/// Команда HGET — получает значение поля из хэша.
+///
+/// Формат: `HGET key field`
+///
+/// # Поля
+/// * `key` — ключ хэша.
+/// * `field` — имя поля.
+///
+/// # Возвращает
+/// Значение поля или `Null`, если поле не найдено.
 #[derive(Debug)]
 pub struct HGetCommand {
     pub key: String,
@@ -58,6 +85,16 @@ impl CommandExecute for HGetCommand {
     }
 }
 
+/// Команда HDEL — удаляет поле из хэша.
+///
+/// Формат: `HDEL key field`
+///
+/// # Поля
+/// * `key` — ключ хэша.
+/// * `field` — имя поля.
+///
+/// # Возвращает
+/// 1, если поле было удалено, 0 — если поле не найдено.
 #[derive(Debug)]
 pub struct HDelCommand {
     pub key: String,
@@ -84,6 +121,15 @@ impl CommandExecute for HDelCommand {
     }
 }
 
+/// Команда HGETALL — получает все поля и значения хэша.
+///
+/// Формат: `HGETALL key`
+///
+/// # Поля
+/// * `key` — ключ хэша.
+///
+/// # Возвращает
+/// Список всех полей и значений (как чередующиеся элементы списка) или `Null`, если хэш не найден.
 #[derive(Debug)]
 pub struct HGetAllCommand {
     pub key: String,
