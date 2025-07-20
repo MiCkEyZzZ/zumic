@@ -34,7 +34,7 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
                 }
                 Err(RecvError::Closed) => break,
                 Err(RecvError::Lagged(n)) => {
-                    messages.push(format!("Missed {} notifications", n));
+                    messages.push(format!("Missed {n} notifications"));
                 }
             }
         }

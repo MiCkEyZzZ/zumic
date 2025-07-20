@@ -682,7 +682,7 @@ mod tests {
 
         // Публикуем много сообщений, чтобы переполнить буфер
         for i in 0..10 {
-            broker.publish("lag_channel", Bytes::from(format!("msg{}", i)));
+            broker.publish("lag_channel", Bytes::from(format!("msg{i}")));
         }
 
         // Первое получение может вернуть Lagged ошибку
@@ -690,9 +690,9 @@ mod tests {
             Ok(_) => {} // Иногда получаем сообщение
             Err(BroadcastRecvError::Lagged(n)) => {
                 assert!(n > 0);
-                println!("Successfully caught lagged error: {} messages", n);
+                println!("Successfully caught lagged error: {n} messages");
             }
-            Err(e) => panic!("Unexpected error: {}", e),
+            Err(e) => panic!("Unexpected error: {e}"),
         }
     }
 }
