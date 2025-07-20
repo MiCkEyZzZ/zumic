@@ -7,11 +7,11 @@ build-release: ## Сборка релизной сборки
 	cargo build --release
 
 ##@ Test
-.PHONY: check clippy nextest test
-check: ## Cargo check
+.PHONY: check clippy nextest test miri miri-test
+check: ## Cargo проверка
 	cargo check
 
-clippy: ## Clippy (treat warnings as errors)
+clippy: ## Clippy (рассматривать предупреждения как ошибки)
 	cargo clippy -- -D warnings
 
 nextest: ## Nextest
@@ -19,6 +19,12 @@ nextest: ## Nextest
 
 test: ## Cargo test (обычные тесты)
 	cargo test
+
+miri: ## Запустите все тесты в Miri
+	cargo miri test
+
+miri-test: ## Запустите определенный тест в Miri. Использование: make miri-test TEST="модуль::имя_теста"
+	cargo miri test $(TEST)
 
 ##@ Format & Lints
 .PHONY: fmt fmt-toml fmt-all check-toml check-all
@@ -119,8 +125,7 @@ help: ## Показать это сообщение
 	@echo "Usage: make [target]"
 	@echo
 	@awk 'BEGIN {FS = ":.*##"; \
-	  printf " %-20s %s\n", "Target", "Description"; \
-	  printf " -------------------- ------------------------------\n"} \
-	  /^[a-zA-Z0-9_-]+:.*?##/ { printf " \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
-	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
-	@echo
+	  printf "%-20s %s\n", "Цель", "Описание"; \
+	  printf "-------------------  -----------------------------\n"} \
+	/^[a-zA-Z0-9_-]+:.*?##/ { printf " \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
+	/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)

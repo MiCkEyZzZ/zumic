@@ -90,13 +90,14 @@ mod tests {
 
         manager.publish("news", Bytes::from("hello"));
 
-        let msg = sub.receiver().recv().await.unwrap();
+        let msg = sub.recv().await.unwrap();
         assert_eq!(msg.payload, Bytes::from("hello"));
         assert_eq!(&*msg.channel, "news");
     }
 
     /// Тест проверяет, что после unsubscribe_all подписчик не получает сообщений.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_unsubscribe_all() {
         let manager = PubSubManager::new();
         let mut sub = manager.subscribe("updates");
@@ -125,12 +126,12 @@ mod tests {
         manager.publish("news:world", Bytes::from("global"));
         manager.publish("news:local", Bytes::from("city"));
 
-        let msg1 = psub.receiver().recv().await.unwrap();
+        let msg1 = psub.recv().await.unwrap();
         assert!(msg1.channel.starts_with("news:"));
         let payload1: &[u8] = msg1.payload.as_ref();
         assert!(payload1 == b"global" || payload1 == b"city");
 
-        let msg2 = psub.receiver().recv().await.unwrap();
+        let msg2 = psub.recv().await.unwrap();
         assert!(msg2.channel.starts_with("news:"));
         let payload2: &[u8] = msg2.payload.as_ref();
         assert!(payload1 != payload2, "Expected two distinct payloads");
