@@ -4,29 +4,27 @@ use globset::Glob;
 use tokio::sync::broadcast;
 
 use super::Message;
+use crate::{RecvError, TryRecvError};
 
-/// Подписка на конкретный канал Pub/Sub.
+/// Подписка на конкретный канал по имени.
 ///
-/// Обёртка над [`broadcast::Receiver`], привязанная к имени
-/// канала (`Arc<str>`), позволяет получать сообщения из этого
-/// канала.
+/// Предоставляет удобный async интерфейс для получения сообщений
+/// без необходимости обращаться к внутреннему `broadcast::Receiver`.
 ///
-/// Отписка происходит автоматически при `Drop` или явно через
-/// [`Subscription::unsubscribe`].
+/// Отписка происходит автоматически при `Drop`.
 pub struct Subscription {
     /// Название канала, на который подписаны.
     pub channel: Arc<str>,
     /// Внутренний приёмник для входящих сообщений.
-    pub inner: broadcast::Receiver<Message>,
+    pub(crate) inner: broadcast::Receiver<Message>,
 }
 
-/// Подписка по шаблону на несколько каналов.
+/// Подписка на каналы по glob-паттерну.
 ///
 /// Использует [`globset::Glob`] для сопоставления имён каналов
 /// и получает сообщения из всех каналов, подходящих под шаблон.
 ///
-/// Отписка также происходит автоматически при `Drop` или явно
-/// через [`PatternSubscription::unsubscribe`].
+/// Отписка происходит автоматически при `Drop`.
 pub struct PatternSubscription {
     /// Шаблон glob для сопоставления имён каналов.
     pub pattern: Glob,
@@ -35,8 +33,35 @@ pub struct PatternSubscription {
 }
 
 impl Subscription {
-    /// Возвращает изменяемую ссылку на внутренний приёмник,
-    /// чтобы можно было вызвать `.recv().await`.
+    /// Асинхронно ожидает следующее сообщение из канала.
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` при успешном получении сообщения
+    /// - `Err(RecvError::Closed)` если канал закрыт
+    /// - `Err(RecvError::Lagged(n))` если приёмник отстал на `n` сообщений
+    pub async fn recv(&mut self) -> Result<Message, RecvError> {
+        self.inner.recv().await.map_err(Into::into)
+    }
+
+    /// Пытается получить сообщение без блокировки.
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` если сообщение доступно немедленно
+    /// - `Err(TryRecvError::Empty)` если нет доступных сообщений
+    /// - `Err(TryRecvError::Closed)` если канал закрыт
+    /// - `Err(TryRecvError::Lagged(n))` если приёмник отстал на `n` сообщений
+    pub async fn try_recv(&mut self) -> Result<Message, TryRecvError> {
+        self.inner.try_recv().map_err(Into::into)
+    }
+
+    /// Возвращает изменяемую ссылку на внутренний приёмник.
+    ///
+    /// **Deprecated**: Используйте `recv()` и `try_recv()` вместо прямого
+    /// доступа к receiver. Этот метод оставлен для обратной совместимости.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Используйте recv() и try_recv() методы вместо прямого доступа к receiver"
+    )]
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
@@ -45,13 +70,49 @@ impl Subscription {
     ///
     /// После вызова больше не будут приходить сообщения.
     pub fn unsubscribe(self) {
-        // Ничего не нужно делать: при drop Receiver отписывается сам
+        // При drop Receiver отписывается сам
+    }
+
+    /// Возвращает имя канала, на который подписались.
+    pub fn channel_name(&self) -> &Arc<str> {
+        &self.channel
+    }
+
+    /// Проверяет, закрыт ли канал (нет активных отправителей).
+    pub fn is_closed(&self) -> bool {
+        self.inner.is_closed()
+    }
+
+    /// Возвращает количество сообщений в очереди на получение.
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Проверяет, пуста ли очередь сообщений.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 
 impl PatternSubscription {
-    /// Возвращает изменяемую ссылку на внутренний приёмник,
-    /// чтобы можно было вызвать `.recv().await`.
+    /// Асинхронно ожидает следующее сообщение, соответствующее паттерну.
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` при успешном получении сообщения
+    /// - `Err(RecvError::Closed)` если канал закрыт
+    /// - `Err(RecvError::Lagged(n))` если приёмник отстал на `n` сообщений
+    pub async fn recv(&mut self) -> Result<Message, RecvError> {
+        self.inner.recv().await.map_err(Into::into)
+    }
+
+    /// Возвращает изменяемую ссылку на внутренний приёмник.
+    ///
+    /// **Deprecated**: Используйте `recv()` вместо прямого доступа к receiver.
+    /// Этот метод оставлен для обратной совместимости.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Используйте recv() метод вместо прямого доступа к receiver"
+    )]
     pub fn receiver(&mut self) -> &mut broadcast::Receiver<Message> {
         &mut self.inner
     }
@@ -62,6 +123,26 @@ impl PatternSubscription {
     /// этому шаблону.
     pub fn unsubscribe(self) {
         // При drop Receiver отписывается сам
+    }
+
+    /// Возвращает питтерн подписки.
+    pub fn pattern(&self) -> &Glob {
+        &self.pattern
+    }
+
+    /// Проверяет, закрыт ли канал (нет активных отправителей).
+    pub fn is_closed(&self) -> bool {
+        self.inner.is_closed()
+    }
+
+    /// Возвращает количество сообщений в очереди на получение.
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Проверяет, пуста ли очередь сообщений.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 
@@ -93,6 +174,7 @@ mod tests {
     /// Тест проверяет, что опубликованное сообщение приходит
     /// подписчику.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_receive_message_via_subscription() {
         let broker = Broker::new(10);
         let mut sub = broker.subscribe("testchan");
@@ -136,6 +218,7 @@ mod tests {
 
     /// Тест проверяет, что шаблонная подписка получает сообщение.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_pattern_subscription_receives_message() {
         let broker = Broker::new(10);
         let mut psub = broker.psubscribe("foo*").unwrap();
@@ -154,6 +237,7 @@ mod tests {
     /// Тест проверяет, что после `punsubscribe` сообщения не
     /// приходят.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_pattern_unsubscribe_stops_reception() {
         let broker = Broker::new(10);
         let mut psub = broker.psubscribe("bar*").unwrap();
@@ -168,6 +252,7 @@ mod tests {
     /// Тест проверяет, что несколько шаблонных подписок получают
     /// одно и то же сообщение.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
         let mut ps1 = broker.psubscribe("qu?x").unwrap();
@@ -219,6 +304,7 @@ mod tests {
     /// Тест проверяет, что две подписки на один канал обе
     /// получают сообщения.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new(5);
         let mut a = broker.subscribe("dup");

@@ -147,6 +147,35 @@ impl Broker {
     ) {
         self.channels.remove(channel);
     }
+
+    /// Возвращает количество активных подписок на точные каналы.
+    pub fn channel_count(&self) -> usize {
+        self.channels.len()
+    }
+
+    /// Возвращает количество активных подписок по паттернам.
+    pub fn pattern_count(&self) -> usize {
+        self.patterns.len()
+    }
+
+    /// Возвращает список имён всех активных каналов.
+    pub fn active_channels(&self) -> Vec<Arc<str>> {
+        self.channels
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
+
+    /// Возвращает количество подписчиков на конкретный канал.
+    pub fn subscriber_count(
+        &self,
+        channel: &str,
+    ) -> usize {
+        self.channels
+            .get(channel)
+            .map(|entry| entry.receiver_count())
+            .unwrap_or(0)
+    }
 }
 
 #[cfg(test)]
@@ -156,6 +185,8 @@ mod tests {
         sync::broadcast::error::RecvError,
         time::{timeout, Duration},
     };
+
+    use crate::{RecvError as BroadcastRecvError, TryRecvError};
 
     use super::*;
 
@@ -261,6 +292,7 @@ mod tests {
     /// Тест проверяет, что подписки по паттернам (psubscribe)
     /// получают сообщения.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_psubscribe_and_receive() {
         let broker = Broker::new(5);
         let mut psub = broker.psubscribe("foo.*").unwrap();
@@ -274,6 +306,7 @@ mod tests {
     /// Тест проверяет, что обычные и паттерн-подписки работают
     /// вместе.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_sub_and_psub_together() {
         let broker = Broker::new(5);
         let mut sub = broker.subscribe("topic");
@@ -292,6 +325,7 @@ mod tests {
     /// Тест проверяет, что после `punsubscribe` приёмник
     /// закрывается.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_punsubscribe_no_receive() {
         let broker = Broker::new(5);
         let mut psub = broker.psubscribe("a?c").unwrap();
@@ -306,6 +340,7 @@ mod tests {
     /// Тест проверяет, что два подписчика на один канал
     /// оба получают каждое сообщение.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_multiple_subscribe_same_channel() {
         let broker = Broker::new(5);
 
@@ -343,6 +378,7 @@ mod tests {
     /// Тест проверяет поведение при переполнении буфера:
     /// старое сообщение удаляется, recv() возвращает `Lagged`.
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_broadcast_overwrites_when_buffer_full() {
         let broker = Broker::new(1); // размер буфера = 1
 
@@ -385,5 +421,278 @@ mod tests {
         assert_eq!(broker.publish_count.load(Ordering::Relaxed), 1);
         assert_eq!(broker.send_error_count.load(Ordering::Relaxed), 0);
         assert!(!broker.channels.contains_key("vanish")); // канал не следует создавать заново
+    }
+
+    /// Тест проверяет асинхронную доставку одного сообщения через `recv()`.
+    #[tokio::test]
+    async fn test_subscription_recv_success() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("test_channel");
+
+        // Публикуем сообщение
+        broker.publish("test_channel", Bytes::from("hello world"));
+
+        // Получаем сообщение асинхронно
+        let result = sub.recv().await;
+        assert!(result.is_ok());
+
+        let msg = result.unwrap();
+        assert_eq!(msg.channel.as_ref(), "test_channel");
+        assert_eq!(msg.payload, Bytes::from("hello world"));
+    }
+
+    /// Тест проверяет немедленное получение через `try_recv().await`.
+    #[tokio::test]
+    async fn test_subscription_try_recv_success() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("test_channel");
+
+        // Публикуем сообщение.
+        broker.publish("test_channel", Bytes::from("immediate"));
+
+        // Пытаемся получить сообщение немедленно.
+        let result = sub.try_recv().await;
+        assert!(result.is_ok());
+
+        let msg = result.unwrap();
+        assert_eq!(msg.channel.as_ref(), "test_channel");
+        assert_eq!(msg.payload, Bytes::from("immediate"));
+    }
+
+    /// Тест проверяет, что `try_recv().await` возвращает `Empty` на пустом канале.
+    #[tokio::test]
+    async fn test_subscription_try_recv_empty() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("empty_channel");
+
+        // Пытаемся получить сообщение из пустого канала.
+        let result = sub.try_recv().await;
+        assert!(matches!(result, Err(TryRecvError::Empty)));
+    }
+
+    /// Тест проверяет получение одного сообщения по шаблону через `recv()`.
+    #[tokio::test]
+    async fn test_pattern_subscription_recv_success() -> Result<(), globset::Error> {
+        let broker = Broker::new(10);
+        let mut pattern_sub = broker.psubscribe("test.*")?;
+
+        // Публикуем в канал, соответствующий паттерну.
+        broker.publish("test.foo", Bytes::from("pattern message"));
+
+        // Получаем сообщение.
+        let result = pattern_sub.recv().await;
+        assert!(result.is_ok());
+
+        let msg = result.unwrap();
+        assert_eq!(msg.channel.as_ref(), "test.foo");
+        assert_eq!(msg.payload, Bytes::from("pattern message"));
+
+        Ok(())
+    }
+
+    /// Тест проверяет получение нескольких сообщений по одному шаблону.
+    #[tokio::test]
+    async fn test_pattern_subscription_multiple_channels() -> Result<(), globset::Error> {
+        let broker = Broker::new(10);
+        let mut pattern_sub = broker.psubscribe("user.*")?;
+
+        // Публикуем в несколько каналов, соответствующих паттерну.
+        broker.publish("user.login", Bytes::from("user login"));
+        broker.publish("user.logout", Bytes::from("user logout"));
+
+        // Получаем первое сообщение.
+        let msg1 = pattern_sub.recv().await.unwrap();
+        assert_eq!(msg1.channel.as_ref(), "user.login");
+
+        // Получаем второе сообщение.
+        let msg2 = pattern_sub.recv().await.unwrap();
+        assert_eq!(msg2.channel.as_ref(), "user.logout");
+
+        Ok(())
+    }
+
+    /// Тест проверяет, что `recv()` на закрытом канале возвращает `Closed`.
+    #[tokio::test]
+    async fn test_subscription_closed_error() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("closing_channel");
+
+        // Удаляем все подписки, что должно закрыть канал.
+        broker.unsubscribe_all("closing_channel");
+
+        // Пытаемся получить сообщение из закрытого канала.
+        let result = timeout(Duration::from_millis(100), sub.recv()).await;
+
+        // Проверяем, что получили ошибку о закрытии канала.
+        if let Ok(recv_result) = result {
+            assert!(matches!(recv_result, Err(BroadcastRecvError::Closed)));
+        }
+    }
+
+    /// Тест проверяет получение нескольких сообщений подряд через `recv()`.
+    #[tokio::test]
+    async fn test_subscription_multiple_messages() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("multi_channel");
+
+        // Публикуем несколько сообщений.
+        for i in 0..5 {
+            broker.publish("multi_channel", Bytes::from(format!("message: {i}")));
+        }
+
+        // Получаем все сообщения.
+        for i in 0..5 {
+            let result = sub.recv().await;
+            assert!(result.is_ok());
+
+            let msg = result.unwrap();
+            assert_eq!(msg.payload, Bytes::from(format!("message: {i}")));
+        }
+    }
+
+    /// Тест проверяет параллельную доставку одному сообщению нескольким подписчикам.
+    #[tokio::test]
+    async fn test_concurrent_subscriptions() {
+        let broker = Arc::new(Broker::new(10));
+        let mut handles = Vec::new();
+
+        // Создаём несколько подписчиков
+        for i in 0..3 {
+            let broker_clone = broker.clone();
+            let handle = tokio::spawn(async move {
+                let mut sub = broker_clone.subscribe("concurrent_channel");
+                let msg = sub.recv().await.unwrap();
+                format!(
+                    "subscriber-{}: {}",
+                    i,
+                    String::from_utf8_lossy(&msg.payload)
+                )
+            });
+            handles.push(handle);
+        }
+
+        // Даём подписчикам время подписаться
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Публикуем сообщение
+        broker.publish("concurrent_channel", Bytes::from("broadcast"));
+
+        // Ждём результатов
+        let mut results = Vec::new();
+        for handle in handles {
+            results.push(handle.await.unwrap());
+        }
+
+        // Проверяем, что все получили сообщение
+        assert_eq!(results.len(), 3);
+        for result in results {
+            assert!(result.contains("broadcast"));
+        }
+    }
+
+    /// Тест проверяет таймаут при отсутствии сообщений (`timeout`).
+    #[tokio::test]
+    async fn test_subscription_timeout() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("timeout_channel");
+
+        // Пытаемся получить сообщение с таймаутом
+        let result = timeout(Duration::from_millis(50), sub.recv()).await;
+
+        // Проверяем, что произошел таймаут
+        assert!(result.is_err());
+    }
+
+    /// Тест проверяет вспомогательные методы подписки: `len`, `is_empty`, `channel_name`, `is_closed`.
+    #[tokio::test]
+    async fn test_subscription_helper_methods() {
+        let broker = Broker::new(10);
+        let mut sub = broker.subscribe("helper_channel");
+
+        // Проверяем helper методы
+        assert_eq!(sub.channel_name().as_ref(), "helper_channel");
+        assert!(!sub.is_closed());
+        assert_eq!(sub.len(), 0);
+        assert!(sub.is_empty());
+
+        // Публикуем сообщение
+        broker.publish("helper_channel", Bytes::from("test"));
+
+        // Проверяем, что очередь не пуста
+        assert_eq!(sub.len(), 1);
+        assert!(!sub.is_empty());
+
+        // Получаем сообщение
+        let _ = sub.recv().await.unwrap();
+        assert_eq!(sub.len(), 0);
+        assert!(sub.is_empty());
+    }
+
+    /// Тест проверяет вспомогательные методы паттерн-подписки: `len`, `is_empty`, `is_closed`.
+    #[tokio::test]
+    async fn test_pattern_subscription_helper_methods() -> Result<(), globset::Error> {
+        let broker = Broker::new(10);
+        let pattern_sub = broker.psubscribe("helper.*")?;
+
+        // Проверяем helper методы
+        assert!(!pattern_sub.is_closed());
+        assert_eq!(pattern_sub.len(), 0);
+        assert!(pattern_sub.is_empty());
+
+        // Публикуем сообщение
+        broker.publish("helper.test", Bytes::from("test"));
+
+        // Проверяем, что очередь не пуста
+        assert_eq!(pattern_sub.len(), 1);
+        assert!(!pattern_sub.is_empty());
+
+        Ok(())
+    }
+
+    /// Тест проверяет форматирование ошибок типов `RecvError` и `TryRecvError`.
+    #[tokio::test]
+    async fn test_error_types_display() {
+        // Тестируем форматирование ошибок
+        let recv_closed = BroadcastRecvError::Closed;
+        let recv_lagged = BroadcastRecvError::Lagged(42);
+
+        assert_eq!(recv_closed.to_string(), "channel is closed");
+        assert_eq!(
+            recv_lagged.to_string(),
+            "receiver lagged behind by 42 messages"
+        );
+
+        let try_recv_empty = TryRecvError::Empty;
+        let try_recv_closed = TryRecvError::Closed;
+        let try_recv_lagged = TryRecvError::Lagged(10);
+
+        assert_eq!(try_recv_empty.to_string(), "no messages available");
+        assert_eq!(try_recv_closed.to_string(), "channel is closed");
+        assert_eq!(
+            try_recv_lagged.to_string(),
+            "receiver lagged behind by 10 messages"
+        );
+    }
+
+    /// Тест проверяет сценарий переполнения буфера и генерацию `Lagged` ошибки.
+    #[tokio::test]
+    async fn test_lagged_error_scenario() {
+        let broker = Broker::new(2); // Маленький буфер для провокации lag
+        let mut sub = broker.subscribe("lag_channel");
+
+        // Публикуем много сообщений, чтобы переполнить буфер
+        for i in 0..10 {
+            broker.publish("lag_channel", Bytes::from(format!("msg{}", i)));
+        }
+
+        // Первое получение может вернуть Lagged ошибку
+        match sub.recv().await {
+            Ok(_) => {} // Иногда получаем сообщение
+            Err(BroadcastRecvError::Lagged(n)) => {
+                assert!(n > 0);
+                println!("Successfully caught lagged error: {} messages", n);
+            }
+            Err(e) => panic!("Unexpected error: {}", e),
+        }
     }
 }

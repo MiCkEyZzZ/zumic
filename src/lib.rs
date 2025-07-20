@@ -79,7 +79,7 @@ pub use pubsub::{Broker, Message, PatternSubscription, Subscription};
 /// Реэкспорт основных типов ошибок.
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
-    PasswordError, StoreError, StoreResult, VersionError,
+    PasswordError, RecvError, StoreError, StoreResult, TryRecvError, VersionError,
 };
 
 /// Реэкспорт настроек конфигурации.
