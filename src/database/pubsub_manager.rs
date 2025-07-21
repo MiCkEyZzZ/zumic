@@ -1,7 +1,6 @@
 use bytes::Bytes;
-use globset::Error as GlobError;
 
-use crate::{Broker, PatternSubscription, Subscription};
+use crate::{Broker, PatternSubscription, RecvError, Subscription};
 
 /// Менеджер Pub/Sub-системы, хранится внутри StorageEngine.
 #[derive(Debug)]
@@ -22,15 +21,15 @@ impl PubSubManager {
         &self,
         channel: &str,
         payload: Bytes,
-    ) {
-        self.broker.publish(channel, payload);
+    ) -> Result<usize, RecvError> {
+        self.broker.publish(channel, payload)
     }
 
     /// Подписка на точный канал.
     pub fn subscribe(
         &self,
         channel: &str,
-    ) -> Subscription {
+    ) -> Result<Subscription, RecvError> {
         self.broker.subscribe(channel)
     }
 
@@ -46,7 +45,7 @@ impl PubSubManager {
     pub fn psubscribe(
         &self,
         pattern: &str,
-    ) -> Result<PatternSubscription, GlobError> {
+    ) -> Result<PatternSubscription, RecvError> {
         self.broker.psubscribe(pattern)
     }
 
@@ -54,7 +53,7 @@ impl PubSubManager {
     pub fn punsubscribe(
         &self,
         pattern: &str,
-    ) -> Result<(), GlobError> {
+    ) -> Result<(), RecvError> {
         self.broker.punsubscribe(pattern)
     }
 
@@ -86,9 +85,9 @@ mod tests {
     #[tokio::test]
     async fn test_publish_and_subscribe() {
         let manager = PubSubManager::new();
-        let mut sub = manager.subscribe("news");
+        let mut sub = manager.subscribe("news").unwrap();
 
-        manager.publish("news", Bytes::from("hello"));
+        manager.publish("news", Bytes::from("hello")).unwrap();
 
         let msg = sub.recv().await.unwrap();
         assert_eq!(msg.payload, Bytes::from("hello"));
@@ -100,10 +99,10 @@ mod tests {
     #[allow(deprecated)]
     async fn test_unsubscribe_all() {
         let manager = PubSubManager::new();
-        let mut sub = manager.subscribe("updates");
+        let mut sub = manager.subscribe("updates").unwrap();
 
         manager.unsubscribe_all("updates");
-        manager.publish("updates", Bytes::from("nope"));
+        let _ = manager.publish("updates", Bytes::from("nope"));
 
         // Ждём максимум 100 мс, затем `unwrap()` по таймауту
         let res =
@@ -123,8 +122,10 @@ mod tests {
         let manager = PubSubManager::new();
         let mut psub = manager.psubscribe("news:*").unwrap();
 
-        manager.publish("news:world", Bytes::from("global"));
-        manager.publish("news:local", Bytes::from("city"));
+        manager
+            .publish("news:world", Bytes::from("global"))
+            .unwrap();
+        manager.publish("news:local", Bytes::from("city")).unwrap();
 
         let msg1 = psub.recv().await.unwrap();
         assert!(msg1.channel.starts_with("news:"));
@@ -160,8 +161,8 @@ mod tests {
     #[test]
     fn test_stats_tracking() {
         let manager = PubSubManager::new();
-        manager.publish("any", Bytes::from("1"));
-        manager.publish("any", Bytes::from("2"));
+        let _ = manager.publish("any", Bytes::from("1"));
+        let _ = manager.publish("any", Bytes::from("2"));
         let (published, errors) = manager.stats();
 
         assert_eq!(published, 2);

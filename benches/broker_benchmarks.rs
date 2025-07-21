@@ -30,7 +30,9 @@ fn bench_publish_0_sub(c: &mut Criterion) {
     let broker = Broker::new(100);
     c.bench_function("publish_0_subs", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
@@ -40,27 +42,35 @@ fn bench_publish_1_sub(c: &mut Criterion) {
     let _sub = broker.subscribe("chan");
     c.bench_function("publish_1_sub", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
 
 fn bench_publish_10_sub(c: &mut Criterion) {
     let broker = Broker::new(100);
-    let _subs: Vec<Subscription> = (0..10).map(|_| broker.subscribe("chan")).collect();
+    let _subs: Vec<Subscription> = (0..10).map(|_| broker.subscribe("chan").unwrap()).collect();
     c.bench_function("publish_10_subs", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
 
 fn bench_publish_100_sub(c: &mut Criterion) {
     let broker = Broker::new(100);
-    let _subs: Vec<Subscription> = (0..100).map(|_| broker.subscribe("chan")).collect();
+    let _subs: Vec<Subscription> = (0..100)
+        .map(|_| broker.subscribe("chan").unwrap())
+        .collect();
     c.bench_function("publish_100_subs", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
