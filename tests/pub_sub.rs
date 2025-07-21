@@ -15,7 +15,9 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
     let broker = Arc::new(Broker::new(100));
 
     // Подписываемся на уведомления о пользователях
-    let mut user_sub = broker.subscribe("user.notifications");
+    let mut user_sub = broker
+        .subscribe("user.notifications")
+        .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
     let mut admin_pattern = broker.psubscribe("admin.*")?;
 
     // Создаем задачу для обработки пользовательских уведомлений
@@ -36,6 +38,7 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
                 Err(RecvError::Lagged(n)) => {
                     messages.push(format!("Missed {n} notifications"));
                 }
+                _ => {}
             }
         }
         messages
@@ -65,11 +68,21 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Публикуем события
-    broker.publish("user.notifications", Bytes::from("New message arrived"));
-    broker.publish("user.notifications", Bytes::from("Friend request received"));
-    broker.publish("admin.security", Bytes::from("Failed login attempt"));
-    broker.publish("admin.audit", Bytes::from("User data accessed"));
-    broker.publish("user.notifications", Bytes::from("Email verified"));
+    broker
+        .publish("user.notifications", Bytes::from("New message arrived"))
+        .unwrap();
+    broker
+        .publish("user.notifications", Bytes::from("Friend request received"))
+        .unwrap();
+    broker
+        .publish("admin.security", Bytes::from("Failed login attempt"))
+        .unwrap();
+    broker
+        .publish("admin.audit", Bytes::from("User data accessed"))
+        .unwrap();
+    broker
+        .publish("user.notifications", Bytes::from("Email verified"))
+        .unwrap();
 
     // Ждем результатов
     let (user_messages, admin_events) = tokio::join!(user_task, admin_task);
@@ -96,24 +109,32 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
 #[tokio::test]
 async fn test_mixed_sync_async_usage() {
     let broker = Broker::new(10);
-    let mut sub = broker.subscribe("mixed_channel");
+    let mut sub = broker
+        .subscribe("mixed_channel")
+        .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
     // Публикуем несколько сообщений
-    broker.publish("mixed_channel", Bytes::from("sync1"));
-    broker.publish("mixed_channel", Bytes::from("sync2"));
+    broker
+        .publish("mixed_channel", Bytes::from("sync1"))
+        .unwrap();
+    broker
+        .publish("mixed_channel", Bytes::from("sync2"))
+        .unwrap();
 
     // Синхронная семантика здесь — всё равно async, поэтому await
-    let msg1 = sub.try_recv().await.unwrap();
+    let msg1 = sub.try_recv().unwrap();
     assert_eq!(msg1.payload, Bytes::from("sync1"));
 
-    let msg2 = sub.try_recv().await.unwrap();
+    let msg2 = sub.try_recv().unwrap();
     assert_eq!(msg2.payload, Bytes::from("sync2"));
 
     // Теперь канал пуст — await + проверяем Err(TryRecvError::Empty)
-    assert!(matches!(sub.try_recv().await, Err(TryRecvError::Empty)));
+    assert!(matches!(sub.try_recv(), Err(TryRecvError::Empty)));
 
     // Публикуем ещё одно сообщение
-    broker.publish("mixed_channel", Bytes::from("async1"));
+    broker
+        .publish("mixed_channel", Bytes::from("async1"))
+        .unwrap();
 
     // Асинхронная операция чтения
     let msg3 = sub.recv().await.unwrap();
@@ -126,11 +147,17 @@ async fn test_mixed_sync_async_usage() {
 #[tokio::test]
 async fn test_unsubscribe_behavior() {
     let broker = Broker::new(10);
-    let sub1 = broker.subscribe("unsub_channel");
-    let mut sub2 = broker.subscribe("unsub_channel");
+    let sub1 = broker
+        .subscribe("unsub_channel")
+        .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+    let mut sub2 = broker
+        .subscribe("unsub_channel")
+        .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
     // Публикуем сообщение
-    broker.publish("unsub_channel", Bytes::from("before_unsub"));
+    broker
+        .publish("unsub_channel", Bytes::from("before_unsub"))
+        .unwrap();
 
     // sub1 отписывается
     sub1.unsubscribe();
@@ -140,7 +167,9 @@ async fn test_unsubscribe_behavior() {
     assert_eq!(msg.payload, Bytes::from("before_unsub"));
 
     // Публикуем еще одно
-    broker.publish("unsub_channel", Bytes::from("after_unsub"));
+    broker
+        .publish("unsub_channel", Bytes::from("after_unsub"))
+        .unwrap();
     let msg = sub2.recv().await.unwrap();
     assert_eq!(msg.payload, Bytes::from("after_unsub"));
 }
@@ -151,13 +180,19 @@ async fn test_unsubscribe_behavior() {
 #[tokio::test]
 async fn test_broker_statistics_with_async_api() {
     let broker = Broker::new(10);
-    let mut sub = broker.subscribe("stats_channel");
+    let mut sub = broker
+        .subscribe("stats_channel")
+        .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
     assert_eq!(broker.publish_count.load(Ordering::Relaxed), 0);
 
     // Публикуем и получаем сообщения
-    broker.publish("stats_channel", Bytes::from("test1"));
-    broker.publish("stats_channel", Bytes::from("test2"));
+    broker
+        .publish("stats_channel", Bytes::from("test1"))
+        .unwrap();
+    broker
+        .publish("stats_channel", Bytes::from("test2"))
+        .unwrap();
 
     assert_eq!(broker.publish_count.load(Ordering::Relaxed), 2);
 

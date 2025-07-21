@@ -50,8 +50,28 @@ impl Subscription {
     /// - `Err(TryRecvError::Empty)` если нет доступных сообщений
     /// - `Err(TryRecvError::Closed)` если канал закрыт
     /// - `Err(TryRecvError::Lagged(n))` если приёмник отстал на `n` сообщений
-    pub async fn try_recv(&mut self) -> Result<Message, TryRecvError> {
+    pub fn try_recv(&mut self) -> Result<Message, TryRecvError> {
         self.inner.try_recv().map_err(Into::into)
+    }
+
+    /// Асинхронно ожидает сообщение с таймаутом.
+    ///
+    /// # Аргументы
+    /// - `timeout` - максимальное время ожидания
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` при успешном получении сообщения
+    /// - `Err(PubSubError::Timeout)` если время ожидания истекло
+    /// - `Err(PubSubError::ChannelClosed)` если канал закрыт
+    /// - `Err(PubSubError::Lagged(n))` если приёмник отстал
+    pub async fn recv_timeout(
+        &mut self,
+        timeout: std::time::Duration,
+    ) -> Result<Message, RecvError> {
+        match tokio::time::timeout(timeout, self.recv()).await {
+            Ok(result) => result,
+            Err(_) => Err(RecvError::Timeout),
+        }
     }
 
     /// Возвращает изменяемую ссылку на внутренний приёмник.
@@ -105,6 +125,37 @@ impl PatternSubscription {
         self.inner.recv().await.map_err(Into::into)
     }
 
+    /// Пытается получить сообщение без блокировки.
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` если сообщение доступно немедленно
+    /// - `Err(TryRecvError::Empty)` если нет доступных сообщений
+    /// - `Err(TryRecvError::ChannelClosed)` если канал закрыт
+    /// - `Err(TryRecvError::Lagged(n))` если приёмник отстал на `n` сообщений
+    pub fn try_recv(&mut self) -> Result<Message, TryRecvError> {
+        self.inner.try_recv().map_err(Into::into)
+    }
+
+    /// Асинхронно ожидает сообщение с таймаутом.
+    ///
+    /// # Аргументы
+    /// - `timeout` - максимальное время ожидания
+    ///
+    /// # Возвращает
+    /// - `Ok(Message)` при успешном получении сообщения
+    /// - `Err(PubSubError::Timeout)` если время ожидания истекло
+    /// - `Err(PubSubError::ChannelClosed)` если канал закрыт
+    /// - `Err(PubSubError::Lagged(n))` если приёмник отстал
+    pub async fn recv_timeout(
+        &mut self,
+        timeout: std::time::Duration,
+    ) -> Result<Message, RecvError> {
+        match tokio::time::timeout(timeout, self.recv()).await {
+            Ok(result) => result,
+            Err(_) => Err(RecvError::Timeout),
+        }
+    }
+
     /// Возвращает изменяемую ссылку на внутренний приёмник.
     ///
     /// **Deprecated**: Используйте `recv()` вместо прямого доступа к receiver.
@@ -128,6 +179,11 @@ impl PatternSubscription {
     /// Возвращает питтерн подписки.
     pub fn pattern(&self) -> &Glob {
         &self.pattern
+    }
+
+    /// Возвращает строковое представление паттерна.
+    pub fn pattern_str(&self) -> &str {
+        self.pattern.glob()
     }
 
     /// Проверяет, закрыт ли канал (нет активных отправителей).
@@ -154,7 +210,7 @@ mod tests {
     use globset::Glob;
     use tokio::{sync::broadcast, time::timeout};
 
-    use crate::{pubsub::PatternSubscription, Broker, Subscription};
+    use crate::{pubsub::PatternSubscription, Broker, RecvError, Subscription};
 
     /// Тест проверяет, что поле `channel` содержит правильное
     /// имя канала.
@@ -162,7 +218,9 @@ mod tests {
     async fn test_subscription_channel_name() {
         let sub = {
             let broker = Broker::new(10);
-            let sub = broker.subscribe("mychan");
+            let sub = broker
+                .subscribe("mychan")
+                .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
             assert_eq!(&*sub.channel, "mychan");
             sub
         };
@@ -177,8 +235,12 @@ mod tests {
     #[allow(deprecated)]
     async fn test_receive_message_via_subscription() {
         let broker = Broker::new(10);
-        let mut sub = broker.subscribe("testchan");
-        broker.publish("testchan", Bytes::from_static(b"hello"));
+        let mut sub = broker
+            .subscribe("testchan")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+        broker
+            .publish("testchan", Bytes::from_static(b"hello"))
+            .unwrap();
         let msg = timeout(Duration::from_millis(100), sub.receiver().recv())
             .await
             .expect("timed out")
@@ -221,9 +283,13 @@ mod tests {
     #[allow(deprecated)]
     async fn test_pattern_subscription_receives_message() {
         let broker = Broker::new(10);
-        let mut psub = broker.psubscribe("foo*").unwrap();
+        let mut psub = broker
+            .psubscribe("foo*")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
-        broker.publish("foobar", Bytes::from_static(b"xyz"));
+        broker
+            .publish("foobar", Bytes::from_static(b"xyz"))
+            .unwrap();
 
         let msg = timeout(Duration::from_millis(100), psub.receiver().recv())
             .await
@@ -242,7 +308,7 @@ mod tests {
         let broker = Broker::new(10);
         let mut psub = broker.psubscribe("bar*").unwrap();
         broker.punsubscribe("bar*").unwrap();
-        broker.publish("barbaz", Bytes::from_static(b"nope"));
+        broker.publish_unchecked("barbaz", Bytes::from_static(b"nope"));
         let result = timeout(Duration::from_millis(100), psub.receiver().recv()).await;
         assert!(
             result.is_err() || matches!(result.unwrap(), Err(broadcast::error::RecvError::Closed))
@@ -255,10 +321,16 @@ mod tests {
     #[allow(deprecated)]
     async fn test_multiple_pattern_subscriptions_receive() {
         let broker = Broker::new(10);
-        let mut ps1 = broker.psubscribe("qu?x").unwrap();
-        let mut ps2 = broker.psubscribe("qu*").unwrap();
+        let mut ps1 = broker
+            .psubscribe("qu?x")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+        let mut ps2 = broker
+            .psubscribe("qu*")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
-        broker.publish("quux", Bytes::from_static(b"hello"));
+        broker
+            .publish("quux", Bytes::from_static(b"hello"))
+            .unwrap();
 
         let msg1 = timeout(Duration::from_millis(100), ps1.receiver().recv())
             .await
@@ -307,9 +379,13 @@ mod tests {
     #[allow(deprecated)]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new(5);
-        let mut a = broker.subscribe("dup");
-        let mut b = broker.subscribe("dup");
-        broker.publish("dup", Bytes::from_static(b"X"));
+        let mut a = broker
+            .subscribe("dup")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+        let mut b = broker
+            .subscribe("dup")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+        broker.publish("dup", Bytes::from_static(b"X")).unwrap();
         assert_eq!(
             a.receiver().recv().await.unwrap().payload,
             Bytes::from_static(b"X")
@@ -318,6 +394,30 @@ mod tests {
             b.receiver().recv().await.unwrap().payload,
             Bytes::from_static(b"X")
         );
+    }
+
+    #[tokio::test]
+    async fn test_subscription_recv_timeout() {
+        let broker = Broker::new(10);
+        let mut sub = broker
+            .subscribe("test-channel")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+
+        // Тест таймаута
+        let result = sub.recv_timeout(Duration::from_millis(50)).await;
+        assert!(matches!(result, Err(RecvError::Timeout)));
+    }
+
+    #[tokio::test]
+    async fn test_pattern_subscription_timeout() {
+        let broker = Broker::new(10);
+        let mut sub = broker
+            .psubscribe("test.*")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+
+        // Тест таймаута
+        let result = sub.recv_timeout(Duration::from_millis(50)).await;
+        assert!(matches!(result, Err(RecvError::Timeout)));
     }
 
     /// Тест проверяет, что отписка от несуществующего канала
@@ -336,5 +436,29 @@ mod tests {
     fn test_invalid_glob_pattern() {
         let broker = Broker::new(5);
         assert!(broker.psubscribe("[invalid[").is_err());
+    }
+
+    #[test]
+    fn test_subscription_properties() {
+        let broker = Broker::new(10);
+        let sub = broker
+            .subscribe("test-channel")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+
+        assert_eq!(sub.channel_name().as_ref(), "test-channel");
+        assert!(sub.is_empty());
+        assert_eq!(sub.len(), 0);
+    }
+
+    #[test]
+    fn test_pattern_subscription_properties() {
+        let broker = Broker::new(10);
+        let sub = broker
+            .psubscribe("test.*")
+            .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
+
+        assert_eq!(sub.pattern_str(), "test.*");
+        assert!(sub.is_empty());
+        assert_eq!(sub.len(), 0);
     }
 }

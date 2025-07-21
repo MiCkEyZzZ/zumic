@@ -19,7 +19,7 @@ fn bench_unsubscribe(c: &mut Criterion) {
     let broker = Broker::new(100);
     c.bench_function("unsubscribe", |b| {
         b.iter(|| {
-            let sub = broker.subscribe("chan");
+            let sub = broker.subscribe("chan").unwrap();
             sub.unsubscribe();
             black_box(());
         });
@@ -31,7 +31,9 @@ fn bench_publish_1_sub(c: &mut Criterion) {
     let _sub = broker.subscribe("chan");
     c.bench_function("publish_1_sub", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
@@ -39,10 +41,12 @@ fn bench_publish_1_sub(c: &mut Criterion) {
 fn bench_publish_10_sub(c: &mut Criterion) {
     let broker = Broker::new(100);
     // создаём 10 подписок заранее
-    let _subs: Vec<Subscription> = (0..10).map(|_| broker.subscribe("chan")).collect();
+    let _subs: Vec<Subscription> = (0..10).map(|_| broker.subscribe("chan").unwrap()).collect();
     c.bench_function("publish_10_sub", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
@@ -50,10 +54,14 @@ fn bench_publish_10_sub(c: &mut Criterion) {
 fn bench_publish_100_sub(c: &mut Criterion) {
     let broker = Broker::new(100);
     // создаём 100 подписок заранее
-    let _subs: Vec<Subscription> = (0..100).map(|_| broker.subscribe("chan")).collect();
+    let _subs: Vec<Subscription> = (0..100)
+        .map(|_| broker.subscribe("chan").unwrap())
+        .collect();
     c.bench_function("publish_100_sub", |b| {
         b.iter(|| {
-            broker.publish("chan", black_box(Bytes::from_static(b"x")));
+            broker
+                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .unwrap();
         })
     });
 }
