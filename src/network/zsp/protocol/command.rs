@@ -7,17 +7,61 @@ pub enum Command {
     Echo(String),
 
     // --- Базовые ---
-    Set { key: String, value: Value },
-    Get { key: String },
-    Del { key: String },
-    MSet { entries: Vec<(String, Value)> },
-    MGet { keys: Vec<String> },
-    SetNx { key: String, value: Value },
-    Rename { from: String, to: String },
-    RenameNx { from: String, to: String },
+    Set {
+        key: String,
+        value: Value,
+    },
+    Get {
+        key: String,
+    },
+    Del {
+        key: String,
+    },
+    MSet {
+        entries: Vec<(String, Value)>,
+    },
+    MGet {
+        keys: Vec<String>,
+    },
+    SetNx {
+        key: String,
+        value: Value,
+    },
+    Rename {
+        from: String,
+        to: String,
+    },
+    RenameNx {
+        from: String,
+        to: String,
+    },
 
     // Авторизация
-    Auth { user: Option<String>, pass: String },
+    Auth {
+        user: Option<String>,
+        pass: String,
+    },
+
+    // --- PubSub команды ---
+    Subscribe {
+        channels: Vec<String>,
+    },
+    Unsubscribe {
+        channels: Vec<String>,
+    },
+    Publish {
+        channel: String,
+        message: PubSubMessage,
+    },
+}
+
+// Новый тип для pub/sub сообщений
+#[derive(Debug, Clone, PartialEq)]
+pub enum PubSubMessage {
+    Bytes(Vec<u8>),
+    String(String),
+    Json(serde_json::Value),
+    Serialized { data: Vec<u8>, content_type: String },
 }
 
 impl Command {
@@ -35,6 +79,11 @@ impl Command {
             Command::Rename { .. } => "rename",
             Command::RenameNx { .. } => "renamenx",
             Command::Auth { .. } => "auth",
+
+            // PubSub команды
+            Command::Subscribe { .. } => "subscribe",
+            Command::Unsubscribe { .. } => "unsubscribe",
+            Command::Publish { .. } => "publish",
         }
     }
 }
@@ -49,10 +98,18 @@ pub enum Response {
     Float(f64),
     Bool(bool),
     String(String),
-}
 
-impl Response {
-    pub fn error(msg: impl Into<String>) -> Self {
-        Response::Error(msg.into())
-    }
+    // PubSub ответы
+    Message {
+        channel: String,
+        message: PubSubMessage,
+    },
+    Subscribed {
+        channel: String,
+        count: i64,
+    },
+    Unsubscribed {
+        channel: String,
+        count: i64,
+    },
 }

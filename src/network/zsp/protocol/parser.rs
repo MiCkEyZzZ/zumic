@@ -1,5 +1,5 @@
 use crate::{
-    zsp::{command::Command as ZSPCommand, zsp_types::ZspFrame},
+    zsp::{command::Command as ZSPCommand, zsp_types::ZspFrame, PubSubMessage},
     AuthCommand, DelCommand, GetCommand, MGetCommand, MSetCommand, ParseError, RenameCommand,
     RenameNxCommand, Sds, SetCommand, SetNxCommand, StoreCommand, Value,
 };
@@ -28,6 +28,11 @@ impl IntoExecutable for ZSPCommand {
                 user: user.unwrap(),
                 pass,
             })),
+
+            // Заглушки для pub/sub, так как store command пока нет.
+            ZSPCommand::Publish { .. } => Err(ParseError::UnknownCommand),
+            ZSPCommand::Subscribe { .. } => Err(ParseError::UnknownCommand),
+            ZSPCommand::Unsubscribe { .. } => Err(ParseError::UnknownCommand),
 
             ZSPCommand::Ping => Err(ParseError::UnknownCommand),
             ZSPCommand::Echo(_) => Err(ParseError::UnknownCommand),
@@ -164,7 +169,113 @@ fn parse_from_str_command(
                 _ => Err(ParseError::WrongArgCount("AUTH", 1)),
             }
         }
+        "subscribe" => {
+            if items.len() < 2 {
+                return Err(ParseError::WrongArgCount("SUBSCRIBE", 1));
+            }
+
+            let channels = items[1..]
+                .iter()
+                .map(|f| parse_key(f, "SUBSCRIBE"))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(ZSPCommand::Subscribe { channels })
+        }
+        "unsubscribe" => {
+            if items.len() < 2 {
+                return Err(ParseError::WrongArgCount("UNSUBSCRIBE", 1));
+            }
+
+            let channels = items[1..]
+                .iter()
+                .map(|f| parse_key(f, "UNSUBSCRIBE"))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(ZSPCommand::Unsubscribe { channels })
+        }
+        "publish" => {
+            // Поддерживаем два формата:
+            // Legacy: PUBLISH channel message_data
+            // Enhanced: PUBLISH channel message_type message_data [content_type]
+
+            if items.len() < 3 {
+                return Err(ParseError::WrongArgCount("PUBLISH", 2));
+            }
+
+            let channel = parse_key(&items[1], "PUBLISH")?;
+
+            let message = if items.len() == 3 {
+                // Legacy format: assume bytes
+                parse_pubsub_message_legacy(&items[2])?
+            } else if items.len() >= 4 {
+                // Enhanced format
+                let message_type = parse_key(&items[2], "PUBLISH")?;
+                match message_type.to_uppercase().as_str() {
+                    "BYTES" => {
+                        let data = parse_binary_data(&items[3], "PUBLISH")?;
+                        PubSubMessage::Bytes(data)
+                    }
+                    "STRING" => {
+                        let s = parse_string_data(&items[3], "PUBLISH")?;
+                        PubSubMessage::String(s)
+                    }
+                    "JSON" => {
+                        let json_str = parse_string_data(&items[3], "PUBLISH")?;
+                        let json_value = serde_json::from_str(&json_str)
+                            .map_err(|_| ParseError::InvalidValueType("PUBLISH JSON"))?;
+                        PubSubMessage::Json(json_value)
+                    }
+                    "SERIALIZED" => {
+                        if items.len() < 5 {
+                            return Err(ParseError::WrongArgCount("PUBLISH SERIALIZED", 4));
+                        }
+                        let content_type = parse_key(&items[3], "PUBLISH")?;
+                        let data = parse_binary_data(&items[4], "PUBLISH")?;
+                        PubSubMessage::Serialized { data, content_type }
+                    }
+                    _ => return Err(ParseError::InvalidValueType("PUBLISH")),
+                }
+            } else {
+                return Err(ParseError::WrongArgCount("PUBLISH", 2));
+            };
+
+            Ok(ZSPCommand::Publish { channel, message })
+        }
         _ => Err(ParseError::UnknownCommand),
+    }
+}
+
+// Вспомогательные ф-ии
+
+fn parse_pubsub_message_legacy(frame: &ZspFrame) -> Result<PubSubMessage, ParseError> {
+    match frame {
+        ZspFrame::BinaryString(Some(data)) => Ok(PubSubMessage::Bytes(data.clone())),
+        ZspFrame::InlineString(s) => Ok(PubSubMessage::String(s.to_string())),
+        _ => Err(ParseError::InvalidValueType("PUBLISH")),
+    }
+}
+
+fn parse_binary_data(
+    frame: &ZspFrame,
+    cmd: &'static str,
+) -> Result<Vec<u8>, ParseError> {
+    match frame {
+        ZspFrame::BinaryString(Some(data)) => Ok(data.clone()),
+        ZspFrame::InlineString(s) => Ok(s.as_bytes().to_vec()),
+        _ => Err(ParseError::InvalidValueType(cmd)),
+    }
+}
+
+fn parse_string_data(
+    frame: &ZspFrame,
+    cmd: &'static str,
+) -> Result<String, ParseError> {
+    match frame {
+        ZspFrame::InlineString(s) => Ok(s.to_string()),
+        ZspFrame::BinaryString(Some(data)) => {
+            String::from_utf8(data.clone()).map_err(|_| ParseError::InvalidUtf8)
+        }
+        _ => Err(ParseError::InvalidValueType(cmd)),
     }
 }
 
