@@ -41,7 +41,7 @@ fn bench_vecdeque_iter(n: usize) {
 fn bench_quicklist_mixed(n: usize) {
     let mut list = QuickList::new(128);
     for i in 0..n {
-        if i % 2 == 0 {
+        if i.is_multiple_of(2) {
             list.push_front(i);
         } else {
             list.push_back(i);
@@ -56,7 +56,7 @@ fn bench_quicklist_mixed(n: usize) {
 fn bench_vecdeque_mixed(n: usize) {
     let mut list = VecDeque::new();
     for i in 0..n {
-        if i % 2 == 0 {
+        if i.is_multiple_of(2) {
             list.push_front(i);
         } else {
             list.push_back(i);

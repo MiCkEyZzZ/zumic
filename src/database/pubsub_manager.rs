@@ -275,7 +275,7 @@ mod tests {
             Err(_) => {
                 // Таймаут тоже допустим, так как канал может быть просто закрыт
             }
-            Ok(Err(e)) => panic!("Unexpected error: {:?}", e),
+            Ok(Err(e)) => panic!("Unexpected error: {e:?}"),
         }
     }
 

@@ -98,7 +98,7 @@ fn bench_rewrite(c: &mut Criterion) {
                     let value = format!("value{i}").into_bytes();
                     log.append_set(&key, &value).unwrap();
                     // Для некоторых ключей делаем DEL, чтобы имитировать "устаревание"
-                    if i % 5 == 0 {
+                    if i.is_multiple_of(5) {
                         log.append_del(&key).unwrap();
                     }
                 }

@@ -934,9 +934,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_lag_handling_error_mode() {
-        let mut opts = SubscriptionOptions::default();
-        opts.buffer_size = Some(1); // small broadcast buffer to provoke lag
-        opts.lag_handling = LagHandling::Error;
+        let opts = SubscriptionOptions {
+            buffer_size: Some(1), // small broadcast buffer to provoke lag
+            lag_handling: LagHandling::Error,
+            ..Default::default()
+        };
 
         let broker = Broker::new();
         let mut sub = broker.subscribe_with_options("overflow", opts).unwrap();
@@ -957,21 +959,24 @@ mod tests {
             Ok(_) => {
                 // Sometimes timing allows a consumer to keep up — both behaviors acceptable.
             }
-            Err(e) => panic!("unexpected error: {:?}", e),
+            Err(e) => panic!("unexpected error: {e:?}"),
         }
     }
 
     #[tokio::test]
     async fn test_compression_roundtrip() {
-        // Broker config with compression enabled
-        let mut cfg = BrokerConfig::default();
-        cfg.enable_compression = true;
-        cfg.compression_threshold = 1; // compress everything
+        // Broker с включённой компрессией (чтобы compress_payload сработал)
+        let cfg = BrokerConfig {
+            enable_compression: true,
+            compression_threshold: 1, // compress everything
+            ..Default::default()
+        };
         let broker = Broker::with_config(cfg);
 
-        // Subscriber options with decompression enabled (the subscriber's process_message handles it)
-        let mut sub_opts = SubscriptionOptions::default();
-        sub_opts.enable_compression = true;
+        let sub_opts = SubscriptionOptions {
+            enable_compression: true,
+            ..Default::default()
+        };
         let mut sub = broker.subscribe_with_options("c1", sub_opts).unwrap();
 
         broker
@@ -979,14 +984,9 @@ mod tests {
             .unwrap();
 
         let msg = sub.recv().await.unwrap();
-        // Expect payload to be decompressed (i.e. not Serialized gzip)
-        match msg.payload {
-            MessagePayload::Serialized { content_type, .. } => {
-                panic!("payload unexpectedly serialized as {}", content_type)
-            }
-            _ => {
-                // OK: decompressed into bytes/string/json depending on broker processing
-            }
+        // ожидаем, что payload декомпрессирован (не Serialized с gzip)
+        if let MessagePayload::Serialized { content_type, .. } = msg.payload {
+            panic!("unexpected serialized: {content_type}");
         }
     }
 
@@ -1017,7 +1017,7 @@ mod tests {
                     MessagePayload::String(_) | MessagePayload::Json(_)
                 ));
             }
-            Err(e) => panic!("unexpected error: {:?}", e),
+            Err(e) => panic!("unexpected error: {e:?}"),
         }
     }
 
