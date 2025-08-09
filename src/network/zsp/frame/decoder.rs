@@ -1,5 +1,3 @@
-// Copyright 2025 Zumic
-
 //! Декодер ZSP (Zumic Serialization Protocol).
 //!
 //! Эта структура отвечает за процесс декодирования фреймов

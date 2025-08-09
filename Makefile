@@ -3,7 +3,7 @@
 build: ## Сборка debug
 	cargo build
 
-build-release: ## Сборка релизной сборки
+build-release: ## Сборка релизной версии
 	cargo build --release
 
 ##@ Test

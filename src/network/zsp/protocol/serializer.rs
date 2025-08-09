@@ -1,6 +1,9 @@
 use std::{borrow::Cow, collections::HashMap};
 
-use crate::{zsp::zsp_types::ZspFrame, Value};
+use crate::{
+    zsp::{zsp_types::ZspFrame, PubSubMessage},
+    Value,
+};
 
 use super::command::Response;
 
@@ -15,7 +18,55 @@ pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
         Response::Float(f) => ZspFrame::Float(f),
         Response::Bool(b) => ZspFrame::Bool(b),
         Response::String(s) => ZspFrame::InlineString(s.into()),
+
+        // PubSub ответы
+        Response::Message { channel, message } => serialize_pubsub_message(channel, message),
+        Response::Subscribed { channel, count } => ZspFrame::Array(vec![
+            ZspFrame::InlineString("sybscriber".into()),
+            ZspFrame::BinaryString(Some(channel.into_bytes())),
+            ZspFrame::Integer(count),
+        ]),
+        Response::Unsubscribed { channel, count } => ZspFrame::Array(vec![
+            ZspFrame::InlineString("unsubscribe".into()),
+            ZspFrame::BinaryString(Some(channel.into_bytes())),
+            ZspFrame::Integer(count),
+        ]),
     }
+}
+
+// Вспомогательные ф-ии
+
+fn serialize_pubsub_message<'a>(
+    channel: String,
+    message: PubSubMessage,
+) -> ZspFrame<'a> {
+    let mut components = vec![
+        ZspFrame::InlineString("message".into()),
+        ZspFrame::BinaryString(Some(channel.into_bytes())),
+    ];
+
+    match message {
+        PubSubMessage::Bytes(data) => {
+            components.push(ZspFrame::InlineString("BYTES".into()));
+            components.push(ZspFrame::BinaryString(Some(data)));
+        }
+        PubSubMessage::String(s) => {
+            components.push(ZspFrame::InlineString("STRING".into()));
+            components.push(ZspFrame::BinaryString(Some(s.into_bytes())));
+        }
+        PubSubMessage::Json(json) => {
+            let json_str = serde_json::to_string(&json).unwrap_or_default();
+            components.push(ZspFrame::InlineString("JSON".into()));
+            components.push(ZspFrame::BinaryString(Some(json_str.into_bytes())));
+        }
+        PubSubMessage::Serialized { data, content_type } => {
+            components.push(ZspFrame::InlineString("SERIALIZED".into()));
+            components.push(ZspFrame::BinaryString(Some(content_type.into_bytes())));
+            components.push(ZspFrame::BinaryString(Some(data)));
+        }
+    }
+
+    ZspFrame::Array(components)
 }
 
 /// Преобразует тип Value в ZspFrame.

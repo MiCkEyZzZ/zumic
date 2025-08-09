@@ -74,7 +74,13 @@ pub use engine::{
 pub use network::{server, zsp};
 
 /// Реэкспорт API для Pub/Sub.
-pub use pubsub::{Broker, Message, PatternSubscription, Subscription};
+pub use pubsub::{
+    Broker, BrokerConfig, BrokerMetrics, BrokerSnapshot, ChannelSnapshot, ChannelStats,
+    ContentFilter, LagHandling, Message, MessageFilters, MessageMetadata, MessagePayload,
+    MessageResult, MessageTypeFilter, MetadataFilter, MultiSubscriber, PayloadType, PublishOptions,
+    PublishResult, SerializationFormat, SizeFilter, Subscriber, SubscriberStats,
+    SubscriptionOptions,
+};
 
 /// Реэкспорт основных типов ошибок.
 pub use error::{

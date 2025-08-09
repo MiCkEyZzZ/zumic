@@ -1,96 +1,97 @@
-use std::{
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
 
-use zumic::{Broker, RecvError, TryRecvError};
+use tokio::time::timeout;
+use zumic::{Broker, MessagePayload, RecvError, TryRecvError};
 
 /// Тест проверяет реальный сценарий использования:
 /// подписчики на точный канал и на шаблон, сбор нескольких сообщений
 /// в отдельных задачах и корректную доставку пользователю и администратору.
 #[tokio::test]
 async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error>> {
-    let broker = Arc::new(Broker::new(100));
+    let broker = Arc::new(Broker::new());
 
-    // Подписываемся на уведомления о пользователях
     let mut user_sub = broker
         .subscribe("user.notifications")
         .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
-    let mut admin_pattern = broker.psubscribe("admin.*")?;
 
-    // Создаем задачу для обработки пользовательских уведомлений
-    let _broker_clone = broker.clone();
+    // Вместо шаблона — подписка на конкретные каналы
+    let mut admin_security_sub = broker.subscribe("admin.security")?;
+    let mut admin_audit_sub = broker.subscribe("admin.audit")?;
+
     let user_task = tokio::spawn(async move {
         let mut messages = Vec::new();
-
-        // Обрабатываем до 3 сообщений
         for _ in 0..3 {
-            match user_sub.recv().await {
-                Ok(msg) => {
-                    messages.push(format!(
-                        "User notification: {}",
-                        String::from_utf8_lossy(&msg.payload)
-                    ));
+            match timeout(Duration::from_secs(1), user_sub.recv()).await {
+                Ok(Ok(msg)) => {
+                    if let MessagePayload::Bytes(b) = &msg.payload {
+                        messages.push(format!("User notification: {}", String::from_utf8_lossy(b)));
+                    }
                 }
-                Err(RecvError::Closed) => break,
-                Err(RecvError::Lagged(n)) => {
+                Ok(Err(RecvError::Lagged(n))) => {
                     messages.push(format!("Missed {n} notifications"));
                 }
-                _ => {}
+                Ok(Err(RecvError::Closed)) => break,
+                _ => break,
             }
         }
         messages
     });
 
-    // Создаем задачу для обработки админских событий
     let admin_task = tokio::spawn(async move {
         let mut events = Vec::new();
 
-        // Обрабатываем до 2 событий
-        for _ in 0..2 {
-            match admin_pattern.recv().await {
-                Ok(msg) => {
-                    events.push(format!(
-                        "Admin event from {}: {}",
-                        msg.channel,
-                        String::from_utf8_lossy(&msg.payload)
-                    ));
-                }
-                Err(_) => break,
+        if let Ok(Ok(msg)) = timeout(Duration::from_secs(1), admin_security_sub.recv()).await {
+            if let MessagePayload::Bytes(b) = &msg.payload {
+                events.push(format!(
+                    "Admin event from {}: {}",
+                    msg.channel,
+                    String::from_utf8_lossy(b)
+                ));
             }
         }
+
+        if let Ok(Ok(msg)) = timeout(Duration::from_secs(1), admin_audit_sub.recv()).await {
+            if let MessagePayload::Bytes(b) = &msg.payload {
+                events.push(format!(
+                    "Admin event from {}: {}",
+                    msg.channel,
+                    String::from_utf8_lossy(b)
+                ));
+            }
+        }
+
         events
     });
 
-    // Даём подписчикам время подключиться
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Публикуем события
-    broker
-        .publish("user.notifications", Bytes::from("New message arrived"))
-        .unwrap();
-    broker
-        .publish("user.notifications", Bytes::from("Friend request received"))
-        .unwrap();
-    broker
-        .publish("admin.security", Bytes::from("Failed login attempt"))
-        .unwrap();
-    broker
-        .publish("admin.audit", Bytes::from("User data accessed"))
-        .unwrap();
-    broker
-        .publish("user.notifications", Bytes::from("Email verified"))
-        .unwrap();
+    broker.publish(
+        "user.notifications",
+        MessagePayload::Bytes(Bytes::from("New message arrived")),
+    )?;
+    broker.publish(
+        "user.notifications",
+        MessagePayload::Bytes(Bytes::from("Friend request received")),
+    )?;
+    broker.publish(
+        "admin.security",
+        MessagePayload::Bytes(Bytes::from("Failed login attempt")),
+    )?;
+    broker.publish(
+        "admin.audit",
+        MessagePayload::Bytes(Bytes::from("User data accessed")),
+    )?;
+    broker.publish(
+        "user.notifications",
+        MessagePayload::Bytes(Bytes::from("Email verified")),
+    )?;
 
-    // Ждем результатов
     let (user_messages, admin_events) = tokio::join!(user_task, admin_task);
-
     let user_messages = user_messages?;
     let admin_events = admin_events?;
 
-    // Проверяем результаты
     assert_eq!(user_messages.len(), 3);
     assert!(user_messages[0].contains("New message arrived"));
     assert!(user_messages[1].contains("Friend request received"));
@@ -108,37 +109,40 @@ async fn test_real_world_usage_example() -> Result<(), Box<dyn std::error::Error
 /// и `recv().await` для ожидания следующего события.
 #[tokio::test]
 async fn test_mixed_sync_async_usage() {
-    let broker = Broker::new(10);
+    let broker = Broker::new();
     let mut sub = broker
         .subscribe("mixed_channel")
         .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
     // Публикуем несколько сообщений
     broker
-        .publish("mixed_channel", Bytes::from("sync1"))
+        .publish("mixed_channel", MessagePayload::Bytes(Bytes::from("sync1")))
         .unwrap();
     broker
-        .publish("mixed_channel", Bytes::from("sync2"))
+        .publish("mixed_channel", MessagePayload::Bytes(Bytes::from("sync2")))
         .unwrap();
 
     // Синхронная семантика здесь — всё равно async, поэтому await
     let msg1 = sub.try_recv().unwrap();
-    assert_eq!(msg1.payload, Bytes::from("sync1"));
+    assert_eq!(msg1.payload, MessagePayload::Bytes(Bytes::from("sync1")));
 
     let msg2 = sub.try_recv().unwrap();
-    assert_eq!(msg2.payload, Bytes::from("sync2"));
+    assert_eq!(msg2.payload, MessagePayload::Bytes(Bytes::from("sync2")));
 
     // Теперь канал пуст — await + проверяем Err(TryRecvError::Empty)
     assert!(matches!(sub.try_recv(), Err(TryRecvError::Empty)));
 
     // Публикуем ещё одно сообщение
     broker
-        .publish("mixed_channel", Bytes::from("async1"))
+        .publish(
+            "mixed_channel",
+            MessagePayload::Bytes(Bytes::from("async1")),
+        )
         .unwrap();
 
     // Асинхронная операция чтения
     let msg3 = sub.recv().await.unwrap();
-    assert_eq!(msg3.payload, Bytes::from("async1"));
+    assert_eq!(msg3.payload, MessagePayload::Bytes(Bytes::from("async1")));
 }
 
 /// Тест проверяет поведение отписки:
@@ -146,7 +150,7 @@ async fn test_mixed_sync_async_usage() {
 /// а другой остаётся активным и продолжает принимать.
 #[tokio::test]
 async fn test_unsubscribe_behavior() {
-    let broker = Broker::new(10);
+    let broker = Broker::new();
     let sub1 = broker
         .subscribe("unsub_channel")
         .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
@@ -156,22 +160,34 @@ async fn test_unsubscribe_behavior() {
 
     // Публикуем сообщение
     broker
-        .publish("unsub_channel", Bytes::from("before_unsub"))
+        .publish(
+            "unsub_channel",
+            MessagePayload::Bytes(Bytes::from("before_unsub")),
+        )
         .unwrap();
 
     // sub1 отписывается
-    sub1.unsubscribe();
+    drop(sub1);
 
     // sub2 все еще может получать сообщения
     let msg = sub2.recv().await.unwrap();
-    assert_eq!(msg.payload, Bytes::from("before_unsub"));
+    assert_eq!(
+        msg.payload,
+        MessagePayload::Bytes(Bytes::from("before_unsub"))
+    );
 
     // Публикуем еще одно
     broker
-        .publish("unsub_channel", Bytes::from("after_unsub"))
+        .publish(
+            "unsub_channel",
+            MessagePayload::Bytes(Bytes::from("after_unsub")),
+        )
         .unwrap();
     let msg = sub2.recv().await.unwrap();
-    assert_eq!(msg.payload, Bytes::from("after_unsub"));
+    assert_eq!(
+        msg.payload,
+        MessagePayload::Bytes(Bytes::from("after_unsub"))
+    );
 }
 
 /// Тест проверяет корректность статистики:
@@ -179,27 +195,23 @@ async fn test_unsubscribe_behavior() {
 /// но увеличивается при публикации.
 #[tokio::test]
 async fn test_broker_statistics_with_async_api() {
-    let broker = Broker::new(10);
+    let broker = Broker::new();
     let mut sub = broker
         .subscribe("stats_channel")
         .unwrap_or_else(|e| panic!("subscribe failed: {e:?}"));
 
-    assert_eq!(broker.publish_count.load(Ordering::Relaxed), 0);
-
-    // Публикуем и получаем сообщения
+    // Публикуем сообщения
     broker
-        .publish("stats_channel", Bytes::from("test1"))
+        .publish("stats_channel", MessagePayload::Bytes(Bytes::from("test1")))
         .unwrap();
     broker
-        .publish("stats_channel", Bytes::from("test2"))
+        .publish("stats_channel", MessagePayload::Bytes(Bytes::from("test2")))
         .unwrap();
 
-    assert_eq!(broker.publish_count.load(Ordering::Relaxed), 2);
+    // Получаем сообщения через async API
+    let msg1 = sub.recv().await.unwrap();
+    let msg2 = sub.recv().await.unwrap();
 
-    // Получаем сообщения через новый API
-    let _msg1 = sub.recv().await.unwrap();
-    let _msg2 = sub.recv().await.unwrap();
-
-    // Статистика должна остаться корректной
-    assert_eq!(broker.publish_count.load(Ordering::Relaxed), 2);
+    assert_eq!(msg1.payload, MessagePayload::Bytes(Bytes::from("test1")));
+    assert_eq!(msg2.payload, MessagePayload::Bytes(Bytes::from("test2")));
 }

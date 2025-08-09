@@ -1,12 +1,12 @@
-use bytes::Bytes;
 use std::hint::black_box;
 
+use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use zumic::{Broker, Subscription};
+use zumic::{Broker, MessagePayload, Subscriber};
 
 fn bench_subscribe(c: &mut Criterion) {
-    let broker = Broker::new(100);
+    let broker = Broker::new();
     c.bench_function("subscribe", |b| {
         b.iter(|| {
             // тратим всю работу подписки
@@ -16,51 +16,60 @@ fn bench_subscribe(c: &mut Criterion) {
 }
 
 fn bench_unsubscribe(c: &mut Criterion) {
-    let broker = Broker::new(100);
+    let broker = Broker::new();
     c.bench_function("unsubscribe", |b| {
         b.iter(|| {
             let sub = broker.subscribe("chan").unwrap();
-            sub.unsubscribe();
+            drop(sub);
             black_box(());
         });
     });
 }
 
 fn bench_publish_1_sub(c: &mut Criterion) {
-    let broker = Broker::new(100);
+    let broker = Broker::new();
     let _sub = broker.subscribe("chan");
     c.bench_function("publish_1_sub", |b| {
         b.iter(|| {
             broker
-                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .publish(
+                    "chan",
+                    black_box(MessagePayload::Bytes(Bytes::from_static(b"x"))),
+                )
                 .unwrap();
         })
     });
 }
 
 fn bench_publish_10_sub(c: &mut Criterion) {
-    let broker = Broker::new(100);
+    let broker = Broker::new();
     // создаём 10 подписок заранее
-    let _subs: Vec<Subscription> = (0..10).map(|_| broker.subscribe("chan").unwrap()).collect();
+    let _subs: Vec<Subscriber> = (0..10).map(|_| broker.subscribe("chan").unwrap()).collect();
     c.bench_function("publish_10_sub", |b| {
         b.iter(|| {
             broker
-                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .publish(
+                    "chan",
+                    black_box(MessagePayload::Bytes(Bytes::from_static(b"x"))),
+                )
                 .unwrap();
         })
     });
 }
 
 fn bench_publish_100_sub(c: &mut Criterion) {
-    let broker = Broker::new(100);
+    let broker = Broker::new();
     // создаём 100 подписок заранее
-    let _subs: Vec<Subscription> = (0..100)
+    let _subs: Vec<Subscriber> = (0..100)
         .map(|_| broker.subscribe("chan").unwrap())
         .collect();
     c.bench_function("publish_100_sub", |b| {
         b.iter(|| {
             broker
-                .publish("chan", black_box(Bytes::from_static(b"x")))
+                .publish(
+                    "chan",
+                    black_box(MessagePayload::Bytes(Bytes::from_static(b"x"))),
+                )
                 .unwrap();
         })
     });

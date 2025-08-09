@@ -1,7 +1,7 @@
 use thiserror::Error;
 use tokio::sync::broadcast;
 
-/// Ошибка при получении сообщений.
+/// Ошибка при получении сообщений (блокирующее `recv()` и т.п.).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RecvError {
     #[error("channel is closed")]
@@ -10,23 +10,23 @@ pub enum RecvError {
     #[error("operation exceeded the specified timeout")]
     Timeout,
 
-    #[error("message serialization/deserialization error")]
+    #[error("message serialization/deserialization error: {0}")]
     SerializationError(String),
 
     #[error("receiver lagged behind by {0} messages")]
     Lagged(u64),
 
-    #[error("invalid glob pattern for subscription")]
+    #[error("invalid glob pattern for subscription: {0}")]
     InvalidPattern(String),
 
-    #[error("channel not found (attempt to operate on a non-existent channel)")]
+    #[error("channel not found (attempt to operate on a non-existent channel): {0}")]
     ChannelNotFound(String),
 
     #[error("channel subscriber limit exceeded")]
     SubscriberLimitExceeded,
 }
 
-/// Ошибка при неблокирующем получении сообщений.
+/// Ошибка при неблокирующем получении сообщений (`try_recv()`).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TryRecvError {
     #[error("no messages available")]
@@ -66,6 +66,14 @@ impl From<globset::Error> for RecvError {
     }
 }
 
+/// Удобное конвертирующее преобразование — используется в местах,
+/// где `TryRecvError` нужно "поднять" в `RecvError`.
+///
+/// ВАЖНО: `TryRecvError::Empty` здесь маппится в `RecvError::Timeout`.
+/// Это сделано для совместимости с местами где `Err(e).into()` приводило
+/// к `RecvError` и ожидалось, что пустая очередь будет считаться
+/// "не найдено / нет сообщения". При желании можно убрать это
+/// преобразование и делать явную обработку `Empty` там, где это важно.
 impl From<TryRecvError> for RecvError {
     fn from(err: TryRecvError) -> Self {
         match err {
@@ -109,6 +117,7 @@ mod tests {
 
     #[test]
     fn test_globset_conversion() {
+        // invalid pattern -> globset error -> RecvError::InvalidPattern
         let glob_err = Glob::new("[").unwrap_err();
         let recv_err: RecvError = glob_err.into();
         match recv_err {
@@ -121,6 +130,7 @@ mod tests {
     fn test_try_recv_to_recv_conversion() {
         let err = TryRecvError::Empty;
         let recv: RecvError = err.into();
+        // Следует понимать: Empty преобразуется в Timeout (см. комментарий выше)
         assert_eq!(recv, RecvError::Timeout);
     }
 }
