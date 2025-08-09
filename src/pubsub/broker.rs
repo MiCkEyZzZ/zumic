@@ -749,9 +749,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_lag_handling_error_mode() {
-        let mut opts = SubscriptionOptions::default();
-        opts.buffer_size = Some(1); // маленький буфер у канала
-        opts.lag_handling = LagHandling::Error;
+        let opts = SubscriptionOptions {
+            buffer_size: Some(1),
+            lag_handling: LagHandling::Error,
+            ..Default::default()
+        };
 
         let broker = Broker::new();
         let mut sub = broker.subscribe_with_options("overflow", opts).unwrap();
@@ -770,7 +772,7 @@ mod tests {
         match sub.try_recv() {
             Err(TryRecvError::Lagged(n)) => assert!(n > 0),
             Ok(_) => (), // возможно система успела, допускаем оба поведения
-            Err(e) => panic!("unexpected: {:?}", e),
+            Err(e) => panic!("unexpected: {e:?}"),
         }
     }
 
@@ -787,13 +789,17 @@ mod tests {
     #[tokio::test]
     async fn test_compression_roundtrip() {
         // Broker с включённой компрессией (чтобы compress_payload сработал)
-        let mut cfg = BrokerConfig::default();
-        cfg.enable_compression = true;
-        cfg.compression_threshold = 1; // всё сжимать
+        let cfg = BrokerConfig {
+            enable_compression: true,
+            compression_threshold: 1, // всё сжимать
+            ..Default::default()
+        };
         let broker = Broker::with_config(cfg);
 
-        let mut sub_opts = SubscriptionOptions::default();
-        sub_opts.enable_compression = true; // подписчик должен уметь декомпрессить
+        let sub_opts = SubscriptionOptions {
+            enable_compression: true, // подписчик должен уметь декомпрессить
+            ..Default::default()
+        };
         let mut sub = broker.subscribe_with_options("c1", sub_opts).unwrap();
 
         broker
@@ -802,18 +808,17 @@ mod tests {
 
         let msg = sub.recv().await.unwrap();
         // ожидаем, что payload декомпрессирован (не Serialized с gzip)
-        match msg.payload {
-            MessagePayload::Serialized { content_type, .. } => {
-                panic!("unexpected serialized: {}", content_type)
-            }
-            _ => {}
+        if let MessagePayload::Serialized { content_type, .. } = msg.payload {
+            panic!("unexpected serialized: {content_type}");
         }
     }
 
     #[test]
     fn test_cleanup_inactive_channels() {
-        let mut cfg = BrokerConfig::default();
-        cfg.channel_ttl = Some(Duration::from_millis(10));
+        let cfg = BrokerConfig {
+            channel_ttl: Some(Duration::from_millis(10)),
+            ..Default::default()
+        };
         let broker = Broker::with_config(cfg);
 
         {

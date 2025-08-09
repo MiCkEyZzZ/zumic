@@ -17,7 +17,7 @@ fn bench_set_bit(c: &mut Criterion) {
 fn bench_get_bit(c: &mut Criterion) {
     let mut bitmap = Bitmap::with_capacity(10_000);
     for i in 0..10_000 {
-        bitmap.set_bit(i, i % 2 == 0);
+        bitmap.set_bit(i, i.is_multiple_of(2));
     }
 
     c.bench_function("get_bit 10k", |b| {

@@ -7,12 +7,15 @@ build-release: ## Сборка релизной версии
 	cargo build --release
 
 ##@ Test
-.PHONY: check clippy nextest test miri miri-test
+.PHONY: check clippy clippy-ci nextest test miri miri-test
 check: ## Cargo проверка
 	cargo check
 
 clippy: ## Clippy (рассматривать предупреждения как ошибки)
 	cargo clippy -- -D warnings
+
+clippy-ci: ## Clippy как в CI: все таргеты и все фичи, warnings -> error
+	cargo clippy --all-targets --all-features -- -D warnings
 
 nextest: ## Nextest
 	cargo nextest run
