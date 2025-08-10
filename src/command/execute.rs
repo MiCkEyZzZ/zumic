@@ -15,7 +15,10 @@ use super::{
     SetCommand, SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand,
     ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
-use crate::{StorageEngine, StoreError, Value};
+use crate::{
+    command::pubsub::{PublishCommand, SubscribeCommand, UnsubscribeCommand},
+    StorageEngine, StoreError, Value,
+};
 
 pub trait CommandExecute: std::fmt::Debug {
     /// Выполняет команду, взаимодействуя с хранилищем.
@@ -95,6 +98,9 @@ pub enum Command {
     GetBit(GetBitCommand),
     BitCount(BitCountCommand),
     BitOp(BitOpCommand),
+    Subscribe(SubscribeCommand),
+    Unsubscribe(UnsubscribeCommand),
+    Publish(PublishCommand),
 }
 
 impl CommandExecute for Command {
@@ -154,6 +160,9 @@ impl CommandExecute for Command {
             Command::GetBit(cmd) => cmd.execute(store),
             Command::BitCount(cmd) => cmd.execute(store),
             Command::BitOp(cmd) => cmd.execute(store),
+            Command::Subscribe(cmd) => cmd.execute(store),
+            Command::Unsubscribe(cmd) => cmd.execute(store),
+            Command::Publish(cmd) => cmd.execute(store),
         }
     }
 }
