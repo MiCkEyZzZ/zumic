@@ -46,6 +46,9 @@ num_cpus = "1.17.0"
 once_cell = "1.21.3"
 ordered-float = { version = "5.0.0", features = ["serde"] }
 phf = { version = "0.11", features = ["macros"] }
+proptest = "1.4"
+# Дополнительно для лучшей интеграции с proptest
+proptest-derive = "0.4" # для автогенерации Arbitrary traits
 rand = "0.8"
 rmp-serde = "1.3.0"
 serde = { version = "1.0.219", features = ["derive"] }

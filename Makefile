@@ -121,6 +121,66 @@ release-all: ## Полный цикл релиза: bump-version + release-auto
 	$(MAKE) bump-version
 	$(MAKE) release-auto
 
+##@ Property testing команды
+.PHONY: proptest proptest-quick proptest-long proptest-verbose proptest-coverage proptest-continuous proptest-timing \
+        stress-test stress-test-quick endurance-test test-all find-bugs-fast
+
+# Быстрые property tests (100 случаев на тест)
+proptest-quick: ## Быстрые property tests (100 случаев)
+	PROPTEST_CASES=100 cargo test --test property_tests
+
+# Обычные property tests (по умолчанию 1000 случаев)
+proptest: ## Обычные property tests (по умолчанию)
+	cargo test --test property_tests
+
+# Длительное тестирование (10000 случаев)
+proptest-long: ## Длительное property testing
+	PROPTEST_CASES=10000 cargo test --test property_tests
+
+# Подробный вывод для отладки
+proptest-verbose: ## Подробный вывод для property tests
+	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test property_tests -- --nocapture
+
+# Запуск property tests с генерацией отчета о покрытии
+proptest-coverage: ## Генерация покрытия для property tests (tarpaulin, HTML)
+	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests
+
+# Continuous property testing - запускать в фоне
+proptest-continuous: ## Бесконечный цикл property tests (оставлять с осторожностью)
+	while true; do \
+		echo "Running property tests iteration $$(date)"; \
+		PROPTEST_CASES=1000 cargo test --test property_tests || break; \
+		sleep 60; \
+	done
+
+# Проверить что property tests проходят быстро (не более 30 сек как в Success Criteria)
+proptest-timing: ## Измерение времени выполнения property tests
+	time PROPTEST_CASES=1000 cargo test --test property_tests
+
+# Запуск стресс-тестов (медленные, с большим количеством итераций)
+stress-test: ## Запуск стресс-тестов (медленные, много итераций)
+	PROPTEST_CASES=10000 cargo test --test stress_tests
+
+# Быстрые стресс-тесты для CI
+stress-test-quick: ## Быстрые стресс-тесты (короткие, для CI)
+	PROPTEST_CASES=1000 cargo test --test stress_tests
+
+# Эндуранс тест - найти memory leaks (очень медленный, только локально)
+endurance-test: ## Эндуранс тест для поиска утечек памяти (медленный)
+	cargo test --test stress_tests test_endurance_many_iterations --release -- --ignored --nocapture
+
+# Полный набор тестов - property + stress + unit
+test-all: ## Полный набор тестов (unit + property + stress)
+	cargo test
+	$(MAKE) proptest
+	$(MAKE) stress-test-quick
+
+# Найти баги быстро - краткий набор тестов с разными типами
+find-bugs-fast: ## Минимальный набор тестов, чтобы быстро найти баги
+	PROPTEST_CASES=500 cargo test --test property_tests roundtrip_all_values
+	PROPTEST_CASES=500 cargo test --test property_tests numeric_edge_cases
+	cargo test --test stress_tests test_compression_pathological_cases
+
 ##@ Help
 help: ## Показать это сообщение
 	@echo
@@ -128,7 +188,7 @@ help: ## Показать это сообщение
 	@echo "Usage: make [target]"
 	@echo
 	@awk 'BEGIN {FS = ":.*##"; \
-	  printf "%-20s %s\n", "Цель", "Описание"; \
-	  printf "-------------------  -----------------------------\n"} \
+	  printf "%-20s %s\n", "Цель",   " Описание"; \
+	  printf "--------------------  -----------------------------\n"} \
 	/^[a-zA-Z0-9_-]+:.*?##/ { printf " \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
 	/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)

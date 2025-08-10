@@ -60,8 +60,9 @@ pub use command::{
 
 /// Реэкспорт встроенных структур данных.
 pub use database::{
-    Dict, GeoEntry, GeoPoint, GeoSet, Hll, ListPack, QuickList, Sds, SkipList, SmartHash,
-    StreamEntry, Value, DENSE_SIZE,
+    Bitmap, Dict, DictIter, ExpireMap, GeoEntry, GeoPoint, GeoSet, Hll, IntSet, ListPack, Node,
+    PubSubManager, QuickList, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash,
+    SmartHashIter, Stream, StreamEntry, StreamId, Value, DENSE_SIZE,
 };
 
 /// Реэкспорт движков хранения.

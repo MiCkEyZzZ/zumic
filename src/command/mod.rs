@@ -27,6 +27,7 @@ pub mod geo;
 pub mod hash;
 pub mod int;
 pub mod list;
+pub mod pubsub;
 pub mod set;
 pub mod string;
 pub mod zset;
