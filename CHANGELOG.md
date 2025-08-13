@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unrelease] - 0000-00-00
+## [Unrelease]
 
 ### Добавлено
 

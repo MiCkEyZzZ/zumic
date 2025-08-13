@@ -6,16 +6,37 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 2 * * *" # Ночной прогон
+    - cron: "0 2 * * *" # Extended run at night
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  # 1. Собираем проект один раз
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Build tests
+        run: cargo test --no-run --test property_tests
+
+  # 2. Запускаем тесты в матрице без повторной сборки
   property-tests:
+    needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - rust: stable
@@ -54,28 +75,25 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      - uses: actions/cache@v3
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-proptest-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
 
       - name: Run property tests (${{ matrix.mode }})
         run: |
           echo "Running property tests with ${{ matrix.cases }} cases..."
-          # Важно: property_tests.rs должен читать PROPTEST_CASES из std::env
           PROPTEST_CASES=${{ matrix.cases }} cargo test --test property_tests -- --nocapture
         timeout-minutes: ${{ matrix.timeout }}
 
+  # 3. Extended nightly fuzzing по расписанию
   nightly-fuzzing:
-    runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Extended nightly fuzzing
+      - uses: Swatinem/rust-cache@v2
+      - name: Extended nightly fuzz run
         run: |
           echo "Starting extended nightly fuzz run..."
           PROPTEST_CASES=50000 cargo test --test property_tests -- --nocapture
