@@ -181,6 +181,20 @@ find-bugs-fast: ## Минимальный набор тестов, чтобы б
 	PROPTEST_CASES=500 cargo test --test property_tests numeric_edge_cases
 	cargo test --test stress_tests test_compression_pathological_cases
 
+##@ Run
+.PHONY: run run-full run-compact run-release
+run: ## Запуск Зумик в режиме по умолчанию (debug → full)
+	cargo run
+
+run-full: ## Запуск Зумик с полным баннером (force)
+	ZUMIC_BANNER=full cargo run
+
+run-compact: ## Запуск Зумик с коротким баннером (force)
+	ZUMIC_BANNER=compact cargo run
+
+run-release: ## Запуск Зумик в релизной версии
+	cargo build --release && ./target/release/zumic
+
 ##@ Help
 help: ## Показать это сообщение
 	@echo
@@ -188,7 +202,7 @@ help: ## Показать это сообщение
 	@echo "Usage: make [target]"
 	@echo
 	@awk 'BEGIN {FS = ":.*##"; \
-	  printf "%-20s %s\n", "Цель",   " Описание"; \
+	  printf "%-20s %s\n", "Target", " Description"; \
 	  printf "--------------------  -----------------------------\n"} \
 	/^[a-zA-Z0-9_-]+:.*?##/ { printf " \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
 	/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)

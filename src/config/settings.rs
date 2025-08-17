@@ -28,7 +28,7 @@ impl StorageConfig {
 // --- defaults for serde:
 
 fn default_listen() -> SocketAddr {
-    "127.0.0.1:6379".parse().unwrap()
+    "127.0.0.1:6174".parse().unwrap()
 }
 
 fn default_max_connections() -> i64 {
