@@ -3,12 +3,30 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use zumic::{server::handle_connection, InMemoryStore, Settings, StorageEngine, StorageType};
+use zumic::{
+    banner, server::handle_connection, InMemoryStore, Settings, StorageEngine, StorageType,
+};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let settings = Settings::load()?;
     info!("Loaded config: {:#?}", &settings);
+
+    // Информамация для подстановки
+    let port = if settings.listen_address.port() == 0 {
+        6174
+    } else {
+        settings.listen_address.port()
+    };
+
+    let storage = match settings.storage_type {
+        StorageType::Memory => "in-memory",
+        StorageType::Persistent => "persistent",
+        StorageType::Cluster => "cluster",
+    }
+    .to_string();
+
+    banner::print_banner(&settings.listen_address.to_string(), port, &storage);
 
     #[allow(clippy::arc_with_non_send_sync)]
     let engine = match settings.storage_type {

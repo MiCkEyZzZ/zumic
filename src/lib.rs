@@ -72,7 +72,7 @@ pub use engine::{
 };
 
 /// Реэкспорт сетевого сервера и протокола.
-pub use network::{server, zsp};
+pub use network::{banner, server, zsp};
 
 /// Реэкспорт API для Pub/Sub.
 pub use pubsub::{
