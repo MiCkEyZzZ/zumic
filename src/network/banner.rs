@@ -19,20 +19,19 @@ pub const ASCII_FULL: &str = r#"
     Memory:           {mem_value} {mem_unit}
     Git:              {git}
     Build:            {git} ({build_time})
-    Website:          https://zumic.io
 "#;
 
 pub const ASCII_COMPACT: &str = r#"
-Зумик ДБ {version} — {mode} — {listen}:{port} — ПИД {pid}
+Zumic DB {version} — {mode} — {listen}:{port} — PID {pid}
 "#;
 
-/// Форматированная и выровненная печать баннера
+/// Formatted and aligned banner output
 pub fn print_banner(
     listen: &str,
     port: u16,
     storage: &str,
 ) {
-    // выбор режима
+    // choose mode
     let forced = env::var("ZUMIC_BANNER").ok();
     let full = match forced.as_deref() {
         Some("full") => true,
@@ -40,7 +39,7 @@ pub fn print_banner(
         _ => cfg!(debug_assertions), // debug => full, release => compact
     };
 
-    // метаданные
+    // metadata
     let version = env!("CARGO_PKG_VERSION");
     let mode = if cfg!(debug_assertions) {
         "debug"
@@ -56,7 +55,7 @@ pub fn print_banner(
     let arch = std::env::consts::ARCH;
     let cpus = num_cpus::get();
 
-    // корректное вычисление памяти
+    // correct memory calculation
     let mem_total_kb = sys.total_memory(); // KB
     let mem_total_gb = mem_total_kb as f64 / 1024.0 / 1024.0; // KB -> GB
 
@@ -76,11 +75,10 @@ pub fn print_banner(
         build_time_raw.to_string()
     };
 
-    // TTY?
     let color = atty::is(Stream::Stdout);
 
     if full {
-        // готовим подстановки
+        // prepare substitutions
         let mut s = ASCII_FULL.to_string();
         s = s
             .replace("{version}", version)
