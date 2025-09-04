@@ -1,0 +1,27 @@
+[package]
+name = "zumic-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.3", features = ["derive"] }
+
+# Подключаем основной проект ZUMIC как зависимость
+zumic = { path = "..", features = ["fuzz"] }
+
+# Fuzz targets — пути относительны директории fuzz/
+[[bin]]
+name = "decode_value"
+path = "targets/decode_value.rs"
+test = false
+doc = false
+
+[profile.release]
+opt-level = 1 # вместо 3, чтобы не раздувать компиляцию
+lto = false   # выключить link-time optimization
+debug = true  # оставить отладочные символы
