@@ -24,8 +24,8 @@ export CARGO_BUILD_JOBS=1
 # Преобразуем минуты в секунды
 SECONDS=$((MINUTES * 60))
 
-# Запускаем fuzz в фоне с чистыми RUSTFLAGS, чтобы не падало на линковке
-nohup bash -lc "RUSTFLAGS='' cargo fuzz run ${TARGET} -- -max_total_time=${SECONDS} -keep_going=${KEEP_GOING}" > "${LOG_FILE}" 2>&1 &
+# Запускаем fuzz в фоне через nightly Rust без лишних RUSTFLAGS
+nohup bash -lc "cargo +nightly fuzz run ${TARGET} -- -max_total_time=${SECONDS} -keep_going=${KEEP_GOING}" > "${LOG_FILE}" 2>&1 &
 FZ_PID=$!
 echo ${FZ_PID} > "${PID_FILE}"
 echo "Fuzz pid: ${FZ_PID}"
@@ -35,7 +35,7 @@ wait ${FZ_PID} || true
 
 echo "Fuzz finished (or was stopped). Gathering artifacts..."
 
-# Скопировать артефакты (crashes/minimized) в results
+# Копируем артефакты (crashes/minimized) в results
 if [ -d "${ROOT}/fuzz/artifacts/${TARGET}" ]; then
     cp -r "${ROOT}/fuzz/artifacts/${TARGET}" "${RESULTS_DIR}/artifacts" || true
 fi
