@@ -1,27 +1,27 @@
 name: Release
-
 permissions:
   contents: write
-
 on:
   push:
     tags:
       - "v*.*.*" # Запускать только на пуш тега вида v1.2.3
-
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-
+    env:
+      TARGET: x86_64-unknown-linux-gnu # замените, если другой таргет
     steps:
       - uses: actions/checkout@v4
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --target $TARGET
 
       - name: Package binary
         run: |
+          TARGET_DIR=target/${TARGET}/release
           mkdir dist
-          cp target/release/zumic dist/
+          ls -l $TARGET_DIR
+          cp $TARGET_DIR/zumic dist/
           cd dist
           tar czf zumic-${GITHUB_REF_NAME}.tar.gz zumic
 
