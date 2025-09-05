@@ -6,7 +6,7 @@ use std::env;
 use sysinfo::System;
 
 pub const ASCII_FULL: &str = r#"
-    Zumic DB {version}
+    Zumic {version}
     ----------------------------------------------
     Mode:             {mode}
     Listening:        {listen}
