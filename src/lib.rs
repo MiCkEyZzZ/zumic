@@ -67,8 +67,9 @@ pub use database::{
 
 /// Реэкспорт движков хранения.
 pub use engine::{
-    load_from_reader, load_from_zdb, save_to_zdb, AofLog, InClusterStore, InMemoryStore,
-    InPersistentStore, Storage, StorageEngine,
+    load_from_reader, load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InClusterStore,
+    InMemoryStore, InPersistentStore, Shard, ShardMetrics, ShardMetricsSnapshot, ShardedIndex,
+    ShardingConfig, Storage, StorageEngine,
 };
 
 /// Реэкспорт сетевого сервера и протокола.

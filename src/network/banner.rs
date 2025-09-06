@@ -22,7 +22,7 @@ pub const ASCII_FULL: &str = r#"
 "#;
 
 pub const ASCII_COMPACT: &str = r#"
-Zumic DB {version} — {mode} — {listen}:{port} — PID {pid}
+Zumic {version} — {mode} — {listen}:{port} — PID {pid}
 "#;
 
 /// Formatted and aligned banner output
@@ -57,12 +57,15 @@ pub fn print_banner(
 
     // correct memory calculation
     let mem_total_kb = sys.total_memory(); // KB
-    let mem_total_gb = mem_total_kb as f64 / 1024.0 / 1024.0; // KB -> GB
+    let mem_total_mb = mem_total_kb as f64 / 1024.0;
+    let mem_total_gb = mem_total_mb / 1024.0;
 
     let (mem_value, mem_unit) = if mem_total_gb >= 1.0 {
         (mem_total_gb, "GB")
+    } else if mem_total_mb >= 1.0 {
+        (mem_total_mb, "MB")
     } else {
-        (mem_total_kb as f64 / 1024.0, "MB")
+        (mem_total_kb as f64, "KB")
     };
 
     let git = option_env!("GIT_COMMIT").unwrap_or("unknown");
