@@ -12,11 +12,13 @@
 //! - `skip_list`: отсортированная структура данных с логарифмической сложностью операций.
 //! - `smart_hash`: гибридная хеш-таблица, оптимизированная по памяти и скорости.
 //! - `types`: определения поддерживаемых типов значений в базе данных.
+//! - `sharding`: распределение ключей по нескольким шардам для уменьшения lock contention и повышения параллельности.
 
 pub mod aof;
 pub mod cluster;
 pub mod memory;
 pub mod persistent;
+pub mod sharding;
 pub mod storage;
 pub mod store;
 pub mod zdb;
@@ -28,6 +30,7 @@ pub use aof::*;
 pub use cluster::*;
 pub use memory::*;
 pub use persistent::*;
+pub use sharding::*;
 pub use storage::*;
 pub use store::*;
 pub use zdb::*;

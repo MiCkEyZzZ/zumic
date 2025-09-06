@@ -4,9 +4,10 @@ use tracing::{error, info};
 
 use zumic::{
     banner,
+    engine::PersistentStoreConfig,
     network::connection::ConnectionConfig,
     server::{Server, ServerConfig},
-    InMemoryStore, Settings, StorageEngine, StorageType,
+    InMemoryStore, InPersistentStore, Settings, StorageEngine, StorageType,
 };
 
 #[tokio::main(flavor = "current_thread")]
@@ -56,8 +57,10 @@ async fn run_server() -> anyhow::Result<()> {
     let engine = match settings.storage_type {
         StorageType::Memory => Arc::new(StorageEngine::Memory(InMemoryStore::new())),
         StorageType::Persistent => {
-            error!("Persistent storage not yet implemented");
-            return Err(anyhow::anyhow!("Persistent storage not implemented"));
+            let config = PersistentStoreConfig::default();
+            let store =
+                InPersistentStore::new("zumic.aof", config).map_err(|e| anyhow::anyhow!("{e}"))?;
+            Arc::new(StorageEngine::Persistent(store))
         }
         StorageType::Cluster => {
             error!("Cluster storage not yet implemented");
