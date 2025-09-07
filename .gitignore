@@ -48,3 +48,4 @@ debug/
 bin
 client
 results
+zumic.aof
