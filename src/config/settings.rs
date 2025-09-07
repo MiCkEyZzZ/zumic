@@ -144,8 +144,8 @@ impl Settings {
     pub fn load() -> Result<Self, ConfigError> {
         let profile = std::env::var("RUST_ENV").unwrap_or_else(|_| "dev".into());
         let builder = Config::builder()
-            .add_source(File::with_name("config/default").required(false))
-            .add_source(File::with_name(&format!("config/{profile}")).required(false))
+            .add_source(File::with_name("src/config/default").required(false))
+            .add_source(File::with_name(&format!("src/config/{profile}")).required(false))
             .add_source(Environment::with_prefix("ZUMIC").separator("_"))
             .set_default("listen_address", default_listen().to_string())?
             .set_default("max_connections", default_max_connections())?

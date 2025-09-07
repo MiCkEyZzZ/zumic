@@ -1,0 +1,13 @@
+storage_type = "persistent"                   # Тип хранилища — постоянное
+aof_path = "./data/persistent/dump.aof"       # Путь к AOF-файлу
+data_dir = "./data/persistent"                # Папка для хранения данных
+log_level = "info"                            # Уровень логов
+
+[persistent_store]
+sync_policy = "EverySecond"                   # Политика синхронизации: "Always" | "EverySecond" | "Manual"
+enable_operation_logging = true               # Включить логирование операций
+
+[persistent_store.sharding]
+num_shards = 16                               # Количество шардов
+enable_metrics = true                         # Включить метрики шардов
+slow_operation_threshold_us = 500             # Порог медленных операций (микросекунды)

@@ -5,101 +5,149 @@
 # окружения ZUMIC_*
 # --------------------------------------------------------------------
 
-# Персистентность / AOF
-aof_path = "./data/dump.aof"                                # путь к AOF (Append Only File)
-snapshot_freq = 300                                         # частота снапшотов в секундах
-
-# Пул потоков
-thread_pool_size = 8                                        # кол-во потоков для тяжёлых задач
+# ========================================
+# ОСНОВНЫЕ НАСТРОЙКИ СЕРВЕРА
+# ========================================
 
 # Сеть
-listen_address = "127.0.0.1:6174"                           # Адрес и порт, на которых сервер будет принимать подключения
-
-# Настройки хранилища
-storage_type = "memory"                                     # Доступные варианты: "memory"|"persistent"|"cluster"
-                                                            # memory — данные только в оперативной памяти (быстро, но временно)
-                                                            # persistent — хранение на диске (файлы / WAL / контрольные точки)
-                                                            # cluster — распределённый режим (несколько нод)
-
-# Управление соединениями
-max_connections = 10000                                     # Максимальное число одновременных клиентских соединений
-max_connections_per_ip = 100                                # Максимум соединений с одного IP (защита от DoS / перебора)
+listen_address = "127.0.0.1:6174"                           # Адрес и порт для подключений
+max_connections = 10000                                     # Максимальное число одновременных соединений
+max_connections_per_ip = 100                                # Максимум соединений с одного IP
 
 # Таймауты (в секундах)
-connection_timeout = 300                                    # Сколько секунд соединение может простаивать (idle) до разрыва
-read_timeout = 30                                           # Максимальное время ожидания команды от клиента
-write_timeout = 10                                          # Максимальное время ожидания записи ответа клиенту
+connection_timeout = 300                                    # Время простоя до разрыва соединения
+read_timeout = 30                                           # Время ожидания команды от клиента
+write_timeout = 10                                          # Время ожидания записи ответа
 
 # Буферы
-read_buffer_size = 8192                                     # Размер буфера чтения на соединение (в байтах)
-                                                            # Увеличение буфера ускоряет bulk-операции, но требует памяти
+read_buffer_size = 8192                                     # Размер буфера чтения (байт)
+shutdown_timeout = 30                                       # Время ожидания при graceful shutdown
 
-# Завершение работы сервера
-shutdown_timeout = 30                                       # Максимальное время (в секундах), в течение которого сервер будет ждать
-                                                            # завершения активных соединений при graceful shutdown
+# Пул потоков
+thread_pool_size = 8                                        # Количество потоков для тяжёлых задач
+worker_threads = 4                                          # Количество worker-потоков (опционально)
 
-# Логирование (опционально)
-log_level = "info"                                          # Уровень логов: trace, debug, info, warn, error
-# log_level = "trace"
-# log_level = "debug"
-# log_level = "warn"
-# log_level = "error"
+# ========================================
+# НАСТРОЙКИ ХРАНИЛИЩА
+# ========================================
 
-# Настройка производительности (опционально)
-# worker_threads = 4                                        # количество worker-потоков (по умолчанию — CPU cores)
-# tcp_nodelay = true                                        # отключить Nagle для меньшей задержки
-# tcp_keepalive = true                                      # включить TCP keepalive
-# so_reuseaddr = true                                       # разрешить reuse addr
+# Тип хранилища: "memory" | "persistent" | "cluster"
+storage_type = "memory"
 
-# Память (для storage_type = "Memory")
-max_memory = "2GB"                                          # лимит памяти
-# memory_policy = "allkeys-lru"                             # политика вытеснения
+# Память (для всех типов хранилища)
+max_memory = "2GB"                                          # Лимит памяти
+memory_policy = "allkeys-lru"                               # Политика вытеснения (опционально)
 
-# Настройки персистентности (опции для persistent)
-# data_dir = "./data"                                       # папка с данными
-# checkpoint_interval = 300                                 # интервал чекпоинтов в секундах
-# wal_enabled = true                                        # вкл. журналирование WAL
-# compression = "lz4"                                       # сжатие: none | lz4 | gzip
+# Персистентность
+aof_path = "./data/dump.aof"                                # Путь к AOF файлу
+snapshot_freq = 300                                         # Частота снапшотов (секунды)
+data_dir = "./data"                                         # Папка с данными
+checkpoint_interval = 300                                   # Интервал чекпоинтов (секунды)
+wal_enabled = true                                          # Включить WAL журналирование
+compression = "lz4"                                         # Сжатие: "none" | "lz4" | "gzip"
 
-# Кластер (для storage_type = "cluster")
-# cluster_enabled = false
-# cluster_nodes = ["127.0.0.1:6175", "127.0.0.1:6176"]
-# cluster_replica_factor = 1
-# cluster_consistency = "eventual"  # strong | eventual
+# ========================================
+# НАСТРОЙКИ ПЕРСИСТЕНТНОГО ХРАНИЛИЩА
+# ========================================
 
-# Мониторинг
-# metrics_enabled = true
-# metrics_port = 9090
-# health_check_port = 8080
-# profiling_enabled = false
+[persistent_store]
+sync_policy = "EverySecond"                                 # "Always" | "EverySecond" | "Manual"
+enable_operation_logging = false                            # Логирование операций
 
-# Безопасность (TLS и ACL)
-# tls_enabled = false
-# tls_cert = "server.crt"
-# tls_key = "server.key"
-# allowed_ips = ["127.0.0.1", "192.168.1.0/24"]
+# Шардирование
+[persistent_store.sharding]
+num_shards = 8                                              # Количество шардов (рекомендуется: CPU cores * 2)
+enable_metrics = true                                       # Включить метрики шардов
+slow_operation_threshold_us = 1000                          # Порог медленных операций (микросекунды)
 
-# ------------------------------------------------------------
-# ACL / аутентификация
-# ------------------------------------------------------------
-# Простой общий пароль (пример; лучше хранить в ENV):
-# requirepass neutrino
-#
-# Redis-стиль (пример для справки, НЕвалидный TOML):
-# user default on nopass ~* +@all
-# user anton on >REPLACE_WITH_SUPERSECRET ~data:* +get +set
-#
-# Рабочая конфигурация в виде TOML-блоков:
+# ========================================
+# НАСТРОЙКИ КЛАСТЕРА
+# ========================================
+
+[cluster]
+enabled = false                                             # Включить кластерный режим
+nodes = ["127.0.0.1:6175", "127.0.0.1:6176"]              # Список узлов кластера
+replica_factor = 1                                          # Фактор репликации
+consistency = "eventual"                                    # Уровень консистентности: "strong" | "eventual"
+
+# ========================================
+# МОНИТОРИНГ И МЕТРИКИ
+# ========================================
+
+[monitoring]
+metrics_enabled = true                                      # Включить сбор метрик
+metrics_port = 9090                                         # Порт для метрик (Prometheus)
+health_check_port = 8080                                    # Порт для health check
+profiling_enabled = false                                   # Включить профилирование
+
+# ========================================
+# БЕЗОПАСНОСТЬ И TLS
+# ========================================
+
+[tls]
+enabled = false                                             # Включить TLS
+cert = "server.crt"                                         # Путь к сертификату (опционально)
+key = "server.key"                                          # Путь к ключу (опционально)
+allowed_ips = ["127.0.0.1", "192.168.1.0/24"]             # Разрешённые IP адреса
+
+# Простая аутентификация (опционально)
+# requirepass = "supersecret"
+
+# ========================================
+# УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (ACL)
+# ========================================
+
+# Пользователь по умолчанию (без пароля, полные права)
 [[users]]
 name = "default"
 nopass = true
-pattern = "*"
-roles = ["admin"]
+pattern = "*"                                               # Доступ ко всем ключам
+roles = ["admin"]                                           # Роли пользователя
 
-# Можно оставить одного реального юзера, второй убрать
-# Если нужен второй — задаём пароль через ENV:
+# Пример пользователя с ограниченными правами
 [[users]]
 name = "anton"
-password_env = "ZUMIC_USER_ANTON_PASSWORD"
-pattern = "data:*"
-permissions = ["get","set"]
+password_env = "ZUMIC_USER_ANTON_PASSWORD"                  # Пароль из переменной окружения
+pattern = "data:*"                                          # Доступ только к ключам с префиксом "data:"
+permissions = ["get", "set"]                                # Разрешённые команды
+
+# ========================================
+# НАСТРОЙКИ ПРОИЗВОДИТЕЛЬНОСТИ
+# ========================================
+
+# TCP настройки
+tcp_nodelay = true                                          # Отключить алгоритм Nagle для меньшей задержки
+tcp_keepalive = true                                        # Включить TCP keepalive
+so_reuseaddr = true                                         # Разрешить reuse адреса
+
+# ========================================
+# ЛОГИРОВАНИЕ
+# ========================================
+
+log_level = "info"                                          # Уровень логов: "trace" | "debug" | "info" | "warn" | "error"
+
+# Примеры других уровней:
+# log_level = "trace"    # Самый подробный
+# log_level = "debug"    # Отладочная информация
+# log_level = "warn"     # Только предупреждения и ошибки
+# log_level = "error"    # Только ошибки
+
+# ========================================
+# ПРИМЕРЫ КОНФИГУРАЦИЙ ДЛЯ РАЗНЫХ РЕЖИМОВ
+# ========================================
+
+# Для переключения на персистентное хранилище раскомментируйте:
+# storage_type = "persistent"
+
+# Для кластерного режима:
+# storage_type = "cluster"
+# [cluster]
+# enabled = true
+# nodes = ["127.0.0.1:6174", "127.0.0.1:6175", "127.0.0.1:6176"]
+
+# Для продакшена с TLS и аутентификацией:
+# requirepass = "your_strong_password"
+# [tls]
+# enabled = true
+# cert = "/path/to/server.crt"
+# key = "/path/to/server.key"
