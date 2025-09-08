@@ -67,9 +67,9 @@ pub use database::{
 
 /// Реэкспорт движков хранения.
 pub use engine::{
-    load_from_reader, load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InClusterStore,
-    InMemoryStore, InPersistentStore, Shard, ShardMetrics, ShardMetricsSnapshot, ShardedIndex,
-    ShardingConfig, Storage, StorageEngine,
+    load_from_reader, load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InMemoryStore,
+    InPersistentStore, Shard, ShardId, ShardMetrics, ShardMetricsSnapshot, ShardedIndex,
+    ShardingConfig, SlotId, SlotManager, SlotState, Storage, StorageEngine, SyncPolicy,
 };
 
 /// Реэкспорт сетевого сервера и протокола.
@@ -87,7 +87,8 @@ pub use pubsub::{
 /// Реэкспорт основных типов ошибок.
 pub use error::{
     AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
-    PasswordError, RecvError, StoreError, StoreResult, TryRecvError, VersionError,
+    PasswordError, RecvError, Result, SlotManagerError, StoreError, StoreResult, TryRecvError,
+    VersionError,
 };
 
 /// Реэкспорт настроек конфигурации.

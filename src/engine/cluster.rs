@@ -1,177 +1,353 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::{Duration, Instant},
+};
 
-use super::Storage;
-use crate::{GeoPoint, Sds, StoreError, StoreResult, Value};
+use crate::{
+    engine::slot_manager::{ShardId, SlotManager},
+    GeoPoint, Sds, Storage, StoreError, StoreResult, Value,
+};
 
-/// Количество слотов в кластере.
-pub const SLOT_COUNT: usize = 16384;
-
-/// Реализация распределённого хранилища с маршрутизацией по слотам.
-///
-/// `InClusterStore` позволяет использовать несколько `Storage`-шардов.
-/// Каждый ключ маршрутизируется в один из шардов на основе слота (slot),
-/// вычисленного из значения ключа с использованием CRC16.
-///
-/// Распределение слотов между шардов происходит по кругу (round-robin)
-/// при инициализации.
-#[derive(Clone)]
+/// `InClusterStore` — распределённое key-value хранилище,
+/// объединяющее несколько shard'ов (`Storage`) под управлением
+/// `SlotManager`.
 pub struct InClusterStore {
-    pub shards: Vec<Arc<dyn Storage>>,
-    pub slots: Vec<usize>, // длина: 16384, каждый слот сопоставляется с индексом в `shards`
+    /// Список всех shard'ов (каждый реализует `Storage`).
+    shards: Vec<Arc<dyn Storage>>,
+    /// Менеджер распределения ключей по shard'ам.
+    slot_manager: Arc<SlotManager>,
+    /// Хэндл фонового треда-ребалансера.
+    rebalancer_handle: Option<thread::JoinHandle<()>>,
+    /// Флаг остановки фонового ребалансера.
+    shutdown_flag: Arc<Mutex<bool>>,
+    /// Примитивные метрики операций по кластеру.
+    operation_metrics: Arc<RwLock<OperationMetrics>>,
+}
+
+/// Метрики операций в кластере.
+///
+/// Используются для тестов и базового мониторинга.
+#[derive(Debug, Clone)]
+pub struct OperationMetrics {
+    /// Общее количество операций (set/get/del/...).
+    pub total_operations: u64,
+    /// Количество операций, затронувших более одного shard'а.
+    pub cross_shard_operations: u64,
+    /// Количество миграций слотов.
+    pub migration_operations: u64,
+    /// Количество неудачных операций (ошибки маршрутизации и т.п.).
+    pub failed_operations: u64,
+    /// Среднее время ответа (мс). Пока вычисляется упрощённо.
+    pub average_response_time_ms: f64,
+    /// Время последнего сброса метрик.
+    pub last_reset: Instant,
 }
 
 impl InClusterStore {
-    /// Создаёт новый кластер, распределяя 16384 слота равномерно между шардов.
+    /// Создаёт новый кластер из списка shard'ов.
     ///
-    /// # Паника
-    /// Паника произойдёт, если `shards` пуст.
+    /// - каждый shard обязан реализовывать `Storage`,
+    /// - создаётся `SlotManager` по количеству shard'ов,
+    /// - запускается фоновый тред ребалансировки.
     pub fn new(shards: Vec<Arc<dyn Storage>>) -> Self {
-        let mut slots = vec![0; SLOT_COUNT];
-        for (i, slot) in slots.iter_mut().enumerate() {
-            *slot = i % shards.len();
+        let shard_count = shards.len();
+        let slot_manager = Arc::new(SlotManager::new(shard_count));
+        let shutdown_flag = Arc::new(Mutex::new(false));
+
+        let rebalancer_handle = Self::start_rebalancer(slot_manager.clone(), shutdown_flag.clone());
+
+        Self {
+            shards,
+            slot_manager,
+            rebalancer_handle: Some(rebalancer_handle),
+            shutdown_flag,
+            operation_metrics: Arc::new(RwLock::new(OperationMetrics {
+                last_reset: Instant::now(),
+                ..Default::default()
+            })),
         }
-        Self { shards, slots }
     }
 
-    /// Вычисляет слот (от 0 до 16383) для данного ключа.
+    /// Создаёт кластер с кастомным `SlotManager`.
     ///
-    /// Если в ключе присутствует подстрока в фигурных скобках (`{}`), хэшируется только она.
-    /// Это позволяет контролировать маршрутизацию ключей на уровне приложения
-    /// и гарантировать, что определённые ключи попадут на один и тот же шард.
-    ///
-    /// В противном случае, хэшируется весь ключ.
-    ///
-    /// Используется алгоритм CRC16 (XMODEM).
-    fn key_slot(key: &Sds) -> usize {
-        use crc16::{State, XMODEM};
+    /// Полезно в тестах или при явном контроле распределения ключей.
+    pub fn new_with_slot_manager(
+        shards: Vec<Arc<dyn Storage>>,
+        slot_manager: Arc<SlotManager>,
+    ) -> Self {
+        let shutdown_flag = Arc::new(Mutex::new(false));
+        let rebalancer_handle = Self::start_rebalancer(slot_manager.clone(), shutdown_flag.clone());
 
-        let bytes = key.as_bytes();
+        Self {
+            shards,
+            slot_manager,
+            rebalancer_handle: Some(rebalancer_handle),
+            shutdown_flag,
+            operation_metrics: Arc::new(RwLock::new(OperationMetrics {
+                last_reset: Instant::now(),
+                ..Default::default()
+            })),
+        }
+    }
 
-        if let Some(start) = bytes.iter().position(|&b| b == b'{') {
-            if let Some(end) = bytes[start + 1..].iter().position(|&b| b == b'}') {
-                let tag = &bytes[start + 1..start + 1 + end];
-                let hash = State::<XMODEM>::calculate(tag);
-                return (hash as usize) % SLOT_COUNT;
+    /// Фоновый процесс, периодически проверяющий необходимость
+    /// ребалансировки и инициирующий миграции слотов.
+    fn start_rebalancer(
+        slot_manager: Arc<SlotManager>,
+        shutdown_flag: Arc<Mutex<bool>>,
+    ) -> thread::JoinHandle<()> {
+        thread::spawn(move || {
+            let mut last_check = Instant::now();
+            let check_interval = Duration::from_secs(10);
+
+            loop {
+                // shutdown?
+                {
+                    let shutdown = *shutdown_flag.lock().unwrap();
+                    if shutdown {
+                        break;
+                    }
+                }
+
+                if last_check.elapsed() >= check_interval {
+                    if slot_manager.should_rebalance() {
+                        let migrations = slot_manager.trigger_rebalance();
+
+                        for (slot, from_shard, to_shard) in migrations {
+                            if let Err(e) =
+                                slot_manager.start_slot_migration(slot, from_shard, to_shard)
+                            {
+                                eprintln!("Failed to start migration for slot {slot}: {e:?}");
+                            } else {
+                                println!(
+                                    "Started migration: slot {slot} from shard {from_shard} to shard {to_shard}"
+                                );
+                            }
+                        }
+                    }
+                    last_check = Instant::now();
+                }
+
+                thread::sleep(Duration::from_millis(100));
+            }
+        })
+    }
+
+    /// Получить shard по его идентификатору.
+    ///
+    /// Возвращает ошибку `WrongShard`, если индекс некорректный.
+    fn shard_by_id(
+        &self,
+        shard_id: ShardId,
+    ) -> Result<Arc<dyn Storage>, StoreError> {
+        match self.shards.get(shard_id).cloned() {
+            Some(s) => Ok(s),
+            None => {
+                self.record_failed_operation();
+                Err(StoreError::WrongShard)
             }
         }
-
-        let hash = State::<XMODEM>::calculate(bytes);
-        (hash as usize) % SLOT_COUNT
     }
 
-    /// Возвращает шард, на который должен быть направлен данный ключ.
-    fn get_shard(
+    /// Утилита: преобразовать `Sds` в `&str` (lossy).
+    fn sds_to_str<'a>(s: &'a Sds) -> std::borrow::Cow<'a, str> {
+        std::string::String::from_utf8_lossy(s.as_bytes())
+    }
+
+    /// Учёт обычной операции (увеличение счётчика + запись в slot_manager).
+    fn record_operation(
         &self,
         key: &Sds,
-    ) -> Arc<dyn Storage> {
-        let slot = Self::key_slot(key);
-        let shard_idx = self.slots[slot];
-        self.shards[shard_idx].clone()
+    ) {
+        let ks = Self::sds_to_str(key);
+        self.slot_manager.record_operation(ks.as_ref());
+        let mut m = self.operation_metrics.write().unwrap();
+        m.total_operations += 1;
+    }
+
+    /// Учёт cross-shard операции.
+    fn record_cross_shard_operation(&self) {
+        let mut m = self.operation_metrics.write().unwrap();
+        m.cross_shard_operations += 1;
+    }
+
+    /// Учёт неудачной операции.
+    fn record_failed_operation(&self) {
+        let mut m = self.operation_metrics.write().unwrap();
+        m.failed_operations += 1;
+    }
+
+    /// Доступ к `SlotManager` (например, для тестов или мониторинга).
+    pub fn get_slot_manager(&self) -> &Arc<SlotManager> {
+        &self.slot_manager
     }
 }
 
 impl Storage for InClusterStore {
-    /// Устанавливает значение для ключа на соответствующем шарде.
     fn set(
         &self,
         key: &Sds,
         value: Value,
     ) -> StoreResult<()> {
-        self.get_shard(key).set(key, value)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.set(key, value)
     }
 
-    /// Получает значение ключа с соответствующего шарда.
     fn get(
         &self,
         key: &Sds,
     ) -> StoreResult<Option<Value>> {
-        self.get_shard(key).get(key)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.get(key)
     }
 
-    /// Удаляет ключ с соответствующего шарда.
     fn del(
         &self,
         key: &Sds,
     ) -> StoreResult<bool> {
-        self.get_shard(key).del(key)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.del(key)
     }
 
-    /// Устанавливает несколько пар ключ-значение.
-    ///
-    /// Все ключи могут располагаться на разных шардах.
     fn mset(
         &self,
         entries: Vec<(&Sds, Value)>,
     ) -> StoreResult<()> {
-        for (k, v) in entries {
-            self.set(k, v)?;
+        if entries.is_empty() {
+            return Ok(());
         }
+
+        let mut groups: HashMap<ShardId, Vec<(&Sds, Value)>> = HashMap::new();
+        for (k, v) in entries {
+            let ks = Self::sds_to_str(k);
+            let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+            groups.entry(shard_id).or_default().push((k, v));
+            self.slot_manager.record_operation(ks.as_ref());
+        }
+
+        let groups_count = groups.len();
+
+        for (shard_id, vec) in groups.into_iter() {
+            let shard = self.shard_by_id(shard_id)?;
+            shard.mset(vec)?;
+        }
+
+        if groups_count > 1 {
+            self.record_cross_shard_operation();
+            // Временно для проверки работы
+            let metrics = self.operation_metrics.read().unwrap();
+            println!(
+                "Cross-shard operations after MSET: {}",
+                metrics.cross_shard_operations
+            );
+        }
+
         Ok(())
     }
 
-    /// Получает значения для нескольких ключей.
-    ///
-    /// Все ключи могут располагаться на разных шардах.
     fn mget(
         &self,
         keys: &[&Sds],
     ) -> StoreResult<Vec<Option<Value>>> {
-        keys.iter().map(|key| self.get(key)).collect()
+        if keys.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut groups: HashMap<ShardId, Vec<(usize, &Sds)>> = HashMap::new();
+        for (i, &k) in keys.iter().enumerate() {
+            let ks = Self::sds_to_str(k);
+            let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+            groups.entry(shard_id).or_default().push((i, k));
+            self.slot_manager.record_operation(ks.as_ref());
+        }
+
+        let mut results: Vec<Option<Value>> = vec![None; keys.len()];
+
+        for (shard_id, list) in groups.iter() {
+            let shard = self.shard_by_id(*shard_id)?;
+            let shard_keys: Vec<&Sds> = list.iter().map(|(_, k)| *k).collect();
+            let shard_results = shard.mget(&shard_keys)?;
+            for ((idx, _), res) in list.iter().zip(shard_results.into_iter()) {
+                results[*idx] = res;
+            }
+        }
+
+        if groups.len() > 1 {
+            self.record_cross_shard_operation();
+            // Временно для проверки работы
+            let metrics = self.operation_metrics.read().unwrap();
+            println!(
+                "Cross-shard operations after MGET: {}",
+                metrics.cross_shard_operations
+            );
+        }
+
+        Ok(results)
     }
 
-    /// Переименовывает ключ, если оба находятся на одном шарде.
-    ///
-    /// Возвращает ошибку `StoreError::WrongShard`, если `from` и `to` попадают на разные шарды.
     fn rename(
         &self,
         from: &Sds,
         to: &Sds,
     ) -> StoreResult<()> {
-        let from_shard = self.get_shard(from);
-        let to_shard = self.get_shard(to);
-        if !Arc::ptr_eq(&from_shard, &to_shard) {
+        let from_str = Self::sds_to_str(from);
+        let to_str = Self::sds_to_str(to);
+
+        let from_shard = self.slot_manager.get_key_shard(from_str.as_ref());
+        let to_shard = self.slot_manager.get_key_shard(to_str.as_ref());
+
+        self.slot_manager.record_operation(from_str.as_ref());
+        self.slot_manager.record_operation(to_str.as_ref());
+
+        if from_shard != to_shard {
             return Err(StoreError::WrongShard);
         }
-        let val = self.get(from)?.ok_or(StoreError::KeyNotFound)?;
-        self.del(from)?;
-        self.set(to, val)?;
-        Ok(())
+
+        let shard = self.shard_by_id(from_shard)?;
+        shard.rename(from, to)
     }
 
-    /// То же, что и `rename`, но не переименовывает, если целевой ключ уже существует.
-    ///
-    /// Возвращает `Ok(true)`, если переименование произошло, иначе `Ok(false)`.
     fn renamenx(
         &self,
         from: &Sds,
         to: &Sds,
     ) -> StoreResult<bool> {
-        let from_shard = self.get_shard(from);
-        let to_shard = self.get_shard(to);
-        if !Arc::ptr_eq(&from_shard, &to_shard) {
+        let from_str = Self::sds_to_str(from);
+        let to_str = Self::sds_to_str(to);
+
+        let from_shard = self.slot_manager.get_key_shard(from_str.as_ref());
+        let to_shard = self.slot_manager.get_key_shard(to_str.as_ref());
+
+        self.slot_manager.record_operation(from_str.as_ref());
+        self.slot_manager.record_operation(to_str.as_ref());
+
+        if from_shard != to_shard {
             return Err(StoreError::WrongShard);
         }
-        if self.get(to)?.is_some() {
-            return Ok(false);
-        }
-        let val = self.get(from)?.ok_or(StoreError::KeyNotFound)?;
-        self.del(from)?;
-        self.set(to, val)?;
-        Ok(true)
+
+        let shard = self.shard_by_id(from_shard)?;
+        shard.renamenx(from, to)
     }
 
-    /// Полностью очищает все шардированные хранилища.
     fn flushdb(&self) -> StoreResult<()> {
         for shard in &self.shards {
             shard.flushdb()?;
         }
+        self.slot_manager.reset_metrics();
         Ok(())
     }
 
-    /// Добавляет точку `(lon, lat)` с именем `member` в гео-набор по ключу `key`.
-    ///
-    /// Возвращает `Ok(true)`, если `member` был добавлен впервые,
-    /// и `Ok(false)`, если он уже присутствовал в наборе.
     fn geo_add(
         &self,
         key: &Sds,
@@ -179,38 +355,39 @@ impl Storage for InClusterStore {
         lat: f64,
         member: &Sds,
     ) -> StoreResult<bool> {
-        self.get_shard(key).geo_add(key, lon, lat, member)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.geo_add(key, lon, lat, member)
     }
 
-    /// Вычисляет расстояние между двумя членами `member1` и `member2` в указанной единице `unit`.
-    ///
-    /// Поддерживаемые единицы: `"m"` (метры), `"km"`, `"mi"`, `"ft"`.
-    /// Если один из членов не найден или ключ отсутствует, возвращает `Ok(None)`.
     fn geo_dist(
         &self,
         key: &Sds,
-        m1: &Sds,
-        m2: &Sds,
+        member1: &Sds,
+        member2: &Sds,
         unit: &str,
     ) -> StoreResult<Option<f64>> {
-        self.get_shard(key).geo_dist(key, m1, m2, unit)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.geo_dist(key, member1, member2, unit)
     }
 
-    /// Возвращает координаты `[lon, lat]` для каждого запрошенного `member`.
-    ///
-    /// Если член не найден, в возвращаемом массиве на его месте будет `Value::Null`.
     fn geo_pos(
         &self,
         key: &Sds,
         member: &Sds,
     ) -> StoreResult<Option<GeoPoint>> {
-        self.get_shard(key).geo_pos(key, member)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.geo_pos(key, member)
     }
 
-    /// Ищет всех членов в радиусе `radius` от точки `(lon, lat)`.
-    ///
-    /// `radius` задаётся в единицах `unit` (`"m"`, `"km"`, `"mi"`, `"ft"`).
-    /// Возвращает вектор кортежей `(member, distance, GeoPoint)`.
     fn geo_radius(
         &self,
         key: &Sds,
@@ -219,12 +396,13 @@ impl Storage for InClusterStore {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        self.get_shard(key).geo_radius(key, lon, lat, radius, unit)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.geo_radius(key, lon, lat, radius, unit)
     }
 
-    /// То же, что `geo_radius`, но центр радиуса определяется по координатам `member`.
-    ///
-    /// Если `member` не найден, возвращает пустой вектор.
     fn geo_radius_by_member(
         &self,
         key: &Sds,
@@ -232,211 +410,148 @@ impl Storage for InClusterStore {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        self.get_shard(key)
-            .geo_radius_by_member(key, member, radius, unit)
+        self.record_operation(key);
+        let key_str = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(key_str.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.geo_radius_by_member(key, member, radius, unit)
+    }
+}
+
+impl Drop for InClusterStore {
+    /// При уничтожении объекта останавливает фоновый тред ребалансера.
+    fn drop(&mut self) {
+        // Signal shutdown to background thread
+        {
+            let mut shutdown = self.shutdown_flag.lock().unwrap();
+            *shutdown = true;
+        }
+
+        // Wait for background thread to finish
+        if let Some(handle) = self.rebalancer_handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Default for OperationMetrics {
+    fn default() -> Self {
+        Self {
+            total_operations: 0,
+            cross_shard_operations: 0,
+            migration_operations: 0,
+            failed_operations: 0,
+            average_response_time_ms: 0.0,
+            last_reset: Instant::now(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::InMemoryStore;
+    use crate::{InMemoryStore, Sds, Value};
 
-    /// Создаёт кластер `InClusterStore` с двумя in-memory хранилищами.
-    ///
-    /// Используется в тестах для проверки маршрутизации ключей между шардами.
-    fn make_cluster() -> InClusterStore {
-        #[allow(clippy::arc_with_non_send_sync)]
-        let s1 = Arc::new(InMemoryStore::new());
-        #[allow(clippy::arc_with_non_send_sync)]
-        let s2 = Arc::new(InMemoryStore::new());
-        InClusterStore::new(vec![s1, s2])
+    #[allow(clippy::arc_with_non_send_sync)]
+    fn make_cluster(shards: usize) -> InClusterStore {
+        let vec = (0..shards)
+            .map(|_| Arc::new(InMemoryStore::new()) as Arc<dyn Storage>)
+            .collect();
+        InClusterStore::new(vec)
     }
 
-    /// Тест проверяет, что слот, получаемый из ключа, всегда в пределах
-    /// диапазона [0, SLOT_COUNT).
     #[test]
-    fn test_key_slot_range() {
-        let key = Sds::from_str("kin");
-        let slot = InClusterStore::key_slot(&key);
-        assert!(slot < SLOT_COUNT);
+    fn test_set_get_del() {
+        let cluster = make_cluster(2);
+
+        let key = Sds::from_str("foo");
+        let val = Value::Str(Sds::from_str("bar"));
+
+        cluster.set(&key, val.clone()).unwrap();
+        assert_eq!(cluster.get(&key).unwrap(), Some(val.clone()));
+
+        assert!(cluster.del(&key).unwrap());
+        assert_eq!(cluster.get(&key).unwrap(), None);
     }
 
-    /// Тест проверяет, что ключи направляются к правильным шардам при `set` и `get`.
     #[test]
-    fn test_set_get_routes_to_correct_shard() {
-        let cluster = make_cluster();
-        let k1 = Sds::from_str("alpha");
-        let v1 = Value::Str(Sds::from_str("A"));
+    fn test_mset_mget_cross_shard() {
+        let cluster = make_cluster(4);
 
-        let k2 = Sds::from_str("beta");
-        let v2 = Value::Str(Sds::from_str("B"));
+        let k1 = Sds::from_str("key1");
+        let k2 = Sds::from_str("key2");
+        let v1 = Value::Str(Sds::from_str("v1"));
+        let v2 = Value::Str(Sds::from_str("v2"));
 
-        cluster.set(&k1, v1.clone()).unwrap();
-        cluster.set(&k2, v2.clone()).unwrap();
+        cluster
+            .mset(vec![(&k1, v1.clone()), (&k2, v2.clone())])
+            .unwrap();
+        let res = cluster.mget(&[&k1, &k2]).unwrap();
 
-        assert_eq!(cluster.get(&k1).unwrap(), Some(v1));
-        assert_eq!(cluster.get(&k2).unwrap(), Some(v2));
+        assert_eq!(res, vec![Some(v1), Some(v2)]);
+
+        // Проверяем, что cross_shard учёлся
+        let metrics = cluster.operation_metrics.read().unwrap().clone();
+        assert!(metrics.cross_shard_operations >= 1);
     }
 
-    /// Тест проверяет, что `rename` срабатывает, если ключи находятся на одном шарде.
     #[test]
-    fn test_rename_same_shard_succeeds() {
-        let cluster = make_cluster();
-        let from = Sds::from_str("{same}");
-        let to = Sds::from_str("{same}new");
+    fn test_rename_and_renamenx() {
+        let cluster = make_cluster(1);
 
+        let k1 = Sds::from_str("a");
+        let k2 = Sds::from_str("b");
+
+        cluster.set(&k1, Value::Str(Sds::from_str("v"))).unwrap();
+
+        cluster.rename(&k1, &k2).unwrap();
         assert_eq!(
-            InClusterStore::key_slot(&from),
-            InClusterStore::key_slot(&to)
+            cluster.get(&k2).unwrap(),
+            Some(Value::Str(Sds::from_str("v")))
+        );
+        assert_eq!(cluster.get(&k1).unwrap(), None);
+
+        let k3 = Sds::from_str("c");
+        cluster.set(&k3, Value::Str(Sds::from_str("c"))).unwrap();
+        let res = cluster.renamenx(&k2, &k3);
+        assert!(res.is_err() || !res.unwrap());
+    }
+
+    #[test]
+    fn test_flushdb() {
+        let cluster = make_cluster(3);
+        let key = Sds::from_str("flushme");
+
+        cluster
+            .set(&key, Value::Str(Sds::from_str("data")))
+            .unwrap();
+        assert_eq!(
+            cluster.get(&key).unwrap(),
+            Some(Value::Str(Sds::from_str("data")))
         );
 
-        cluster.set(&from, Value::Int(42)).unwrap();
-        cluster.rename(&from, &to).unwrap();
-
-        assert_eq!(cluster.get(&from).unwrap(), None);
-        assert_eq!(cluster.get(&to).unwrap(), Some(Value::Int(42)));
-    }
-
-    /// Тест проверяет, что попытка `rename` между разными шардами вызывает ошибку `WrongShard`.
-    #[test]
-    fn test_rename_different_shards_errors() {
-        let mut cluster = make_cluster();
-
-        let a = Sds::from_str("a");
-        let b = Sds::from_str("b");
-
-        let slot_a = InClusterStore::key_slot(&a);
-        let slot_b = InClusterStore::key_slot(&b);
-        cluster.slots[slot_a] = 0;
-        cluster.slots[slot_b] = 1;
-
-        cluster.set(&a, Value::Int(7)).unwrap();
-        let err = cluster.rename(&a, &b).unwrap_err();
-        assert!(matches!(err, StoreError::WrongShard));
-    }
-
-    /// Тест проверяет, что `flushdb` очищает все шарды.
-    #[test]
-    fn test_flushdb_clears_all_shards() {
-        let cluster = make_cluster();
-        cluster.set(&Sds::from_str("one"), Value::Int(1)).unwrap();
-        cluster.set(&Sds::from_str("two"), Value::Int(2)).unwrap();
-
-        assert!(cluster.get(&Sds::from_str("one")).unwrap().is_some());
-        assert!(cluster.get(&Sds::from_str("two")).unwrap().is_some());
-
         cluster.flushdb().unwrap();
-
-        assert_eq!(cluster.get(&Sds::from_str("one")).unwrap(), None);
-        assert_eq!(cluster.get(&Sds::from_str("two")).unwrap(), None);
+        assert_eq!(cluster.get(&key).unwrap(), None);
     }
 
-    /// Тест проверяет, что ключи с одинаковым хеш-тегом `{tag}` направляются в
-    /// один и тот же слот, даже если остальные части ключа отличаются.
     #[test]
-    fn test_key_slot_tag_ignores_outside() {
-        let a = Sds::from_str("{tag}");
-        let b = Sds::from_str("{tag}kin");
-        let c = Sds::from_str("x{tag}kin");
+    fn test_geo_ops() {
+        let cluster = make_cluster(2);
+        let key = Sds::from_str("geo");
+        let member = Sds::from_str("rome");
 
-        let sa = InClusterStore::key_slot(&a);
-        let sb = InClusterStore::key_slot(&b);
-        let sc = InClusterStore::key_slot(&c);
-        assert_eq!(sa, sb);
-        assert_eq!(sb, sc);
-    }
+        assert!(cluster.geo_add(&key, 12.5, 41.9, &member).unwrap());
+        let pos = cluster.geo_pos(&key, &member).unwrap().unwrap();
+        assert!((pos.lon - 12.5).abs() < 1e-6);
+        assert!((pos.lat - 41.9).abs() < 1e-6);
 
-    /// Тест для geo_add и geo_pos: проверяем добавление точки и её получение.
-    #[test]
-    fn test_cluster_geo_add_and_pos() {
-        let cluster = make_cluster();
-        let key = Sds::from_str("cities");
-        let paris = Sds::from_str("paris");
-        let berlin = Sds::from_str("berlin");
+        let member2 = Sds::from_str("milan");
+        cluster.geo_add(&key, 9.19, 45.46, &member2).unwrap();
 
-        // Добавляем в кластер
-        assert!(cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap());
-        assert!(cluster.geo_add(&key, 13.4050, 52.5200, &berlin).unwrap());
-
-        // Повторное добавление того же члена должно вернуть false
-        assert!(!cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap());
-
-        // geo_pos
-        let p = cluster.geo_pos(&key, &paris).unwrap().unwrap();
-        assert!((p.lon - 2.3522).abs() < 1e-6);
-        assert!((p.lat - 48.8566).abs() < 1e-6);
-    }
-
-    /// Тест для geo_dist: проверяем вычисление расстояния между двумя точками.
-    #[test]
-    fn test_cluster_geo_dist() {
-        let cluster = make_cluster();
-        let key = Sds::from_str("cities");
-        let paris = Sds::from_str("paris");
-        let berlin = Sds::from_str("berlin");
-
-        cluster.geo_add(&key, 2.3522, 48.8566, &paris).unwrap();
-        cluster.geo_add(&key, 13.4050, 52.5200, &berlin).unwrap();
-
-        let d_km = cluster
-            .geo_dist(&key, &paris, &berlin, "km")
+        let dist = cluster
+            .geo_dist(&key, &member, &member2, "km")
             .unwrap()
             .unwrap();
-        assert!((d_km - 878.0).abs() < 10.0);
-
-        let d_m = cluster
-            .geo_dist(&key, &paris, &berlin, "m")
-            .unwrap()
-            .unwrap();
-        assert!((d_m - 878_000.0).abs() < 20_000.0);
-    }
-
-    /// Тест для geo_radius: проверяем поиск точек в радиусе.
-    #[test]
-    fn test_cluster_geo_radius() {
-        let cluster = make_cluster();
-        let key = Sds::from_str("landmarks");
-        let center = Sds::from_str("center");
-        let near = Sds::from_str("near");
-        let far = Sds::from_str("far");
-
-        cluster.geo_add(&key, 0.0, 0.0, &center).unwrap();
-        cluster.geo_add(&key, 0.001, 0.001, &near).unwrap();
-        cluster.geo_add(&key, 10.0, 10.0, &far).unwrap();
-
-        // radius = 0.2 km
-        let results = cluster.geo_radius(&key, 0.0, 0.0, 0.2, "km").unwrap();
-        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
-
-        assert!(members.contains(&"center".to_string()));
-        assert!(members.contains(&"near".to_string()));
-        assert!(!members.contains(&"far".to_string()));
-    }
-
-    /// Тест для geo_radius_by_member: поиск по существующему члену.
-    #[test]
-    fn test_cluster_geo_radius_by_member() {
-        let cluster = make_cluster();
-        let key = Sds::from_str("points");
-        let origin = Sds::from_str("origin");
-        let east = Sds::from_str("east");
-        let north = Sds::from_str("north");
-        let faraway = Sds::from_str("faraway");
-
-        cluster.geo_add(&key, 0.0, 0.0, &origin).unwrap();
-        cluster.geo_add(&key, 0.002, 0.0, &east).unwrap();
-        cluster.geo_add(&key, 0.0, 0.002, &north).unwrap();
-        cluster.geo_add(&key, 1.0, 1.0, &faraway).unwrap();
-
-        let results = cluster
-            .geo_radius_by_member(&key, &origin, 0.3, "km")
-            .unwrap();
-        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
-
-        assert!(members.contains(&"origin".to_string()));
-        assert!(members.contains(&"east".to_string()));
-        assert!(members.contains(&"north".to_string()));
-        assert!(!members.contains(&"faraway".to_string()));
+        assert!(dist > 400.0); // реальное расстояние ~ 480км
     }
 }

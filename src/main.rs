@@ -4,10 +4,10 @@ use tracing::{error, info};
 
 use zumic::{
     banner,
-    engine::PersistentStoreConfig,
+    engine::{InClusterStore, PersistentStoreConfig},
     network::connection::ConnectionConfig,
     server::{Server, ServerConfig},
-    InMemoryStore, InPersistentStore, Settings, StorageEngine, StorageType,
+    InMemoryStore, InPersistentStore, Settings, Storage, StorageEngine, StorageType,
 };
 
 #[tokio::main(flavor = "current_thread")]
@@ -63,8 +63,11 @@ async fn run_server() -> anyhow::Result<()> {
             Arc::new(StorageEngine::Persistent(store))
         }
         StorageType::Cluster => {
-            error!("Cluster storage not yet implemented");
-            return Err(anyhow::anyhow!("Cluster storage not implemented"));
+            let shards: Vec<Arc<dyn Storage>> = (0..3)
+                .map(|_| Arc::new(InMemoryStore::new()) as Arc<dyn Storage>)
+                .collect();
+            let cluster_store = InClusterStore::new(shards);
+            Arc::new(StorageEngine::Cluster(cluster_store))
         }
     };
 

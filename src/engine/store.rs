@@ -1,8 +1,9 @@
 use std::io::{self};
 
-use super::{InClusterStore, InMemoryStore, InPersistentStore};
+use super::{InMemoryStore, InPersistentStore};
 use crate::{
     config::settings::{StorageConfig, StorageType},
+    engine::cluster::InClusterStore,
     GeoPoint, Sds, Storage, StoreResult, Value,
 };
 

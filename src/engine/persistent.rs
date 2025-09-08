@@ -762,6 +762,7 @@ mod tests {
     fn test_sharded_mset_mget() -> StoreResult<()> {
         let store = new_sharded_store(3)?;
 
+        // --- базовый сценарий: небольшое количество ключей ---
         let keys: Vec<Sds> = (0..10)
             .map(|i| Sds::from_str(&format!("key_{}", i)))
             .collect();
@@ -770,7 +771,6 @@ mod tests {
             .collect();
 
         let entries: Vec<(&Sds, Value)> = keys.iter().zip(values.iter().cloned()).collect();
-
         store.mset(entries)?;
 
         let key_refs: Vec<&Sds> = keys.iter().collect();
@@ -781,10 +781,30 @@ mod tests {
             assert_eq!(*result, Some(values[i].clone()));
         }
 
-        // Проверяем распределение по шардам
         let stats = store.sharding_info().1;
         assert_eq!(stats.total_keys, 10);
-        assert!(stats.balance_ratio() <= 3.0); // Разумная балансировка
+
+        // --- проверка балансировки на большом числе ключей ---
+        let big_keys: Vec<Sds> = (0..3000)
+            .map(|i| Sds::from_str(&format!("big_key_{}", i)))
+            .collect();
+        let big_values: Vec<Value> = (0..3000)
+            .map(|i| Value::Str(Sds::from_str(&format!("val_{}", i))))
+            .collect();
+        let big_entries: Vec<(&Sds, Value)> =
+            big_keys.iter().zip(big_values.iter().cloned()).collect();
+
+        store.mset(big_entries)?;
+
+        let stats_big = store.sharding_info().1;
+        assert_eq!(stats_big.total_keys, 3010); // 10 старых + 3000 новых
+
+        // теперь должно быть нормальное распределение
+        assert!(
+            stats_big.balance_ratio() <= 2.0,
+            "shards are too imbalanced: ratio={}",
+            stats_big.balance_ratio()
+        );
 
         Ok(())
     }
