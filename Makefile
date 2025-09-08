@@ -1,10 +1,15 @@
+# Определяем кастомный target, если он задан в .cargo/config.toml
+BUILD_TARGET := $(shell test -f .cargo/config.toml && grep -E '^\s*target\s*=' .cargo/config.toml | head -1 | cut -d'"' -f2)
+TARGET_ARG   := $(if $(BUILD_TARGET),--target $(BUILD_TARGET),)
+TARGET_DIR   := target/$(if $(BUILD_TARGET),$(BUILD_TARGET)/,)
+
 ##@ Build
 .PHONY: build build-release
 build: ## Сборка debug
-	cargo build
+	cargo build $(TARGET_ARG)
 
 build-release: ## Сборка релизной версии
-	cargo build --release
+	cargo build --release $(TARGET_ARG)
 
 ##@ Test
 .PHONY: check clippy clippy-ci nextest test miri miri-test
@@ -193,7 +198,7 @@ run-compact: ## Запуск Зумик с коротким баннером (fo
 	ZUMIC_BANNER=compact cargo run
 
 run-release: ## Запуск Зумик в релизной версии
-	cargo build --release && ./target/release/zumic
+	cargo build --release $(TARGET_ARG) && ./$(TARGET_DIR)release/zumic
 
 ##@ Help
 help: ## Показать это сообщение
