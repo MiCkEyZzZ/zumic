@@ -13,6 +13,7 @@ pub mod network;
 /// Модуль парсинга — ошибки при разборе входящих данных или команд.
 pub mod parser;
 pub mod pubsub;
+pub mod slot_manager;
 /// Модуль системных ошибок — общие системные ошибки, не попадающие в другие категории.
 pub mod system;
 pub mod version;
@@ -25,5 +26,6 @@ pub use encode::*;
 pub use network::*;
 pub use parser::*;
 pub use pubsub::*;
+pub use slot_manager::*;
 pub use system::*;
 pub use version::*;
