@@ -140,4 +140,36 @@ pub fn print_banner(
             println!("{s}");
         }
     }
+    println!();
+}
+
+/// Лог запуска сервера в стиле Redis с миллисекундами
+pub fn print_startup_log() {
+    let pid = std::process::id();
+    let now = Local::now();
+    let ts = now.format("%d %b %Y %H:%M:%S%.3f");
+
+    if atty::is(Stream::Stdout) {
+        println!(
+            "[{}] {} {} {}",
+            pid.to_string().red(),
+            ts.to_string().white(),
+            "# Server started, Zumic version".dimmed().bold(),
+            env!("CARGO_PKG_VERSION").dimmed().bold()
+        );
+        println!(
+            "[{}] {} {}",
+            pid.to_string().red(),
+            ts.to_string().white(),
+            "* Ready to accept connections".green()
+        );
+    } else {
+        println!(
+            "[{}] {} # Server started, Zumic version {}",
+            pid,
+            ts,
+            env!("CARGO_PKG_VERSION")
+        );
+        println!("[{}] {} * Ready to accept connections", pid, ts);
+    }
 }

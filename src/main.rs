@@ -52,6 +52,7 @@ async fn run_server() -> anyhow::Result<()> {
         port,
         &storage_type_str,
     );
+    banner::print_startup_log();
 
     #[allow(clippy::arc_with_non_send_sync)]
     let engine = match settings.storage_type {
