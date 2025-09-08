@@ -383,7 +383,7 @@ impl MetricsCollector {
     /// Генерирует отчёт о здоровье системы на основе последних метрик
     pub fn generate_health_report(&self) -> HealthReport {
         let latest_metrics = self.get_latest_metrics();
-        let recent_metrics = self.get_metrics_history(Duration::from_mins(15));
+        let recent_metrics = self.get_metrics_history(Duration::from_secs(15 * 60));
 
         let overall_health = if let Some(ref metrics) = latest_metrics {
             let helth_score = calculate_health_score(&metrics.health);
