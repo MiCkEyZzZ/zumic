@@ -5,6 +5,7 @@ use owo_colors::OwoColorize;
 use std::env;
 use sysinfo::System;
 
+/// Полный баннер с информацией о сервере.
 pub const ASCII_FULL: &str = r#"
     Zumic {version}
     ----------------------------------------------
@@ -21,25 +22,31 @@ pub const ASCII_FULL: &str = r#"
     Build:            {git} ({build_time})
 "#;
 
+/// Компактный баннер для вывода.
 pub const ASCII_COMPACT: &str = r#"
 Zumic {version} — {mode} — {listen}:{port} — PID {pid}
 "#;
 
-/// Formatted and aligned banner output
+/// Вывод баннера сервера с информацией о конфигурации
+///
+/// # Параметры
+/// - `listen`: адрес, на котором слушает сервер
+/// - `port`: порт сервера
+/// - `storage`: тип хранилища (память, постоянное, кластер)
 pub fn print_banner(
     listen: &str,
     port: u16,
     storage: &str,
 ) {
-    // choose mode
+    // Определяем режим отображения баннера: полный или компактный
     let forced = env::var("ZUMIC_BANNER").ok();
     let full = match forced.as_deref() {
         Some("full") => true,
         Some("compact") => false,
-        _ => cfg!(debug_assertions), // debug => full, release => compact
+        _ => cfg!(debug_assertions), // debug => полный, release => компактный
     };
 
-    // metadata
+    // Получение метаданных
     let version = env!("CARGO_PKG_VERSION");
     let mode = if cfg!(debug_assertions) {
         "debug"
@@ -55,7 +62,7 @@ pub fn print_banner(
     let arch = std::env::consts::ARCH;
     let cpus = num_cpus::get();
 
-    // correct memory calculation
+    // Расчет памяти
     let mem_total_kb = sys.total_memory(); // KB
     let mem_total_mb = mem_total_kb as f64 / 1024.0;
     let mem_total_gb = mem_total_mb / 1024.0;
@@ -68,6 +75,7 @@ pub fn print_banner(
         (mem_total_kb as f64, "KB")
     };
 
+    // Git и время сборки
     let git = option_env!("GIT_COMMIT").unwrap_or("unknown");
     let build_time_raw = option_env!("BUILD_TIME").unwrap_or("unknown");
     let build_time_fmt = if let Ok(dt) = DateTime::parse_from_rfc3339(build_time_raw) {
@@ -81,7 +89,7 @@ pub fn print_banner(
     let color = atty::is(Stream::Stdout);
 
     if full {
-        // prepare substitutions
+        // Подстановка значений в шаблон
         let mut s = ASCII_FULL.to_string();
         s = s
             .replace("{version}", version)
@@ -143,7 +151,9 @@ pub fn print_banner(
     println!();
 }
 
-/// Лог запуска сервера в стиле Redis с миллисекундами
+/// Лог запуска сервера с точностью до миллисекунд
+///
+/// Показывает PID, временную метку, статус запуска и готовность принимать соединения
 pub fn print_startup_log() {
     let pid = std::process::id();
     let now = Local::now();
