@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use crate::{GeoPoint, Sds, StoreResult, Value};
 
 /// Трейт `Storage` определяет интерфейс для реализаций хранилища
@@ -98,6 +100,93 @@ pub trait Storage {
 
     /// Ищет по радиусу от координат существующего member.
     fn geo_radius_by_member(
+        &self,
+        key: &Sds,
+        member: &Sds,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>>;
+}
+
+/// Трейт `AsyncStorage` определяет интерфейс для реализаций хранилища
+/// ключ-значение.
+/// Все методы могут возвращать ошибку и используют `StoreResult`
+/// как тип результата.
+#[async_trait]
+pub trait AsyncStorage: Send + Sync + 'static {
+    async fn set(
+        &self,
+        key: &Sds,
+        value: Value,
+    ) -> StoreResult<()>;
+
+    async fn get(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Option<Value>>;
+
+    async fn del(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<bool>;
+
+    async fn mset(
+        &self,
+        entries: Vec<(Sds, Value)>,
+    ) -> StoreResult<()>;
+
+    async fn mget(
+        &self,
+        keys: Vec<Sds>,
+    ) -> StoreResult<Vec<Option<Value>>>;
+
+    async fn rename(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<()>;
+
+    async fn renamenx(
+        &self,
+        from: &Sds,
+        to: &Sds,
+    ) -> StoreResult<bool>;
+
+    async fn flushdb(&self) -> StoreResult<()>;
+
+    // GEO мутоды
+    async fn geo_add(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        member: &Sds,
+    ) -> StoreResult<bool>;
+
+    async fn geo_dist(
+        &self,
+        key: &Sds,
+        member1: &Sds,
+        member2: &Sds,
+        unit: &str,
+    ) -> StoreResult<Option<f64>>;
+
+    async fn geo_pos(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<Option<GeoPoint>>;
+
+    async fn geo_radius(
+        &self,
+        key: &Sds,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        unit: &str,
+    ) -> StoreResult<Vec<(String, f64, GeoPoint)>>;
+
+    async fn geo_radius_by_member(
         &self,
         key: &Sds,
         member: &Sds,
