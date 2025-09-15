@@ -23,6 +23,12 @@ pub enum StoreError {
     #[error("Invalid command: {0}")]
     InvalidCommand(String),
 
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+
     #[error("Wrong type for operation: {0}")]
     WrongType(String),
 

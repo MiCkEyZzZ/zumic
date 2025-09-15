@@ -16,10 +16,12 @@
 
 pub mod aof;
 pub mod cluster;
+pub mod compaction;
 pub mod memory;
 pub mod metrics;
 pub mod persistent;
 pub mod rebalancer;
+pub mod recovery;
 pub mod sharding;
 pub mod slot_manager;
 pub mod storage;

@@ -17,6 +17,7 @@ pub struct GeoCoord {
 /// Перечисление движков хранилища данных.
 /// Может представлять хранилище в памяти, кластерное хранилище
 /// или персистентное (дисковое).
+#[allow(clippy::large_enum_variant)]
 pub enum StorageEngine {
     /// Хранилище в памяти
     Memory(InMemoryStore),
