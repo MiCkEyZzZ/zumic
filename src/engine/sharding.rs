@@ -495,6 +495,44 @@ impl Default for ShardingConfig {
     }
 }
 
+impl<V: Clone> Clone for ShardedIndex<V> {
+    fn clone(&self) -> Self {
+        let shards = self
+            .shards
+            .iter()
+            .map(|shard| {
+                let data = shard.data.read().unwrap().clone();
+                Shard {
+                    data: RwLock::new(data),
+                    metrics: shard.metrics.clone(),
+                    id: shard.id,
+                    slow_op_threshold_us: shard.slow_op_threshold_us,
+                }
+            })
+            .collect();
+
+        Self {
+            shards,
+            config: self.config.clone(),
+            hasher_seed: self.hasher_seed,
+        }
+    }
+}
+
+impl Clone for ShardMetrics {
+    fn clone(&self) -> Self {
+        Self {
+            key_count: AtomicU64::new(self.key_count.load(Ordering::Relaxed)),
+            read_ops: AtomicU64::new(self.read_ops.load(Ordering::Relaxed)),
+            write_ops: AtomicU64::new(self.write_ops.load(Ordering::Relaxed)),
+            read_lock_wait_ns: AtomicU64::new(self.read_lock_wait_ns.load(Ordering::Relaxed)),
+            write_lock_wait_ns: AtomicU64::new(self.write_lock_wait_ns.load(Ordering::Relaxed)),
+            slow_ops: AtomicU64::new(self.slow_ops.load(Ordering::Relaxed)),
+            last_updated: AtomicU64::new(self.last_updated.load(Ordering::Relaxed)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

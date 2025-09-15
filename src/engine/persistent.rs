@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     io::Cursor,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{atomic::Ordering, Mutex},
 };
 
@@ -10,11 +10,16 @@ use super::{
     write_stream, AofLog, Storage, StreamReader,
 };
 use crate::{
+    engine::{
+        compaction::{CompactionConfig, CompactionMetrics, RecoveryStrategy, SnapshotInfo},
+        recovery::{RecoveryManager, RecoveryMetrics},
+        AofMetrics,
+    },
     GeoPoint, GeoSet, GlobalShardStats, Sds, ShardMetricsSnapshot, ShardedIndex, ShardingConfig,
     StoreError, StoreResult, Value,
 };
 
-/// Конфигурация для InPersistentStore
+/// Конфигурация для InPersistentStore с поддержкой компактизации.
 #[derive(Debug, Clone)]
 pub struct PersistentStoreConfig {
     /// Конфигурация шардирования
@@ -23,6 +28,10 @@ pub struct PersistentStoreConfig {
     pub sync_policy: SyncPolicy,
     /// Включить детальное логирование операций
     pub enable_operation_logging: bool,
+    /// Конфигурация компактирования и снапшотов
+    pub compaction: CompactionConfig,
+    /// Стретагия восстановления
+    pub recovery_strategy: RecoveryStrategy,
 }
 
 /// Хранилище с поддержкой постоянства через AOF и sharded индекс.
@@ -32,9 +41,13 @@ pub struct InPersistentStore {
     index: ShardedIndex<Vec<u8>>,
     /// Журнал AOF, логирующий изменения (один для всех шардов)
     aof: Mutex<AofLog>,
+    /// Менеджер компактирования и восстановления
+    recovery_manager: Mutex<RecoveryManager>,
     /// Конфигурация хранилища
     #[allow(dead_code)]
     config: PersistentStoreConfig,
+    /// Путь к AOF файлу
+    aof_path: PathBuf,
 }
 
 impl InPersistentStore {
@@ -44,13 +57,23 @@ impl InPersistentStore {
         path: P,
         config: PersistentStoreConfig,
     ) -> Result<Self, StoreError> {
+        let aof_path = path.as_ref().to_path_buf();
         let aof = AofLog::open(path, config.sync_policy)?;
         let index = ShardedIndex::new(config.sharding.clone());
+
+        // Создаём менеджер восстановления
+        let recovery_manager = RecoveryManager::new(
+            aof_path.clone(),
+            Some(config.compaction.clone()),
+            config.recovery_strategy.clone(),
+        );
 
         let store = Self {
             index,
             aof: Mutex::new(aof),
+            recovery_manager: Mutex::new(recovery_manager),
             config,
+            aof_path,
         };
 
         // Восстанавливаем состояние из AOF
@@ -67,6 +90,105 @@ impl InPersistentStore {
     /// Возвращает метрики по всем шардам (для мониторинга).
     pub fn get_shard_metrics(&self) -> Vec<ShardMetricsSnapshot> {
         self.index.collect_metrics()
+    }
+
+    /// Возвращает метрики компактирования
+    pub fn get_compaction_metrics(&self) -> Option<CompactionMetrics> {
+        let recovery_guard = self.recovery_manager.lock().unwrap();
+        recovery_guard.compaction_manager().map(|cm| cm.metrics())
+    }
+
+    /// Возвращение метрики восстановления
+    pub fn get_recovery_metrics(&self) -> RecoveryMetrics {
+        let recovery_guard = self.recovery_manager.lock().unwrap();
+        recovery_guard.recovery_metrics()
+    }
+
+    /// Вручную запускает компактирование
+    pub fn trigger_compaction(&self) -> StoreResult<()> {
+        let recovery_guard = self.recovery_manager.lock().unwrap();
+        recovery_guard.trigger_compaction()
+    }
+
+    /// Создаёт снимки вручную
+    pub fn create_snapshot(&self) -> StoreResult<SnapshotInfo> {
+        let recovery_guard = self.recovery_manager.lock().unwrap();
+        recovery_guard.create_snapshot()
+    }
+
+    /// Получает инормацию о последнем снимке
+    pub fn get_latest_snapshot_info(&self) -> StoreResult<Option<SnapshotInfo>> {
+        let recovery_guard = self.recovery_manager.lock().unwrap();
+        if let Some(cm) = recovery_guard.compaction_manager() {
+            cm.find_latest_snapshot()
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Возвращает размер AOF файла
+    pub fn get_aof_size(&self) -> u64 {
+        std::fs::metadata(&self.aof_path)
+            .map(|m| m.len())
+            .unwrap_or(0)
+    }
+
+    /// Возвращает метрики AOF
+    pub fn get_aof_metrics(&self) -> AofMetrics {
+        let aof_guard = self.aof.lock().unwrap();
+        aof_guard.metrics()
+    }
+
+    /// Graceful shutdown с сохранением состояния
+    pub fn shutdown(&self) -> StoreResult<()> {
+        // Финальный flush AOF
+        {
+            let _aof_guard = self.aof.lock().unwrap();
+            // Убеждаемся что все данные записаны
+            // Note: AofLog не имеет публичного flush метода, но drop сделает это автоматически
+        }
+
+        // Останавливаем компактирование
+        {
+            let mut recovery_guard = self.recovery_manager.lock().unwrap();
+            recovery_guard.shutdown()?;
+        }
+
+        // Опционально создаём финальный снапшот
+        if self.config.compaction.enable_snapshots {
+            if let Err(e) = self.create_snapshot() {
+                eprintln!("Warning: Failed to create shutdown snapshot: {:?}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Инициализация компактирования и восстановления состояния
+    #[allow(dead_code)]
+    fn initialize_and_recover(&self) -> StoreResult<()> {
+        // Инициализируем менеджер восстановления
+        {
+            let mut recovery_guard = self.recovery_manager.lock().unwrap();
+            recovery_guard.initialize(
+                std::sync::Arc::new(self.index.clone()),
+                self.config.compaction.clone(),
+            )?;
+
+            // Выполняем восстановление
+            let recovery_stats = recovery_guard.recover(&self.index)?;
+
+            if self.config.enable_operation_logging {
+                println!("Recovery completed: {recovery_stats:?}");
+                println!(
+                    "Recovery rate: {:.2} keys/sec",
+                    recovery_stats.recovery_rate_keys_per_sec()
+                );
+                println!("Data rate: {:.2} MB/s", recovery_stats.data_rate_mbps());
+            }
+        }
+
+        Ok(())
     }
 
     /// Восстанавливает состояние из AOF журнала.
@@ -157,7 +279,6 @@ impl Storage for InPersistentStore {
             let was_new = !data.contains_key(key_b);
             data.insert(key_b.to_vec(), val_b);
 
-            // Обновляем key count метрику
             if was_new {
                 if let Some(ref metrics) = shard.metrics {
                     metrics.increment_key_count();
@@ -189,7 +310,6 @@ impl Storage for InPersistentStore {
     ) -> StoreResult<bool> {
         let key_b = key.as_bytes();
 
-        // Проверяем существование ключа и удаляем из шрда
         let shard = self.index.get_shard(key_b);
         let existed = shard.write(|data| {
             if data.remove(key_b).is_some() {
@@ -202,7 +322,6 @@ impl Storage for InPersistentStore {
             }
         });
 
-        // Логируем в AOF только если ключ действительно был удалён
         if existed {
             let mut aof = self.aof.lock().unwrap();
             aof.append_del(key_b)?;
@@ -217,7 +336,6 @@ impl Storage for InPersistentStore {
         &self,
         entries: Vec<(&Sds, Value)>,
     ) -> StoreResult<()> {
-        // map key_bytes -> serialized value bytes
         let mut kv_lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::with_capacity(entries.len());
         for (k, v) in &entries {
             kv_lookup.insert(k.as_bytes().to_vec(), v.to_bytes());
@@ -250,7 +368,6 @@ impl Storage for InPersistentStore {
                 }
                 if new_keys > 0 {
                     if let Some(ref metrics) = shard.metrics {
-                        // напрямую увеличиваем AtomicU64 пачкой
                         metrics.key_count.fetch_add(new_keys, Ordering::Relaxed);
                     }
                 }
@@ -266,7 +383,6 @@ impl Storage for InPersistentStore {
         &self,
         keys: &[&Sds],
     ) -> StoreResult<Vec<Option<Value>>> {
-        // Группируем ключи по шардам с исходными индексами
         let mut groups: HashMap<usize, Vec<(usize, &[u8])>> = HashMap::new();
         for (i, k) in keys.iter().enumerate() {
             let kb = k.as_bytes();
@@ -275,7 +391,6 @@ impl Storage for InPersistentStore {
         }
 
         let mut result = vec![None; keys.len()];
-
         let mut shard_ids: Vec<usize> = groups.keys().cloned().collect();
         shard_ids.sort_unstable();
 
@@ -316,14 +431,12 @@ impl Storage for InPersistentStore {
         let to_shard_id = self.index.shard_for_key(to_b);
 
         if from_shard_id == to_shard_id {
-            // Простой случай: оба ключа в одном шарде
             let shard = &self.index.all_shards()[from_shard_id];
             let value = shard.write(|data| {
                 if let Some(val) = data.remove(from_b) {
                     let to_was_new = !data.contains_key(to_b);
                     data.insert(to_b.to_vec(), val.clone());
 
-                    // Обновляем метрики: удален один ключ, добавлен другой
                     if let Some(ref metrics) = shard.metrics {
                         metrics.decrement_key_count();
                         if to_was_new {
@@ -338,7 +451,6 @@ impl Storage for InPersistentStore {
             });
 
             if let Some(val) = value {
-                // Логируем обе операции в AOF
                 let mut aof = self.aof.lock().unwrap();
                 aof.append_del(from_b)?;
                 aof.append_set(to_b, &val)?;
@@ -347,10 +459,8 @@ impl Storage for InPersistentStore {
                 Err(StoreError::KeyNotFound)
             }
         } else {
-            // Cross-shard: делаем атомарную swap-перемещалку под двумя write-guards
             let val_res: StoreResult<Vec<u8>> =
                 self.with_two_shards_write(from_shard_id, to_shard_id, |from_map, to_map| {
-                    // from_map соответствует `from_shard_id`, to_map — `to_shard_id`
                     if !from_map.contains_key(from_b) {
                         return Err(StoreError::KeyNotFound);
                     }
@@ -358,7 +468,6 @@ impl Storage for InPersistentStore {
                     let to_was_new = !to_map.contains_key(to_b);
                     to_map.insert(to_b.to_vec(), val.clone());
 
-                    // обновляем метрики через index (atomic)
                     if let Some(ref m) = self.index.all_shards()[from_shard_id].metrics {
                         m.decrement_key_count();
                     }
@@ -371,9 +480,8 @@ impl Storage for InPersistentStore {
                     Ok(val)
                 });
 
-            let value = val_res?; // если Err -> выйдем вверх
+            let value = val_res?;
 
-            // Логируем операции в AOF
             let mut aof = self.aof.lock().unwrap();
             aof.append_del(from_b)?;
             aof.append_set(to_b, &value)?;
@@ -395,32 +503,25 @@ impl Storage for InPersistentStore {
         let to_shard_id = self.index.shard_for_key(to_b);
 
         if from_shard_id == to_shard_id {
-            // Простой случай: оба ключа в одном шарде
             let shard = &self.index.all_shards()[from_shard_id];
             let result = shard.write(|data| {
-                // Проверяем существование исходного ключа
                 if !data.contains_key(from_b) {
                     return Err(StoreError::KeyNotFound);
                 }
 
-                // Проверяем, не существует ли целевой ключ
                 if data.contains_key(to_b) {
                     return Ok(false);
                 }
 
-                // Выполняем перенос
                 if let Some(val) = data.remove(from_b) {
                     data.insert(to_b.to_vec(), val.clone());
-                    // Метрики не меняются: удалили один, добавили другой
                     Ok(true)
                 } else {
-                    // Теоретически unreachable после предыдущих проверок
                     Ok(false)
                 }
             })?;
 
             if result {
-                // Логируем операции только при успешном выполнении
                 let mut aof = self.aof.lock().unwrap();
                 aof.append_del(from_b)?;
                 aof.append_set(to_b, shard.data.read().unwrap().get(to_b).unwrap())?;
@@ -428,10 +529,8 @@ impl Storage for InPersistentStore {
 
             Ok(result)
         } else {
-            // Cross-shard case: делаем всю логику под двумя write-guards через helper
             let res: StoreResult<bool> =
                 self.with_two_shards_write(from_shard_id, to_shard_id, |from_map, to_map| {
-                    // Проверяем условия
                     if !from_map.contains_key(from_b) {
                         return Err(StoreError::KeyNotFound);
                     }
@@ -439,12 +538,10 @@ impl Storage for InPersistentStore {
                         return Ok(false);
                     }
 
-                    // Перенос
                     let val = from_map.remove(from_b).unwrap();
                     let to_was_new = !to_map.contains_key(to_b);
                     to_map.insert(to_b.to_vec(), val.clone());
 
-                    // обновляем метрики
                     if let Some(ref m) = self.index.all_shards()[from_shard_id].metrics {
                         m.decrement_key_count();
                     }
@@ -460,8 +557,6 @@ impl Storage for InPersistentStore {
             let performed = res?;
 
             if performed {
-                // Логирование операции
-                // Для aof нужно значение; его мы уже вставили — читаем его под read
                 let value = {
                     let shard = &self.index.all_shards()[to_shard_id];
                     shard.read(|data| data.get(to_b).cloned().unwrap())
@@ -503,7 +598,6 @@ impl Storage for InPersistentStore {
         let shard = self.index.get_shard(key_b);
 
         let result: StoreResult<(Vec<u8>, bool)> = shard.write(|data| {
-            // Восстановить предыдущий GeoSet
             let mut gs = if let Some(raw) = data.get(key_b) {
                 let mut rdr =
                     StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
@@ -521,12 +615,10 @@ impl Storage for InPersistentStore {
                 GeoSet::new()
             };
 
-            // Добавить новую точку
             let existed = gs.get(member.as_str()?).is_some();
             gs.add(member.to_string(), lon, lat);
             let added = !existed;
 
-            // Сериализовать
             let mut buf = Vec::new();
             let entries = gs.entries.iter().map(|e| {
                 let key = Sds::from_str(&e.member);
@@ -547,9 +639,8 @@ impl Storage for InPersistentStore {
             Ok((buf, added))
         });
 
-        let result = result?; // распаковываем StoreResult
+        let result = result?;
 
-        // Логируем в AOF
         {
             let mut aof = self.aof.lock().unwrap();
             aof.append_set(key_b, &result.0)?;
@@ -576,7 +667,6 @@ impl Storage for InPersistentStore {
                 None => return Ok(None),
             };
 
-            // Восстановить GeoSet
             let mut gs = GeoSet::new();
             let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
             while let Some(Ok((m_sds, val))) = rdr.next() {
@@ -588,12 +678,10 @@ impl Storage for InPersistentStore {
                 }
             }
 
-            // Конвертировать Sds → &str и посчитать дистанцию
             let m1 = member1.as_str()?;
             let m2 = member2.as_str()?;
             let meters = gs.dist(m1, m2);
 
-            // Перевести в нужные единицы
             Ok(meters.map(|m| match unit {
                 "km" => m / 1000.0,
                 "mi" => m / 1609.344,
@@ -654,7 +742,6 @@ impl Storage for InPersistentStore {
                 None => return Ok(vec![]),
             };
 
-            // Восстановить GeoSet
             let mut gs = GeoSet::new();
             let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
             while let Some(Ok((m_sds, val))) = rdr.next() {
@@ -666,7 +753,6 @@ impl Storage for InPersistentStore {
                 }
             }
 
-            // Перевести radius в метры
             let r_m = match unit {
                 "km" => radius * 1000.0,
                 "mi" => radius * 1609.344,
@@ -674,7 +760,6 @@ impl Storage for InPersistentStore {
                 _ => radius,
             };
 
-            // Сформировать результат
             let mut out = Vec::new();
             for (m, dist_m) in gs.radius(lon, lat, r_m) {
                 let dist = match unit {
@@ -698,7 +783,6 @@ impl Storage for InPersistentStore {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        // Сначала получаем позицию
         let center = self.geo_pos(key, member)?;
         if let Some(GeoPoint { lon, lat }) = center {
             self.geo_radius(key, lon, lat, radius, unit)
@@ -714,6 +798,16 @@ impl Default for PersistentStoreConfig {
             sharding: ShardingConfig::default(),
             sync_policy: SyncPolicy::Always,
             enable_operation_logging: false,
+            compaction: CompactionConfig::default(),
+            recovery_strategy: RecoveryStrategy::Auto,
+        }
+    }
+}
+
+impl Drop for InPersistentStore {
+    fn drop(&mut self) {
+        if let Err(e) = self.shutdown() {
+            eprintln!("Error during store shutdown: {e:?}");
         }
     }
 }
@@ -735,6 +829,8 @@ mod tests {
             },
             sync_policy: SyncPolicy::Always,
             enable_operation_logging: false,
+            compaction: CompactionConfig::default(),
+            recovery_strategy: RecoveryStrategy::Auto,
         };
         InPersistentStore::new(temp_file, config)
     }
@@ -821,6 +917,8 @@ mod tests {
             },
             sync_policy: SyncPolicy::Always,
             enable_operation_logging: false,
+            compaction: CompactionConfig::default(),
+            recovery_strategy: RecoveryStrategy::Auto,
         };
 
         // 1) open, write, rename across shards
