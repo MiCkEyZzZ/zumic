@@ -8,13 +8,17 @@ use std::{
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use tempfile::NamedTempFile;
 
-/// 4-байтовый магический заголовок для формата AOF (идентификатор версии).
-const MAGIC: &[u8; 4] = b"AOF1";
+use crate::engine::aof_integrity::{
+    AofValidator, IntegrityStats, RepairMode, RepairResult, ValidationResult,
+};
+
+/// AOF2 включает checksumming для каждой записи
+const MAGIC: &[u8; 4] = b"AOF2";
 
 /// Коды операций в AOF-логе.
 /// Используются для сериализации и восстановления команд.
@@ -39,6 +43,17 @@ pub enum SyncPolicy {
     No,
 }
 
+/// Политика обработки повреждённых данных при reply.
+#[derive(Debug, Clone, Copy)]
+pub enum CorruptionPolicy {
+    /// Остановиться на первой ошибке (Строгий режим)
+    Strict,
+    /// Пропускать повреждение записи и продолжать
+    Skip,
+    /// Логировать ошибки но продолжать (для отладки)
+    Log,
+}
+
 /// Статистика работы AOF-журнала.
 #[derive(Debug, Default)]
 pub struct AofMetrics {
@@ -54,10 +69,16 @@ pub struct AofMetrics {
     pub flush_errors: usize,
     /// Общее время всех flush-операций в наносекундах
     pub flush_total_ns: u64,
+    /// Статистика integrity проверок
+    pub integrity: IntegrityStats,
+    /// Кол-во записей, пропущенных при replay из-за corruption
+    pub replay_skipped: usize,
+    /// Время последнего integrity check в секундах
+    pub last_integrity_check: u64,
 }
 
 /// Основная структура журнала AOF (Append-Only File).
-/// Поддерживает буферизованную запись, восстановление и компактацию.
+/// Поддерживает буферизованную запись, восстановление, компактацию и integrity проверки.
 pub struct AofLog {
     /// Буферизованный writer, защищённый мьютексом для потокобезопасности.
     writer: Arc<Mutex<BufWriter<File>>>,
@@ -65,10 +86,14 @@ pub struct AofLog {
     reader: File,
     /// Выбранная политика синхронизации.
     policy: SyncPolicy,
+    /// Политика обработки corruption
+    corruption_policy: CorruptionPolicy,
     /// Канал для остановки фонового флешера (для EverySec).
     flusher_stop_tx: Option<Sender<()>>,
     /// Хэндл фонового потока флешера, чтобы ждать его завершения.
     flusher_handle: Option<JoinHandle<()>>,
+    /// Validator для integrity проверок
+    validator: AofValidator,
     pending_ops: AtomicUsize,
     /// Текущий порог батча (количество операций до flush)
     batch_size: AtomicUsize,
@@ -80,6 +105,8 @@ pub struct AofLog {
     metrics_flush_count: AtomicUsize,
     metrics_flush_errors: AtomicUsize,
     metrics_flush_total_ns: AtomicU64,
+    metrics_replay_skipped: AtomicUsize,
+    metrics_last_integrity_check: AtomicU64,
 }
 
 impl AofLog {
@@ -95,12 +122,14 @@ impl AofLog {
     /// # Аргументы
     /// - `path` — путь к AOF-файлу.
     /// - `policy` — политика синхронизации (Always, EverySec, No).
+    /// - `corruption_policy` — политика обработки поврежденных данных.
     ///
     /// # Ошибки
     /// Возвращает ошибку при некорректном заголовке файла или ошибке открытия.
     pub fn open<P: AsRef<Path>>(
         path: P,
         policy: SyncPolicy,
+        corruption_policy: CorruptionPolicy,
     ) -> io::Result<Self> {
         // 1) Читаем или создаём файл для проверки заголовка и для replay.
         let mut file = OpenOptions::new()
@@ -112,17 +141,29 @@ impl AofLog {
         {
             let mut header = [0u8; 4];
             let n = file.read(&mut header)?;
-            if n == MAGIC.len() {
+            if n == 4 {
                 if &header != MAGIC {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Invalid AOF magic header",
-                    ));
+                    // backward compat AOF1
+                    if &header == b"AOF1" {
+                        eprintln!("Warning: Found AOF1 format. Consider upgrading to AOF2 for integrity protection.");
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!("Invalid AOF magic header: {header:?}"),
+                        ));
+                    }
                 }
-            } else {
+            } else if n == 0 {
+                // New empty file -> write magic
                 file.seek(io::SeekFrom::Start(0))?;
                 file.write_all(MAGIC)?;
                 file.flush()?;
+            } else {
+                // Partial header -> consider file corrupted
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Partial AOF header ({} bytes): {:?}", n, &header[..n]),
+                ));
             }
         }
         file.seek(io::SeekFrom::Start(0))?;
@@ -135,17 +176,26 @@ impl AofLog {
             writer: Arc::clone(&writer),
             reader,
             policy,
+            corruption_policy,
+            validator: AofValidator::new(),
             flusher_stop_tx: None,
             flusher_handle: None,
             pending_ops: AtomicUsize::new(0),
             batch_size: AtomicUsize::new(Self::INITIAL_BATCH),
-            last_activity: AtomicU64::new(Instant::now().elapsed().as_secs()),
+            last_activity: AtomicU64::new(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            ),
             metrics_ops_total: AtomicUsize::new(0),
             metrics_ops_set: AtomicUsize::new(0),
             metrics_ops_del: AtomicUsize::new(0),
             metrics_flush_count: AtomicUsize::new(0),
             metrics_flush_errors: AtomicUsize::new(0),
             metrics_flush_total_ns: AtomicU64::new(0),
+            metrics_replay_skipped: AtomicUsize::new(0),
+            metrics_last_integrity_check: AtomicU64::new(0),
         };
 
         // 4) Если политика EverySec — запускаем фоновый флешер
@@ -171,8 +221,13 @@ impl AofLog {
         Ok(log)
     }
 
+    /// Создать AOF с параметрами по умолчанию.
+    pub fn open_default<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Self::open(path, SyncPolicy::EverySec, CorruptionPolicy::Log)
+    }
+
     /// Добавляет в журнал команду `SET` с ключом и значением.
-    /// Формат: [AofOp::Set][len(key)][key][len(val)][val].
+    /// Формат: [AofOp::Set][checksum][key_len][key][val_len][val].
     ///
     /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
     ///
@@ -191,16 +246,31 @@ impl AofLog {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.metrics_ops_set
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Создаем payload для checksum вычисления
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(key.len() as u32).to_be_bytes());
+        payload.extend_from_slice(key);
+        payload.extend_from_slice(&(value.len() as u32).to_be_bytes());
+        payload.extend_from_slice(value);
+
+        // Вычисляем checksum
+        let checksum = self.validator.compute_checksum(&payload);
+
         {
             let mut buf = self.writer.lock().unwrap();
+            // Записываем: operation + checksum + payload
             buf.write_all(&[AofOp::Set as u8])?;
-            Self::write_32(&mut *buf, key.len() as u32)?;
-            buf.write_all(key)?;
-            Self::write_32(&mut *buf, value.len() as u32)?;
-            buf.write_all(value)?;
+            Self::write_32(&mut *buf, checksum)?;
+            buf.write_all(&payload)?;
         }
-        let now_s = Instant::now().elapsed().as_secs();
+
+        let now_s = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         self.last_activity.store(now_s, Ordering::Relaxed);
+
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
             let threshold = self.batch_size.load(Ordering::Relaxed);
@@ -216,7 +286,7 @@ impl AofLog {
     }
 
     /// Добавляет в журнал команду `DEL` с ключом.
-    /// Формат: [AofOp::Del][len(key)][key]
+    /// Формат (AOF2): [AofOp::Del][checksum][key_len][key]
     ///
     /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
     ///
@@ -233,13 +303,24 @@ impl AofLog {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.metrics_ops_del
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(key.len() as u32).to_be_bytes());
+        payload.extend_from_slice(key);
+
+        let checksum = self.validator.compute_checksum(&payload);
+
         {
             let mut buf = self.writer.lock().unwrap();
             buf.write_all(&[AofOp::Del as u8])?;
-            Self::write_32(&mut *buf, key.len() as u32)?;
-            buf.write_all(key)?;
+            Self::write_32(&mut *buf, checksum)?;
+            buf.write_all(&payload)?;
         }
-        let now_s = Instant::now().elapsed().as_secs();
+
+        let now_s = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         self.last_activity.store(now_s, Ordering::Relaxed);
         if let SyncPolicy::Always = self.policy {
             let count = self.pending_ops.fetch_add(1, Ordering::Relaxed) + 1;
@@ -264,10 +345,10 @@ impl AofLog {
     /// - `f` — функция, принимающая тип операции, ключ и значение (или None).
     ///
     /// # Ошибки
-    /// Возвращает ошибку при чтении файла или некорректных данных.
+    /// Возвращает ошибку при чтении файла или некорректных данных (в зависимости от CorruptionPolicy).
     pub fn replay<F>(
         &mut self,
-        mut f: F,
+        f: F,
     ) -> io::Result<()>
     where
         F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
@@ -275,35 +356,30 @@ impl AofLog {
         self.reader.seek(io::SeekFrom::Start(0))?;
         let mut header = [0u8; 4];
         self.reader.read_exact(&mut header)?;
-        if &header != MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad AOF header"));
+
+        let is_aof1 = &header == b"AOF1";
+        let is_aof2 = &header == MAGIC;
+
+        if !is_aof1 && !is_aof2 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Bad AOF header: {header:?}"),
+            ));
         }
+
         let mut buf = Vec::new();
         self.reader.read_to_end(&mut buf)?;
-        let mut pos = 0;
 
-        while pos < buf.len() {
-            let op = AofOp::try_from(buf[pos])?;
-            pos += 1;
-            let key_len = Self::read_u32(&buf, &mut pos)? as usize;
-            let key = buf[pos..pos + key_len].to_vec();
-            pos += key_len;
-            let val = if op == AofOp::Set {
-                let vlen = Self::read_u32(&buf, &mut pos)? as usize;
-                let v = buf[pos..pos + vlen].to_vec();
-                pos += vlen;
-                Some(v)
-            } else {
-                None
-            };
-            f(op, key, val);
+        if is_aof1 {
+            self.replay_aof1_format(&buf, f)
+        } else {
+            self.replay_aof2_format(&buf, f)
         }
-
-        Ok(())
     }
 
     /// Компактирует журнал AOF, записывая только "живые" ключи.
     /// Использует временный файл и затем атомарно заменяет оригинал.
+    /// Всегда использует формат AOF2 с checksums.
     ///
     /// # Аргументы
     /// - `path` — путь к AOF-файлу.
@@ -328,15 +404,33 @@ impl AofLog {
         tmp.flush()?;
         // 3. Записываем только SET-операции для каждого живого key/value.
         for (key, value) in live {
+            // Создаём payload
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&(key.len() as u32).to_be_bytes());
+            payload.extend_from_slice(&key);
+            payload.extend_from_slice(&(value.len() as u32).to_be_bytes());
+            payload.extend_from_slice(&value);
+
+            // Вычисляем checksum
+            let checksum = self.validator.compute_checksum(&payload);
+
+            // Записываем: op + checksum + payload
             tmp.write_all(&[AofOp::Set as u8])?;
-            Self::write_32(&mut tmp, key.len() as u32)?;
-            tmp.write_all(&key)?;
-            Self::write_32(&mut tmp, value.len() as u32)?;
-            tmp.write_all(&value)?;
+            Self::write_32(&mut tmp, checksum)?;
+            tmp.write_all(&payload)?;
         }
         tmp.flush()?;
+
+        // Перед атомарной заменой - убедимся, что текущий writer зафлашен,
+        // чтобы избежать состояния, когда старый writer держит данные в буфере.
+        {
+            let mut guard = self.writer.lock().unwrap();
+            let _ = guard.flush();
+        }
+
         // Атомарно заменяем старый файл.
         tmp.persist(path)?;
+
         // После замены - нужно обновить writer и reader в AofLog:
         // Закрываем текущие дескрипторы, открываем новый файл.
         let mut file = OpenOptions::new()
@@ -346,6 +440,7 @@ impl AofLog {
             .open(path)?;
         file.seek(io::SeekFrom::Start(0))?;
         self.reader = file;
+
         // Обновляем writer внутри Arc<Mutex<...>>
         let writer_file = OpenOptions::new().create(true).append(true).open(path)?;
         let mut guard = self.writer.lock().unwrap();
@@ -365,6 +460,99 @@ impl AofLog {
             flush_count: self.metrics_flush_count.load(Ordering::Relaxed),
             flush_errors: self.metrics_flush_errors.load(Ordering::Relaxed),
             flush_total_ns: self.metrics_flush_total_ns.load(Ordering::Relaxed),
+            integrity: self.validator.stats().clone(),
+            replay_skipped: self.metrics_replay_skipped.load(Ordering::Relaxed),
+            last_integrity_check: self.metrics_last_integrity_check.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Выполняет полную проверку целостности AOF файла.
+    pub fn verify_integrity(&mut self) -> io::Result<IntegrityStats> {
+        self.validator.reset_stats();
+
+        // Читаем файл без вызова callback ф-ий, только для валидации
+        let mut dummy_callback = |_op, _key, _val| {};
+        self.replay(&mut dummy_callback)?;
+
+        Ok(self.validator.stats().clone())
+    }
+
+    /// Выполняет repair AOF файл с заданной стратегией.
+    pub fn repair<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        mode: RepairMode,
+    ) -> io::Result<RepairResult> {
+        let original_policy = self.corruption_policy;
+
+        // Устанавливаем политику в зависимости от режима repair
+        self.corruption_policy = match mode {
+            RepairMode::Skip => CorruptionPolicy::Skip,
+            RepairMode::Strict => CorruptionPolicy::Strict,
+            RepairMode::Recover => CorruptionPolicy::Log,
+        };
+
+        let mut messages = Vec::new();
+        let mut recovered_data = std::collections::HashMap::new();
+
+        // Собираем все валидные записи
+        let repair_result = self.replay(|op, key, val| match op {
+            AofOp::Set => {
+                if let Some(value) = val {
+                    recovered_data.insert(key, value);
+                }
+            }
+            AofOp::Del => {
+                recovered_data.remove(&key);
+            }
+        });
+
+        let stats = self.validator.stats().clone();
+        let was_modified = stats.records_corrupted > 0 || stats.records_truncated > 0;
+
+        // Если нашли проблемы и режим позволяет, перезаписываем файл
+        if was_modified && !matches!(mode, RepairMode::Strict) {
+            match self.rewrite(&path, recovered_data) {
+                Ok(()) => {
+                    messages.push("AOF file successfully repaired and rewritten".to_string());
+                }
+                Err(e) => {
+                    messages.push(format!("Failed to rewrite repaired AOF: {}", e));
+                }
+            }
+        }
+
+        if stats.records_corrupted > 0 {
+            messages.push(format!(
+                "Found {} corrupted records",
+                stats.records_corrupted
+            ));
+        }
+        if stats.records_truncated > 0 {
+            messages.push(format!(
+                "Found {} truncated records",
+                stats.records_truncated
+            ));
+        }
+        if stats.records_skipped > 0 {
+            messages.push(format!("Skipped {} invalid records", stats.records_skipped));
+        }
+
+        // Восстанавливаем оригинальную политику
+        self.corruption_policy = original_policy;
+
+        match repair_result {
+            Ok(()) => Ok(RepairResult {
+                stats,
+                modified: was_modified,
+                messages,
+            }),
+            Err(e) if matches!(mode, RepairMode::Strict) => Err(e),
+            Err(_) => Ok(RepairResult {
+                stats,
+                modified: was_modified,
+                messages,
+            }),
         }
     }
 
@@ -457,13 +645,329 @@ impl AofLog {
     ///
     /// Используется только при политике `Always`.
     fn adjust_batch_size(&self) {
-        let now = Instant::now().elapsed().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let last = self.last_activity.load(Ordering::Relaxed);
         let mut cur = self.batch_size.load(Ordering::Relaxed);
         if now.saturating_sub(last) > 5 && cur > 4 {
             cur = (cur / 2).max(4);
             self.batch_size.store(cur, Ordering::Relaxed);
         }
+    }
+
+    /// Replay для старого формата AOF1 (без checksum)
+    fn replay_aof1_format<F>(
+        &mut self,
+        buf: &[u8],
+        mut f: F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
+    {
+        let mut pos = 0;
+
+        while pos < buf.len() {
+            if let Err(e) = self.replay_aof1_record(buf, &mut pos, &mut f) {
+                match self.corruption_policy {
+                    CorruptionPolicy::Strict => return Err(e),
+                    CorruptionPolicy::Skip | CorruptionPolicy::Log => {
+                        if matches!(self.corruption_policy, CorruptionPolicy::Log) {
+                            eprintln!("AOF replay warning: {e}, skipping record at position {pos}")
+                        }
+                        self.metrics_replay_skipped.fetch_add(1, Ordering::Relaxed);
+                        // Попытка перейти к следующей потенциальной записи с помощью эвристики.
+                        if let Some(next_pos) = self.find_next_valid_record(buf, pos) {
+                            pos = next_pos;
+                            continue;
+                        } else {
+                            // не нашли - выходим
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Replay одной записи в формате AOF1
+    fn replay_aof1_record<F>(
+        &self,
+        buf: &[u8],
+        pos: &mut usize,
+        f: &mut F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
+    {
+        if *pos >= buf.len() {
+            return Ok(());
+        }
+
+        let op = AofOp::try_from(buf[*pos])?;
+        *pos += 1;
+
+        let key_len = Self::read_u32(buf, pos)? as usize;
+        if *pos + key_len > buf.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Truncated key data",
+            ));
+        }
+
+        let key = buf[*pos..*pos + key_len].to_vec();
+        *pos += key_len;
+
+        let val = if op == AofOp::Set {
+            let vlen = Self::read_u32(buf, pos)? as usize;
+            if *pos + vlen > buf.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Truncated value data",
+                ));
+            }
+            let v = buf[*pos..*pos + vlen].to_vec();
+            *pos += vlen;
+            Some(v)
+        } else {
+            None
+        };
+
+        f(op, key, val);
+        Ok(())
+    }
+
+    /// Replay для нового формата AOF2 (с checksum)
+    fn replay_aof2_format<F>(
+        &mut self,
+        buf: &[u8],
+        mut f: F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
+    {
+        let mut pos = 0;
+        self.metrics_last_integrity_check.store(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            Ordering::Relaxed,
+        );
+
+        while pos < buf.len() {
+            match self.replay_aof2_record(buf, &mut pos, &mut f) {
+                Ok(()) => continue,
+                Err(e) => {
+                    match self.corruption_policy {
+                        CorruptionPolicy::Strict => return Err(e),
+                        CorruptionPolicy::Skip | CorruptionPolicy::Log => {
+                            if matches!(self.corruption_policy, CorruptionPolicy::Log) {
+                                eprintln!("AOF replay integrity error: {e}, skipping record at position {pos}");
+                            }
+                            // mark skipped in validator stats and metrics
+                            self.validator.mark_skipped();
+                            self.metrics_replay_skipped.fetch_add(1, Ordering::Relaxed);
+
+                            // Пытаемся найти следующую валидацию запись
+                            if let Some(next_pos) = self.find_next_valid_record(buf, pos) {
+                                pos = next_pos;
+                            } else {
+                                // Не можем найти валидные записи, заканчиваем
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Replay одной записи в формате AOF2 с проверкой checksum
+    fn replay_aof2_record<F>(
+        &mut self,
+        buf: &[u8],
+        pos: &mut usize,
+        f: &mut F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
+    {
+        if *pos >= buf.len() {
+            return Ok(());
+        }
+
+        // Находим границы записи
+        let record_start = *pos;
+        let record_end = self.find_record_end(buf, record_start)?;
+        let record_data = &buf[record_start..record_end];
+
+        // Валидируем запись
+        let validation_result = self.validator.validate_record(record_data);
+
+        match validation_result {
+            ValidationResult::Valid => {
+                // Парсим валидную запись
+                self.parse_valid_aof2_record(record_data, f)?;
+                *pos = record_end;
+                Ok(())
+            }
+            ValidationResult::Corrupted { expected, actual } => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Checksum mismatch: expected 0x{expected:08x}, got 0x{actual:08x}"),
+            )),
+            ValidationResult::Truncated => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Truncated AOF record",
+            )),
+            ValidationResult::UnknownOperation(op) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unknown operation code: {op}"),
+            )),
+            ValidationResult::UnexpectedEof => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Unexpected end of file in AOF record",
+            )),
+        }
+    }
+
+    /// Определяет конец текущий записи AOF2
+    fn find_record_end(
+        &self,
+        buf: &[u8],
+        start: usize,
+    ) -> io::Result<usize> {
+        if start >= buf.len() {
+            return Ok(buf.len());
+        }
+
+        let mut pos = start;
+
+        // Минимальный размер записи: op(1) + checksum(4) + key_len(4) = 9
+        if pos.checked_add(9).is_none_or(|p| p > buf.len()) {
+            // not enough bytes => treat as truncated to EOF
+            return Ok(buf.len());
+        }
+
+        // op + checksum
+        pos = pos.checked_add(1 + 4).unwrap();
+
+        // Читаем key_len (проверки на переполнение внутри)
+        if pos.checked_add(4).is_none_or(|p| p > buf.len()) {
+            return Ok(buf.len());
+        }
+
+        let key_len =
+            u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]) as usize;
+        pos = pos.checked_add(4).unwrap();
+        pos = match pos.checked_add(key_len) {
+            Some(p) => p,
+            None => return Ok(buf.len()), // overflow -> treat truncated
+        };
+        if pos > buf.len() {
+            return Ok(buf.len());
+        }
+
+        // Для SET операции читаем val_len
+        let op = buf[start]; // op at record start
+        if op == AofOp::Set as u8 {
+            if pos.checked_add(4).is_none_or(|p| p > buf.len()) {
+                return Ok(buf.len());
+            }
+            let val_len =
+                u32::from_be_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]) as usize;
+            pos = pos.checked_add(4).unwrap();
+            pos = match pos.checked_add(val_len) {
+                Some(p) => p,
+                None => return Ok(buf.len()),
+            };
+            if pos > buf.len() {
+                return Ok(buf.len());
+            }
+        }
+
+        Ok(pos.min(buf.len()))
+    }
+
+    /// Парсит валидную AOF2 запись.
+    fn parse_valid_aof2_record<F>(
+        &self,
+        record_data: &[u8],
+        f: &mut F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(AofOp, Vec<u8>, Option<Vec<u8>>),
+    {
+        let mut pos = 0usize;
+        if pos >= record_data.len() {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Empty record"));
+        }
+        let op = AofOp::try_from(record_data[pos])?;
+        pos = pos
+            .checked_add(1)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "pos overflow"))?;
+
+        // checksum (skip 4)
+        if pos.checked_add(4).is_none_or(|p| p > record_data.len()) {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "truncated checksum",
+            ));
+        }
+        pos = pos.checked_add(4).unwrap();
+
+        // key_len + key
+        let klen = Self::read_u32(record_data, &mut pos)? as usize;
+        if pos.checked_add(klen).is_none_or(|p| p > record_data.len()) {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "truncated key",
+            ));
+        }
+        let key = record_data[pos..pos + klen].to_vec();
+        pos = pos.checked_add(klen).unwrap();
+
+        let val = if op == AofOp::Set {
+            let vlen = Self::read_u32(record_data, &mut pos)? as usize;
+            if pos.checked_add(vlen).is_none_or(|p| p > record_data.len()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "truncated value",
+                ));
+            }
+            let v = record_data[pos..pos + vlen].to_vec();
+            // pos = pos.checked_add(vlen).unwrap(); // not necessary after last read
+            Some(v)
+        } else {
+            None
+        };
+
+        f(op, key, val);
+        Ok(())
+    }
+
+    /// Находит следующую потенциально валидную запись после ошибки.
+    fn find_next_valid_record(
+        &self,
+        buf: &[u8],
+        start_pos: usize,
+    ) -> Option<usize> {
+        // Простая эвристика: ищем следующий байт, который может быть валидной операцией
+        for pos in start_pos + 1..buf.len() {
+            let potential_op = buf[pos];
+            if potential_op == 1 || potential_op == 2 {
+                // Проверяем что у нас достаточно данных для минимальной записи
+                if pos + 9 <= buf.len() {
+                    return Some(pos);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -495,9 +999,8 @@ impl Drop for AofLog {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::NamedTempFile;
-
     use super::*;
+    use tempfile::NamedTempFile;
 
     /// Вспомогательная функция для проверки append_set и append_del с последующим воспроизведением
     /// в соответствии с заданной политикой синхронизации.
@@ -506,13 +1009,13 @@ mod tests {
         let path = temp_file.path();
 
         {
-            let mut log = AofLog::open(path, policy)?;
+            let mut log = AofLog::open(path, policy, CorruptionPolicy::Log)?;
             log.append_set(b"kin", b"dzadza")?;
             log.append_del(b"kin")?;
         }
 
         {
-            let mut log = AofLog::open(path, policy)?;
+            let mut log = AofLog::open(path, policy, CorruptionPolicy::Log)?;
             let mut seq = Vec::new();
             log.replay(|op, key, val| seq.push((op, key, val)))?;
 
@@ -553,13 +1056,13 @@ mod tests {
             let temp = NamedTempFile::new().unwrap();
             let path = temp.path();
             {
-                let mut log = AofLog::open(path, *policy).unwrap();
+                let mut log = AofLog::open(path, *policy, CorruptionPolicy::Log).unwrap();
                 log.append_set(b"k1", b"v1").unwrap();
                 log.append_set(b"k2", b"v2").unwrap();
                 log.append_set(b"k3", b"v3").unwrap();
             }
             {
-                let mut log = AofLog::open(path, *policy).unwrap();
+                let mut log = AofLog::open(path, *policy, CorruptionPolicy::Log).unwrap();
                 let mut seq = Vec::new();
                 log.replay(|op, key, val| seq.push((op, key, val))).unwrap();
                 assert_eq!(seq.len(), 3);
@@ -582,7 +1085,7 @@ mod tests {
         // Create AOF with duplicate keys and deletions
         let temp = NamedTempFile::new()?;
         let path = temp.path().to_path_buf();
-        let mut log = AofLog::open(&path, SyncPolicy::Always)?;
+        let mut log = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
         log.append_set(b"k1", b"v1")?;
         log.append_set(b"k2", b"v2")?;
         log.append_set(b"k1", b"v1_new")?;
@@ -593,7 +1096,7 @@ mod tests {
         // Собираем в памяти «живые» пары, как в Storage::new
         let mut live_map = std::collections::HashMap::new();
         {
-            let mut rlog = AofLog::open(&path, SyncPolicy::Always)?;
+            let mut rlog = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
             rlog.replay(|op, key, val| match op {
                 AofOp::Set => {
                     live_map.insert(key, val.unwrap());
@@ -605,12 +1108,12 @@ mod tests {
         }
 
         // Перезаписываем вызовы
-        let mut clog = AofLog::open(&path, SyncPolicy::Always)?;
+        let mut clog = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
         clog.rewrite(&path, live_map.clone().into_iter())?;
 
         // После перезаписи журнал должен содержать только фактический SET для каждого ключа
         let mut seq = Vec::new();
-        let mut rlog2 = AofLog::open(&path, SyncPolicy::Always)?;
+        let mut rlog2 = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
         rlog2.replay(|op, key, val| seq.push((op, key, val)))?;
 
         // Проверьте, что порядок может быть любым, но значения должны совпадать
@@ -629,7 +1132,7 @@ mod tests {
     fn test_metrics_always_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;
         let path = temp.path();
-        let mut log = AofLog::open(path, SyncPolicy::Always)?;
+        let mut log = AofLog::open(path, SyncPolicy::Always, CorruptionPolicy::Log)?;
 
         // Изначально все счётчики нулевые
         let m0 = log.metrics();
@@ -671,7 +1174,7 @@ mod tests {
     fn test_metrics_no_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;
         let path = temp.path();
-        let mut log = AofLog::open(path, SyncPolicy::No)?;
+        let mut log = AofLog::open(path, SyncPolicy::No, CorruptionPolicy::Log)?;
 
         log.append_set(b"k", b"v")?;
         log.append_del(b"k")?;

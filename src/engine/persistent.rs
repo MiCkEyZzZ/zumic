@@ -13,7 +13,7 @@ use crate::{
     engine::{
         compaction::{CompactionConfig, CompactionMetrics, RecoveryStrategy, SnapshotInfo},
         recovery::{RecoveryManager, RecoveryMetrics},
-        AofMetrics,
+        AofMetrics, CorruptionPolicy,
     },
     GeoPoint, GeoSet, GlobalShardStats, Sds, ShardMetricsSnapshot, ShardedIndex, ShardingConfig,
     StoreError, StoreResult, Value,
@@ -26,6 +26,8 @@ pub struct PersistentStoreConfig {
     pub sharding: ShardingConfig,
     /// Политика синхронизации
     pub sync_policy: SyncPolicy,
+    /// Политика обработки повреждений AOF при replay
+    pub corruption_policy: CorruptionPolicy,
     /// Включить детальное логирование операций
     pub enable_operation_logging: bool,
     /// Конфигурация компактирования и снапшотов
@@ -58,7 +60,7 @@ impl InPersistentStore {
         config: PersistentStoreConfig,
     ) -> Result<Self, StoreError> {
         let aof_path = path.as_ref().to_path_buf();
-        let aof = AofLog::open(path, config.sync_policy)?;
+        let aof = AofLog::open(path, config.sync_policy, config.corruption_policy)?;
         let index = ShardedIndex::new(config.sharding.clone());
 
         // Создаём менеджер восстановления
@@ -797,6 +799,7 @@ impl Default for PersistentStoreConfig {
         Self {
             sharding: ShardingConfig::default(),
             sync_policy: SyncPolicy::Always,
+            corruption_policy: CorruptionPolicy::Log,
             enable_operation_logging: false,
             compaction: CompactionConfig::default(),
             recovery_strategy: RecoveryStrategy::Auto,
@@ -828,6 +831,7 @@ mod tests {
                 slow_operation_threshold_us: 1000,
             },
             sync_policy: SyncPolicy::Always,
+            corruption_policy: CorruptionPolicy::Log,
             enable_operation_logging: false,
             compaction: CompactionConfig::default(),
             recovery_strategy: RecoveryStrategy::Auto,
@@ -835,6 +839,7 @@ mod tests {
         InPersistentStore::new(temp_file, config)
     }
 
+    /// Тест проверяет, что можно записать ключ и получить его значение, и ключ попадает в правильный шард
     #[test]
     fn test_set_and_get() -> StoreResult<()> {
         let store = new_sharded_store(4)?;
@@ -854,6 +859,7 @@ mod tests {
         Ok(())
     }
 
+    /// Тест проверяет, что можно массово записать и прочитать ключи (mset/mget) и шардирование распределяет ключи сбалансировано
     #[test]
     fn test_sharded_mset_mget() -> StoreResult<()> {
         let store = new_sharded_store(3)?;
@@ -905,6 +911,7 @@ mod tests {
         Ok(())
     }
 
+    /// Тест проверяет, что AOF корректно записывает операции, поддерживает replay и cross-shard rename
     #[test]
     fn test_aof_replay_and_cross_shard_rename() -> StoreResult<()> {
         // создаём отдельный temp file, чтобы можно было переоткрыть store и проверить replay
@@ -916,6 +923,7 @@ mod tests {
                 slow_operation_threshold_us: 1000,
             },
             sync_policy: SyncPolicy::Always,
+            corruption_policy: CorruptionPolicy::Log,
             enable_operation_logging: false,
             compaction: CompactionConfig::default(),
             recovery_strategy: RecoveryStrategy::Auto,
@@ -952,6 +960,7 @@ mod tests {
         Ok(())
     }
 
+    /// Тест проверяет, что flushdb удаляет все ключи и сбрасывает метрики
     #[test]
     fn test_flushdb_clears_all_and_metrics_zeroed() -> StoreResult<()> {
         let store = new_sharded_store(3)?;
@@ -982,6 +991,7 @@ mod tests {
         Ok(())
     }
 
+    /// Тест проверяет, что геопозиции корректно добавляются и distance возвращает положительное значение
     #[test]
     fn test_geo_add_pos_and_dist() -> StoreResult<()> {
         let store = new_sharded_store(2)?;
