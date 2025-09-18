@@ -157,7 +157,11 @@ impl RecoveryManager {
         stats.aof_size_bytes = file_size;
 
         // Создаём временный AOF лог для повтора
-        let mut aof_log = AofLog::open(&self.aof_path, super::SyncPolicy::No)?;
+        let mut aof_log = AofLog::open(
+            &self.aof_path,
+            super::SyncPolicy::No,
+            super::CorruptionPolicy::Log,
+        )?;
 
         aof_log
             .replay(|op, key, val| {
@@ -338,7 +342,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        engine::{compaction::RecoveryStrategy, recovery::RecoveryManager},
+        engine::{compaction::RecoveryStrategy, recovery::RecoveryManager, CorruptionPolicy},
         AofLog, ShardedIndex, ShardingConfig, SyncPolicy,
     };
 
@@ -351,6 +355,7 @@ mod tests {
         Arc::new(ShardedIndex::new(cfg))
     }
 
+    /// Тест проверяет, что при восстановлении из пустого AOF файл не приводит к ошибкам и не загружает ключи
     #[test]
     fn test_recover_from_aof_only_empty_file() {
         let dir = tempdir().unwrap();
@@ -366,6 +371,7 @@ mod tests {
         assert_eq!(stats.operations_replayed, 0);
     }
 
+    /// Тест проверяет, что восстановление из AOF с операциями корректно воспроизводит set и del
     #[test]
     fn test_recover_from_aof_only_with_ops() {
         let dir = tempdir().unwrap();
@@ -373,7 +379,8 @@ mod tests {
 
         // создаём AOF через настоящий AofLog
         {
-            let mut log = AofLog::open(&aof_path, SyncPolicy::Always).unwrap();
+            let mut log =
+                AofLog::open(&aof_path, SyncPolicy::Always, CorruptionPolicy::Log).unwrap();
             log.append_set(b"key", b"value").unwrap();
             log.append_del(b"key").unwrap();
             drop(log); // закрываем файл, чтобы всё сбросилось
@@ -389,6 +396,7 @@ mod tests {
         assert!(stats.keys_deleted >= 1);
     }
 
+    /// Тест проверяет, что метрики восстановления корректно обновляются после replay AOF
     #[test]
     fn test_recovery_metrics_updates() {
         let dir = tempdir().unwrap();
@@ -396,7 +404,8 @@ mod tests {
 
         // создаём валидный бинарный AOF через AofLog
         {
-            let mut log = AofLog::open(&aof_path, SyncPolicy::Always).unwrap();
+            let mut log =
+                AofLog::open(&aof_path, SyncPolicy::Always, CorruptionPolicy::Log).unwrap();
             log.append_set(b"key", b"value").unwrap();
             // при необходимости можно добавить и append_del
             drop(log); // гарантируем flush/закрытие
@@ -412,6 +421,7 @@ mod tests {
         assert!(metrics.recovery_duration_ns > 0);
     }
 
+    /// Тест проверяет, что вызов trigger_compaction без инициализации RecoveryManager возвращает ошибку
     #[test]
     fn test_trigger_compaction_without_init() {
         let dir = tempdir().unwrap();
@@ -422,6 +432,7 @@ mod tests {
         assert!(matches!(res, Err(StoreError::InvalidOperation(_))));
     }
 
+    /// Тест проверяет, что вызов create_snapshot без инициализации RecoveryManager возвращает ошибку
     #[test]
     fn test_create_snapshot_without_init() {
         let dir = tempdir().unwrap();
@@ -432,6 +443,7 @@ mod tests {
         assert!(matches!(res, Err(StoreError::InvalidOperation(_))));
     }
 
+    /// Тест проверяет, что метод recovery_rate_keys_per_sec правильно рассчитывает скорость восстановления
     #[test]
     fn test_recovery_rate_keys_per_sec() {
         let stats = RecoveryStats {
