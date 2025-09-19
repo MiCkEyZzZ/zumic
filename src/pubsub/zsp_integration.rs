@@ -502,6 +502,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Тест проверяет, что сообщение корректно кодируется и декодируется (roundtrip)
     #[test]
     fn test_message_roundtrip() {
         let original_msg = Message::from_string("test_channel", "Hello, World!")
@@ -522,6 +523,7 @@ mod tests {
         assert_eq!(original_msg.metadata, decoded_msg.metadata);
     }
 
+    /// Тест проверяет корректность кодирования и декодирования JSON payload
     #[test]
     fn test_json_payload_roundtrip() {
         let json_data = json!({
@@ -543,6 +545,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет работу с сериализованным payload (Serialized)
     #[test]
     fn test_serialized_payload_roundtrip() {
         let payload_bytes = Bytes::from(vec![1, 2, 3, 4, 5]);
@@ -567,6 +570,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет кодирование и декодирование команды SUBSCRIBE
     #[test]
     fn test_subscribe_command_roundtrip() {
         let channels = vec!["ch1".to_string(), "ch2".to_string(), "ch3".to_string()];
@@ -583,6 +587,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет кодирование и декодирование PUBLISH команды с расширенным форматом
     #[test]
     fn test_publish_command_enhanced_format() {
         let channel = "test_channel";
@@ -604,6 +609,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет декодирование PUBLISH команды в устаревшем (legacy) формате
     #[test]
     fn test_publish_command_legacy_format() {
         // Имитировать устаревший формат вручную
@@ -632,6 +638,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет PUBLISH команду с JSON payload
     #[test]
     fn test_json_publish_command() {
         let json_data = json!({"event": "user_login", "user_id": 42});
