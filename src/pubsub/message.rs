@@ -406,9 +406,7 @@ mod tests {
         active: bool,
     }
 
-    /// Тест проверяет создание сообщения из строки и вектора:
-    /// правильность канала и преобразование полезной нагрузки
-    /// в `Bytes`.
+    /// Тест проверяет создание сообщения из вектора байтов и корректность payload
     #[test]
     fn test_from_and_vec() {
         let ch = "news";
@@ -418,8 +416,7 @@ mod tests {
         assert_eq!(msg.payload, MessagePayload::Bytes(Bytes::from(pl_vec)));
     }
 
-    /// Тест проверяет создание из `String` и `Bytes`, включая
-    /// совпадение ссылок и содержимого.
+    /// Тест проверяет создание сообщения из строки канала и байтового payload
     #[test]
     fn new_from_string_and_bytes() {
         let ch_string = String::from("updates");
@@ -429,8 +426,7 @@ mod tests {
         assert_eq!(msg.payload, MessagePayload::Bytes(pl_bytes));
     }
 
-    /// Тест проверяет, что клонирование сохраняет указатели (Arc
-    /// и Bytes) без копирования.
+    /// Тест проверяет, что клонирование сообщения сохраняет указатели Arc и Bytes (zero-copy)
     #[test]
     fn clone_preserves_arc_and_bytes_zero_copy() {
         let msg1 = Message::new("chan", Bytes::from_static(b"x"));
@@ -452,8 +448,7 @@ mod tests {
         assert_eq!(bytes_ptr2, bytes_ptr);
     }
 
-    /// Тест проверяет создание из статических данных без
-    /// копирования (`from_static`).
+    /// Тест проверяет создание сообщения из статических данных без копирования
     #[test]
     fn from_static_zero_copy() {
         let msg = Message::from_static("static_chan", b"data");
@@ -464,9 +459,7 @@ mod tests {
         );
     }
 
-    /// Тест проверяет сравнение поведения `new` и `from_static`:
-    /// каналы равны по значению, а указатели совпадают из-за
-    /// интернирования.
+    /// Тест проверяет, что сообщение созданное через `new` и `from_static` с одинаковым каналом делят Arc
     #[test]
     fn mix_new_and_from_static() {
         let m1 = Message::new("kin", b"dzadza".to_vec());
@@ -476,8 +469,7 @@ mod tests {
         assert!(Arc::ptr_eq(&m1.channel, &m2.channel));
     }
 
-    /// Тест проверяет корректную работу с пустым каналом и
-    /// полезной нагрузкой (new и from_static).
+    /// Тест проверяет создание сообщений с пустым каналом и пустым payload
     #[test]
     fn empty_channel_and_payload() {
         let m = Message::new("", Vec::<u8>::new());
@@ -489,8 +481,7 @@ mod tests {
         assert!(m_static.payload.is_empty());
     }
 
-    /// Тест проверяет создание из среза и `Bytes`, сравнивая
-    /// полезную нагрузку.
+    /// Тест проверяет создание сообщений из среза и Bytes с клонированием
     #[test]
     fn new_from_slice_and_bytes_clone() {
         // slice имеет тип &[u8; 10]
@@ -507,8 +498,7 @@ mod tests {
         assert_eq!(m2.payload, expected2);
     }
 
-    /// Тест проверяет создание из вектора и статического среза,
-    /// сравнивая полезную нагрузку с ожидаемой.
+    /// Тест проверяет создание сообщений из вектора и среза
     #[test]
     fn new_from_vec_and_static() {
         let v = vec![9u8; 10];
@@ -519,8 +509,7 @@ mod tests {
         assert_eq!(m2.payload, MessagePayload::Bytes(Bytes::from_static(s)));
     }
 
-    /// Тест проверяет, что два сообщения с одинаковыми каналами
-    /// и полезной нагрузкой равны.
+    /// Тест проверяет корректность сравнения сообщений на равенство
     #[test]
     fn message_equality() {
         let a = Message::new("a", b"x".to_vec());
@@ -528,8 +517,7 @@ mod tests {
         assert_eq!(a, b);
     }
 
-    /// Тест проверяет, что `Debug` вывод содержит канал и полезную
-    ///  нагрузку.
+    /// Тест проверяет отображение debug строки содержит имя канала и payload
     #[test]
     fn debug_contains_channel_and_payload() {
         let m = Message::new("dbg", b"z".to_vec());
@@ -539,8 +527,7 @@ mod tests {
         assert!(s.contains("dbg"));
     }
 
-    /// Тест проверяет, что клонирование большого payload не
-    /// копирует данные (zero-copy).
+    /// Тест проверяет клонирование сообщения с большим payload сохраняет zero-copy
     #[test]
     fn large_payload_clone_zero_copy() {
         let big = vec![0u8; 1_000_000];
@@ -568,8 +555,7 @@ mod tests {
         assert_eq!(m2.payload.len(), big.len());
     }
 
-    /// Тест проверяет, что создание из `Arc<str>` сохраняет
-    /// указатель.
+    /// Тест проверяет сохранение указателя Arc при использовании Arc<str> канала
     #[test]
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
@@ -577,9 +563,7 @@ mod tests {
         assert_eq!(&*arc, &*m.channel);
     }
 
-    /// Тест проверяет, что вызовы `from_static` с одинаковыми
-    /// именами каналов возвращают один и тот же `Arc<str>`,
-    /// несмотря на разные полезные нагрузки.
+    /// Тест проверяет, что статические сообщения с одинаковым каналом используют один Arc
     #[test]
     fn static_messages_share_pointer() {
         let m1 = Message::from_static("stat", b"1");
@@ -590,9 +574,7 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что `Message::new` и `Message::from_static`
-    /// с одинаковыми именами используют один и тот же
-    /// интернированный `Arc<str>` для канала.
+    /// Тест проверяет, что `new` и `from_static` с одинаковым именем канала делят Arc
     #[test]
     fn new_and_from_static_share_pointer() {
         let m1 = Message::new("mix", b"kin".to_vec());
@@ -603,6 +585,7 @@ mod tests {
         );
     }
 
+    /// Тест проверяет корректность payload типа Bytes
     #[test]
     fn test_bytes_payload() {
         let data = b"Hello, World!";
@@ -613,6 +596,7 @@ mod tests {
         assert_eq!(msg.payload.content_type(), "application/octet-stream");
     }
 
+    /// Тест проверяет корректность payload типа String
     #[test]
     fn test_string_payload() {
         let msg = Message::from_string("test_channel", "Hello, Rust!");
@@ -622,6 +606,7 @@ mod tests {
         assert_eq!(msg.payload.content_type(), "text/plain");
     }
 
+    /// Тест проверяет корректность payload типа JSON
     #[test]
     fn test_json_payload() {
         let json_data = serde_json::json!({
@@ -642,6 +627,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет создание сообщения из сериализуемого объекта и десериализацию
     #[test]
     fn test_serializable_payload() {
         let test_data = TestStruct {
@@ -657,6 +643,7 @@ mod tests {
         assert_eq!(deserialized, test_data);
     }
 
+    /// Тест проверяет добавление метаданных к сообщению
     #[test]
     fn test_message_with_metadata() {
         let msg = Message::from_string("test_channel", "Hello")
@@ -675,6 +662,7 @@ mod tests {
         assert_eq!(metadata.headers.get("priority"), Some(&"high".to_string()));
     }
 
+    /// Тест проверяет конвертацию payload String в Bytes
     #[test]
     fn test_payload_conversion() {
         let original = "Hello, World!";
@@ -684,6 +672,7 @@ mod tests {
         assert_eq!(bytes, Bytes::from(original.as_bytes()));
     }
 
+    /// Тест проверяет сериализацию и десериализацию с помощью Bincode
     #[test]
     fn test_bincode_serialization() {
         let test_data = TestStruct {
