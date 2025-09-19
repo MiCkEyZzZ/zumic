@@ -37,11 +37,11 @@ pub enum MessageTypeFilter {
 /// Обработка отставания.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LagHandling {
-    /// Игнорировать отстование (по умолчанию)
+    /// Игнорировать отставание (по умолчанию)
     Ignore,
     /// Возвращать ошибку при отставании
     Error,
-    /// Логировать отстование, но продолжать работу
+    /// Логировать отставание, но продолжать работу
     Log,
     /// Пропускать отстающие сообщения
     Skip,
@@ -272,7 +272,7 @@ impl Subscriber {
         T: for<'de> Deserialize<'de>,
     {
         let message = self.recv().await?;
-        // inspect_err позволяет инкрементировать счётчик при ошибке, не меняя типа ошибки
+        // inspect_err позволяет инкриминировать счётчик при ошибке, не меняя типа ошибки
         message.deserialize().inspect_err(|_| {
             self.stats.deserialization_errors += 1;
         })
@@ -406,7 +406,7 @@ impl Subscriber {
         self.options.message_buffer_size = new_size;
     }
 
-    /// Внутриенний метод получения сообщения.
+    /// Внутренний метод получения сообщения.
     async fn recv_internal(&mut self) -> Result<Message, RecvError> {
         loop {
             match self.receiver.recv().await {
@@ -480,7 +480,7 @@ impl Subscriber {
         true
     }
 
-    /// Проверяет фильтр по методанным.
+    /// Проверяет фильтр по метаданным.
     fn check_metadata_filter(
         &self,
         message: &Message,
@@ -654,7 +654,7 @@ impl Subscriber {
         }
     }
 
-    /// Обрабатывает отствание подписчика.
+    /// Обрабатывает отставание подписчика.
     fn handle_lagging(
         &mut self,
         count: u64,

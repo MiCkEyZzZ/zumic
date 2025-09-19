@@ -570,7 +570,7 @@ mod tests {
 
     use super::*;
     use std::sync::Arc;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt}; // <- НУЖНЫЕ ИМПОРТЫ
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::{
         net::{TcpListener, TcpStream},
         time::Duration,

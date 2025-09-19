@@ -558,13 +558,13 @@ impl Broker {
     pub fn publish_str<S, T>(
         &self,
         channel: S,
-        mesage: T,
+        message: T,
     ) -> Result<PublishResult, RecvError>
     where
         S: AsRef<str>,
         T: Into<String>,
     {
-        self.publish(channel, MessagePayload::String(mesage.into()))
+        self.publish(channel, MessagePayload::String(message.into()))
     }
 
     /// Быстрая публикация в JSON.

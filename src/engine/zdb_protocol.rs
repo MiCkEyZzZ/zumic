@@ -40,7 +40,7 @@ pub fn load_from_zdb(
 /// Новая функция — читает пары <key, value> из произвольного `Read`.
 /// Удобна для unit-тестов и для fuzzing (можно подавать Cursor).
 ///
-/// Использует `read_value_with_version` если он доступен (чтобы фузить разные версии),
+/// Использует `read_value_with_version` если он доступен (чтобы фаззить разные версии),
 /// но по умолчанию вызывает `read_value` (текущее поведение).
 pub fn load_from_reader<R: Read>(
     store: &mut InMemoryStore,

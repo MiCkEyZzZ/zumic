@@ -360,7 +360,8 @@ mod tests {
         time::{sleep, timeout, Duration},
     };
 
-    /// Тест: сервер принимает соединение, ConnectionHandler отвечает на PING, затем на QUIT и закрывается.
+    /// Тест проверяет принимает ли соединение, ConnectionHandler отвечает на
+    /// PING, затем на QUIT и закрывается.
     #[tokio::test(flavor = "current_thread")]
     async fn server_accepts_connection_and_handles_ping_quit() -> Result<()> {
         // Конфиг — будем вручную создавать listener и передавать в run_server
@@ -439,7 +440,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест: сервер корректно завершает работу при получении shutdown через oneshot без входящих соединений.
+    /// Тест проверяет сервер корректно завершает работу при получении shutdown
+    /// через oneshot без входящих соединений.
     #[tokio::test(flavor = "current_thread")]
     async fn server_shutdown_via_channel() -> Result<()> {
         let conn_cfg = ConnectionConfig::default();
