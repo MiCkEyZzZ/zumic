@@ -863,6 +863,7 @@ mod tests {
         (broker, sub)
     }
 
+    /// Тест проверяет, что у подписки сохраняется корректное имя канала.
     #[tokio::test]
     async fn test_subscription_channel_name() {
         let (broker, sub) = setup_one().await;
@@ -872,6 +873,7 @@ mod tests {
         assert_eq!(sub.channel(), "chan");
     }
 
+    /// Тест проверяет получение сообщения через подписку (recv).
     #[tokio::test]
     async fn test_receive_message_via_subscription() {
         let (broker, mut sub) = setup_one().await;
@@ -892,6 +894,7 @@ mod tests {
         );
     }
 
+    /// Тест проверяет, что несколько подписчиков на один канал получают одно и то же сообщение.
     #[tokio::test]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new();
@@ -909,6 +912,7 @@ mod tests {
         assert_eq!(mb.payload, MessagePayload::Bytes(Bytes::from_static(b"X")));
     }
 
+    /// Тест проверяет корректное поведение try_recv: возврат Empty при отсутствии данных и получение сообщения при наличии.
     #[tokio::test]
     async fn test_try_recv_success_and_empty() {
         let broker = Broker::new();
@@ -932,6 +936,7 @@ mod tests {
         assert_eq!(msg.payload, MessagePayload::Bytes(Bytes::from("immediate")));
     }
 
+    /// Тест проверяет обработку режима LagHandling::Error (отставание вызывает ошибку Lagged).
     #[tokio::test]
     async fn test_lag_handling_error_mode() {
         let opts = SubscriptionOptions {
@@ -963,6 +968,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что сообщения сжимаются брокером и корректно декомпрессируются подписчиком.
     #[tokio::test]
     async fn test_compression_roundtrip() {
         // Broker с включённой компрессией (чтобы compress_payload сработал)
@@ -990,6 +996,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет, что фильтр по типу payload блокирует нежелательные сообщения.
     #[tokio::test]
     async fn test_with_payload_type_filter_blocks_unwanted_types() {
         // filter allows only String payloads; Bytes should be filtered
@@ -1021,6 +1028,7 @@ mod tests {
         }
     }
 
+    /// Тест проверяет работу MultiSubscriber: получение сообщений из нескольких каналов методами recv_any и recv_all.
     #[tokio::test]
     async fn test_multi_subscriber_recv_any_and_recv_all() {
         let broker = Broker::new();
