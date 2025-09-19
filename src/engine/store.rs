@@ -145,7 +145,7 @@ impl StorageEngine {
         }
     }
 
-    /// Возвращает ссылку на конкретное хранилище, реализующее трейд `Storage`.
+    /// Возвращает ссылку на конкретное хранилище, реализующее трейт `Storage`.
     pub fn get_store(&self) -> &dyn Storage {
         match self {
             Self::Memory(store) => store,
@@ -154,7 +154,7 @@ impl StorageEngine {
         }
     }
 
-    /// Возвращает изменяемую ссылку на конкретное хранилище, реализующее трейд `Storage`.
+    /// Возвращает изменяемую ссылку на конкретное хранилище, реализующее трейт `Storage`.
     pub fn get_store_mut(&mut self) -> &mut dyn Storage {
         match self {
             Self::Memory(store) => store,

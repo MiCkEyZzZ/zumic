@@ -16,7 +16,7 @@ impl CommandRegistry {
         }
     }
 
-    /// Региструет команду `name` с обработчиком `h`.
+    /// Регистрирует команду `name` с обработчиком `h`.
     pub fn register<F>(
         &mut self,
         name: impl Into<String>,

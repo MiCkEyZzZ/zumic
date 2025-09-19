@@ -36,7 +36,7 @@ fuzz_target!(|data: &[u8]| {
             });
         }
 
-        // 3) Попробуем пересжать "сырые" данные (после тега) и прочитать результат
+        // 3) Попробуем пересажать "сырые" данные (после тега) и прочитать результат
         let raw_data: &[u8] = if data.len() > 1 { &data[1..] } else { &[] };
         if let Ok(recompressed) = compress_block(raw_data) {
             let mut buf = Vec::with_capacity(1 + 4 + recompressed.len());

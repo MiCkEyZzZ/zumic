@@ -48,7 +48,7 @@ pub struct ConnectionManager {
     ip_connections: Arc<RwLock<HashMap<std::net::IpAddr, AtomicU32>>>,
     /// Общий счётчик активных соединений
     active_connections: Arc<AtomicUsize>,
-    /// Флаг для gracefull shutdown
+    /// Флаг для graceful shutdown
     shutdown_signal: Arc<tokio::sync::Notify>,
     /// Счётчик для генерации ID соединений
     connection_counter: Arc<AtomicU32>,

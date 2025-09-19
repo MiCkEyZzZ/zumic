@@ -30,7 +30,7 @@ indent_style = space
 indent_size = 2
 tab_width    = 2
 
-# Shell scripts, Makefiles
+# Shell scripts, Makefile
 [*.{sh,mak,Makefile}]
 indent_style = tab
 indent_size = 1

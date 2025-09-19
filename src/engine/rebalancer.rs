@@ -11,7 +11,7 @@ use crate::engine::{ShardId, SlotId, SlotManager};
 /// Причины, по которым может быть инициирован ребаланс.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RebalanceTrigger {
-    /// Ребаланс инициирован из-за дисбаланса нагрузки между шардоми.
+    /// Ребаланс инициирован из-за дисбаланса нагрузки между шардами.
     LoadImbalance { max_load: f64, min_load: f64 },
     /// Ребаланс инициирован из-за обнаружения "горячего" ключа.
     HotKeyDetected { key: String, ops_per_sec: u64 },
@@ -364,7 +364,7 @@ mod tests {
     fn test_hot_key_trigger_rebalance() {
         let slot_manager = setup_slot_manager(4);
 
-        // Симудируем один горячий ключ
+        // Симулируем один горячий ключ
         for _ in 0..150 {
             slot_manager.record_operation("hot_key");
         }

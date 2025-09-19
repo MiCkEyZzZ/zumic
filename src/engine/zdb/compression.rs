@@ -98,7 +98,7 @@ mod tests {
             .collect();
         assert!(should_compress(data.len()));
         let compressed = compress_block(&data).expect("compress failed");
-        // Убедимся, что что-то действительно сжалось (или хотя бы буфер непуст)
+        // Убедимся, что что-то действительно сжалось
         assert!(!compressed.is_empty());
         let decompressed = decompress_block(&compressed).expect("decompress failed");
         assert_eq!(decompressed, data);

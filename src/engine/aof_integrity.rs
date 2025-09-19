@@ -187,7 +187,7 @@ impl AofValidator {
         &self.stats
     }
 
-    /// Сьрасывает статистику.
+    /// Сбрасывает статистику.
     pub fn reset_stats(&mut self) {
         self.stats = IntegrityStats::default();
     }

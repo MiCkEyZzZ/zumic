@@ -42,7 +42,7 @@ pub struct ShardMetrics {
     pub last_updated: AtomicU64,
 }
 
-/// Imutable snapshot метрик шарда для экспорта.
+/// Immutable snapshot метрик шарда для экспорта.
 #[derive(Debug, Clone)]
 pub struct ShardMetricsSnapshot {
     pub key_count: u64,
@@ -139,7 +139,7 @@ impl ShardMetrics {
         self.last_updated.store(nanos, Ordering::Relaxed);
     }
 
-    /// Получить shapshot метрик для мониторинга.
+    /// Получить snapshot метрик для мониторинга.
     pub fn snapshot(&self) -> ShardMetricsSnapshot {
         let read_ops = self.read_ops.load(Ordering::Relaxed);
         let write_ops = self.write_ops.load(Ordering::Relaxed);
@@ -265,7 +265,7 @@ impl<V> ShardedIndex<V> {
         }
     }
 
-    /// Получает шард для кдюча.
+    /// Получает шард для ключа.
     pub fn get_shard(
         &self,
         key: &[u8],

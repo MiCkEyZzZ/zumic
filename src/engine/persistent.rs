@@ -32,7 +32,7 @@ pub struct PersistentStoreConfig {
     pub enable_operation_logging: bool,
     /// Конфигурация компактирования и снапшотов
     pub compaction: CompactionConfig,
-    /// Стретагия восстановления
+    /// Стратегия восстановления
     pub recovery_strategy: RecoveryStrategy,
 }
 
@@ -118,7 +118,7 @@ impl InPersistentStore {
         recovery_guard.create_snapshot()
     }
 
-    /// Получает инормацию о последнем снимке
+    /// Получает информацию о последнем снимке
     pub fn get_latest_snapshot_info(&self) -> StoreResult<Option<SnapshotInfo>> {
         let recovery_guard = self.recovery_manager.lock().unwrap();
         if let Some(cm) = recovery_guard.compaction_manager() {

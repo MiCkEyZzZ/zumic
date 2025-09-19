@@ -154,7 +154,7 @@ pub trait AsyncStorage: Send + Sync + 'static {
 
     async fn flushdb(&self) -> StoreResult<()>;
 
-    // GEO мутоды
+    // GEO методы
     async fn geo_add(
         &self,
         key: &Sds,
