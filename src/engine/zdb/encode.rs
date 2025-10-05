@@ -1,7 +1,7 @@
 //! Модуль для сериализации значений `Value` в бинарный формат.
 //!
-//! Все типы значений кодируются с префиксным тегом,
-//! за которым следует длина и содержимое (если применимо).
+//! Все типы значений кодируются с префиксным тегом, за которым следует длина и
+//! содержимое (если применимо).
 //!
 //! Используется BigEndian-формат для чисел.
 
@@ -158,7 +158,8 @@ pub fn write_value_inner<W: Write>(
     }
 }
 
-/// Записывает дамп с проверкой целостности: магия, версия, записи и CRC32 в конце.
+/// Записывает дамп с проверкой целостности: магия, версия, записи и CRC32 в
+/// конце.
 ///
 /// Формат:
 ///   [magic][ver][count]
@@ -215,14 +216,14 @@ pub fn write_stream<W: Write>(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
+    use super::*;
     use crate::{
         database::Bitmap,
         engine::{decompress_block, read_dump, read_value_with_version, StreamReader},
         Sds,
     };
-
-    use super::*;
-    use std::io::Cursor;
 
     /// Тест проверяет сериализацию и десериализацию целого числа.
     #[test]
@@ -291,7 +292,8 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
-    /// Тест проверяет поведение `should_compress` при различных размерах входных данных.
+    /// Тест проверяет поведение `should_compress` при различных размерах
+    /// входных данных.
     #[test]
     fn test_should_compress_threshold() {
         assert!(!should_compress(0));
@@ -311,7 +313,8 @@ mod tests {
         assert_eq!(&decompressed, data);
     }
 
-    /// Тест проверяет, что большие данные корректно сжимаются и распаковываются.
+    /// Тест проверяет, что большие данные корректно сжимаются и
+    /// распаковываются.
     #[test]
     fn test_compress_decompress_roundtrip_large() {
         // generate > MIN_COMPRESSION_SIZE bytes
@@ -324,7 +327,8 @@ mod tests {
         assert_eq!(decompressed, data);
     }
 
-    /// Тест проверяет обработку ошибки при попытке распаковать случайные данные.
+    /// Тест проверяет обработку ошибки при попытке распаковать случайные
+    /// данные.
     #[test]
     fn test_decompress_invalid_data() {
         // random bytes should error
@@ -334,7 +338,8 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::Other);
     }
 
-    /// Тест проверяет корректность записи и чтения потока данных (stream roundtrip).
+    /// Тест проверяет корректность записи и чтения потока данных (stream
+    /// roundtrip).
     #[test]
     fn test_stream_roundtrip() {
         let items = vec![
@@ -359,7 +364,8 @@ mod tests {
         assert!(reader.next().is_none());
     }
 
-    /// Тест проверяет, что дамп с CRC проходит полный круг: write_dump → read_dump.
+    /// Тест проверяет, что дамп с CRC проходит полный круг: write_dump →
+    /// read_dump.
     #[test]
     fn doc_test_dump_roundtrip_crc() {
         let items = vec![
@@ -372,7 +378,8 @@ mod tests {
         assert_eq!(got, items);
     }
 
-    /// Тест проверяет, что при повреждении CRC в конце read_dump падает с ошибкой.
+    /// Тест проверяет, что при повреждении CRC в конце read_dump падает с
+    /// ошибкой.
     #[test]
     fn doc_test_dump_crc_mismatch() {
         let items = vec![(Sds::from_str("key"), Value::Bool(false))];

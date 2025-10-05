@@ -482,11 +482,11 @@ fn calculate_health_score(health: &HealthMetrics) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::engine::rebalancer::RebalancerConfig;
 
-    use super::*;
-
-    /// Тест проверяет на корректность подсчёта операций после вызова record_operation
+    /// Тест проверяет на корректность подсчёта операций после вызова
+    /// record_operation
     #[test]
     fn test_metrics_collection() {
         let collector = MetricsCollector::new(Duration::from_secs(1), 100);
@@ -502,7 +502,8 @@ mod tests {
         assert_eq!(*counts.get("set").unwrap(), 1);
     }
 
-    /// Тест проверяет на корректность вычисления `health` score для различных метрик
+    /// Тест проверяет на корректность вычисления `health` score для различных
+    /// метрик
     #[test]
     fn test_health_score_calculation() {
         let healthy_metrics = HealthMetrics {
@@ -564,7 +565,8 @@ mod tests {
         assert_eq!(latest.operations.total_ops, 2);
     }
 
-    /// Тест проверяет на корректность подсчёта операций и среднего времени отклика
+    /// Тест проверяет на корректность подсчёта операций и среднего времени
+    /// отклика
     #[test]
     fn test_metrics_collect_operations_and_performance() {
         let collector = MetricsCollector::new(Duration::from_secs(1), 100);
@@ -601,7 +603,8 @@ mod tests {
         assert!(csv.contains("total_ops"));
     }
 
-    /// Тест проверяет на корректность генерации отчёта о здоровье кластера, включая alerts и performance trend
+    /// Тест проверяет на корректность генерации отчёта о здоровье кластера,
+    /// включая alerts и performance trend
     #[test]
     fn test_generate_health_report_alerts_and_trend() {
         let collector = MetricsCollector::new(Duration::from_secs(1), 10);
@@ -637,7 +640,8 @@ mod tests {
         assert!(report.metrics_summary.is_some());
     }
 
-    /// Тест проверяет на корректное увеличение счётчика ошибок после вызова `record_error`
+    /// Тест проверяет на корректное увеличение счётчика ошибок после вызова
+    /// `record_error`
     #[test]
     fn test_record_error_increments_failed_ops() {
         let collector = MetricsCollector::new(Duration::from_secs(1), 10);

@@ -2,7 +2,6 @@ use std::hint::black_box;
 
 use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::{Broker, MessagePayload, Subscriber};
 
 fn bench_subscribe(c: &mut Criterion) {

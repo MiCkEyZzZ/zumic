@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use super::{decode::DecodeError, encode::EncodeError, parser::ParseError};
+use crate::{ParseError, ZspDecodeError, ZspEncodeError};
 
 #[derive(Debug, Error)]
 pub enum NetworkError {
@@ -8,8 +8,8 @@ pub enum NetworkError {
     Parse(#[from] ParseError),
 
     #[error("Decode error: {0}")]
-    Decode(#[from] DecodeError),
+    Decode(#[from] ZspDecodeError),
 
     #[error("Encode error: {0}")]
-    Encode(#[from] EncodeError),
+    Encode(#[from] ZspEncodeError),
 }

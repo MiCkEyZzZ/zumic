@@ -2,30 +2,34 @@
 //! частях системы.
 //! Включает типы ошибок и связанные с ними утилиты.
 
-/// Модуль аутентификации — ошибки, связанные с авторизацией и контролем доступа.
+/// Модуль аутентификации — ошибки, связанные с авторизацией и контролем
+/// доступа.
 pub mod auth;
-/// Модуль декодирования — ошибки, возникающие при декодировании данных.
-pub mod decode;
-/// Модуль кодирования — ошибки, связанные с кодированием данных.
-pub mod encode;
 /// Модуль сетевого взаимодействия — ошибки, возникающие при работе с сетью.
 pub mod network;
 /// Модуль парсинга — ошибки при разборе входящих данных или команд.
 pub mod parser;
 pub mod pubsub;
 pub mod slot_manager;
-/// Модуль системных ошибок — общие системные ошибки, не попадающие в другие категории.
+/// Модуль системных ошибок — общие системные ошибки, не попадающие в другие
+/// категории.
 pub mod system;
-pub mod version;
+pub mod zdb_version;
+pub mod zsp_decoder;
+pub mod zsp_encoder;
+pub mod zsp_parser;
+pub mod zsp_serialization;
 
 // Публичный экспорт всех типов ошибок и функций из вложенных модулей,
 // чтобы упростить доступ к ним из внешнего кода.
 pub use auth::*;
-pub use decode::*;
-pub use encode::*;
 pub use network::*;
 pub use parser::*;
 pub use pubsub::*;
 pub use slot_manager::*;
 pub use system::*;
-pub use version::*;
+pub use zdb_version::*;
+pub use zsp_decoder::*;
+pub use zsp_encoder::*;
+pub use zsp_parser::*;
+pub use zsp_serialization::*;

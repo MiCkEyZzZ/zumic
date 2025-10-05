@@ -1,7 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
-
 use tokio::time::timeout;
 use zumic::{Broker, MessagePayload, RecvError, TryRecvError};
 

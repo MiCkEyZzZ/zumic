@@ -8,12 +8,11 @@
 
 use std::borrow::Cow;
 
-use crate::EncodeError;
-
 use super::{
     decoder::{MAX_ARRAY_DEPTH, MAX_BINARY_LENGTH},
     zsp_types::ZspFrame,
 };
+use crate::ZspEncodeError;
 
 /// Структура энкодера для кодирования в формат ZSP.
 pub struct ZspEncoder;
@@ -23,17 +22,17 @@ impl ZspEncoder {
         ZspEncoder
     }
 
-    pub fn encode(frame: &ZspFrame) -> Result<Vec<u8>, EncodeError> {
+    pub fn encode(frame: &ZspFrame) -> Result<Vec<u8>, ZspEncodeError> {
         Self::encode_frame(frame, 0)
     }
 
     fn encode_frame(
         frame: &ZspFrame,
         current_depth: usize,
-    ) -> Result<Vec<u8>, EncodeError> {
+    ) -> Result<Vec<u8>, ZspEncodeError> {
         if current_depth > MAX_ARRAY_DEPTH {
             let err_msg = format!("Max array depth exceed ({MAX_ARRAY_DEPTH})");
-            return Err(EncodeError::InvalidData(err_msg));
+            return Err(ZspEncodeError::InvalidData(err_msg));
         }
 
         match frame {
@@ -61,7 +60,7 @@ impl ZspEncoder {
                         b.len(),
                         MAX_BINARY_LENGTH
                     );
-                    return Err(EncodeError::InvalidData(err_msg));
+                    return Err(ZspEncodeError::InvalidData(err_msg));
                 }
 
                 let mut out = format!("${}\r\n", b.len()).into_bytes();
@@ -109,19 +108,19 @@ impl ZspEncoder {
         }
     }
 
-    fn validate_simple_string(s: &str) -> Result<(), EncodeError> {
+    fn validate_simple_string(s: &str) -> Result<(), ZspEncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Simple string contains CR or LF characters";
-            Err(EncodeError::InvalidData(err_msg.into()))
+            Err(ZspEncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }
     }
 
-    fn validate_error_string(s: &str) -> Result<(), EncodeError> {
+    fn validate_error_string(s: &str) -> Result<(), ZspEncodeError> {
         if s.contains('\r') || s.contains('\n') {
             let err_msg = "Error message contains CR or LF characters";
-            Err(EncodeError::InvalidData(err_msg.into()))
+            Err(ZspEncodeError::InvalidData(err_msg.into()))
         } else {
             Ok(())
         }
@@ -226,7 +225,8 @@ mod tests {
         // Пример неполного словаря
         let frame = ZspFrame::Dictionary(items);
         let result = ZspEncoder::encode(&frame);
-        assert!(result.is_ok()); // Ожидается, что словарь будет закодирован корректно
+        assert!(result.is_ok()); // Ожидается, что словарь будет закодирован
+                                 // корректно
     }
 
     /// Тест проверяет кодирование числа с плавающей запятой.

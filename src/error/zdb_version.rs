@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::engine::FormatVersion;
 
 #[derive(Debug, Error)]
-pub enum VersionError {
+pub enum ZdbVersionError {
     #[error("Unsupported ZDB dump version: {found}. Supported versions: {supported:?}")]
     UnsupportedVersion {
         found: u8,

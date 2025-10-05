@@ -656,9 +656,8 @@ mod tests {
     use bytes::Bytes;
     use tokio::time::Duration;
 
-    use crate::{LagHandling, TryRecvError};
-
     use super::*;
+    use crate::{LagHandling, TryRecvError};
 
     /// Helper: создает брокера и подписывается на него, возвращая
     /// (брокеру, получателю)
@@ -776,7 +775,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что `try_recv().await` возвращает `Empty` на пустом канале.
+    /// Тест проверяет, что `try_recv().await` возвращает `Empty` на пустом
+    /// канале.
     #[tokio::test]
     async fn test_subscription_try_recv_empty() {
         let broker = Broker::new();

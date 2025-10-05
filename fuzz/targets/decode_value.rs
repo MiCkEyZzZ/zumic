@@ -1,7 +1,8 @@
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
 use std::io::Cursor;
+
+use libfuzzer_sys::fuzz_target;
 use zumic::engine::{compress_block, read_value_with_version, FormatVersion, TAG_COMPRESSED};
 
 fuzz_target!(|data: &[u8]| {
@@ -13,7 +14,8 @@ fuzz_target!(|data: &[u8]| {
         });
     }
 
-    // 2) Если это compressed-блок (первый байт TAG_COMPRESSED), делаем дополнительные проверки
+    // 2) Если это compressed-блок (первый байт TAG_COMPRESSED), делаем
+    //    дополнительные проверки
     if !data.is_empty() && data[0] == TAG_COMPRESSED {
         // Создаём копию и МУТИРУЕМ её полностью
         let mut corrupted = data.to_vec();

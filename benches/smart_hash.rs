@@ -1,5 +1,5 @@
-// use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-// use zumic::{ArcBytes, SmartHash};
+// use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId,
+// Criterion}; use zumic::{ArcBytes, SmartHash};
 
 // fn prepare_kv_pairs(n: usize) -> Vec<(ArcBytes, ArcBytes)> {
 //     (0..n)
@@ -17,8 +17,8 @@
 
 //     for &size in [8, 32, 64, 128, 1024].iter() {
 //         let data = prepare_kv_pairs(size);
-//         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
-//             b.iter_batched(
+//         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b,
+// data| {             b.iter_batched(
 //                 || SmartHash::new(),
 //                 |mut sh| {
 //                     for (k, v) in data {
@@ -43,12 +43,12 @@
 //             sh.insert(k.clone(), v.clone());
 //         }
 
-//         group.bench_with_input(BenchmarkId::from_parameter(size), &sh, |b, sh| {
-//             let keys: Vec<_> = sh.keys();
+//         group.bench_with_input(BenchmarkId::from_parameter(size), &sh, |b,
+// sh| {             let keys: Vec<_> = sh.keys();
 //             b.iter(|| {
 //                 for key in &keys {
-//                     let _ = sh.clone().get(key); // клонируем для иммутабельности
-//                 }
+//                     let _ = sh.clone().get(key); // клонируем для
+// иммутабельности                 }
 //             });
 //         });
 //     }
@@ -62,8 +62,8 @@
 //     for &size in [8, 32, 64, 128, 1024].iter() {
 //         let data = prepare_kv_pairs(size);
 
-//         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b, data| {
-//             b.iter_batched(
+//         group.bench_with_input(BenchmarkId::from_parameter(size), &data, |b,
+// data| {             b.iter_batched(
 //                 || {
 //                     let mut sh = SmartHash::new();
 //                     for (k, v) in data {
@@ -94,8 +94,8 @@
 //             sh.insert(k.clone(), v.clone());
 //         }
 
-//         group.bench_with_input(BenchmarkId::from_parameter(size), &sh, |b, sh| {
-//             b.iter(|| {
+//         group.bench_with_input(BenchmarkId::from_parameter(size), &sh, |b,
+// sh| {             b.iter(|| {
 //                 for (k, v) in sh.clone().iter() {
 //                     criterion::black_box((k, v));
 //                 }

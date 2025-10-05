@@ -3,3 +3,61 @@ upper-case-acronyms-aggressive = true  # Применяйте строгий с�
 
 # Немного смягчены правила, чтобы избежать блокировки полезного кода.
 avoid-breaking-exported-api = false  # Не блокировать изменения в экспортируемых API
+
+# --- Безопасные/критичные запреты ---
+[[disallowed-methods]]
+path = "time::now"
+allow-invalid = true    # <- подавляет warning "does not refer to a reachable function"
+reason = "time::now небезопасен (RUSTSEC) — используйте std::time::Instant или chrono/explicit clocks."
+
+[[disallowed-methods]]
+path = "time::at"
+allow-invalid = true
+reason = "time::at небезопасен (RUSTSEC)."
+
+[[disallowed-methods]]
+path = "time::at_utc"
+allow-invalid = true
+reason = "time::at_utc небезопасен (RUSTSEC)."
+
+[[disallowed-methods]]
+path = "std::mem::transmute"
+reason = "transmute ломает систему типов и опасен; используйте safe-конверсии или строго ревью."
+
+# OpenSSL unsafe spots (известные RUSTSEC/issue)
+[[disallowed-methods]]
+path = "openssl::x509::store::X509StoreRef::objects"
+reason = "X509StoreRef::objects может быть небезопасен — избегайте, используйте безопасные обёртки."
+
+[[disallowed-methods]]
+path = "openssl::ssl::select_next_proto"
+reason = "select_next_proto может привести к use-after-free; избегайте."
+
+[[disallowed-types]]
+path = "openssl::bio::MemBio"
+reason = "MemBio::get_buf небезопасен, избегать прямого использования."
+
+[[disallowed-types]]
+path = "openssl::pkcs7::Pkcs7"
+reason = "Pkcs7 может вызывать небезопасные вызовы MemBio::get_buf."
+
+# --- Thread / runtime hooks ---
+[[disallowed-methods]]
+path = "std::thread::Builder::spawn"
+reason = "Потоки должны создаваться через проектную обёртку (чтобы инициализировать системные hooks/логирование/pprof)."
+
+[[disallowed-methods]]
+path = "tokio::runtime::builder::Builder::on_thread_start"
+reason = "Используй проектную обёртку для добавления хук-ов (иначе системные hook'и пропускаются)."
+
+[[disallowed-methods]]
+path = "tokio::runtime::builder::Builder::on_thread_stop"
+reason = "Используй проектную обёртку для добавления хук-ов (иначе системные hook'и пропускаются)."
+
+[[disallowed-methods]]
+path = "futures_executor::thread_pool::ThreadPoolBuilder::after_start"
+reason = "Используй проектную обёртку для корректной инициализации потоков."
+
+[[disallowed-methods]]
+path = "futures_executor::thread_pool::ThreadPoolBuilder::before_stop"
+reason = "Используй проектную обёртку для корректного завершения потоков."

@@ -36,7 +36,8 @@ pub struct CompactionConfig {
     pub compaction_check_interval: u64,
     /// Минимальный размер AOF-файла для запуска компакции (в байтах)
     pub min_file_size_threshold: u64,
-    /// Максимальный размер AOF-файла, после которого компакция запускается принудительно (в байтах)
+    /// Максимальный размер AOF-файла, после которого компакция запускается
+    /// принудительно (в байтах)
     pub max_file_size_threshold: u64,
     /// Минимальное количество операций для запуска компакции
     pub min_ops_threshold: usize,
@@ -471,7 +472,8 @@ impl CompactionManager {
         false
     }
 
-    /// Выполняет компакцию — создает новый компактный AOF-файл с актуальными данными.
+    /// Выполняет компакцию — создает новый компактный AOF-файл с актуальными
+    /// данными.
     fn perform_compaction(
         aof_path: &Path,
         _config: &CompactionConfig,
@@ -582,7 +584,8 @@ impl CompactionManager {
         Ok(())
     }
 
-    /// Записывает 32-битное беззнаковое целое в переданный писатель в формате big-endian.
+    /// Записывает 32-битное беззнаковое целое в переданный писатель в формате
+    /// big-endian.
     fn write_u32<W: Write>(
         w: &mut W,
         v: u32,
@@ -590,7 +593,8 @@ impl CompactionManager {
         w.write_all(&v.to_be_bytes())
     }
 
-    /// Записывает 64-битное беззнаковое целое в переданный писатель в формате big-endian.
+    /// Записывает 64-битное беззнаковое целое в переданный писатель в формате
+    /// big-endian.
     fn write_u64<W: Write>(
         w: &mut W,
         v: u64,
@@ -598,14 +602,16 @@ impl CompactionManager {
         w.write_all(&v.to_be_bytes())
     }
 
-    /// Читает 32-битное беззнаковое целое из переданного читателя в формате big-endian.
+    /// Читает 32-битное беззнаковое целое из переданного читателя в формате
+    /// big-endian.
     fn read_u32<R: Read>(r: &mut R) -> StoreResult<u32> {
         let mut buf = [0u8; 4];
         r.read_exact(&mut buf).map_err(StoreError::Io)?;
         Ok(u32::from_be_bytes(buf))
     }
 
-    /// Читает 64-битное беззнаковое целое из переданного читателя в формате big-endian.
+    /// Читает 64-битное беззнаковое целое из переданного читателя в формате
+    /// big-endian.
     fn read_u64<R: Read>(r: &mut R) -> StoreResult<u64> {
         let mut buf = [0u8; 8];
         r.read_exact(&mut buf).map_err(StoreError::Io)?;
@@ -638,16 +644,19 @@ impl Drop for CompactionManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{
         fs::File,
         sync::Arc,
         thread,
         time::{Duration, Instant},
     };
+
     use tempfile::tempdir;
 
-    /// Тест проверяет создание snapshot из одного индекса, затем загружает его в новый индекс.
+    use super::*;
+
+    /// Тест проверяет создание snapshot из одного индекса, затем загружает его
+    /// в новый индекс.
     #[test]
     fn test_create_and_load_snapshot() -> Result<(), StoreError> {
         let tmp = tempdir().unwrap();
@@ -661,7 +670,8 @@ mod tests {
         };
 
         let aof_path = tmp.path().join("aof.bin");
-        // создаём пустой файл AOF (compaction использует путь, но не требует содержимого для snapshot)
+        // создаём пустой файл AOF (compaction использует путь, но не требует
+        // содержимого для snapshot)
         File::create(&aof_path).unwrap();
 
         let index1 = Arc::new(ShardedIndex::new(crate::ShardingConfig::default()));
@@ -691,7 +701,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет стартуем ли фоновый воркер, триггерит компакцию, ждёт изменения метрик и файла aof.
+    /// Тест проверяет стартуем ли фоновый воркер, триггерит компакцию, ждёт
+    /// изменения метрик и файла aof.
     #[test]
     fn test_compaction_thread_trigger_writes_aof_and_metrics() -> Result<(), StoreError> {
         let tmp = tempdir().unwrap();

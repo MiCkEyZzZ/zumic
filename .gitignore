@@ -1,3 +1,6 @@
+# macOS системные файлы
+.DS_Store
+
 # Артефакты сборки Rust
 target/
 dist
@@ -15,9 +18,7 @@ book/
 .trunk
 *.iml
 out/
-
-# macOS системные файлы
-.DS_Store
+.devcontainer/
 
 # Логи и профили
 /logs
@@ -42,7 +43,6 @@ zumic.aof
 test_zdb_roundtrip.**
 
 # Разное
-out/
 debug/
 bin
 client

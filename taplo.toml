@@ -11,3 +11,25 @@ compact_inline_tables = false
 array_trailing_comma = true
 indent_string = "    "  # Отступ с 4 пробелами
 trailing_newline = true
+align_comments = true
+align_entries = false
+compact_entries = false
+inline_table_expand = true
+crlf = false
+
+reorder_keys = false
+reorder_arrays = false
+reorder_inline_tables = false
+
+# Исключения (не форматировать)
+# файлы/папки относительно корня workspace
+exclude = [
+  "target/**",
+  "book/**",
+  "docs/**",
+  "fuzz/**",
+  "node_modules/**",
+  "**/Cargo.lock",
+  ".venv/**",
+  ".git/**",
+]

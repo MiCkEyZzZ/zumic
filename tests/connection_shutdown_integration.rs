@@ -1,11 +1,11 @@
-use anyhow::Result;
 use std::{sync::Arc, time::Duration};
+
+use anyhow::Result;
 use tokio::{
     io::AsyncReadExt,
     net::{TcpListener, TcpStream},
     time::sleep,
 };
-
 use zumic::{
     network::connection::{ConnectionConfig, ConnectionManager},
     InMemoryStore, StorageEngine,
@@ -41,7 +41,8 @@ async fn connection_handler_shutdown_notify() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     };
 
-    // Клиентская future: подключиться, подождать, вызвать shutdown у менеджера, проверить сообщение
+    // Клиентская future: подключиться, подождать, вызвать shutdown у менеджера,
+    // проверить сообщение
     let manager_client = manager.clone();
     let client_fut = async move {
         let mut client = TcpStream::connect(local_addr).await?;

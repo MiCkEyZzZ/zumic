@@ -406,7 +406,8 @@ mod tests {
         active: bool,
     }
 
-    /// Тест проверяет создание сообщения из вектора байтов и корректность payload
+    /// Тест проверяет создание сообщения из вектора байтов и корректность
+    /// payload
     #[test]
     fn test_from_and_vec() {
         let ch = "news";
@@ -426,7 +427,8 @@ mod tests {
         assert_eq!(msg.payload, MessagePayload::Bytes(pl_bytes));
     }
 
-    /// Тест проверяет, что клонирование сообщения сохраняет указатели Arc и Bytes (zero-copy)
+    /// Тест проверяет, что клонирование сообщения сохраняет указатели Arc и
+    /// Bytes (zero-copy)
     #[test]
     fn clone_preserves_arc_and_bytes_zero_copy() {
         let msg1 = Message::new("chan", Bytes::from_static(b"x"));
@@ -459,7 +461,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что сообщение созданное через `new` и `from_static` с одинаковым каналом делят Arc
+    /// Тест проверяет, что сообщение созданное через `new` и `from_static` с
+    /// одинаковым каналом делят Arc
     #[test]
     fn mix_new_and_from_static() {
         let m1 = Message::new("kin", b"dzadza".to_vec());
@@ -527,7 +530,8 @@ mod tests {
         assert!(s.contains("dbg"));
     }
 
-    /// Тест проверяет клонирование сообщения с большим payload сохраняет zero-copy
+    /// Тест проверяет клонирование сообщения с большим payload сохраняет
+    /// zero-copy
     #[test]
     fn large_payload_clone_zero_copy() {
         let big = vec![0u8; 1_000_000];
@@ -555,7 +559,8 @@ mod tests {
         assert_eq!(m2.payload.len(), big.len());
     }
 
-    /// Тест проверяет сохранение указателя Arc при использовании Arc<str> канала
+    /// Тест проверяет сохранение указателя Arc при использовании Arc<str>
+    /// канала
     #[test]
     fn new_from_arc_str_retains_pointer() {
         let arc: Arc<str> = Arc::from("mychan");
@@ -563,7 +568,8 @@ mod tests {
         assert_eq!(&*arc, &*m.channel);
     }
 
-    /// Тест проверяет, что статические сообщения с одинаковым каналом используют один Arc
+    /// Тест проверяет, что статические сообщения с одинаковым каналом
+    /// используют один Arc
     #[test]
     fn static_messages_share_pointer() {
         let m1 = Message::from_static("stat", b"1");
@@ -574,7 +580,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что `new` и `from_static` с одинаковым именем канала делят Arc
+    /// Тест проверяет, что `new` и `from_static` с одинаковым именем канала
+    /// делят Arc
     #[test]
     fn new_and_from_static_share_pointer() {
         let m1 = Message::new("mix", b"kin".to_vec());
@@ -627,7 +634,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет создание сообщения из сериализуемого объекта и десериализацию
+    /// Тест проверяет создание сообщения из сериализуемого объекта и
+    /// десериализацию
     #[test]
     fn test_serializable_payload() {
         let test_data = TestStruct {

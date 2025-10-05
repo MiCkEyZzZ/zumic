@@ -89,7 +89,8 @@ impl Storage for InMemoryStore {
 
     /// Массовое получение значений по ключам.
     ///
-    /// Возвращает вектор опциональных значений, соответствующих переданным ключам.
+    /// Возвращает вектор опциональных значений, соответствующих переданным
+    /// ключам.
     fn mget(
         &self,
         keys: &[&Sds],
@@ -408,7 +409,8 @@ mod tests {
     }
 
     /// Тест: renamenx успешен.
-    /// Проверяет, что `renamenx` переименовывает, если целевой ключ отсутствует.
+    /// Проверяет, что `renamenx` переименовывает, если целевой ключ
+    /// отсутствует.
     #[test]
     fn test_renamenx_success() {
         let store = InMemoryStore::new();
@@ -548,7 +550,7 @@ mod tests {
         let results = store
             .geo_radius(&landmarks_key, 0.0, 0.0, 0.2, "km")
             .unwrap();
-        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+        let members: Vec<_> = results.iter().map(|(m, ..)| m.clone()).collect();
 
         assert!(members.contains(&"center".to_string()));
         assert!(members.contains(&"near".to_string()));
@@ -578,7 +580,7 @@ mod tests {
         let results = store
             .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
             .unwrap();
-        let members: Vec<_> = results.iter().map(|(m, _, _)| m.clone()).collect();
+        let members: Vec<_> = results.iter().map(|(m, ..)| m.clone()).collect();
 
         assert!(members.contains(&"origin".to_string()));
         assert!(members.contains(&"east".to_string()));

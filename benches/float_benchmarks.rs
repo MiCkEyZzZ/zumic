@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::{
     command::{DecrByFloatCommand, IncrByFloatCommand, SetFloatCommand},
     engine::{memory::InMemoryStore, store::StorageEngine},

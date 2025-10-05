@@ -1,8 +1,7 @@
-use bytes::Bytes;
 use std::hint::black_box;
 
+use bytes::Bytes;
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::Message;
 
 fn bench_new_string_vec(c: &mut Criterion) {

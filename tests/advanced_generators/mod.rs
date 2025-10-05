@@ -7,7 +7,6 @@ use proptest::{
     prelude::{any, prop, Just, Strategy},
     prop_oneof,
 };
-
 use zumic::{Dict, Hll, Sds, SkipList, Value, DENSE_SIZE};
 
 mod generators;
@@ -18,7 +17,8 @@ pub fn deeply_nested_strategy() -> impl Strategy<Value = Value> {
     // Создаёт структуры типа Array[Array[Array[...]]] глубиной до 100
     let leaf = Just(Value::Int(42));
 
-    // макс. глубина, максимум узлов, только один элемент на уровень для макс. глубины.
+    // макс. глубина, максимум узлов, только один элемент на уровень для макс.
+    // глубины.
     leaf.prop_recursive(100, 1000, 1, |inner| Just(Value::Array(vec![inner])))
 }
 

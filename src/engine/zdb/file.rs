@@ -1,4 +1,4 @@
-use crate::error::version::VersionError;
+use crate::ZdbVersionError;
 
 /// «Магическое» начало файла: ASCII-буквы «ZDB».
 pub const FILE_MAGIC: &[u8; 3] = b"ZDB";
@@ -104,8 +104,8 @@ impl std::fmt::Display for FormatVersion {
     }
 }
 
-impl From<VersionError> for std::io::Error {
-    fn from(err: VersionError) -> Self {
+impl From<ZdbVersionError> for std::io::Error {
+    fn from(err: ZdbVersionError) -> Self {
         std::io::Error::new(std::io::ErrorKind::InvalidData, err)
     }
 }
@@ -181,11 +181,11 @@ impl VersionUtils {
     pub fn validate_compatibility(
         reader_version: FormatVersion,
         dump_version: FormatVersion,
-    ) -> Result<CompatibilityInfo, VersionError> {
+    ) -> Result<CompatibilityInfo, ZdbVersionError> {
         let info = CompatibilityInfo::check(reader_version, dump_version);
 
         if !info.can_read {
-            return Err(VersionError::IncompatibleVersion {
+            return Err(ZdbVersionError::IncompatibleVersion {
                 reader: reader_version,
                 dump: dump_version,
             });
@@ -218,14 +218,14 @@ impl VersionUtils {
 }
 
 impl TryFrom<u8> for FormatVersion {
-    type Error = VersionError;
+    type Error = ZdbVersionError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(FormatVersion::Legacy),
             1 => Ok(FormatVersion::V1),
             2 => Ok(FormatVersion::V2),
-            other => Err(VersionError::UnsupportedVersion {
+            other => Err(ZdbVersionError::UnsupportedVersion {
                 found: other,
                 supported: FormatVersion::supported_versions(),
             }),
@@ -253,7 +253,8 @@ mod tests {
         assert_eq!(FormatVersion::current(), FormatVersion::V1);
     }
 
-    /// Тест проверяет преобразование из u8 в FormatVersion и обработку некорректных значений.
+    /// Тест проверяет преобразование из u8 в FormatVersion и обработку
+    /// некорректных значений.
     #[test]
     fn test_version_try_from() {
         assert_eq!(FormatVersion::try_from(0).unwrap(), FormatVersion::Legacy);
@@ -263,7 +264,7 @@ mod tests {
         let err = FormatVersion::try_from(99).unwrap_err();
         assert!(matches!(
             err,
-            VersionError::UnsupportedVersion { found: 99, .. }
+            ZdbVersionError::UnsupportedVersion { found: 99, .. }
         ));
     }
 
@@ -285,7 +286,8 @@ mod tests {
         assert!(FormatVersion::V2.can_read(FormatVersion::V2));
     }
 
-    /// Тест проверяет совместимость записи: можно писать только в свою версию или более новую.
+    /// Тест проверяет совместимость записи: можно писать только в свою версию
+    /// или более новую.
     #[test]
     fn test_version_write_compatibility() {
         // Можем писать только в свою версию или более новую
@@ -398,7 +400,7 @@ mod tests {
     /// Тест проверяет форматирование ошибок типа VersionError.
     #[test]
     fn test_version_error_display() {
-        let err = VersionError::UnsupportedVersion {
+        let err = ZdbVersionError::UnsupportedVersion {
             found: 99,
             supported: vec![FormatVersion::V1, FormatVersion::V2],
         };
@@ -411,7 +413,7 @@ mod tests {
     /// Тест проверяет преобразование VersionError в io::Error.
     #[test]
     fn test_version_error_conversion() {
-        let version_err = VersionError::UnsupportedVersion {
+        let version_err = ZdbVersionError::UnsupportedVersion {
             found: 99,
             supported: vec![FormatVersion::V1],
         };

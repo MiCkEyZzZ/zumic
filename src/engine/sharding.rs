@@ -239,7 +239,8 @@ impl<V> ShardedIndex<V> {
             ));
         }
 
-        // Seed для SipHash — генерируем случайно (можно сделать детерминированным позже).
+        // Seed для SipHash — генерируем случайно (можно сделать детерминированным
+        // позже).
         let hasher_seed = (fastrand::u64(..), fastrand::u64(..));
 
         Self {
@@ -380,7 +381,8 @@ impl<V> ShardedIndex<V> {
         }
     }
 
-    /// Множественное чтение: возвращает Vec<Option<V>> в том же порядке, что и keys.
+    /// Множественное чтение: возвращает Vec<Option<V>> в том же порядке, что и
+    /// keys.
     pub fn mget(
         &self,
         keys: &[&[u8]],
@@ -537,7 +539,8 @@ impl Clone for ShardMetrics {
 mod tests {
     use super::*;
 
-    /// Тест проверяет, что один и тот же ключ всегда попадает в один и тот же шард
+    /// Тест проверяет, что один и тот же ключ всегда попадает в один и тот же
+    /// шард
     #[test]
     fn test_sharding_consistency() {
         let config = ShardingConfig {
@@ -554,7 +557,8 @@ mod tests {
         assert_eq!(shard1, shard2);
     }
 
-    /// Тест проверяет равномерность распределения большого количества ключей по шардам
+    /// Тест проверяет равномерность распределения большого количества ключей по
+    /// шардам
     #[test]
     fn test_key_distribution() {
         let config = ShardingConfig {
@@ -577,7 +581,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет корректность метрик при выполнении операций чтения и записи
+    /// Тест проверяет корректность метрик при выполнении операций чтения и
+    /// записи
     #[test]
     fn test_shard_metrics() {
         let config = ShardingConfig {
@@ -670,7 +675,8 @@ mod tests {
         assert_eq!(stats.balance_ratio(), 2.0);
     }
 
-    /// Тест проверяет корректность удаления ключей и обработку повторного удаления
+    /// Тест проверяет корректность удаления ключей и обработку повторного
+    /// удаления
     #[test]
     fn test_remove_key() {
         let config = ShardingConfig::default();
@@ -691,7 +697,8 @@ mod tests {
         assert!(!index.remove(b"foo"));
     }
 
-    /// Тест проверяет работу с пограничными случаями (пустой ключ, длинный ключ, пустые mset/mget)
+    /// Тест проверяет работу с пограничными случаями (пустой ключ, длинный
+    /// ключ, пустые mset/mget)
     #[test]
     fn test_edge_cases() {
         let config = ShardingConfig::default();

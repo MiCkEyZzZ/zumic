@@ -566,18 +566,19 @@ impl Default for ConnectionConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::InMemoryStore;
-
-    use super::*;
     use std::sync::Arc;
+
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
         time::Duration,
     };
 
-    /// Тест проверяет, что обработчик соединения корректно отвечает на команду `PING`
-    /// и завершает соединение после получения команды `QUIT`.
+    use super::*;
+    use crate::InMemoryStore;
+
+    /// Тест проверяет, что обработчик соединения корректно отвечает на команду
+    /// `PING` и завершает соединение после получения команды `QUIT`.
     #[tokio::test(flavor = "current_thread")]
     #[allow(clippy::arc_with_non_send_sync)]
     async fn handler_run_ping_and_quit() -> anyhow::Result<()> {
@@ -623,7 +624,8 @@ mod tests {
             Ok::<(), anyhow::Error>(())
         };
 
-        // Запускаем оба future параллельно на одном (current_thread) рантайме — не требуется Send.
+        // Запускаем оба future параллельно на одном (current_thread) рантайме — не
+        // требуется Send.
         tokio::try_join!(server_fut, client_fut)?;
         Ok(())
     }

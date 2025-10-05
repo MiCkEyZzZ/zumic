@@ -101,8 +101,10 @@ impl Manager {
     ///
     /// Вызывающий должен гарантировать, что:
     /// - Загружаемая библиотека безопасна.
-    /// - Она экспортирует корректную функцию `create_module()` и использует совместимую ABI.
-    /// - Модуль не вызывает неопределённого поведения при инициализации или вызове `handle`.
+    /// - Она экспортирует корректную функцию `create_module()` и использует
+    ///   совместимую ABI.
+    /// - Модуль не вызывает неопределённого поведения при инициализации или
+    ///   вызове `handle`.
     pub unsafe fn add_dynamic(
         &mut self,
         path: PathBuf,
@@ -167,9 +169,10 @@ impl Default for Manager {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
+
     use super::*;
     use crate::{command_registry::CommandRegistry, db_context::DbContext, Module};
-    use std::sync::{Arc, Mutex};
 
     // Заглушка для Module для тестов
     struct DummyModule {
@@ -242,7 +245,8 @@ mod tests {
         assert!(manager.init_all(&mut registry, &mut ctx).is_ok());
 
         // Можно проверить, что init был вызван, если у DummyModule флаги
-        // Но для этого нужно вернуть объект DummyModule наружу или хранить Arc флаги в тесте
+        // Но для этого нужно вернуть объект DummyModule наружу или хранить Arc
+        // флаги в тесте
     }
 
     /// Тест проверяет, что вызов `handle` у модуля через менеджер работает

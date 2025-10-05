@@ -1,8 +1,7 @@
 //! Команды для работы с хэш-таблицами (HASH) в Zumic.
 //!
-//! Реализует команды HSET, HGET, HDEL, HGETALL для управления полями
-//! и значениями в хешах.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! Реализует команды HSET, HGET, HDEL, HGETALL для управления полями и
+//! значениями в хешах. Каждая команда реализует трейт [`CommandExecute`].
 
 use crate::{CommandExecute, QuickList, Sds, SmartHash, StorageEngine, StoreError, Value};
 
@@ -129,7 +128,8 @@ impl CommandExecute for HDelCommand {
 /// * `key` — ключ хеша.
 ///
 /// # Возвращает
-/// Список всех полей и значений (как чередующиеся элементы списка) или `Null`, если хэш не найден.
+/// Список всех полей и значений (как чередующиеся элементы списка) или `Null`,
+/// если хэш не найден.
 #[derive(Debug)]
 pub struct HGetAllCommand {
     pub key: String,
@@ -165,7 +165,8 @@ mod tests {
         StorageEngine::Memory(InMemoryStore::new())
     }
 
-    /// Тестирует установку поля в хэш с помощью HSet и получение его с помощью HGet
+    /// Тестирует установку поля в хэш с помощью HSet и получение его с помощью
+    /// HGet
     #[test]
     fn test_hset_and_hget() {
         let mut store = create_store();
@@ -221,7 +222,8 @@ mod tests {
         }
     }
 
-    /// Проверяет, что HDel удаляет поле, и что оно действительно исчезает из хеша
+    /// Проверяет, что HDel удаляет поле, и что оно действительно исчезает из
+    /// хеша
     #[test]
     fn test_hdel_command() {
         let mut store = create_store();
@@ -257,7 +259,8 @@ mod tests {
         }
     }
 
-    /// Проверяет, что HGetAll возвращает все поля и значения хеша в виде списка строк "поле: значение"
+    /// Проверяет, что HGetAll возвращает все поля и значения хеша в виде списка
+    /// строк "поле: значение"
     #[test]
     fn test_hgetall_command() {
         let mut store = create_store();

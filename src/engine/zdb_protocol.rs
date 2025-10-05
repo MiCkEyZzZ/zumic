@@ -40,15 +40,16 @@ pub fn load_from_zdb(
 /// Новая функция — читает пары <key, value> из произвольного `Read`.
 /// Удобна для unit-тестов и для fuzzing (можно подавать Cursor).
 ///
-/// Использует `read_value_with_version` если он доступен (чтобы фаззить разные версии),
-/// но по умолчанию вызывает `read_value` (текущее поведение).
+/// Использует `read_value_with_version` если он доступен (чтобы фаззить разные
+/// версии), но по умолчанию вызывает `read_value` (текущее поведение).
 pub fn load_from_reader<R: Read>(
     store: &mut InMemoryStore,
     r: &mut R,
 ) -> io::Result<()> {
     loop {
         // Читаем ключ или выходим при EOF
-        // Сначала пробуем версионный reader (если экспортирован), иначе fallback на read_value.
+        // Сначала пробуем версионный reader (если экспортирован), иначе fallback на
+        // read_value.
         let key_val = match read_value_with_version(r, crate::engine::zdb::file::FormatVersion::V1)
             .or_else(|_| read_value(r))
         {
@@ -92,12 +93,13 @@ pub fn load_from_reader<R: Read>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Sds;
     use std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    use super::*;
+    use crate::Sds;
 
     #[test]
     fn test_zdb_save_and_load_roundtrip() {

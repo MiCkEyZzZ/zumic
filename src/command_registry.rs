@@ -50,9 +50,8 @@ impl Default for CommandRegistry {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Sds, Value};
-
     use super::*;
+    use crate::{Sds, Value};
 
     /// Тест проверяет базовую регистрацию и вызов простой команды (`ping`),
     /// возвращающей предопределённый результат.
@@ -84,8 +83,9 @@ mod tests {
         assert_eq!(result, b"echo: hello");
     }
 
-    /// Тест проверяет, что команды могут взаимодействовать с контекстом базы данных (`DbContext`):
-    /// одна команда сохраняет значение, другая — извлекает его.
+    /// Тест проверяет, что команды могут взаимодействовать с контекстом базы
+    /// данных (`DbContext`): одна команда сохраняет значение, другая —
+    /// извлекает его.
     #[test]
     fn test_command_can_use_db_context() {
         let mut registry = CommandRegistry::new();
@@ -116,8 +116,8 @@ mod tests {
         assert_eq!(value, Value::Str(Sds::from(b"abc123".as_ref())));
     }
 
-    /// Тест проверяет, что при попытке вызвать неизвестную команду происходит паника
-    /// с ожидаемым сообщением об ошибке.
+    /// Тест проверяет, что при попытке вызвать неизвестную команду происходит
+    /// паника с ожидаемым сообщением об ошибке.
     #[test]
     #[should_panic(expected = "Unknown command: missing")]
     fn test_call_unknown_command_panics() {

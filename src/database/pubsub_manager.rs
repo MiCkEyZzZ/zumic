@@ -150,11 +150,13 @@ impl Default for PubSubManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::time::Duration;
+
     use bytes::Bytes;
     use serde_json::json;
-    use std::time::Duration;
     use tokio::time::timeout;
+
+    use super::*;
 
     /// Тест проверяет, что публикация в канал доставляется подписчику.
     #[tokio::test]

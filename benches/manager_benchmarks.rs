@@ -1,7 +1,5 @@
-use tokio::runtime::Runtime;
-
 use criterion::{criterion_group, criterion_main, Criterion};
-
+use tokio::runtime::Runtime;
 use zumic::auth::AuthManager;
 
 fn bench_auth_manager(c: &mut Criterion) {

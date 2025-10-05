@@ -1,8 +1,7 @@
 //! Команды для работы со строками (String) в Zumic.
 //!
 //! Реализует команды STRLEN, APPEND, GETRANGE для управления строковыми
-//! значениями по ключу.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! значениями по ключу. Каждая команда реализует трейт [`CommandExecute`].
 
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
@@ -150,7 +149,8 @@ mod tests {
         StorageEngine::Memory(InMemoryStore::new())
     }
 
-    /// Тестирует, что команда `StrLenCommand` правильно возвращает длину существующей строки.
+    /// Тестирует, что команда `StrLenCommand` правильно возвращает длину
+    /// существующей строки.
     #[test]
     fn test_str_len_command_existing_key() {
         let mut store = create_store();
@@ -166,8 +166,8 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
-    /// Тестирует, что команда `AppendCommand` возвращает ошибку при попытке добавления данных
-    /// к ключу неверного типа.
+    /// Тестирует, что команда `AppendCommand` возвращает ошибку при попытке
+    /// добавления данных к ключу неверного типа.
     #[test]
     fn test_append_command_invalid_type() {
         let mut store = create_store();
@@ -181,8 +181,8 @@ mod tests {
         assert!(matches!(result, Err(StoreError::InvalidType)));
     }
 
-    /// Тестирует, что команда `AppendCommand` корректно обрабатывает добавление пустой строки,
-    /// результатом чего будет длина 0.
+    /// Тестирует, что команда `AppendCommand` корректно обрабатывает добавление
+    /// пустой строки, результатом чего будет длина 0.
     #[test]
     fn test_append_empty_string() {
         let mut store = create_store();
@@ -193,7 +193,8 @@ mod tests {
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
     }
 
-    /// Тестирует, что команда `StrLenCommand` возвращает 0 для несуществующего ключа.
+    /// Тестирует, что команда `StrLenCommand` возвращает 0 для несуществующего
+    /// ключа.
     #[test]
     fn test_str_len_command_non_existing_key() {
         let mut store = create_store();
@@ -205,8 +206,8 @@ mod tests {
         assert_eq!(result, Value::Int(0));
     }
 
-    /// Тестирует, что команда `AppendCommand` правильно добавляет данные к существующему
-    /// строковому ключу.
+    /// Тестирует, что команда `AppendCommand` правильно добавляет данные к
+    /// существующему строковому ключу.
     #[test]
     fn test_append_command_existing_key() {
         let mut store = create_store();
@@ -224,8 +225,8 @@ mod tests {
         assert_eq!(result, Value::Int(11));
     }
 
-    /// Тестирует, что команда `AppendCommand` корректно создаёт новый ключ при добавлении данных
-    /// к несуществующему ключу.
+    /// Тестирует, что команда `AppendCommand` корректно создаёт новый ключ при
+    /// добавлении данных к несуществующему ключу.
     #[test]
     fn test_append_command_non_existing_key() {
         let mut store = create_store();
@@ -239,8 +240,8 @@ mod tests {
         assert_eq!(result, Value::Int(5));
     }
 
-    /// Тестирует, что команда `GetRangeCommand` корректно возвращает подстроку из сохранённого
-    /// значения.
+    /// Тестирует, что команда `GetRangeCommand` корректно возвращает подстроку
+    /// из сохранённого значения.
     #[test]
     fn test_get_range_command_existing_key() {
         let mut store = create_store();
@@ -262,7 +263,8 @@ mod tests {
         assert_eq!(result, Value::Str(Sds::from_str("hello")));
     }
 
-    /// Тестирует, что команда `GetRangeCommand` возвращает `Null`, если ключ не существует.
+    /// Тестирует, что команда `GetRangeCommand` возвращает `Null`, если ключ не
+    /// существует.
     #[test]
     fn test_get_range_command_non_existing_key() {
         let mut store = create_store();
@@ -277,8 +279,8 @@ mod tests {
         assert_eq!(result, Value::Null);
     }
 
-    /// Тестирует, что команда `GetRangeCommand` возвращает ошибку, если значение ключа имеет
-    /// неверный тип.
+    /// Тестирует, что команда `GetRangeCommand` возвращает ошибку, если
+    /// значение ключа имеет неверный тип.
     #[test]
     fn test_get_range_command_invalid_type() {
         let mut store = create_store();
@@ -298,7 +300,8 @@ mod tests {
 
         // Проверяем, что ошибка соответствует InvalidType
         if let Err(StoreError::InvalidType) = result {
-            // Ожидаем ошибку InvalidType, так как значение для ключа `anton` не является строкой
+            // Ожидаем ошибку InvalidType, так как значение для ключа `anton` не
+            // является строкой
         } else {
             panic!("Expected InvalidType error, but got a different error");
         }

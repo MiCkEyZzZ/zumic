@@ -35,7 +35,8 @@ pub enum AofOp {
 /// Определяет, когда именно сбрасывать данные из буфера на диск.
 #[derive(Debug, Clone, Copy)]
 pub enum SyncPolicy {
-    /// Сбрасывать буфер после каждой команды (максимальная надёжность, но медленно)
+    /// Сбрасывать буфер после каждой команды (максимальная надёжность, но
+    /// медленно)
     Always,
     /// Сбрасывать в фоновом потоке каждую секунду
     EverySec,
@@ -78,7 +79,8 @@ pub struct AofMetrics {
 }
 
 /// Основная структура журнала AOF (Append-Only File).
-/// Поддерживает буферизованную запись, восстановление, компактацию и integrity проверки.
+/// Поддерживает буферизованную запись, восстановление, компактацию и integrity
+/// проверки.
 pub struct AofLog {
     /// Буферизованный writer, защищённый мьютексом для потокобезопасности.
     writer: Arc<Mutex<BufWriter<File>>>,
@@ -131,7 +133,7 @@ impl AofLog {
         policy: SyncPolicy,
         corruption_policy: CorruptionPolicy,
     ) -> io::Result<Self> {
-        // 1) Читаем или создаём файл для проверки заголовка и для replay.
+        // Читаем или создаём файл для проверки заголовка и для replay.
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -198,7 +200,7 @@ impl AofLog {
             metrics_last_integrity_check: AtomicU64::new(0),
         };
 
-        // 4) Если политика EverySec — запускаем фоновый флешер
+        // Если политика EverySec — запускаем фоновый флешер
         if let SyncPolicy::EverySec = policy {
             let (tx, rx): (Sender<()>, Receiver<()>) = mpsc::channel();
             log.flusher_stop_tx = Some(tx);
@@ -229,7 +231,8 @@ impl AofLog {
     /// Добавляет в журнал команду `SET` с ключом и значением.
     /// Формат: [AofOp::Set][checksum][key_len][key][val_len][val].
     ///
-    /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
+    /// В зависимости от политики синхронизации вызывает flush немедленно или
+    /// отложено.
     ///
     /// # Аргументы
     /// - `key` — ключ.
@@ -288,7 +291,8 @@ impl AofLog {
     /// Добавляет в журнал команду `DEL` с ключом.
     /// Формат (AOF2): [AofOp::Del][checksum][key_len][key]
     ///
-    /// В зависимости от политики синхронизации вызывает flush немедленно или отложено.
+    /// В зависимости от политики синхронизации вызывает flush немедленно или
+    /// отложено.
     ///
     /// # Аргументы
     /// - `key` — ключ, который нужно удалить.
@@ -345,7 +349,8 @@ impl AofLog {
     /// - `f` — функция, принимающая тип операции, ключ и значение (или None).
     ///
     /// # Ошибки
-    /// Возвращает ошибку при чтении файла или некорректных данных (в зависимости от CorruptionPolicy).
+    /// Возвращает ошибку при чтении файла или некорректных данных (в
+    /// зависимости от CorruptionPolicy).
     pub fn replay<F>(
         &mut self,
         f: F,
@@ -383,7 +388,8 @@ impl AofLog {
     ///
     /// # Аргументы
     /// - `path` — путь к AOF-файлу.
-    /// - `live` — итерируемое множество пар (ключ, значение), представляющее актуальное состояние.
+    /// - `live` — итерируемое множество пар (ключ, значение), представляющее
+    ///   актуальное состояние.
     ///
     /// # Ошибки
     /// Возвращает ошибку при записи или замене файла.
@@ -640,7 +646,8 @@ impl AofLog {
 
     /// Адаптивно подстраивает размер батча для flush:
     ///
-    /// - Если активности не было > 5 секунд, уменьшает batch в 2 раза (не ниже 4).
+    /// - Если активности не было > 5 секунд, уменьшает batch в 2 раза (не ниже
+    ///   4).
     /// - При активности < 1 секунды назад может увеличить (не реализовано).
     ///
     /// Используется только при политике `Always`.
@@ -999,11 +1006,13 @@ impl Drop for AofLog {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::NamedTempFile;
 
-    /// Вспомогательная функция для проверки append_set и append_del с последующим воспроизведением
-    /// в соответствии с заданной политикой синхронизации.
+    use super::*;
+
+    /// Вспомогательная функция для проверки append_set и append_del с
+    /// последующим воспроизведением в соответствии с заданной политикой
+    /// синхронизации.
     fn run_append_replay(policy: SyncPolicy) -> io::Result<()> {
         let temp_file = NamedTempFile::new()?;
         let path = temp_file.path();
@@ -1031,25 +1040,29 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::Always
+    /// Тест проверяет поведение добавления и воспроизведения с помощью
+    /// SyncPolicy::Always
     #[test]
     fn test_always_policy() {
         run_append_replay(SyncPolicy::Always).unwrap();
     }
 
-    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::EverySec
+    /// Тест проверяет поведение добавления и воспроизведения с помощью
+    /// SyncPolicy::EverySec
     #[test]
     fn test_everysec_policy() {
         run_append_replay(SyncPolicy::EverySec).unwrap();
     }
 
-    /// Тест проверяет поведение добавления и воспроизведения с помощью SyncPolicy::No
+    /// Тест проверяет поведение добавления и воспроизведения с помощью
+    /// SyncPolicy::No
     #[test]
     fn test_no_policy() {
         run_append_replay(SyncPolicy::No).unwrap();
     }
 
-    /// Тест проверяет несколько операций SET при всех политиках синхронизации и проверяет порядок воспроизведения.
+    /// Тест проверяет несколько операций SET при всех политиках синхронизации и
+    /// проверяет порядок воспроизведения.
     #[test]
     fn test_append_multiple_set_under_all_policies() {
         for policy in &[SyncPolicy::Always, SyncPolicy::EverySec, SyncPolicy::No] {
@@ -1078,8 +1091,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что `rewrite()` сжимает AOF, сохраняя только последние операции SET и
-    /// удаляя перезаписанные или удаленные ключи.
+    /// Тест проверяет, что `rewrite()` сжимает AOF, сохраняя только последние
+    /// операции SET и удаляя перезаписанные или удаленные ключи.
     #[test]
     fn test_rewrite_compacts_log() -> io::Result<()> {
         // Create AOF with duplicate keys and deletions
@@ -1111,7 +1124,8 @@ mod tests {
         let mut clog = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
         clog.rewrite(&path, live_map.clone().into_iter())?;
 
-        // После перезаписи журнал должен содержать только фактический SET для каждого ключа
+        // После перезаписи журнал должен содержать только фактический SET для каждого
+        // ключа
         let mut seq = Vec::new();
         let mut rlog2 = AofLog::open(&path, SyncPolicy::Always, CorruptionPolicy::Log)?;
         rlog2.replay(|op, key, val| seq.push((op, key, val)))?;
@@ -1127,7 +1141,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет, что метрики операций и flush корректно считаются при SyncPolicy::Always.
+    /// Тест проверяет, что метрики операций и flush корректно считаются при
+    /// SyncPolicy::Always.
     #[test]
     fn test_metrics_always_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;
@@ -1169,7 +1184,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет, что при SyncPolicy::No flush не происходит автоматически.
+    /// Тест проверяет, что при SyncPolicy::No flush не происходит
+    /// автоматически.
     #[test]
     fn test_metrics_no_policy() -> io::Result<()> {
         let temp = NamedTempFile::new()?;

@@ -8,7 +8,6 @@ use std::{
 };
 
 use proptest::{collection::vec, prop_assert, prop_assert_eq, proptest, test_runner::Config};
-
 use zumic::{
     engine::{read_value, write_value},
     Sds, Value, DENSE_SIZE,
@@ -221,10 +220,11 @@ mod stress_unit_tests {
 /// Benchmark тесты (требует `cargo +nightly bench`)
 #[cfg(test)]
 mod benchmarks {
+    use std::time::{Duration, Instant};
+
     use zumic::Sds;
 
     use super::*;
-    use std::time::{Duration, Instant};
 
     #[test]
     fn benchmark_encode_decode_speed() {

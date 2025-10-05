@@ -1,5 +1,6 @@
-use bytes::Bytes;
 use std::borrow::Cow;
+
+use bytes::Bytes;
 
 use crate::{
     network::zsp::{
@@ -7,14 +8,14 @@ use crate::{
         protocol::command::{Command as ZspCommand, PubSubMessage},
     },
     pubsub::{Message, MessageMetadata, MessagePayload},
-    RecvError,
+    RecvError, ZspDecodeError, ZspEncodeError,
 };
 
 /// Ошибки интеграции ZSP
 #[derive(Debug)]
 pub enum ZspIntegrationError {
-    Encode(crate::EncodeError),
-    Decode(crate::DecodeError),
+    Encode(ZspEncodeError),
+    Decode(ZspDecodeError),
     Serialization(String),
 }
 
@@ -276,14 +277,14 @@ pub fn decode_command(data: &mut Bytes) -> Result<Option<PubSubCommand>, RecvErr
     Ok(None)
 }
 
-impl From<crate::DecodeError> for RecvError {
-    fn from(err: crate::DecodeError) -> Self {
+impl From<crate::ZspDecodeError> for RecvError {
+    fn from(err: crate::ZspDecodeError) -> Self {
         RecvError::from(ZspIntegrationError::Decode(err))
     }
 }
 
-impl From<crate::EncodeError> for RecvError {
-    fn from(err: crate::EncodeError) -> Self {
+impl From<crate::ZspEncodeError> for RecvError {
+    fn from(err: crate::ZspEncodeError) -> Self {
         RecvError::from(ZspIntegrationError::Encode(err))
     }
 }
@@ -499,10 +500,12 @@ fn extract_binary_string(frame: &ZspFrame) -> Result<Vec<u8>, ZspIntegrationErro
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
 
-    /// Тест проверяет, что сообщение корректно кодируется и декодируется (roundtrip)
+    use super::*;
+
+    /// Тест проверяет, что сообщение корректно кодируется и декодируется
+    /// (roundtrip)
     #[test]
     fn test_message_roundtrip() {
         let original_msg = Message::from_string("test_channel", "Hello, World!")
@@ -587,7 +590,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет кодирование и декодирование PUBLISH команды с расширенным форматом
+    /// Тест проверяет кодирование и декодирование PUBLISH команды с расширенным
+    /// форматом
     #[test]
     fn test_publish_command_enhanced_format() {
         let channel = "test_channel";
@@ -609,7 +613,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет декодирование PUBLISH команды в устаревшем (legacy) формате
+    /// Тест проверяет декодирование PUBLISH команды в устаревшем (legacy)
+    /// формате
     #[test]
     fn test_publish_command_legacy_format() {
         // Имитировать устаревший формат вручную

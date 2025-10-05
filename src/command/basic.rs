@@ -1,7 +1,7 @@
 //! Базовые команды key-value для Zumic: SET, GET, DEL, EXISTS, MSET, MGET и др.
 //!
-//! Реализация основных команд для работы с ключами и значениями в хранилище Zumic.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! Реализация основных команд для работы с ключами и значениями в хранилище
+//! Zumic. Каждая команда реализует трейт [`CommandExecute`].
 
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
@@ -94,7 +94,8 @@ impl CommandExecute for ExistsCommand {
     }
 }
 
-/// Команда SETNX — устанавливает значение по ключу, только если ключ не существует.
+/// Команда SETNX — устанавливает значение по ключу, только если ключ не
+/// существует.
 ///
 /// # Поля
 /// * `key` — ключ, по которому сохраняется значение.
@@ -162,8 +163,8 @@ impl CommandExecute for MGetCommand {
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        // 1. Сначала переводим все String → Sds и храним их,
-        //    чтобы ссылки на них были валидны
+        // 1. Сначала переводим все String → Sds и храним их, чтобы ссылки на них были
+        //    валидны
         let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
 
         // 2. Собираем Vec<&Sds> из уже существующих Sds
@@ -213,7 +214,8 @@ impl CommandExecute for RenameCommand {
     }
 }
 
-/// Команда RENAMENX — переименовывает ключ, только если новый ключ не существует.
+/// Команда RENAMENX — переименовывает ключ, только если новый ключ не
+/// существует.
 ///
 /// # Поля
 /// * `from` — исходный ключ.
@@ -550,10 +552,12 @@ mod tests {
         assert_eq!(get_result_old.unwrap(), Value::Null);
     }
 
-    /// This test ensures that the `RenameNxCommand` works as expected when renaming a key to a new key name.
-    /// The `RenameNxCommand` only renames the key if the target key does not already exist.
-    /// It first adds a key, executes the rename operation, and verifies that the new key exists with the original value,
-    /// and that the old key is deleted successfully.
+    /// This test ensures that the `RenameNxCommand` works as expected when
+    /// renaming a key to a new key name. The `RenameNxCommand` only renames
+    /// the key if the target key does not already exist. It first adds a
+    /// key, executes the rename operation, and verifies that the new key exists
+    /// with the original value, and that the old key is deleted
+    /// successfully.
     #[test]
     fn test_renamenx() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());
@@ -591,9 +595,12 @@ mod tests {
         assert_eq!(get_result_old.unwrap(), Value::Null);
     }
 
-    /// This test ensures that the `RenameNxCommand` works as expected when renaming a key only if the target key does not already exist.
-    /// It first adds a key, attempts to rename it with `RenameNxCommand` (where the target key does not exist),
-    /// and verifies that the key is successfully renamed. It then checks that the old key no longer exists and the new key is present.
+    /// This test ensures that the `RenameNxCommand` works as expected when
+    /// renaming a key only if the target key does not already exist.
+    /// It first adds a key, attempts to rename it with `RenameNxCommand` (where
+    /// the target key does not exist), and verifies that the key is
+    /// successfully renamed. It then checks that the old key no longer exists
+    /// and the new key is present.
     #[test]
     fn test_rename_nx_key_not_exists() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());
@@ -631,8 +638,9 @@ mod tests {
         assert_eq!(get_result_new.unwrap(), Value::Str(Sds::from_str("value1")));
     }
 
-    /// This test ensures that the `FlushDbCommand` properly clears all keys from the database.
-    /// It first adds two keys, executes the flush command, and then checks that both keys have been removed.
+    /// This test ensures that the `FlushDbCommand` properly clears all keys
+    /// from the database. It first adds two keys, executes the flush
+    /// command, and then checks that both keys have been removed.
     #[test]
     fn test_flushdb() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());

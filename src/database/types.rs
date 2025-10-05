@@ -3,12 +3,11 @@ use std::{collections::HashSet, io::Cursor};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
+use super::{Bitmap, Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
 use crate::{
     engine::{decode, encode},
     StoreError, StoreResult,
 };
-
-use super::{Bitmap, Dict, Hll, QuickList, Sds, SkipList, SmartHash, StreamEntry};
 
 /// Представляет универсальное значение в движке хранения данных.
 ///
@@ -48,7 +47,8 @@ pub enum Value {
     },
     /// Множество уникальных строковых элементов.
     Set(HashSet<Sds>),
-    /// Структура HyperLogLog для приблизительного подсчёта количества уникальных элементов.
+    /// Структура HyperLogLog для приблизительного подсчёта количества
+    /// уникальных элементов.
     HyperLogLog(Box<Hll>),
     /// Поток записей, каждая из которых идентифицируется ID и набором полей.
     SStream(Vec<StreamEntry>),

@@ -1,11 +1,14 @@
 //! Zumic — высокопроизводительный движок хранения ключ-значение в памяти.
 //!
 //! Основные модули:
-//! - `auth` — аутентификация и контроль доступа (пользователи, пароли, правила доступа)
+//! - `auth` — аутентификация и контроль доступа (пользователи, пароли, правила
+//!   доступа)
 //! - `command` — разбор и выполнение команд (SET, GET, INCR и др.)
 //! - `config` — загрузка конфигурации сервера
-//! - `database` — встроенные структуры данных (Dict, SkipList, QuickList, SDS и др.)
-//! - `engine` — абстракции и реализации движков хранения (InMemory, Persistent, Cluster)
+//! - `database` — встроенные структуры данных (Dict, SkipList, QuickList, SDS и
+//!   др.)
+//! - `engine` — абстракции и реализации движков хранения (InMemory, Persistent,
+//!   Cluster)
 //! - `error` — типы ошибок (кодирование/декодирование, парсинг, хранение)
 //! - `logging` — гибкая система логирования (форматирование, фильтры, вывод)
 //! - `network` — работа с сетью: протокол ZSP и сервер на базе Tokio
@@ -21,7 +24,8 @@ pub mod command_registry;
 pub mod config;
 /// Встроенные структуры данных (Dict, SkipList, QuickList, SDS).
 pub mod database;
-/// Контекст базы данных: управление состоянием, транзакциями и доступом к данным.
+/// Контекст базы данных: управление состоянием, транзакциями и доступом к
+/// данным.
 pub mod db_context;
 /// Абстракции и реализации движков хранения (InMemory, Persistent, Cluster).
 pub mod engine;
@@ -45,7 +49,6 @@ pub use auth::{
     hash_password, verify_password, Acl, AclRule, AclUser, AuthManager, CmdCategory, ServerConfig,
     UserConfig,
 };
-
 /// Реэкспорт основных команд key-value.
 pub use command::{
     AppendCommand, AuthCommand, Command as StoreCommand, CommandExecute, DecrByCommand,
@@ -57,24 +60,30 @@ pub use command::{
     SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand,
     ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
-
+/// Реэкспорт настроек конфигурации.
+pub use config::settings::{Settings, StorageConfig, StorageType};
 /// Реэкспорт встроенных структур данных.
 pub use database::{
     Bitmap, Dict, DictIter, ExpireMap, GeoEntry, GeoPoint, GeoSet, Hll, IntSet, ListPack, Node,
     PubSubManager, QuickList, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash,
     SmartHashIter, Stream, StreamEntry, StreamId, Value, DENSE_SIZE,
 };
-
 /// Реэкспорт движков хранения.
 pub use engine::{
     load_from_reader, load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InMemoryStore,
     InPersistentStore, Shard, ShardId, ShardMetrics, ShardMetricsSnapshot, ShardedIndex,
     ShardingConfig, SlotId, SlotManager, SlotState, Storage, StorageEngine, SyncPolicy,
 };
-
+/// Реэкспорт основных типов ошибок.
+pub use error::{
+    AclError, AuthError, ConfigError, NetworkError, ParseError, PasswordError, RecvError, Result,
+    SlotManagerError, StoreError, StoreResult, TryRecvError, ZdbVersionError, ZspDecodeError,
+    ZspEncodeError, ZspParserError, ZspSerializationError,
+};
+/// Реэкспорт API для работы с модулями и плагинами.
+pub use modules::{DynamicModule, Manager, Module, Plugin, WasmPlugin};
 /// Реэкспорт сетевого сервера и протокола.
 pub use network::{banner, server, zsp};
-
 /// Реэкспорт API для Pub/Sub.
 pub use pubsub::{
     Broker, BrokerConfig, BrokerMetrics, BrokerSnapshot, ChannelSnapshot, ChannelStats,
@@ -83,16 +92,3 @@ pub use pubsub::{
     PublishResult, SerializationFormat, SizeFilter, Subscriber, SubscriberStats,
     SubscriptionOptions,
 };
-
-/// Реэкспорт основных типов ошибок.
-pub use error::{
-    AclError, AuthError, ConfigError, DecodeError, EncodeError, NetworkError, ParseError,
-    PasswordError, RecvError, Result, SlotManagerError, StoreError, StoreResult, TryRecvError,
-    VersionError,
-};
-
-/// Реэкспорт настроек конфигурации.
-pub use config::settings::{Settings, StorageConfig, StorageType};
-
-/// Реэкспорт API для работы с модулями и плагинами.
-pub use modules::{DynamicModule, Manager, Module, Plugin, WasmPlugin};
