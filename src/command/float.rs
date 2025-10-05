@@ -1,8 +1,8 @@
 //! Команды для работы с числами с плавающей точкой (float) в Zumic.
 //!
 //! Реализует команды INCRBYFLOAT, DECRBYFLOAT, SETFLOAT для изменения и
-//! установки float-значений по ключу.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! установки float-значений по ключу. Каждая команда реализует трейт
+//! [`CommandExecute`].
 
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
@@ -99,8 +99,9 @@ mod tests {
     use super::*;
     use crate::InMemoryStore;
 
-    /// Проверяет, что `IncrByFloatCommand` корректно увеличивает значение float.
-    /// Исходное значение ключа — 10.0. После увеличения на 5.5 ожидаем 15.5.
+    /// Проверяет, что `IncrByFloatCommand` корректно увеличивает значение
+    /// float. Исходное значение ключа — 10.0. После увеличения на 5.5
+    /// ожидаем 15.5.
     #[test]
     fn test_incr_by_float() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());
@@ -133,8 +134,9 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Float(6.5));
     }
 
-    /// Проверяет, что `SetFloatCommand` устанавливает значение типа float в хранилище.
-    /// Устанавливаем значение 20.5 под ключом "key1", затем проверяем результат.
+    /// Проверяет, что `SetFloatCommand` устанавливает значение типа float в
+    /// хранилище. Устанавливаем значение 20.5 под ключом "key1", затем
+    /// проверяем результат.
     #[test]
     fn test_set_float() {
         let mut store = StorageEngine::Memory(InMemoryStore::new());

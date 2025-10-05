@@ -58,7 +58,8 @@ pub struct RebalanceEvent {
 }
 
 impl AdvancedRebalancer {
-    /// Создает новый `AdvancedRebalancer` с указанным SlotManager и конфигурацией.
+    /// Создает новый `AdvancedRebalancer` с указанным SlotManager и
+    /// конфигурацией.
     pub fn new(
         slot_manager: Arc<SlotManager>,
         config: RebalancerConfig,
@@ -297,15 +298,16 @@ fn calculate_load_variance(load_distribution: &HashMap<ShardId, f64>) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::{sync::Arc, thread::sleep};
+
+    use super::*;
 
     fn setup_slot_manager(shard_count: usize) -> Arc<SlotManager> {
         Arc::new(SlotManager::new(shard_count))
     }
 
-    /// Тест проверяет на отсутствие необходимости ребаланса при нулевой нагрузке
+    /// Тест проверяет на отсутствие необходимости ребаланса при нулевой
+    /// нагрузке
     #[test]
     fn test_rebalance_no_load() {
         let slot_manager = setup_slot_manager(4);
@@ -319,7 +321,8 @@ mod tests {
             .is_empty());
     }
 
-    /// Тест проверяет на корректное планирование и выполнение миграций при перегрузке одного шарда
+    /// Тест проверяет на корректное планирование и выполнение миграций при
+    /// перегрузке одного шарда
     #[test]
     fn test_rebalance_with_overloaded_shard() {
         let slot_manager = setup_slot_manager(4);
@@ -359,7 +362,8 @@ mod tests {
         assert!(!load_after.is_empty());
     }
 
-    /// Тест проверяет на выполнение миграции горячего ключа на наименее загруженный шард
+    /// Тест проверяет на выполнение миграции горячего ключа на наименее
+    /// загруженный шард
     #[test]
     fn test_hot_key_trigger_rebalance() {
         let slot_manager = setup_slot_manager(4);
@@ -534,7 +538,8 @@ mod tests {
         assert_eq!(event.migrations_planned, 0);
     }
 
-    /// Тест проверяет на отсутствие миграции горячего ключа, если он уже на наименее загруженном шарде
+    /// Тест проверяет на отсутствие миграции горячего ключа, если он уже на
+    /// наименее загруженном шарде
     #[test]
     fn test_hot_key_already_on_least_loaded_shard() {
         let slot_manager = setup_slot_manager(4);
@@ -564,7 +569,8 @@ mod tests {
         assert_eq!(event.migrations_planned, 0);
     }
 
-    /// Тест проверяет на отсутствие миграций при триггерах добавления или удаления шарда
+    /// Тест проверяет на отсутствие миграций при триггерах добавления или
+    /// удаления шарда
     #[test]
     fn test_shard_addition_removal_triggers_no_migration() {
         let slot_manager = setup_slot_manager(4);

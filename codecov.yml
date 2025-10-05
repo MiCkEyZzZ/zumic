@@ -1,0 +1,38 @@
+coverage:
+  precision: 3
+  round: down
+  range: "60...90"
+
+status:
+  project:
+    default:
+      target: auto # пусть Codecov подберёт разумную цель по истории
+      threshold: 4% # допустимое падение общего покрытия
+  patch:
+    default:
+      target: auto
+      threshold: 4% # разрешаем небольшое падение в PR
+
+comment:
+  layout: "header, diff, flags"
+  behavior: default
+  require_changes: false
+
+flag_management:
+  default_rules:
+    carryforward: true
+    statuses:
+      - type: project
+        target: 80% # цель для флагов по проекту (по умолчанию)
+      - type: patch
+        target: 80%
+
+# Не учитывать те папки, которые не важны для процентного покрытия:
+ignore:
+  - tests
+  - fuzz
+  - benches
+  - docker
+  - docs
+  - book
+  - target

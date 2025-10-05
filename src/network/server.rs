@@ -10,7 +10,8 @@ use crate::{
 };
 
 /// Конфигурация сервера.
-/// Определяет адрес для прослушивания, настройки соединений и таймаут graceful shutdown.
+/// Определяет адрес для прослушивания, настройки соединений и таймаут graceful
+/// shutdown.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     /// Адрес и порт для прослушивания входящих соединений.
@@ -279,8 +280,9 @@ pub async fn handle_connection(
     socket: tokio::net::TcpStream,
     engine: Arc<StorageEngine>,
 ) -> Result<()> {
-    use crate::{Sds, Value};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    use crate::{Sds, Value};
 
     let mut lines = BufReader::new(socket).lines();
 
@@ -347,11 +349,9 @@ pub async fn handle_connection(
 #[allow(clippy::arc_with_non_send_sync)]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
-    use crate::InMemoryStore;
-
-    use super::*;
-    use anyhow::Result;
     use std::{net::SocketAddr, sync::Arc};
+
+    use anyhow::Result;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
@@ -359,6 +359,9 @@ mod tests {
         task::LocalSet,
         time::{sleep, timeout, Duration},
     };
+
+    use super::*;
+    use crate::InMemoryStore;
 
     /// Тест проверяет принимает ли соединение, ConnectionHandler отвечает на
     /// PING, затем на QUIT и закрывается.

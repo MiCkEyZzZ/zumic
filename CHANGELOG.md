@@ -1,5 +1,7 @@
 # Changelog
 
+Все важные изменения в проекте задокументированы в этом файле.
+
 ## [Unreleased] - 0000-00-00
 
 ### Добавлено
@@ -22,6 +24,17 @@
   - Расширен модуль: `src/engine/aof.rs` (логика ротации, recovery-интеграция).
   - Интеграция RecoveryManager/CompactionManager в `PersistentStore` (инициализация, trigger\_compaction, create\_snapshot, метрики).
   - Интеграция RecoveryManager/CompactionManager в `PersistentStore` (инициализация, trigger_compaction, create_snapshot, метрики).
+  **error**:
+    - Добавлены ошибки для декодирования zsp-протокола: `zsp_decoder`;
+    - Добавлены ошибки для кодирования zsp-протокола: `zsp_encoder`;
+    - Добавлены ошибки для версионирования zsp-протокола: `zsp_version`;
+    - Добавлены ошибки для парсинга zsp-протокола: `zsp_parser`;
+    - Добавлены ошибки для сериализации zsp-протокола: `zsp_serialization`;
+  **zsp**
+    - Добавил файл для версионирования протокола: `version.rs`;
+  **zumic**
+    - добавил дполнительные правила в: `taplo.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `clippy.toml`
+    - добавил подробное описание в `Makefile`
 
 ### Изменено
 
@@ -29,12 +42,19 @@
 - Улучшена логика `компактизации` и `recovery`, исправлена обработка edge-case ситуаций (неполные или коррумпированные AOF-записи);
 - Добавлены дополнительные метрики и логирование для мониторинга состояния восстановления и компактизации;
 - Обновлены тесты в `persistent`, `recovery`, `aof`;
+- Изменено название файлов в модуле error: с `version` на `zdb_version`;
+- В `engine/zdb/file.rs` изменил название ошибки: с `VersionError` на `ZdbVersionError`;
+- В `pubsub/zsp_integration.rs` изменил название ошибок: c `DecodeError`, `EncodeError` на `ZspDecodeError`, `ZspEncodeError`;
 
 ### Исправлено
 
 - Исправлены ошибки в `recovery` после неполного AOF (`truncated records`);
 - Исправлено обновление метрик при `компактизации` и `recovery`;
 - Исправлены мелкие баги при атомарной замене файлов `snapshot/AOF`;
+
+## Удалено
+
+- Удалены файлы из модуля error: `decode.rs` и `encode.rs`;
 
 ## [v0.4.0] - 2025-09-08
 

@@ -147,7 +147,8 @@ impl InPersistentStore {
         {
             let _aof_guard = self.aof.lock().unwrap();
             // Убеждаемся что все данные записаны
-            // Note: AofLog не имеет публичного flush метода, но drop сделает это автоматически
+            // Note: AofLog не имеет публичного flush метода, но drop сделает
+            // это автоматически
         }
 
         // Останавливаем компактирование
@@ -693,7 +694,8 @@ impl Storage for InPersistentStore {
         })
     }
 
-    /// Возвращает координаты `member` в GeoPoint, или `None`, если member не найден.
+    /// Возвращает координаты `member` в GeoPoint, или `None`, если member не
+    /// найден.
     fn geo_pos(
         &self,
         key: &Sds,
@@ -839,7 +841,8 @@ mod tests {
         InPersistentStore::new(temp_file, config)
     }
 
-    /// Тест проверяет, что можно записать ключ и получить его значение, и ключ попадает в правильный шард
+    /// Тест проверяет, что можно записать ключ и получить его значение, и ключ
+    /// попадает в правильный шард
     #[test]
     fn test_set_and_get() -> StoreResult<()> {
         let store = new_sharded_store(4)?;
@@ -859,7 +862,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет, что можно массово записать и прочитать ключи (mset/mget) и шардирование распределяет ключи сбалансировано
+    /// Тест проверяет, что можно массово записать и прочитать ключи (mset/mget)
+    /// и шардирование распределяет ключи сбалансировано
     #[test]
     fn test_sharded_mset_mget() -> StoreResult<()> {
         let store = new_sharded_store(3)?;
@@ -911,10 +915,12 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет, что AOF корректно записывает операции, поддерживает replay и cross-shard rename
+    /// Тест проверяет, что AOF корректно записывает операции, поддерживает
+    /// replay и cross-shard rename
     #[test]
     fn test_aof_replay_and_cross_shard_rename() -> StoreResult<()> {
-        // создаём отдельный temp file, чтобы можно было переоткрыть store и проверить replay
+        // создаём отдельный temp file, чтобы можно было переоткрыть store и проверить
+        // replay
         let temp_file = NamedTempFile::new()?;
         let config = PersistentStoreConfig {
             sharding: ShardingConfig {
@@ -932,7 +938,8 @@ mod tests {
         // 1) open, write, rename across shards
         let store = InPersistentStore::new(temp_file.path(), config.clone())?;
 
-        // гарантируем разные шарды — пробуем искать пару ключей, которые попадают в разные шарды
+        // гарантируем разные шарды — пробуем искать пару ключей, которые попадают в
+        // разные шарды
         let k1 = Sds::from_str("k_0");
         let mut k2 = Sds::from_str("k_1");
         while store.index.shard_for_key(k1.as_bytes()) == store.index.shard_for_key(k2.as_bytes()) {
@@ -991,7 +998,8 @@ mod tests {
         Ok(())
     }
 
-    /// Тест проверяет, что геопозиции корректно добавляются и distance возвращает положительное значение
+    /// Тест проверяет, что геопозиции корректно добавляются и distance
+    /// возвращает положительное значение
     #[test]
     fn test_geo_add_pos_and_dist() -> StoreResult<()> {
         let store = new_sharded_store(2)?;

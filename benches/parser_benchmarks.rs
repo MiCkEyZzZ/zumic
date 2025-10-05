@@ -1,7 +1,6 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::network::zsp::{frame::zsp_types::ZspFrame, protocol::parser::parse_command};
 
 fn bench_parse_set_inline_string(c: &mut Criterion) {

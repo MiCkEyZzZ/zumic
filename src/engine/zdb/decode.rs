@@ -1,10 +1,10 @@
 //! Модуль для десериализации значений `Value` из бинарного формата.
 //!
-//! Поддерживаются все внутренние типы данных базы:
-//! строки, числа, множества, словари, ZSet, HyperLogLog и Stream.
+//! Поддерживаются все внутренние типы данных базы: строки, числа, множества,
+//! словари, ZSet, HyperLogLog и Stream.
 //!
-//! Каждое значение начинается с однобайтового тега, за которым
-//! следует длина и данные.
+//! Каждое значение начинается с однобайтового тега, за которым следует длина и
+//! данные.
 
 use std::{
     collections::HashSet,
@@ -429,10 +429,10 @@ impl<R: Read> Iterator for StreamReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{compress_block, write_dump, write_stream};
+    use std::io::Cursor;
 
     use super::*;
-    use std::io::Cursor;
+    use crate::engine::{compress_block, write_dump, write_stream};
 
     /// Тест проверяет, что чтение строки даст `Value::Str("hello")`
     #[test]
@@ -472,7 +472,8 @@ mod tests {
         assert_eq!(val, Value::Int(i));
     }
 
-    /// Тест проверяет, что чтение числа с плавающей точкой даст `Value::Float(f)`
+    /// Тест проверяет, что чтение числа с плавающей точкой даст
+    /// `Value::Float(f)`
     #[test]
     fn test_read_float() {
         use std::f64::consts::PI;
@@ -535,7 +536,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что чтение хеша с одной записью вернёт корректную пару `ключ -> строка`
+    /// Тест проверяет, что чтение хеша с одной записью вернёт корректную пару
+    /// `ключ -> строка`
     #[test]
     fn test_read_hash_with_one_entry() {
         let key = b"key";
@@ -568,7 +570,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что при чтении хеша со значением не-строкой возвращается ошибка `InvalidData`
+    /// Тест проверяет, что при чтении хеша со значением не-строкой возвращается
+    /// ошибка `InvalidData`
     #[test]
     fn test_read_hash_value_not_str_error() {
         // создадим хеш с ключом, но значением не строка (например, Int)
@@ -610,7 +613,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что чтение ZSet с записями вернёт корректные `dict` и `sorted`
+    /// Тест проверяет, что чтение ZSet с записями вернёт корректные `dict` и
+    /// `sorted`
     #[test]
     fn test_read_zset_with_entries() {
         let key1 = b"key1";
@@ -689,7 +693,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что чтение HLL меньше `DENSE_SIZE` заполнит остаток нулями
+    /// Тест проверяет, что чтение HLL меньше `DENSE_SIZE` заполнит остаток
+    /// нулями
     #[test]
     fn test_read_hll_with_less_than_dense_size() {
         let n = 2usize; // меньше DENSE_SIZE
@@ -715,7 +720,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что чтение HLL ровно `DENSE_SIZE` вернёт все данные без изменений
+    /// Тест проверяет, что чтение HLL ровно `DENSE_SIZE` вернёт все данные без
+    /// изменений
     #[test]
     fn test_read_hll_with_exact_dense_size() {
         let regs = vec![7u8; DENSE_SIZE];
@@ -739,7 +745,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что неизвестный тег вызывает ошибку `InvalidData` с сообщением "Unknown tag"
+    /// Тест проверяет, что неизвестный тег вызывает ошибку `InvalidData` с
+    /// сообщением "Unknown tag"
     #[test]
     fn test_read_unknown_tag_error() {
         let data = vec![255]; // несуществующий тег
@@ -750,7 +757,8 @@ mod tests {
         assert!(err.to_string().contains("Unknown tag"));
     }
 
-    /// Тест проверяет, что чтение сжатой строки через `TAG_COMPRESSED` вернёт оригинальные данные
+    /// Тест проверяет, что чтение сжатой строки через `TAG_COMPRESSED` вернёт
+    /// оригинальные данные
     #[test]
     fn test_read_compressed_str() {
         // подготовим обычную строку и сожмём её
@@ -774,7 +782,8 @@ mod tests {
         assert_eq!(val, Value::Str(Sds::from_vec(raw.to_vec())));
     }
 
-    /// Тест проверяет, что round-trip дампа через `write_dump` и `read_dump` возвращает исходные данные
+    /// Тест проверяет, что round-trip дампа через `write_dump` и `read_dump`
+    /// возвращает исходные данные
     #[test]
     fn test_read_dump_roundtrip() {
         // создаём два ключа
@@ -789,7 +798,8 @@ mod tests {
         assert_eq!(got, items);
     }
 
-    /// Тест проверяет, что при неправильной магии в дампе возникает ошибка `InvalidData`
+    /// Тест проверяет, что при неправильной магии в дампе возникает ошибка
+    /// `InvalidData`
     #[test]
     fn test_read_dump_bad_magic() {
         let mut buf = Vec::new();
@@ -799,14 +809,15 @@ mod tests {
         buf.push(FormatVersion::V1 as u8);
         // count = 0
         buf.extend(&0u32.to_be_bytes());
-        // CRC32 (создаём некорректный, чтобы подпись была короче, read_dump упадёт на too small)
-        // либо добавьте 4 нуля: buf.extend(&0u32.to_be_bytes());
+        // CRC32 (создаём некорректный, чтобы подпись была короче, read_dump упадёт на
+        // too small) либо добавьте 4 нуля: buf.extend(&0u32.to_be_bytes());
         let err = read_dump(&mut &buf[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
-    /// Тест проверяет, что при неверной версии дампа возникает ошибка `InvalidData`
+    /// Тест проверяет, что при неверной версии дампа возникает ошибка
+    /// `InvalidData`
     #[test]
     fn test_read_dump_wrong_version() {
         let mut buf = Vec::new();
@@ -814,7 +825,8 @@ mod tests {
         // пишем неподдерживаемую версию
         buf.push((FormatVersion::V1 as u8) + 1);
         buf.extend(&0u32.to_be_bytes());
-        // CRC32 тоже можно захардкодить, но read_dump упадёт сразу на Unsupported version
+        // CRC32 тоже можно захардкодить, но read_dump упадёт сразу на Unsupported
+        // version
         let err = read_dump(&mut &buf[..]).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
@@ -859,7 +871,8 @@ mod tests {
         assert_eq!(got, items);
     }
 
-    /// Тест проверяет, что при повреждении хотя бы одного байта CRC-проверка падает.
+    /// Тест проверяет, что при повреждении хотя бы одного байта CRC-проверка
+    /// падает.
     #[test]
     fn doc_test_read_dump_crc_mismatch() {
         let items = vec![(Sds::from_str("key"), Value::Int(1))];
@@ -884,7 +897,8 @@ mod tests {
         assert!(got.is_empty());
     }
 
-    /// Тест проверяет, что дамп размером <4 байт вызывает ошибку `InvalidData` "Dump too small"
+    /// Тест проверяет, что дамп размером <4 байт вызывает ошибку `InvalidData`
+    /// "Dump too small"
     #[test]
     fn doc_test_read_dump_too_small() {
         // Буфер меньше 4 байт → сразу ошибка «Dump too small»
@@ -893,10 +907,12 @@ mod tests {
         assert!(err.to_string().contains("Dump too small"));
     }
 
-    /// Тест: чтение массива через TAG_ARRAY должно вернуть Value::Array с вложенными элементами
+    /// Тест: чтение массива через TAG_ARRAY должно вернуть Value::Array с
+    /// вложенными элементами
     #[test]
     fn test_read_array() {
-        // формируем: [TAG_ARRAY][len=2][вложенный TAG_INT + data][вложенный TAG_STR + data]
+        // формируем: [TAG_ARRAY][len=2][вложенный TAG_INT + data][вложенный TAG_STR +
+        // data]
         let mut data = Vec::new();
         data.push(TAG_ARRAY);
         data.extend(&(2u32).to_be_bytes());
@@ -916,7 +932,8 @@ mod tests {
         );
     }
 
-    /// Тест: чтение битмапы через TAG_BITMAP должно вернуть Value::Bitmap с правильными байтами
+    /// Тест: чтение битмапы через TAG_BITMAP должно вернуть Value::Bitmap с
+    /// правильными байтами
     #[test]
     fn test_read_bitmap() {
         // формируем: [TAG_BITMAP][len=3][bytes 0x01,0x02,0x03]

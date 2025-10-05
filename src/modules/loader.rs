@@ -10,13 +10,29 @@ pub struct DynamicModule {
 }
 
 impl DynamicModule {
-    /// Загружает .so/.dll и достаёт символы `create_module` и `destroy_module`
+    /// Загружает .so/.dll и достаёт символы `create_module` и `destroy_module`.
     ///
     /// # Safety
     ///
-    /// Вызывающий должен гарантировать, что библиотека безопасна:
-    /// - Экспортирует корректную функцию `create_module() -> *mut dyn Module`.
-    /// - Возвращаемый указатель живой и будет корректно уничтожен при завершении.
+    /// This function is `unsafe` because it loads and executes code from an
+    /// external dynamic library and converts raw pointers into a `Box<dyn
+    /// Module>`. The caller must ensure that:
+    ///
+    /// - The library at `path` was compiled with a compatible Rust toolchain
+    ///   and ABI so that `create_module` returns a valid pointer to a `Box<dyn
+    ///   Module>`.
+    /// - The library exports a symbol `create_module` with signature `extern
+    ///   "C" fn() -> *mut dyn Module` (or the exact signature you expect).
+    /// - The returned pointer is non-null and points to a heap allocation that
+    ///   can be safely converted into `Box<dyn Module>` and later dropped by
+    ///   the host program.
+    /// - Any allocator/ABI incompatibilities between host and plugin are
+    ///   handled (preferably build host and plugin with the same Rust version
+    ///   and settings).
+    /// - Any thread-safety / synchronization invariants required by the module
+    ///   implementation are respected by the caller.
+    ///
+    /// Failure to satisfy these conditions is undefined behavior.
     pub unsafe fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let lib = Library::new(path.as_ref()).map_err(|e| format!("Failed to open lib: {e}"))?;
         let constructor: Symbol<unsafe fn() -> *mut dyn Module> = lib

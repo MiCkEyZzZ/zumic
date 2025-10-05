@@ -31,7 +31,8 @@ pub struct RecoveryManager {
 /// Структура, содержащая статистику восстановления
 #[derive(Debug, Default, Clone)]
 pub struct RecoveryStats {
-    /// Использованная стратегия восстановления (например, "aof_only", "snapshot_plus_aof")
+    /// Использованная стратегия восстановления (например, "aof_only",
+    /// "snapshot_plus_aof")
     pub strategy_used: String,
     /// Был ли использован снимок
     pub snapshot_used: bool,
@@ -83,7 +84,8 @@ impl RecoveryManager {
         }
     }
 
-    /// Инициализация менеджера восстановления с шардингом и конфигурацией компакции.
+    /// Инициализация менеджера восстановления с шардингом и конфигурацией
+    /// компакции.
     pub fn initialize(
         &mut self,
         index: Arc<ShardedIndex<Vec<u8>>>,
@@ -228,7 +230,8 @@ impl RecoveryManager {
         if self.aof_path.exists() {
             let aof_stats = self.recover_from_aof_only(index)?;
 
-            // Статистика слияния (повтор AOF может перезаписать некоторые данные моментального снимка)
+            // Статистика слияния (повтор AOF может перезаписать некоторые данные
+            // моментального снимка)
             stats.aof_size_bytes = aof_stats.aof_size_bytes;
             stats.operations_replayed = aof_stats.operations_replayed;
 
@@ -247,7 +250,8 @@ impl RecoveryManager {
         self.compaction_manager.as_ref()
     }
 
-    /// Получить изменяемую ссылку на менеджер компакции, если он инициализирован.
+    /// Получить изменяемую ссылку на менеджер компакции, если он
+    /// инициализирован.
     pub fn compaction_manager_mut(&mut self) -> Option<&mut CompactionManager> {
         self.compaction_manager.as_mut()
     }
@@ -336,11 +340,11 @@ impl Drop for RecoveryManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
 
     use tempfile::tempdir;
 
+    use super::*;
     use crate::{
         engine::{compaction::RecoveryStrategy, recovery::RecoveryManager, CorruptionPolicy},
         AofLog, ShardedIndex, ShardingConfig, SyncPolicy,
@@ -355,7 +359,8 @@ mod tests {
         Arc::new(ShardedIndex::new(cfg))
     }
 
-    /// Тест проверяет, что при восстановлении из пустого AOF файл не приводит к ошибкам и не загружает ключи
+    /// Тест проверяет, что при восстановлении из пустого AOF файл не приводит к
+    /// ошибкам и не загружает ключи
     #[test]
     fn test_recover_from_aof_only_empty_file() {
         let dir = tempdir().unwrap();
@@ -371,7 +376,8 @@ mod tests {
         assert_eq!(stats.operations_replayed, 0);
     }
 
-    /// Тест проверяет, что восстановление из AOF с операциями корректно воспроизводит set и del
+    /// Тест проверяет, что восстановление из AOF с операциями корректно
+    /// воспроизводит set и del
     #[test]
     fn test_recover_from_aof_only_with_ops() {
         let dir = tempdir().unwrap();
@@ -396,7 +402,8 @@ mod tests {
         assert!(stats.keys_deleted >= 1);
     }
 
-    /// Тест проверяет, что метрики восстановления корректно обновляются после replay AOF
+    /// Тест проверяет, что метрики восстановления корректно обновляются после
+    /// replay AOF
     #[test]
     fn test_recovery_metrics_updates() {
         let dir = tempdir().unwrap();
@@ -421,7 +428,8 @@ mod tests {
         assert!(metrics.recovery_duration_ns > 0);
     }
 
-    /// Тест проверяет, что вызов trigger_compaction без инициализации RecoveryManager возвращает ошибку
+    /// Тест проверяет, что вызов trigger_compaction без инициализации
+    /// RecoveryManager возвращает ошибку
     #[test]
     fn test_trigger_compaction_without_init() {
         let dir = tempdir().unwrap();
@@ -432,7 +440,8 @@ mod tests {
         assert!(matches!(res, Err(StoreError::InvalidOperation(_))));
     }
 
-    /// Тест проверяет, что вызов create_snapshot без инициализации RecoveryManager возвращает ошибку
+    /// Тест проверяет, что вызов create_snapshot без инициализации
+    /// RecoveryManager возвращает ошибку
     #[test]
     fn test_create_snapshot_without_init() {
         let dir = tempdir().unwrap();
@@ -443,7 +452,8 @@ mod tests {
         assert!(matches!(res, Err(StoreError::InvalidOperation(_))));
     }
 
-    /// Тест проверяет, что метод recovery_rate_keys_per_sec правильно рассчитывает скорость восстановления
+    /// Тест проверяет, что метод recovery_rate_keys_per_sec правильно
+    /// рассчитывает скорость восстановления
     #[test]
     fn test_recovery_rate_keys_per_sec() {
         let stats = RecoveryStats {

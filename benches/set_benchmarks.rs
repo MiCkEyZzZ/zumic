@@ -1,7 +1,6 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::{
     command::set::{SAddCommand, SIsMemberCommand, SMembersCommand, SRemCommand},
     engine::{memory::InMemoryStore, store::StorageEngine},

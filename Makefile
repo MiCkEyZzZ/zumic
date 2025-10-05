@@ -1,4 +1,33 @@
-# Определяем кастомный target, если он задан в .cargo/config.toml
+# The Zumic Makefile
+#
+# Набор удобных команд для разработки Zumic.
+# Основные возможности:
+#  - Сборка debug/release:   make build / make build-release
+#  - Запуск:                 make run / make run-release
+#  - Тесты и property тесты: make test / make proptest / make stress-test
+#  - Форматирование/линты:   make fmt / make clippy / make check-all
+#  - Fuzz и benchmark:       make fuzz / make bench
+#  - Управление git/релизом: make git-tag / make git-release
+#
+# Переменные:
+#  BUILD_TARGET  - читается из .cargo/config.toml (target triple)
+#  TARGET_ARG    - автоматически формируется для cargo (--target ...)
+#  TARGET_DIR    - путь в target/ для выбранного target'а
+#  VERSION       - автоматически берётся из Cargo.toml (используется в release-auto)
+#  ZUMIC_BANNER  - контролирует баннер при запуске
+#
+# Как пользоваться:
+#  make build            # debug-сборка
+#  make build-release    # optimized release-сборка
+#  make test             # запуск unit-тестов
+#  make proptest         # property tests
+#  make run              # запустить локально в debug режиме
+#  make fuzz             # запуск фаззера (cargo-fuzz)
+#
+# Пометки:
+#  - make help выведет удобную сводку доступных команд.
+#  - Для CI полезно вызывать make check-all и make test-all.
+
 BUILD_TARGET := $(shell test -f .cargo/config.toml && grep -E '^\s*target\s*=' .cargo/config.toml | head -1 | cut -d'"' -f2)
 TARGET_ARG   := $(if $(BUILD_TARGET),--target $(BUILD_TARGET),)
 TARGET_DIR   := target/$(if $(BUILD_TARGET),$(BUILD_TARGET)/,)

@@ -498,7 +498,8 @@ mod tests {
         let rules = vec![
             "on",
             "~data:*", // разрешаем ключи, начинающиеся с "data:"
-            "&chan?",  // разрешаем каналы, соответствующие шаблону "chan?" (например, chan1, chanA)
+            "&chan?",  /* разрешаем каналы, соответствующие шаблону "chan?" (например, chan1,
+                        * chanA) */
         ];
         acl.acl_setuser("anton", &rules).unwrap();
         let u = acl.acl_getuser("anton").unwrap();
@@ -530,7 +531,8 @@ mod tests {
         // Категории парсим один раз
         let cat_read = parse_category("read");
 
-        // Пользователь выключен → любой вызов check_idx(false), check_key, check_channel должен вернуть false
+        // Пользователь выключен → любой вызов check_idx(false), check_key,
+        // check_channel должен вернуть false
         assert!(!u.check_idx(cat_read, lookup_cmd_idx("get")));
         assert!(!u.check_key("any"));
         assert!(!u.check_channel("chan"));

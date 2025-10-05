@@ -1,8 +1,9 @@
+use std::env;
+
 use atty::Stream;
 use chrono::{DateTime, Local};
 use num_cpus;
 use owo_colors::OwoColorize;
-use std::env;
 use sysinfo::System;
 
 /// Полный баннер с информацией о сервере.
@@ -153,7 +154,8 @@ pub fn print_banner(
 
 /// Лог запуска сервера с точностью до миллисекунд
 ///
-/// Показывает PID, временную метку, статус запуска и готовность принимать соединения
+/// Показывает PID, временную метку, статус запуска и готовность принимать
+/// соединения
 pub fn print_startup_log() {
     let pid = std::process::id();
     let now = Local::now();

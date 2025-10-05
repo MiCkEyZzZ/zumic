@@ -244,7 +244,8 @@ impl AofValidator {
         // продвигаем pos после checksum
         pos = checksum_start + 4;
 
-        // Остальная часть записи (для checksum вычисления) — payload начинается после checksum
+        // Остальная часть записи (для checksum вычисления) — payload начинается после
+        // checksum
         let payload = &data[pos..];
 
         // Проверяем что есть достаточно данных для key_len
@@ -327,7 +328,8 @@ impl Default for AofValidator {
 mod tests {
     use super::*;
 
-    /// Тест проверяет, что CRC32 возвращает известные значения для стандартных тестовых векторов
+    /// Тест проверяет, что CRC32 возвращает известные значения для стандартных
+    /// тестовых векторов
     #[test]
     fn test_crc32_known_values() {
         let crc = Crc32::new();
@@ -339,7 +341,8 @@ mod tests {
         assert_eq!(crc.checksum(b"message digest"), 0x20159d7f);
     }
 
-    /// Тест проверяет, что метод verify корректно подтверждает правильный checksum и отвергает неверный
+    /// Тест проверяет, что метод verify корректно подтверждает правильный
+    /// checksum и отвергает неверный
     #[test]
     fn test_crc32_verify() {
         let crc = Crc32::new();
@@ -439,7 +442,8 @@ mod tests {
         assert_eq!(validator.stats().records_truncated, 1);
     }
 
-    /// Тест проверяет, что запись с неизвестной операцией помечается как UnknownOperation
+    /// Тест проверяет, что запись с неизвестной операцией помечается как
+    /// UnknownOperation
     #[test]
     fn test_validator_unknown_operation() {
         let mut validator = AofValidator::new();
@@ -455,7 +459,8 @@ mod tests {
         assert_eq!(validator.stats().records_unknown_op, 1);
     }
 
-    /// Тест проверяет, что статистика целостности корректно обновляется при разных результатах валидации
+    /// Тест проверяет, что статистика целостности корректно обновляется при
+    /// разных результатах валидации
     #[test]
     fn test_integrity_stats() {
         let mut stats = IntegrityStats::default();
@@ -479,7 +484,8 @@ mod tests {
         assert!(stats.has_critical_issues());
     }
 
-    /// Тест проверяет, что критические проблемы с целостностью обнаруживаются корректно
+    /// Тест проверяет, что критические проблемы с целостностью обнаруживаются
+    /// корректно
     #[test]
     fn test_critical_issues_detection() {
         let mut stats = IntegrityStats::default();

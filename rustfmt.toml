@@ -1,6 +1,18 @@
 edition = "2021"
 max_width = 100
 hard_tabs = false
+comment_width = 80
+wrap_comments = true
+format_code_in_doc_comments = true
+format_macro_bodies = true
+format_macro_matchers = true
+normalize_comments = true
+normalize_doc_attributes = true
+condense_wildcard_suffixes = true
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true
+unstable_features = true
 
 # Запятая после последнего элемента в многострочных литералах
 trailing_comma = "Vertical"
@@ -15,3 +27,4 @@ control_brace_style = "AlwaysSameLine"
 
 # Расположение параметров функции: каждый параметр на новой строке
 fn_params_layout    = "Vertical"
+group_imports = "StdExternalCrate"

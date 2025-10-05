@@ -1,7 +1,6 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::ListPack;
 
 fn bench_push_back(c: &mut Criterion) {

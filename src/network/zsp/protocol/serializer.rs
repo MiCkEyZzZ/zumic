@@ -1,11 +1,10 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use super::command::Response;
 use crate::{
     zsp::{zsp_types::ZspFrame, PubSubMessage},
     Value,
 };
-
-use super::command::Response;
 
 /// Сериализует ответ команды в формат ZspFrame.
 pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
@@ -146,9 +145,8 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{Dict, Hll, QuickList, Sds, SkipList, SmartHash};
-
     use super::*;
+    use crate::{Dict, Hll, QuickList, Sds, SkipList, SmartHash};
 
     /// Тест проверяет сериализацию `Response::Ok` в
     /// `ZspFrame::InlineString("OK")`

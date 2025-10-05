@@ -16,7 +16,7 @@ use bytes::Buf;
 use memchr::memchr;
 
 use super::zsp_types::ZspFrame;
-use crate::DecodeError;
+use crate::ZspDecodeError;
 
 /// Максимальная длина строки в протоколе ZSP (1 МБ).
 ///
@@ -71,7 +71,7 @@ impl<'a> ZspDecoder<'a> {
     pub fn decode(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let state = std::mem::replace(&mut self.state, ZspDecodeState::Initial);
 
         match state {
@@ -130,7 +130,7 @@ impl<'a> ZspDecoder<'a> {
         items: &mut Vec<(String, f64)>,
         pending_member: &mut Option<String>,
         remaining: &mut usize,
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         while *remaining > 0 {
             if pending_member.is_none() {
                 // ожидаем member
@@ -140,12 +140,12 @@ impl<'a> ZspDecoder<'a> {
                             ZspFrame::InlineString(cow) => cow.into_owned(),
                             ZspFrame::BinaryString(Some(bytes)) => String::from_utf8(bytes)
                                 .map_err(|_| {
-                                    DecodeError::InvalidData(
+                                    ZspDecodeError::InvalidData(
                                         "Invalid UTF-8 in zset member".to_string(),
                                     )
                                 })?,
                             _ => {
-                                return Err(DecodeError::InvalidData(
+                                return Err(ZspDecodeError::InvalidData(
                                     "Expected string for zset member".to_string(),
                                 ));
                             }
@@ -160,7 +160,7 @@ impl<'a> ZspDecoder<'a> {
                     Some(ZspFrame::Float(f)) => f,
                     Some(ZspFrame::Integer(i)) => i as f64,
                     Some(_) => {
-                        return Err(DecodeError::InvalidData(
+                        return Err(ZspDecodeError::InvalidData(
                             "Expected float/integer for zset score".to_string(),
                         ))
                     }
@@ -178,7 +178,7 @@ impl<'a> ZspDecoder<'a> {
     fn initial_decode(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         if !slice.has_remaining() {
             return Ok(None);
         }
@@ -192,14 +192,14 @@ impl<'a> ZspDecoder<'a> {
             b'$' => self.parse_binary_string(slice),
             b'*' => self.parse_array(slice, 0),
             b'%' => self.parse_dictionary(slice),
-            _ => Err(DecodeError::InvalidData("Unknown ZSP type".to_string())),
+            _ => Err(ZspDecodeError::InvalidData("Unknown ZSP type".to_string())),
         }
     }
 
     fn parse_inline_string(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
         Ok(Some(ZspFrame::InlineString(Cow::Borrowed(line))))
     }
@@ -207,7 +207,7 @@ impl<'a> ZspDecoder<'a> {
     fn parse_error(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
         Ok(Some(ZspFrame::FrameError(line.to_string())))
     }
@@ -215,11 +215,11 @@ impl<'a> ZspDecoder<'a> {
     fn parse_integer(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
         let num = line.parse::<i64>().map_err(|_| {
             let err_msg = "Invalid integer".to_string();
-            DecodeError::InvalidData(err_msg)
+            ZspDecodeError::InvalidData(err_msg)
         })?;
         Ok(Some(ZspFrame::Integer(num)))
     }
@@ -229,11 +229,11 @@ impl<'a> ZspDecoder<'a> {
     fn parse_float(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
         let num = line.parse::<f64>().map_err(|_| {
             let err_msg = "Invalid float".to_string();
-            DecodeError::InvalidData(err_msg)
+            ZspDecodeError::InvalidData(err_msg)
         })?;
         Ok(Some(ZspFrame::Float(num)))
     }
@@ -242,29 +242,29 @@ impl<'a> ZspDecoder<'a> {
     fn parse_bool(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         if slice.len() < 3 {
-            return Err(DecodeError::UnexpectedEof("Incomplete boolean".into()));
+            return Err(ZspDecodeError::UnexpectedEof("Incomplete boolean".into()));
         }
         let b = slice[0];
         if slice[1] != b'\r' || slice[2] != b'\n' {
-            return Err(DecodeError::InvalidData("Invalid boolean format".into()));
+            return Err(ZspDecodeError::InvalidData("Invalid boolean format".into()));
         }
         *slice = &slice[3..];
         match b {
             b't' => Ok(Some(ZspFrame::Bool(true))),
             b'f' => Ok(Some(ZspFrame::Bool(false))),
-            _ => Err(DecodeError::InvalidData("Unknown boolean value".into())),
+            _ => Err(ZspDecodeError::InvalidData("Unknown boolean value".into())),
         }
     }
 
     fn parse_binary_string(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
             let err_msg = "Invalid binary".to_string();
-            DecodeError::InvalidData(err_msg)
+            ZspDecodeError::InvalidData(err_msg)
         })?;
 
         match len {
@@ -273,7 +273,7 @@ impl<'a> ZspDecoder<'a> {
                 let len = len as usize;
                 if len > MAX_BINARY_LENGTH {
                     let err_msg = format!("Binary string too long ({len} > {MAX_BINARY_LENGTH})");
-                    return Err(DecodeError::InvalidData(err_msg));
+                    return Err(ZspDecodeError::InvalidData(err_msg));
                 }
 
                 let available = slice.remaining().min(len);
@@ -291,7 +291,7 @@ impl<'a> ZspDecoder<'a> {
             }
             _ => {
                 let err_msg = "Negative binary length".to_string();
-                Err(DecodeError::InvalidData(err_msg))
+                Err(ZspDecodeError::InvalidData(err_msg))
             }
         }
     }
@@ -301,7 +301,7 @@ impl<'a> ZspDecoder<'a> {
         slice: &mut &'a [u8],
         len: usize,
         data: &mut Vec<u8>,
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let remaining_bytes = len - data.len();
         let available = slice.remaining().min(remaining_bytes);
 
@@ -327,15 +327,15 @@ impl<'a> ZspDecoder<'a> {
         &mut self,
         slice: &mut &'a [u8],
         depth: usize,
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         if depth > MAX_ARRAY_DEPTH {
             let err_msg = "Max array depth exceeded".to_string();
-            return Err(DecodeError::InvalidData(err_msg));
+            return Err(ZspDecodeError::InvalidData(err_msg));
         }
 
         let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
             let err_msg = "Invalid array length".to_string();
-            DecodeError::InvalidData(err_msg)
+            ZspDecodeError::InvalidData(err_msg)
         })?;
 
         match len {
@@ -368,7 +368,7 @@ impl<'a> ZspDecoder<'a> {
             }
             _ => {
                 let err_msg = "Negative array length".to_string();
-                Err(DecodeError::InvalidData(err_msg))
+                Err(ZspDecodeError::InvalidData(err_msg))
             }
         }
     }
@@ -376,11 +376,11 @@ impl<'a> ZspDecoder<'a> {
     fn parse_dictionary(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let len_str = self.read_line(slice)?;
         let len = len_str
             .parse::<isize>()
-            .map_err(|_| DecodeError::InvalidData("Invalid dictionary length".to_string()))?;
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid dictionary length".to_string()))?;
 
         match len {
             -1 => Ok(Some(ZspFrame::Dictionary(HashMap::new()))),
@@ -404,7 +404,7 @@ impl<'a> ZspDecoder<'a> {
                             items.insert(key_str, value);
                         }
                         _ => {
-                            return Err(DecodeError::InvalidData(
+                            return Err(ZspDecodeError::InvalidData(
                                 "Expected InlineString as key".to_string(),
                             ));
                         }
@@ -413,7 +413,7 @@ impl<'a> ZspDecoder<'a> {
 
                 Ok(Some(ZspFrame::Dictionary(items)))
             }
-            _ => Err(DecodeError::InvalidData(
+            _ => Err(ZspDecodeError::InvalidData(
                 "Negative dictionary length".to_string(),
             )),
         }
@@ -426,12 +426,12 @@ impl<'a> ZspDecoder<'a> {
     fn parse_zset(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         // Считываем количество элементов ZSET
         let len_str = self.read_line(slice)?;
         let len = len_str
             .parse::<isize>()
-            .map_err(|_| DecodeError::InvalidData("Invalid zset length".to_string()))?;
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid zset length".to_string()))?;
 
         match len {
             // Null-ZSET
@@ -467,7 +467,9 @@ impl<'a> ZspDecoder<'a> {
             }
 
             // Отрицательное число, не равное -1
-            _ => Err(DecodeError::InvalidData("Negative zset length".to_string())),
+            _ => Err(ZspDecodeError::InvalidData(
+                "Negative zset length".to_string(),
+            )),
         }
     }
 
@@ -476,7 +478,7 @@ impl<'a> ZspDecoder<'a> {
         slice: &mut &'a [u8],
         items: &mut Vec<ZspFrame<'a>>,
         remaining: &mut usize,
-    ) -> Result<Option<ZspFrame<'a>>, DecodeError> {
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         while *remaining > 0 {
             match self.decode(slice)? {
                 Some(frame) => {
@@ -493,27 +495,27 @@ impl<'a> ZspDecoder<'a> {
     fn read_line(
         &mut self,
         slice: &mut &'a [u8],
-    ) -> Result<&'a str, DecodeError> {
+    ) -> Result<&'a str, ZspDecodeError> {
         if let Some(pos) = memchr(b'\r', slice) {
             if pos + 1 < slice.len() && slice[pos + 1] == b'\n' {
                 let line = &slice[..pos];
                 let result = std::str::from_utf8(line)
-                    .map_err(|_| DecodeError::InvalidUtf8("Invalid UTF-8".into()))?;
+                    .map_err(|_| ZspDecodeError::InvalidUtf8("Invalid UTF-8".into()))?;
                 *slice = &slice[(pos + 2)..];
                 return Ok(result);
             }
         }
 
-        Err(DecodeError::UnexpectedEof("Incomplete line".to_string()))
+        Err(ZspDecodeError::UnexpectedEof("Incomplete line".to_string()))
     }
 
     #[inline(always)]
     fn expect_crlf(
         &self,
         slice: &mut &'a [u8],
-    ) -> Result<(), DecodeError> {
+    ) -> Result<(), ZspDecodeError> {
         if slice.len() < 2 || slice[0] != b'\r' || slice[1] != b'\n' {
-            return Err(DecodeError::UnexpectedEof("Expected CRLF".to_string()));
+            return Err(ZspDecodeError::UnexpectedEof("Expected CRLF".to_string()));
         }
         *slice = &slice[2..];
         Ok(())
@@ -561,7 +563,8 @@ mod tests {
     fn test_partial_binary_string() {
         let mut decoder = ZspDecoder::new();
 
-        // Первая часть - должно вернуться None, что означает необходимость дополнительных данных
+        // Первая часть - должно вернуться None, что означает необходимость
+        // дополнительных данных
         let data1 = b"$5\r\nhel".to_vec();
         let mut slice = data1.as_slice();
         assert!(matches!(decoder.decode(&mut slice), Ok(None)));

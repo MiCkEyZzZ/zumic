@@ -1,10 +1,10 @@
-//! Модуль для сжатия и распаковки блоков данных в ZDB с
-//! помощью ZSTD.
+//! Модуль для сжатия и распаковки блоков данных в ZDB с помощью ZSTD.
 //!
-//! Содержит утилиты для решения, когда применять сжатие,
-//! а также функции для компрессии и декомпрессии.
+//! Содержит утилиты для решения, когда применять сжатие, а также функции для
+//! компрессии и декомпрессии.
 
 use std::io;
+
 use zstd::stream::{decode_all, encode_all};
 
 /// Минимальный размер в байтах, при котором стоит применять
@@ -82,7 +82,8 @@ mod tests {
     #[test]
     fn test_compress_decompress_roundtrip_small() {
         let data = b"short data";
-        // даже если мы не будем использовать compress_block при write, сама библиотека работает
+        // даже если мы не будем использовать compress_block при write, сама библиотека
+        // работает
         let compressed = compress_block(data).expect("compress failed");
         let decompressed = decompress_block(&compressed).expect("decompress failed");
         assert_eq!(&decompressed, data);
@@ -104,8 +105,8 @@ mod tests {
         assert_eq!(decompressed, data);
     }
 
-    /// Тест проверяет, что при передаче некорректных данных в `decompress_block`
-    /// возвращается ошибка с типом `ErrorKind::Other`.
+    /// Тест проверяет, что при передаче некорректных данных в
+    /// `decompress_block` возвращается ошибка с типом `ErrorKind::Other`.
     #[test]
     fn test_decompress_invalid_data() {
         // Некорректные данные приводят к ошибке

@@ -1,7 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
 use tracing::{error, info};
-
 use zumic::{
     banner,
     engine::{InClusterStore, PersistentStoreConfig},

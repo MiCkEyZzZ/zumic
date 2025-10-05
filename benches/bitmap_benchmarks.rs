@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use zumic::database::bitmap::Bitmap; // поправь путь под свой crate
+use zumic::database::bitmap::Bitmap;
 
 fn bench_set_bit(c: &mut Criterion) {
     let mut bitmap = Bitmap::with_capacity(10_000);

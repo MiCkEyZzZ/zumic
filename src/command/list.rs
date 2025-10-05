@@ -1,8 +1,8 @@
 //! Команды для работы со списками (List) в Zumic.
 //!
 //! Реализует команды LPUSH, RPUSH, LPOP, RPOP, LLEN, LRANGE для управления
-//! элементами списков по ключу.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! элементами списков по ключу. Каждая команда реализует трейт
+//! [`CommandExecute`].
 
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
@@ -345,7 +345,8 @@ mod tests {
     }
 
     /// Тест, что LLenCommand возвращает 0 и LPopCommand возвращает Null, когда
-    /// список не существует, и что возникает ошибка типа, если ключ существует, но его тип не список.
+    /// список не существует, и что возникает ошибка типа, если ключ существует,
+    /// но его тип не список.
     #[test]
     fn test_len_and_pop_nonexistent_and_type_error() {
         let mut store = create_store();
@@ -364,7 +365,8 @@ mod tests {
             Value::Null
         );
 
-        // Если ключ существует, но это не список, то LPush должен вернуть ошибку InvalidType.
+        // Если ключ существует, но это не список, то LPush должен вернуть ошибку
+        // InvalidType.
         store.set(&Sds::from_str("k"), Value::Int(5)).unwrap();
         assert!(matches!(
             LPushCommand {

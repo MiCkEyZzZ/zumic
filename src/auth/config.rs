@@ -148,7 +148,8 @@ mod tests {
     /// количества параметров.
     #[test]
     fn test_parse_invalid_user_format() {
-        // Должно вернуть ошибку, так как формат пользователя неверный (меньше 3-х частей)
+        // Должно вернуть ошибку, так как формат пользователя неверный (меньше 3-х
+        // частей)
         let content = "user default";
         let result = ServerConfig::parse(content);
         assert!(result.is_err());

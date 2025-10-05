@@ -5,9 +5,8 @@ use tokio::{
     time::{Duration, Instant},
 };
 
-use crate::{AclError, AuthError, PasswordError};
-
 use super::{hash_password, lookup_cmd_idx, parse_category, verify_password, Acl, ServerConfig};
+use crate::{AclError, AuthError, PasswordError};
 
 /// Максимальное количество неудачных попыток входа перед
 /// временной блокировкой.
@@ -34,7 +33,8 @@ pub struct AuthManager {
 
 impl Default for AuthManager {
     fn default() -> Self {
-        Self::new() // Используя существующий метод `new()` в качестве конструктора по умолчанию
+        Self::new() // Используя существующий метод `new()` в качестве
+                    // конструктора по умолчанию
     }
 }
 

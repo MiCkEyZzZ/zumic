@@ -1,8 +1,8 @@
 //! Команды для работы с географическими данными (GEO*) в Zumic.
 //!
 //! Реализует команды GEOADD, GEODIST, GEOPOS, GEORADIUS, GEORADIUSBYMEMBER для
-//! хранения, поиска и вычисления расстояний между точками.
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! хранения, поиска и вычисления расстояний между точками. Каждая команда
+//! реализует трейт [`CommandExecute`].
 
 use super::CommandExecute;
 use crate::{GeoPoint, Sds, StorageEngine, StoreError, Value};
@@ -220,9 +220,8 @@ impl CommandExecute for GeoRadiusByMemberCommand {
 
 #[cfg(test)]
 mod tests {
-    use crate::InMemoryStore;
-
     use super::*;
+    use crate::InMemoryStore;
 
     /// Вспомогалка: создаём память и заполняем точками.
     fn setup_store() -> StorageEngine {

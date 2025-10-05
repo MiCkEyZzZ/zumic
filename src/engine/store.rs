@@ -57,7 +57,8 @@ impl StorageEngine {
 
     /// Удаляет ключ из хранилища.
     ///
-    /// Возвращает `true`, если ключ был удалён, `false` если ключ не существовал.
+    /// Возвращает `true`, если ключ был удалён, `false` если ключ не
+    /// существовал.
     pub fn del(
         &self,
         key: &Sds,
@@ -109,7 +110,8 @@ impl StorageEngine {
         }
     }
 
-    /// Переименовывает ключ `from` в `to` только если ключ `to` ещё не существует.
+    /// Переименовывает ключ `from` в `to` только если ключ `to` ещё не
+    /// существует.
     ///
     /// Возвращает `true` если переименование прошло успешно,
     /// `false` если ключ `to` уже существует.
@@ -154,7 +156,8 @@ impl StorageEngine {
         }
     }
 
-    /// Возвращает изменяемую ссылку на конкретное хранилище, реализующее трейт `Storage`.
+    /// Возвращает изменяемую ссылку на конкретное хранилище, реализующее трейт
+    /// `Storage`.
     pub fn get_store_mut(&mut self) -> &mut dyn Storage {
         match self {
             Self::Memory(store) => store,
@@ -163,7 +166,8 @@ impl StorageEngine {
         }
     }
 
-    /// Добавляет точку `(lon, lat)` с именем `member` в гео-набор под ключом `key`.
+    /// Добавляет точку `(lon, lat)` с именем `member` в гео-набор под ключом
+    /// `key`.
     ///
     /// Возвращает `Ok(true)`, если `member` был добавлен впервые,
     /// и `Ok(false)`, если он уже присутствовал.
@@ -234,7 +238,8 @@ impl StorageEngine {
         }
     }
 
-    /// То же, что `geo_radius`, но центр задаётся координатами уже существующего `member`.
+    /// То же, что `geo_radius`, но центр задаётся координатами уже
+    /// существующего `member`.
     ///
     /// Если `member` не найден — возвращает пустой вектор.
     pub fn geo_radius(
@@ -261,7 +266,8 @@ mod tests {
         Sds::from(data.as_bytes())
     }
 
-    /// Тест проверяет установку значения и последующее получение должно вернуть то же значение.
+    /// Тест проверяет установку значения и последующее получение должно вернуть
+    /// то же значение.
     #[test]
     fn test_engine_set_and_get() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -320,7 +326,8 @@ mod tests {
         assert_eq!(engine.get(&k2).unwrap(), Some(v2));
     }
 
-    /// Тест проверяет получение нескольких значений с помощью mget возвращает их в правильном порядке.
+    /// Тест проверяет получение нескольких значений с помощью mget возвращает
+    /// их в правильном порядке.
     #[test]
     fn test_engine_mget() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -347,7 +354,8 @@ mod tests {
         assert_eq!(got, Some(v));
     }
 
-    /// Тест проверяет попытку переименовать несуществующий ключ должна вернуть ошибку.
+    /// Тест проверяет попытку переименовать несуществующий ключ должна вернуть
+    /// ошибку.
     #[test]
     fn test_engine_rename_nonexistent_key() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -358,7 +366,8 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Тест проверяет renamenx переименовывает ключ только если новый ключ отсутствует.
+    /// Тест проверяет renamenx переименовывает ключ только если новый ключ
+    /// отсутствует.
     #[test]
     fn test_engine_renamenx() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -371,7 +380,8 @@ mod tests {
         // Убедитесь, что старый ключ удален, а новый присутствует.
         let got = engine.get(&k2).unwrap();
         assert_eq!(got, Some(v));
-        // // Повторная попытка переименования должна завершиться неудачей, поскольку новый ключ уже существует.
+        // // Повторная попытка переименования должна завершиться неудачей, поскольку
+        // новый ключ уже существует.
         let result = engine.renamenx(&k1, &k2).unwrap();
         assert!(!result);
     }
@@ -403,7 +413,8 @@ mod tests {
         assert!(engine.is_ok());
     }
 
-    /// Тест проверяет, что `get_store` возвращает объект трейта, с которым можно работать.
+    /// Тест проверяет, что `get_store` возвращает объект трейта, с которым
+    /// можно работать.
     #[test]
     fn test_engine_get_store() {
         let engine = StorageEngine::Memory(InMemoryStore::new());
@@ -483,7 +494,7 @@ mod tests {
         let res = engine
             .geo_radius(&landmarks_key, 0.0, 0.0, 0.2, "km")
             .unwrap();
-        let names: Vec<_> = res.iter().map(|(m, _, _)| m.clone()).collect();
+        let names: Vec<_> = res.iter().map(|(m, ..)| m.clone()).collect();
 
         assert!(names.contains(&"center".to_string()));
         assert!(names.contains(&"near".to_string()));
@@ -511,7 +522,7 @@ mod tests {
         let res = engine
             .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
             .unwrap();
-        let names: Vec<_> = res.iter().map(|(m, _, _)| m.clone()).collect();
+        let names: Vec<_> = res.iter().map(|(m, ..)| m.clone()).collect();
 
         assert!(names.contains(&"origin".to_string()));
         assert!(names.contains(&"east".to_string()));

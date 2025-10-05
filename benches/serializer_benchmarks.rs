@@ -1,7 +1,6 @@
 use std::{collections::HashSet, hint::black_box};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use zumic::{
     network::zsp::protocol::{command::Response, serializer::serialize_response},
     Dict, QuickList, Sds, SkipList, SmartHash, Value,

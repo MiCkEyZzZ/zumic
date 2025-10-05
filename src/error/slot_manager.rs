@@ -1,4 +1,5 @@
 use std::sync::PoisonError;
+
 use thiserror::Error;
 
 /// Ошибки SlotManager'а (migration/rebalance рантайм ошибки).
@@ -20,7 +21,8 @@ pub enum SlotManagerError {
     #[error("invalid shard id: {0}")]
     InvalidShard(usize),
 
-    /// Ошибка ввода/вывода при миграции (например чтение/запись на диск / сеть).
+    /// Ошибка ввода/вывода при миграции (например чтение/запись на диск /
+    /// сеть).
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 

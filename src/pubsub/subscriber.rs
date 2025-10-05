@@ -272,7 +272,8 @@ impl Subscriber {
         T: for<'de> Deserialize<'de>,
     {
         let message = self.recv().await?;
-        // inspect_err позволяет инкриминировать счётчик при ошибке, не меняя типа ошибки
+        // inspect_err позволяет инкриминировать счётчик при ошибке, не меняя типа
+        // ошибки
         message.deserialize().inspect_err(|_| {
             self.stats.deserialization_errors += 1;
         })
@@ -894,7 +895,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что несколько подписчиков на один канал получают одно и то же сообщение.
+    /// Тест проверяет, что несколько подписчиков на один канал получают одно и
+    /// то же сообщение.
     #[tokio::test]
     async fn test_double_subscribe_same_channel() {
         let broker = Broker::new();
@@ -912,7 +914,8 @@ mod tests {
         assert_eq!(mb.payload, MessagePayload::Bytes(Bytes::from_static(b"X")));
     }
 
-    /// Тест проверяет корректное поведение try_recv: возврат Empty при отсутствии данных и получение сообщения при наличии.
+    /// Тест проверяет корректное поведение try_recv: возврат Empty при
+    /// отсутствии данных и получение сообщения при наличии.
     #[tokio::test]
     async fn test_try_recv_success_and_empty() {
         let broker = Broker::new();
@@ -936,7 +939,8 @@ mod tests {
         assert_eq!(msg.payload, MessagePayload::Bytes(Bytes::from("immediate")));
     }
 
-    /// Тест проверяет обработку режима LagHandling::Error (отставание вызывает ошибку Lagged).
+    /// Тест проверяет обработку режима LagHandling::Error (отставание вызывает
+    /// ошибку Lagged).
     #[tokio::test]
     async fn test_lag_handling_error_mode() {
         let opts = SubscriptionOptions {
@@ -962,13 +966,15 @@ mod tests {
         match sub.try_recv() {
             Err(TryRecvError::Lagged(n)) => assert!(n > 0),
             Ok(_) => {
-                // Sometimes timing allows a consumer to keep up — both behaviors acceptable.
+                // Sometimes timing allows a consumer to keep up — both
+                // behaviors acceptable.
             }
             Err(e) => panic!("unexpected error: {e:?}"),
         }
     }
 
-    /// Тест проверяет, что сообщения сжимаются брокером и корректно декомпрессируются подписчиком.
+    /// Тест проверяет, что сообщения сжимаются брокером и корректно
+    /// декомпрессируются подписчиком.
     #[tokio::test]
     async fn test_compression_roundtrip() {
         // Broker с включённой компрессией (чтобы compress_payload сработал)
@@ -996,7 +1002,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет, что фильтр по типу payload блокирует нежелательные сообщения.
+    /// Тест проверяет, что фильтр по типу payload блокирует нежелательные
+    /// сообщения.
     #[tokio::test]
     async fn test_with_payload_type_filter_blocks_unwanted_types() {
         // filter allows only String payloads; Bytes should be filtered
@@ -1011,7 +1018,8 @@ mod tests {
             .publish("ch", MessagePayload::Bytes(Bytes::from_static(b"bin")))
             .unwrap();
 
-        // try_recv should not return bytes (it will either return Empty or block) — use try_recv
+        // try_recv should not return bytes (it will either return Empty or block) — use
+        // try_recv
         match sub.try_recv() {
             Err(TryRecvError::Empty) => {
                 // good — message filtered out
@@ -1028,7 +1036,8 @@ mod tests {
         }
     }
 
-    /// Тест проверяет работу MultiSubscriber: получение сообщений из нескольких каналов методами recv_any и recv_all.
+    /// Тест проверяет работу MultiSubscriber: получение сообщений из нескольких
+    /// каналов методами recv_any и recv_all.
     #[tokio::test]
     async fn test_multi_subscriber_recv_any_and_recv_all() {
         let broker = Broker::new();

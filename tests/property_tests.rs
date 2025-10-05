@@ -3,9 +3,9 @@
 //! Эти тесты генерируют тысячи случайных значений Value и проверяют
 //! что encode/decode работает корректно во всех случаях.
 
-use proptest::prelude::*;
 use std::io::Cursor;
 
+use proptest::prelude::*;
 use zumic::{
     engine::zdb::{read_value, read_value_with_version, write_value, FormatVersion},
     Value,

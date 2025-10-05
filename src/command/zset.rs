@@ -1,8 +1,8 @@
 //! Команды для работы с упорядоченными множествами (ZSet, sorted set) в Zumic.
 //!
-//! Реализует команды ZADD, ZREM, ZSCORE, ZCARD, ZRANGE, ZREVRANGE для управления
-//! элементами с баллами (score).
-//! Каждая команда реализует трейт [`CommandExecute`].
+//! Реализует команды ZADD, ZREM, ZSCORE, ZCARD, ZRANGE, ZREVRANGE для
+//! управления элементами с баллами (score). Каждая команда реализует трейт
+//! [`CommandExecute`].
 
 use ordered_float::OrderedFloat;
 
@@ -188,7 +188,8 @@ impl CommandExecute for ZCardCommand {
 /// * `stop` — конечный индекс.
 ///
 /// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если множество не существует.
+/// Список элементов в заданном диапазоне или `Null`, если множество не
+/// существует.
 #[derive(Debug)]
 pub struct ZRangeCommand {
     pub key: String,
@@ -242,7 +243,8 @@ impl CommandExecute for ZRangeCommand {
 /// * `stop` — конечный индекс.
 ///
 /// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если множество не существует.
+/// Список элементов в заданном диапазоне или `Null`, если множество не
+/// существует.
 #[derive(Debug)]
 pub struct ZRevRangeCommand {
     pub key: String,

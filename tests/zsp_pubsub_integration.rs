@@ -61,7 +61,8 @@ fn test_serialized_binary_payload_integration() {
     };
     let channel = "bin";
 
-    // Формируем publish, декодируем команду, создаём Message, обратно кодируем и декодируем
+    // Формируем publish, декодируем команду, создаём Message, обратно кодируем и
+    // декодируем
     let wire_cmd = encode_publish(channel, &payload).expect("encode publish");
     let mut data = wire_cmd;
     let cmd = decode_command(&mut data)

@@ -1,7 +1,7 @@
 //! Генераторы для property-based тестирования всех типов Value
 //!
-//! Каждый генератор создаёт стратегии для генерации случайных,
-//! но валидных данных определённого типа с акцентом на edge cases.
+//! Каждый генератор создаёт стратегии для генерации случайных, но валидных
+//! данных определённого типа с акцентом на edge cases.
 
 use std::{cmp, f64, ops::RangeInclusive};
 
@@ -21,7 +21,8 @@ pub const MIN_COMPRESSION_SIZE: usize = 64;
 
 /// Генерация для Sds строк.
 pub fn sds_strategy() -> impl Strategy<Value = Sds> {
-    // Формируем динамический regex безопасно (saturating_sub чтобы не уйти в underflow)
+    // Формируем динамический regex безопасно (saturating_sub чтобы не уйти в
+    // underflow)
     let around_compression = format!(
         "[a-zA-Z0-9]{{{},{}}}",
         MIN_COMPRESSION_SIZE.saturating_sub(5),
@@ -128,7 +129,8 @@ pub fn zset_strategy() -> impl Strategy<Value = Value> {
 
         for (score, key) in pairs {
             dict.insert(key.clone(), score);
-            sorted.insert(OrderedFloat(score), key); // Adjust based on your implementation
+            sorted.insert(OrderedFloat(score), key); // Adjust based on your
+                                                     // implementation
         }
 
         Value::ZSet { dict, sorted }

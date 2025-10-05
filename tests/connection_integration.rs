@@ -1,10 +1,10 @@
-use anyhow::Result;
 use std::{sync::Arc, time::Duration};
+
+use anyhow::Result;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
-
 use zumic::{
     network::connection::{ConnectionConfig, ConnectionManager},
     InMemoryStore, StorageEngine,
