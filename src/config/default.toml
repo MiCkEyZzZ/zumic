@@ -154,6 +154,42 @@ module_levels = []
 # Примеры:
 # module_levels = ["zumic::engine=debug", ""zumic::network=trace]
 
+# ===== CUSTOM FIELDS (NEW) =====
+[logging.custom_fields]
+# Instance ID (auto from env ZUMIC_INSTANCE_ID)
+# instance_id = "zumic-01"
+
+# Version (auto from Cargo.toml)
+# version = "1.0.0"
+
+# Environment (auto from ZUMIC_ENV or RUST_ENV)
+# environment = "production"
+
+# Hostname (auto detected)
+# hostname = "server-01"
+
+# ===== TIMESTAMP CONFIG (NEW) =====
+[logging.timestamp]
+# Format: "rfc3339" | "unix" | "custom"
+format = "rfc3339"
+
+# Timezone: "utc" | "local"
+timezone = "utc"
+
+# ===== SPAN CONFIG (NEW) =====
+[logging.span]
+# Включить span name в логах
+include_name = true
+
+# Включить span fields
+include_fields = true
+
+# Включить full span list (all parent spans)
+include_full_list = false
+
+# Максимальная глубина span tree
+max_depth = 5
+
 # ========================================
 # КОНСОЛЬ (OVERRIDE настроек)
 # ========================================

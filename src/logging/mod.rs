@@ -1,5 +1,6 @@
 pub mod config;
 mod filters;
+pub mod formats;
 mod formatter;
 pub mod sinks;
 

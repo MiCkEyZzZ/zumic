@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::logging::formats::{CustomFields, SpanConfig, TimestampConfig};
+
 /// Формат вывода логов.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -90,6 +92,17 @@ pub struct LoggingConfig {
     /// Per-module уровни логирования
     #[serde(default)]
     pub module_levels: Vec<String>,
+    /// Custom fields (instance_id, version, environment, hostname)
+    #[serde(default)]
+    pub custom_fields: CustomFields,
+
+    /// Timestamp configuration
+    #[serde(default)]
+    pub timestamp: TimestampConfig,
+
+    /// Span configuration
+    #[serde(default)]
+    pub span: SpanConfig,
 }
 
 impl LoggingConfig {
@@ -226,6 +239,9 @@ impl Default for LoggingConfig {
             console: ConsoleConfig::default(),
             file: FileConfig::default(),
             module_levels: Vec::new(),
+            custom_fields: CustomFields::default(),
+            timestamp: TimestampConfig::default(),
+            span: SpanConfig::default(),
         }
     }
 }

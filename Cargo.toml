@@ -60,7 +60,7 @@ owo-colors = "4.2.2"
 phf = { version = "0.11", features = ["macros"] }
 proptest = "1.4"
 # Дополнительно для лучшей интеграции с proptest
-proptest-derive = "0.4" # для автогенерации Arbitrary traits
+proptest-derive = "0.4"                                                                    # для автогенерации Arbitrary traits
 rand = "0.8"
 rmp-serde = "1.3.0"
 rustyline = "17.0.1"
@@ -74,8 +74,9 @@ thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["full", "test-util"] }
 tracing = "0.1"
 siphasher = "0.3"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json", "ansi"] }
 tracing-appender = "0.2"
+hostname = "0.4"
 zstd = "0.13.3"
 uuid = { version = "1", features = ["serde", "v4"] }
 
