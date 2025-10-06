@@ -502,6 +502,38 @@ impl ConnectionHandler {
                     }
                 }
             }
+            "GEORADIUS" if parts.len() >= 5 => {
+                let key = Sds::from(parts[1].as_bytes());
+                let lon: f64 = parts[2].parse().unwrap_or(0.0);
+                let lat: f64 = parts[3].parse().unwrap_or(0.0);
+                let radius: f64 = parts[4].parse().unwrap_or(0.0);
+
+                // unit опционально, если есть 6-й аргумент
+                let unit = parts.get(5).copied().unwrap_or("km");
+
+                match engine.geo_radius(&key, lon, lat, radius, unit) {
+                    Ok(results) => {
+                        let mut resp = format!("*{}\r\n", results.len());
+                        for (name, distance, point) in results {
+                            resp += "*3\r\n";
+                            resp += &format!("${}\r\n{}\r\n", name.len(), name);
+                            resp += &format!("+{}\r\n", distance);
+                            resp += &format!(
+                                "*2\r\n${}\r\n{}\r\n${}\r\n{}\r\n",
+                                point.lon.to_string().len(),
+                                point.lon,
+                                point.lat.to_string().len(),
+                                point.lat
+                            );
+                        }
+                        resp
+                    }
+                    Err(e) => {
+                        error!("GEORADIUS command failed: {}", e);
+                        "-ERR GEORADIUS failed\r\n".to_string()
+                    }
+                }
+            }
             _ => "-ERR Unknown command\r\n".to_string(),
         };
 
