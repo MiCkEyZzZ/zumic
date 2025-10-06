@@ -4,7 +4,7 @@
 //! Модуль реализует структуру [`Bitmap`] для хранения и
 //! обработки битовых данных с поддержкой:
 //! - установки и получения битов по индексу,
-//! - подсчёта установленных битов в диапазоне,
+//! - подсчёта установленных битов в диапазоне (с SIMD-ускорением),
 //! - побитовых логических операций (`AND`, `OR`, `XOR`, `NOT`) между битовыми
 //!   массивами.
 //!
@@ -15,27 +15,23 @@ use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use serde::{Deserialize, Serialize};
 
-/// Lookup-таблица для подсчёта количества установленных битов в
-/// байтах от 0 до 255.
-const BIT_COUNT_TABLE: [u8; 256] = [
-    0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
-    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
-    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
-    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
-    1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
-    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
-    2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
-    3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8,
-];
+use crate::database::{
+    bitmap_simd::{bitcount_auto, bitcount_with_strategy, BitcountStrategy, CpuFeatures},
+    BIT_COUNT_TABLE,
+};
 
 /// Динамический битовый массив с поддержкой побитовых операций и
 /// подсчёта битов.
 ///
 /// Используется для хранения и обработки битов, поддерживает
-/// эффективные побитовые операции и подсчёт установленных битов.
+/// эффективные побитовые операции и подсчёт установленных битов
+/// с автоматическим использованием SIMD-инструкций.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Bitmap {
     pub bytes: Vec<u8>,
+    /// Cached CPU features for optimal bitcount strategy
+    #[serde(skip)]
+    pub strategy: Option<BitcountStrategy>,
 }
 
 impl Bitmap {
@@ -43,7 +39,10 @@ impl Bitmap {
     ///
     /// Массив автоматически расширяется при установке битов.
     pub fn new() -> Self {
-        Self { bytes: Vec::new() }
+        Self {
+            bytes: Vec::new(),
+            strategy: None,
+        }
     }
 
     /// Создаёт `Bitmap` с заданной длиной в битах, все биты
@@ -55,6 +54,7 @@ impl Bitmap {
         let byte_len = bits.div_ceil(8);
         Self {
             bytes: vec![0u8; byte_len],
+            strategy: None,
         }
     }
 
@@ -107,16 +107,13 @@ impl Bitmap {
         (byte >> (7 - bit_index)) & 1 == 1
     }
 
-    /// Подсчитывает количество установленных (`true`) битов в
-    /// диапазоне `[start, end)`.
+    /// Подсчитывает количество установленных (`true`) битов в диапазоне
+    /// `[start, end)`.
     ///
-    /// Диапазон автоматически ограничивается длиной массива.
-    ///
-    /// # Аргументы
-    /// * `start` — начало диапазона (включительно).
-    /// * `end` — конец диапазона (исключительно).
+    /// Использует SIMD-ускоренные инструкции (AVX-512, AVX2, POPCNT)
+    /// когда доступны, автоматически выбирая оптимальную реализацию.
     pub fn bitcount(
-        &self,
+        &self, // <-- &mut self -> &self
         start: usize,
         end: usize,
     ) -> usize {
@@ -144,8 +141,55 @@ impl Bitmap {
         let first_mask = 0xFFu8 >> sb;
         let mut count = BIT_COUNT_TABLE[(self.bytes[start_byte] & first_mask) as usize] as usize;
 
-        for &b in &self.bytes[start_byte + 1..end_byte] {
-            count += BIT_COUNT_TABLE[b as usize] as usize;
+        if end_byte > start_byte + 1 {
+            let middle_bytes = &self.bytes[start_byte + 1..end_byte];
+            count += bitcount_auto(middle_bytes);
+        }
+
+        let eb = end % 8;
+        let last_mask = if eb == 0 { 0xFFu8 } else { 0xFFu8 << (8 - eb) };
+        count + BIT_COUNT_TABLE[(self.bytes[end_byte] & last_mask) as usize] as usize
+    }
+
+    /// Подсчитывает все установленные биты используя SIMD-ускорение
+    pub fn bitcount_all(&self) -> usize {
+        bitcount_auto(&self.bytes)
+    }
+
+    /// Подсчитывает биты с конкретной стратегией
+    pub fn bitcount_with_strategy(
+        &self, // <-- &mut self -> &self
+        start: usize,
+        end: usize,
+        strategy: BitcountStrategy,
+    ) -> usize {
+        let end = end.min(self.bit_len());
+        let start = start.min(end);
+        if start >= end {
+            return 0;
+        }
+
+        let start_byte = start / 8;
+        let end_byte = (end - 1) / 8;
+
+        if start_byte == end_byte {
+            let sb = start % 8;
+            let eb = end % 8;
+            let mask = if eb == 0 {
+                0xFFu8 >> sb
+            } else {
+                (0xFFu8 >> sb) & (0xFFu8 << (8 - eb))
+            };
+            return BIT_COUNT_TABLE[(self.bytes[start_byte] & mask) as usize] as usize;
+        }
+
+        let sb = start % 8;
+        let first_mask = 0xFFu8 >> sb;
+        let mut count = BIT_COUNT_TABLE[(self.bytes[start_byte] & first_mask) as usize] as usize;
+
+        if end_byte > start_byte + 1 {
+            let middle_bytes = &self.bytes[start_byte + 1..end_byte];
+            count += bitcount_with_strategy(middle_bytes, strategy);
         }
 
         let eb = end % 8;
@@ -161,6 +205,16 @@ impl Bitmap {
     /// Возвращает ссылку на внутренний байтовый массив (`&[u8]`).
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
+    }
+
+    /// Получить информацию о доступных CPU features
+    pub fn cpu_features() -> CpuFeatures {
+        CpuFeatures::detect()
+    }
+
+    /// Получить оптимальную стратегию для текущего CPU
+    pub fn best_strategy() -> BitcountStrategy {
+        Self::cpu_features().best_strategy()
     }
 }
 
@@ -178,6 +232,7 @@ impl BitAnd for &Bitmap {
                 .zip(rhs.bytes.iter())
                 .map(|(a, b)| a & b)
                 .collect(),
+            strategy: None,
         }
     }
 }
@@ -196,7 +251,10 @@ impl BitOr for &Bitmap {
             let b = rhs.bytes.get(i).copied().unwrap_or(0);
             result.push(a | b);
         }
-        Bitmap { bytes: result }
+        Bitmap {
+            bytes: result,
+            strategy: None,
+        }
     }
 }
 
@@ -214,7 +272,10 @@ impl BitXor for &Bitmap {
             let b = rhs.bytes.get(i).copied().unwrap_or(0);
             result.push(a ^ b);
         }
-        Bitmap { bytes: result }
+        Bitmap {
+            bytes: result,
+            strategy: None,
+        }
     }
 }
 
@@ -224,6 +285,7 @@ impl Not for &Bitmap {
     fn not(self) -> Self::Output {
         Bitmap {
             bytes: self.bytes.iter().map(|b| !b).collect(),
+            strategy: None,
         }
     }
 }
@@ -297,5 +359,72 @@ mod tests {
         assert!(!not.get_bit(1));
         assert!(not.get_bit(0));
         assert!(!not.get_bit(7));
+    }
+
+    /// Тест проверяет SIMD-ускоренный bitcount
+    #[test]
+    fn test_simd_bitcount() {
+        let mut bitmap = Bitmap::new();
+
+        // Установим 1000 битов
+        for i in 0..1000 {
+            if i % 2 == 0 {
+                bitmap.set_bit(i, true);
+            }
+        }
+
+        assert_eq!(bitmap.bitcount_all(), 500);
+        assert_eq!(bitmap.bitcount(0, 1000), 500);
+        assert_eq!(bitmap.bitcount(0, 500), 250);
+    }
+
+    /// Тест сравнения всех стратегий bitcount
+    #[test]
+    fn test_all_strategies_consistency() {
+        let mut bitmap = Bitmap::new();
+
+        // Создаём разнообразный паттерн
+        for i in 0..10000 {
+            bitmap.set_bit(i, i % 3 == 0);
+        }
+
+        let expected = bitmap.bitcount(0, 10000);
+
+        // Все стратегии должны давать одинаковый результат
+        assert_eq!(
+            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::LookupTable),
+            expected
+        );
+        assert_eq!(
+            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Popcnt),
+            expected
+        );
+        assert_eq!(
+            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Avx2),
+            expected
+        );
+        assert_eq!(
+            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Avx512),
+            expected
+        );
+    }
+
+    /// Тест CPU features detection
+    #[test]
+    fn test_cpu_features() {
+        let features = Bitmap::cpu_features();
+        let strategy = Bitmap::best_strategy();
+
+        println!("Detected CPU features: {:?}", features);
+        println!("Best strategy: {:?}", strategy);
+
+        // Должна быть хотя бы базовая стратегия
+        assert!(matches!(
+            strategy,
+            BitcountStrategy::LookupTable
+                | BitcountStrategy::Popcnt
+                | BitcountStrategy::Avx2
+                | BitcountStrategy::Avx512
+        ));
     }
 }
