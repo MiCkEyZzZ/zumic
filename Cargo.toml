@@ -104,10 +104,11 @@ optional = true
 
 [features]
 default = []
+concurrent = []
 fuzz = ["arbitrary"]
 
 [[bench]]
-name = "decode_benchmarks"
+name = "geo_benchmark"
 harness = false
 
 [workspace]

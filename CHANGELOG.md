@@ -24,17 +24,30 @@
   - Расширен модуль: `src/engine/aof.rs` (логика ротации, recovery-интеграция).
   - Интеграция RecoveryManager/CompactionManager в `PersistentStore` (инициализация, trigger\_compaction, create\_snapshot, метрики).
   - Интеграция RecoveryManager/CompactionManager в `PersistentStore` (инициализация, trigger_compaction, create_snapshot, метрики).
-  **error**:
-    - Добавлены ошибки для декодирования zsp-протокола: `zsp_decoder`;
-    - Добавлены ошибки для кодирования zsp-протокола: `zsp_encoder`;
-    - Добавлены ошибки для версионирования zsp-протокола: `zsp_version`;
-    - Добавлены ошибки для парсинга zsp-протокола: `zsp_parser`;
-    - Добавлены ошибки для сериализации zsp-протокола: `zsp_serialization`;
-  **zsp**
-    - Добавил файл для версионирования протокола: `version.rs`;
-  **zumic**
-    - добавил дполнительные правила в: `taplo.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `clippy.toml`
-    - добавил подробное описание в `Makefile`
+- **error**:
+  - Добавлены ошибки для декодирования zsp-протокола: `zsp_decoder`;
+  - Добавлены ошибки для кодирования zsp-протокола: `zsp_encoder`;
+  - Добавлены ошибки для версионирования zsp-протокола: `zsp_version`;
+  - Добавлены ошибки для парсинга zsp-протокола: `zsp_parser`;
+  - Добавлены ошибки для сериализации zsp-протокола: `zsp_serialization`;
+- **zsp**
+  - Добавил файл для версионирования протокола: `version.rs`;
+- **zumic**
+  - добавил дполнительные правила в: `taplo.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `clippy.toml`
+  - добавил подробное описание в `Makefile`
+  Отлично! Давай аккуратно добавим выполнение **Issue #GEO-1** в твой Changelog. Можно оформить так:
+- **database/geo**
+  - Реализован **R-tree** для 2D spatial indexing (Issue **#GEO-1**):
+  - Поддержка **bulk loading** для эффективного построения дерева.
+- **Nearest neighbor search (k-NN)** и **range queries** через bounding box.
+  - Инкрементальные обновления: вставка/удаление без полного rebuild.
+  - Бенчмарки показывают высокую производительность:
+    - radius queries < 1 µs – 1.6 µs на 100k точек
+    - k-NN queries ~18–19 ms на 100k точек
+    - throughput до 25–94 M elements/s в зависимости от операции и размера.
+    - Метрики использования памяти: overhead 91–212% относительно flat array (для R-tree приемлемо).
+    - Модули: `geo_rtree.rs`, интеграция в `geo.rs`.
+    - Юнит- и интеграционные тесты пройдены успешно.
 
 ### Изменено
 

@@ -195,6 +195,7 @@ impl InPersistentStore {
     }
 
     /// Восстанавливает состояние из AOF журнала.
+    /// Восстанавливает состояние из AOF журнала.
     fn replay_aof(&self) -> StoreResult<()> {
         let mut aof_guard = self.aof.lock().unwrap();
 
@@ -209,7 +210,7 @@ impl InPersistentStore {
                             data.insert(key, value);
                             // Обновляем метрики только для новых ключей
                             if was_new {
-                                if let Some(ref metrics) = shard.metrics {
+                                if let Some(metrics) = shard.metrics.as_ref() {
                                     metrics.increment_key_count();
                                 }
                             }
@@ -217,7 +218,7 @@ impl InPersistentStore {
                     }
                     AofOp::Del => {
                         if data.remove(&key).is_some() {
-                            if let Some(ref metrics) = shard.metrics {
+                            if let Some(metrics) = shard.metrics.as_ref() {
                                 metrics.decrement_key_count();
                             }
                         }
@@ -283,7 +284,8 @@ impl Storage for InPersistentStore {
             data.insert(key_b.to_vec(), val_b);
 
             if was_new {
-                if let Some(ref metrics) = shard.metrics {
+                // Берём ссылку на metrics, чтобы не перемещать Option<ShardMetrics>
+                if let Some(metrics) = shard.metrics.as_ref() {
                     metrics.increment_key_count();
                 }
             }
@@ -316,7 +318,8 @@ impl Storage for InPersistentStore {
         let shard = self.index.get_shard(key_b);
         let existed = shard.write(|data| {
             if data.remove(key_b).is_some() {
-                if let Some(ref metrics) = shard.metrics {
+                // Берём ссылку на метрики, чтобы не перемещать Option<ShardMetrics>
+                if let Some(metrics) = shard.metrics.as_ref() {
                     metrics.decrement_key_count();
                 }
                 true
@@ -370,7 +373,8 @@ impl Storage for InPersistentStore {
                     }
                 }
                 if new_keys > 0 {
-                    if let Some(ref metrics) = shard.metrics {
+                    // Берём ссылку на metrics, чтобы не пытаться переместить Option<ShardMetrics>
+                    if let Some(metrics) = shard.metrics.as_ref() {
                         metrics.key_count.fetch_add(new_keys, Ordering::Relaxed);
                     }
                 }
@@ -440,7 +444,8 @@ impl Storage for InPersistentStore {
                     let to_was_new = !data.contains_key(to_b);
                     data.insert(to_b.to_vec(), val.clone());
 
-                    if let Some(ref metrics) = shard.metrics {
+                    // Берём ссылку на metrics, чтобы не перемещать Option<ShardMetrics>
+                    if let Some(metrics) = shard.metrics.as_ref() {
                         metrics.decrement_key_count();
                         if to_was_new {
                             metrics.increment_key_count();
@@ -471,11 +476,12 @@ impl Storage for InPersistentStore {
                     let to_was_new = !to_map.contains_key(to_b);
                     to_map.insert(to_b.to_vec(), val.clone());
 
-                    if let Some(ref m) = self.index.all_shards()[from_shard_id].metrics {
+                    // Здесь тоже берём ссылки на метрики (as_ref), чтобы не перемещать их
+                    if let Some(m) = self.index.all_shards()[from_shard_id].metrics.as_ref() {
                         m.decrement_key_count();
                     }
                     if to_was_new {
-                        if let Some(ref m) = self.index.all_shards()[to_shard_id].metrics {
+                        if let Some(m) = self.index.all_shards()[to_shard_id].metrics.as_ref() {
                             m.increment_key_count();
                         }
                     }
@@ -574,13 +580,15 @@ impl Storage for InPersistentStore {
     }
 
     /// Очищает всё in-memory содержимое всех шардов.
+    /// Очищает всё in-memory содержимое всех шардов.
     fn flushdb(&self) -> StoreResult<()> {
         for shard in self.index.all_shards().iter() {
             shard.write(|data| {
                 let old_count = data.len() as u64;
                 data.clear();
 
-                if let Some(ref metrics) = shard.metrics {
+                // Берём ссылку на metrics, чтобы не перемещать Option<ShardMetrics>
+                if let Some(metrics) = shard.metrics.as_ref() {
                     metrics.key_count.fetch_sub(old_count, Ordering::Relaxed);
                 }
             });
@@ -601,6 +609,7 @@ impl Storage for InPersistentStore {
         let shard = self.index.get_shard(key_b);
 
         let result: StoreResult<(Vec<u8>, bool)> = shard.write(|data| {
+            // Восстанавливаем существующий GeoSet из байтов, если есть
             let mut gs = if let Some(raw) = data.get(key_b) {
                 let mut rdr =
                     StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
@@ -618,23 +627,34 @@ impl Storage for InPersistentStore {
                 GeoSet::new()
             };
 
+            // Добавляем/обновляем member
             let existed = gs.get(member.as_str()?).is_some();
             gs.add(member.to_string(), lon, lat);
             let added = !existed;
 
-            let mut buf = Vec::new();
-            let entries = gs.entries.iter().map(|e| {
-                let key = Sds::from_str(&e.member);
-                let v = Value::Array(vec![Value::Float(e.point.lon), Value::Float(e.point.lat)]);
-                (key, v)
-            });
-            write_stream(&mut buf, entries).map_err(StoreError::Io)?;
+            // Сериализуем все записи через итератор (gs.iter()), для детерминированности
+            // сортируем по имени.
+            let mut entries_vec: Vec<(String, Value)> = gs
+                .iter()
+                .map(|(m, p)| {
+                    let v = Value::Array(vec![Value::Float(p.lon), Value::Float(p.lat)]);
+                    (m.clone(), v)
+                })
+                .collect();
 
+            entries_vec.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+            let mut buf = Vec::new();
+            let entries_iter = entries_vec.into_iter().map(|(m, v)| (Sds::from_str(&m), v));
+            write_stream(&mut buf, entries_iter).map_err(StoreError::Io)?;
+
+            // Сохраняем в shard
             let was_new_key = !data.contains_key(key_b);
             data.insert(key_b.to_vec(), buf.clone());
 
+            // Обновляем метрики через ссылку, не перемещая Option
             if was_new_key {
-                if let Some(ref metrics) = shard.metrics {
+                if let Some(metrics) = shard.metrics.as_ref() {
                     metrics.increment_key_count();
                 }
             }
@@ -644,6 +664,7 @@ impl Storage for InPersistentStore {
 
         let result = result?;
 
+        // Логируем новое состояние в AOF
         {
             let mut aof = self.aof.lock().unwrap();
             aof.append_set(key_b, &result.0)?;
