@@ -121,16 +121,62 @@ tcp_keepalive = true                                        # Включить T
 so_reuseaddr = true                                         # Разрешить reuse адреса
 
 # ========================================
-# ЛОГИРОВАНИЕ
+# ЛОГИРОВАНИЕ (РАСШИРЕННОЕ)
 # ========================================
+[logging]
+# Глобальный уровень: "trace" | "debug" | "info" | "warn" | "error"
+lavel = "info"
 
-log_level = "info"                                          # Уровень логов: "trace" | "debug" | "info" | "warn" | "error"
+# Формат вывода: "json" | "pretty" | "compact"
+format = "pretty"
 
-# Примеры других уровней:
-# log_level = "trace"    # Самый подробный
-# log_level = "debug"    # Отладочная информация
-# log_level = "warn"     # Только предупреждения и ошибки
-# log_level = "error"    # Только ошибки
+# Директория для логов
+log_dir = "./logs"
+
+# Политика ротации: "daily" | "hourly" | "never"
+# Или: rotation = { size = { mb = 100 } }
+rotation = "daily"
+
+# Включить консольный вывод
+console_enabled = true
+
+# Включить запись в файл
+file_enabled = true
+
+# Максимальный размер файла (МБ) для size-based rotation
+max_file_size_mb = 100
+
+# Сколько дней хранить старые логи
+rotation_days = 30
+
+# Per-module уровня (опционально)
+module_levels = []
+# Примеры:
+# module_levels = ["zumic::engine=debug", ""zumic::network=trace]
+
+# ========================================
+# КОНСОЛЬ (OVERRIDE настроек)
+# ========================================
+[logging.console]
+enabled = true
+# format = "pretty" # Override формат для консоли
+with_ansi = true # Цвет ANSI
+with_target = true # Показывать module path
+with_thread_ids = false # Показывать thread IDs
+with_line_numbers = false # Показывать номера строк
+
+# ========================================
+# ФАЙЛ (OVERRIDE настроек)
+# ========================================
+[logging.file]
+enabled = true
+filename = "zumic.log"
+# format = "json" # Override формат для файла
+# rotation = "daily" # Override политики ротации
+# max_size_mb = 100
+# retention_days = 30
+compress_old = false # Сжимать старые файлы
+buffer_zise = 8192 # Размер буфера (байты)
 
 # ========================================
 # ПРИМЕРЫ КОНФИГУРАЦИЙ ДЛЯ РАЗНЫХ РЕЖИМОВ
