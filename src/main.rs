@@ -11,10 +11,6 @@ use zumic::{
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
     let local = tokio::task::LocalSet::new();
 
     local
@@ -31,6 +27,13 @@ async fn main() -> anyhow::Result<()> {
 
 async fn run_server() -> anyhow::Result<()> {
     let settings = Settings::load()?;
+
+    // Инициализируем наш логгер на основе настроек (в модуле logging::mod)
+    // LoggingHandle удерживает WorkerGuard внутри и не даст закрыться appender'у.
+    // Переводим ошибку в anyhow::Error для согласованности с main.
+    let _logging_handle = zumic::logging::init_logging(settings.logging.clone())
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {e}"))?;
+
     info!("Loaded config: {:#?}", &settings);
 
     let port = if settings.listen_address.port() == 0 {

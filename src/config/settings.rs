@@ -3,6 +3,8 @@ use std::net::SocketAddr;
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 
+use crate::logging::config::LoggingConfig;
+
 /// Тип хранилища, используемого сервером.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -124,12 +126,17 @@ pub struct Settings {
     pub max_memory: Option<String>,
 
     /// Уровень логирования: "trace", "debug", "info", "warn", "error".
+    /// DEPRECATED: Используйте logging.level вместо этого
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
     /// Количество потоков в пуле для асинхронных задач.
     #[serde(default = "num_cpus::get")]
     pub thread_pool_size: usize,
+
+    /// Конфигурация логирования (новая, расширенная)
+    #[serde(default)]
+    pub logging: LoggingConfig,
 }
 
 impl Settings {
@@ -143,6 +150,7 @@ impl Settings {
     /// Возвращает `Settings` или ошибку `ConfigError`.
     pub fn load() -> Result<Self, ConfigError> {
         let profile = std::env::var("RUST_ENV").unwrap_or_else(|_| "dev".into());
+
         let builder = Config::builder()
             .add_source(File::with_name("src/config/default").required(false))
             .add_source(File::with_name(&format!("src/config/{profile}")).required(false))
@@ -152,6 +160,21 @@ impl Settings {
             .set_default("storage_type", default_storage_str())?
             .set_default("log_level", default_log_level_str())?;
 
-        builder.build()?.try_deserialize()
+        let mut settings: Settings = builder.build()?.try_deserialize()?;
+
+        // Обратная совместимость: если logging.level пустой, используем log_level
+        if settings.logging.level == "info" && settings.log_level != "info" {
+            settings.logging.level = settings.log_level.clone();
+        }
+
+        // Применяем env overrides для логирования
+        settings.logging.apply_env_overrides();
+
+        // Валидация логирования
+        settings.logging.validate().map_err(|e| {
+            ConfigError::Message(format!("Logging config validation failed: {}", e))
+        })?;
+
+        Ok(settings)
     }
 }
