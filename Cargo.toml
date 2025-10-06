@@ -108,7 +108,7 @@ concurrent = []
 fuzz = ["arbitrary"]
 
 [[bench]]
-name = "geo_benchmark"
+name = "bitmap_benches"
 harness = false
 
 [workspace]
