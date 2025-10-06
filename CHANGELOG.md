@@ -57,6 +57,15 @@
     - Поддержка выравненной и невыравненной памяти (aligned/unaligned).
     - Benchmark suite для сравнения производительности всех реализаций.
     - Метрики throughput и latency для анализа производительности.
+- **logging**
+  - Реализован менеджмент конфигурации логирования (Issue **#LOG-1**):
+  - Структура `LoggingConfig` для хранения всех параметров логирования (`level`, `format`, `log_dir`, `rotation`, `console_enabled`, `file_enabled`, `max_file_size_mb`, `retention_days`).
+  - Поддержка чтения конфигурации из `src/config/default.toml`.
+  - Валидация конфигурации при старте сервера.
+  - Hot-reload для non-critical параметров (`level`, фильтры модулей).
+  - Переопределение через environment variables: `ZUMIC_LOG_LEVEL`, `ZUMIC_LOG_DIR`.
+  - Пер-модульная настройка уровня логирования через `RUST_LOG`.
+  - Юнит- и интеграционные тесты для проверки корректной работы конфигурации.
 
 ### Изменено
 
