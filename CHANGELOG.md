@@ -48,6 +48,15 @@
     - Метрики использования памяти: overhead 91–212% относительно flat array (для R-tree приемлемо).
     - Модули: `geo_rtree.rs`, интеграция в `geo.rs`.
     - Юнит- и интеграционные тесты пройдены успешно.
+- **database/bitmap**
+  - Реализован SIMD-accelerated bitcount (Issue #BITMAP-1):
+    - Использование popcnt для современных x86_64 CPU.
+    - SIMD ускорение через AVX2/AVX-512 для пакетной обработки битов.
+    - Fallback на lookup-таблицу для старых CPU.
+    - Runtime feature detection и автоматический выбор оптимального алгоритма.
+    - Поддержка выравненной и невыравненной памяти (aligned/unaligned).
+    - Benchmark suite для сравнения производительности всех реализаций.
+    - Метрики throughput и latency для анализа производительности.
 
 ### Изменено
 
@@ -58,6 +67,9 @@
 - Изменено название файлов в модуле error: с `version` на `zdb_version`;
 - В `engine/zdb/file.rs` изменил название ошибки: с `VersionError` на `ZdbVersionError`;
 - В `pubsub/zsp_integration.rs` изменил название ошибок: c `DecodeError`, `EncodeError` на `ZspDecodeError`, `ZspEncodeError`;
+- **database/bitmap**
+  - Оптимизирован bitcount: теперь высокая скорость подсчёта установленных битов даже на больших bitmap (1GB+) благодаря SIMD и popcnt.
+  - Улучшена стабильность и корректность подсчёта битов для любых offset'ов.
 
 ### Исправлено
 
