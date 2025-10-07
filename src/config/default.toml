@@ -211,8 +211,52 @@ filename = "zumic.log"
 # rotation = "daily" # Override политики ротации
 # max_size_mb = 100
 # retention_days = 30
-compress_old = false # Сжимать старые файлы
-buffer_zise = 8192 # Размер буфера (байты)
+
+# ===== ROTATION SETTINGS (NEW) =====
+
+# Политика ротации (override глобальной)
+# rotation = "daily"
+# rotation = "hourly"
+# rotation = { size = { mb = 100 } }
+
+# Naming strategy: "simple" | "dated" | "sequential" | "full"
+# simple:     zumic.log
+# dated:      zumic-2025-10-06.log
+# sequential: zumic-001.log, zumic-002.log
+# full:       zumic-2025-10-06-001.log
+naming = "dated"
+# Compression старых файлов (gzip)
+compress_old = false  # true для production
+# Retention policy
+retention_days = 30  # Удалять файлы старше 30 дней
+# Автоматический cleanup
+auto_cleanup = true
+# Интервал для background cleanup (секунды)
+cleanup_interval_secs = 3600  # Каждый час
+# Buffer size (байты)
+buffer_size = 8192
+
+# ===== ПРИМЕРЫ ДЛЯ РАЗНЫХ СЦЕНАРИЕВ =====
+
+# High-volume production:
+# [logging.file]
+# rotation = { size = { mb = 500 } }
+# compress_old = true
+# retention_days = 7
+# naming = "full"
+
+# Development:
+# [logging.file]
+# rotation = "never"
+# compress_old = false
+# retention_days = 3
+
+# Container environment (экономия места):
+# [logging.file]
+# rotation = { size = { mb = 10 } }
+# compress_old = true
+# retention_days = 1
+# naming = "simple"
 
 # ========================================
 # ПРИМЕРЫ КОНФИГУРАЦИЙ ДЛЯ РАЗНЫХ РЕЖИМОВ

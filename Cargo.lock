@@ -3738,6 +3738,7 @@ dependencies = [
  "glob",
  "globset",
  "hostname",
+ "lazy_static",
  "libloading",
  "loom",
  "lru",
