@@ -79,6 +79,7 @@ tracing-appender = "0.2"
 hostname = "0.4"
 zstd = "0.13.3"
 uuid = { version = "1", features = ["serde", "v4"] }
+lazy_static = "1.4"
 
 [dependencies.wasmtime]
 version = "34.0.1"
@@ -89,6 +90,7 @@ chrono = "0.4.41"
 
 
 [dev-dependencies]
+tempfile = "3.0"
 criterion = { version = "0.6.0", features = ["async"] }
 
 [profile.bench]

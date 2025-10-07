@@ -23,6 +23,21 @@ pub enum RotationPolicy {
     Never,
 }
 
+/// Стратегия именования файлов.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FileNamingStrategy {
+    /// zumic.log
+    Simple,
+    /// zumic-2025-10-06.log
+    #[default]
+    Dated,
+    /// zumic-001.log
+    Sequential,
+    /// zumic-2025-10-06-001.log
+    Full,
+}
+
 /// Конфигурация консольного вывода.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConsoleConfig {
@@ -54,6 +69,15 @@ pub struct FileConfig {
     pub compress_old: bool,
     #[serde(default = "default_buffer_size")]
     pub buffer_size: usize,
+    /// File naming strategy
+    #[serde(default)]
+    pub naming: FileNamingStrategy,
+    /// Автоматическое применение retention policy
+    #[serde(default = "default_true")]
+    pub auto_cleanup: bool,
+    /// Интервал для background cleanup (секунды)
+    #[serde(default = "default_cleanup_interval")]
+    pub cleanup_interval_secs: u64,
 }
 
 /// Полная конфигурация системы логирования.
@@ -291,6 +315,9 @@ impl Default for FileConfig {
             retention_days: None,
             compress_old: false,
             buffer_size: 8192,
+            naming: FileNamingStrategy::default(),
+            auto_cleanup: true,
+            cleanup_interval_secs: 3600,
         }
     }
 }
@@ -326,4 +353,8 @@ fn default_true() -> bool {
 
 fn default_false() -> bool {
     false
+}
+
+fn default_cleanup_interval() -> u64 {
+    3600 // 1 час
 }
