@@ -1,9 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use zumic::{
     banner,
     engine::{InClusterStore, PersistentStoreConfig},
+    logging,
     network::connection::ConnectionConfig,
     server::{Server, ServerConfig},
     InMemoryStore, InPersistentStore, Settings, Storage, StorageEngine, StorageType,
@@ -28,11 +29,9 @@ async fn main() -> anyhow::Result<()> {
 async fn run_server() -> anyhow::Result<()> {
     let settings = Settings::load()?;
 
-    // Инициализируем наш логгер на основе настроек (в модуле logging::mod)
-    // LoggingHandle удерживает WorkerGuard внутри и не даст закрыться appender'у.
-    // Переводим ошибку в anyhow::Error для согласованности с main.
-    let _logging_handle = zumic::logging::init_logging(settings.logging.clone())
-        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {e}"))?;
+    let logging_handle = logging::init_logging(settings.logging.clone())
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {e}"))?
+        .with_flush_timeout(Duration::from_secs(10));
 
     info!("Loaded config: {:#?}", &settings);
 
@@ -58,14 +57,19 @@ async fn run_server() -> anyhow::Result<()> {
 
     #[allow(clippy::arc_with_non_send_sync)]
     let engine = match settings.storage_type {
-        StorageType::Memory => Arc::new(StorageEngine::Memory(InMemoryStore::new())),
+        StorageType::Memory => {
+            info!("Initializing in-memory storage");
+            Arc::new(StorageEngine::Memory(InMemoryStore::new()))
+        }
         StorageType::Persistent => {
+            info!("Initializing persistent storage");
             let config = PersistentStoreConfig::default();
             let store =
                 InPersistentStore::new("zumic.aof", config).map_err(|e| anyhow::anyhow!("{e}"))?;
             Arc::new(StorageEngine::Persistent(store))
         }
         StorageType::Cluster => {
+            info!("Initializing cluster storage");
             let shards: Vec<Arc<dyn Storage>> = (0..3)
                 .map(|_| Arc::new(InMemoryStore::new()) as Arc<dyn Storage>)
                 .collect();
@@ -92,10 +96,11 @@ async fn run_server() -> anyhow::Result<()> {
     match server.start().await {
         Ok(_) => {
             info!("Server started successfully");
-            setup_signal_handlers(&mut server).await?;
+            setup_signal_handlers(&mut server, logging_handle).await?;
         }
         Err(e) => {
             error!("Failed to start server: {e}");
+            logging_handle.shutdown();
             return Err(e);
         }
     }
@@ -104,7 +109,10 @@ async fn run_server() -> anyhow::Result<()> {
 }
 
 /// Настройка обработчиков сигналов для graceful shutdown
-async fn setup_signal_handlers(server: &mut Server) -> Result<(), anyhow::Error> {
+async fn setup_signal_handlers(
+    server: &mut Server,
+    logging_handle: logging::LoggingHandle,
+) -> Result<(), anyhow::Error> {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
@@ -134,11 +142,24 @@ async fn setup_signal_handlers(server: &mut Server) -> Result<(), anyhow::Error>
         }
     }
 
+    // Получаем статистику перед shutdown
+    let stats = logging_handle.get_metrics();
+    if stats.dropped_messages > 0 {
+        warn!(
+            dropped_messages = stats.dropped_messages,
+            "Some log messages were dropped during execution"
+        );
+    }
+
     info!("Shutting down server...");
     if let Err(e) = server.shutdown().await {
         error!("Error during server shutdown: {e}");
     }
 
-    info!("Server shutdown completed successfully");
-    Ok(()) // теперь всё совпадает
+    info!("Server shutdown completed, flushing logs...");
+
+    // Graceful logging shutdown с таймаутом
+    logging_handle.shutdown_async(Duration::from_secs(5)).await;
+
+    Ok(())
 }

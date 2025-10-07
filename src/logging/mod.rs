@@ -2,27 +2,12 @@ pub mod config;
 mod filters;
 pub mod formats;
 mod formatter;
+pub mod handle;
 pub mod sinks;
 
-use config::LoggingConfig;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
-
-/// Handle для управления lifecycle логирования.
-pub struct LoggingHandle {
-    _file_guard: Option<tracing_appender::non_blocking::WorkerGuard>,
-}
-
-impl LoggingHandle {
-    /// Принудительный flush всех буферов.
-    pub fn flush(&self) {
-        // WorkerGuard автоматически делает flush при drop
-    }
-
-    /// Graceful shutdown с явным flush.
-    pub fn shutdown(self) {
-        drop(self);
-    }
-}
+pub use config::LoggingConfig;
+pub use handle::LoggingHandle;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Инициализация логирования с конфигурацией
 pub fn init_logging(
@@ -34,14 +19,14 @@ pub fn init_logging(
     // Валидация
     config.validate()?;
 
-    // Создать директорию
+    // Создать директорию логов
     config.ensure_log_dir()?;
 
     // Build filter
     let env_filter = filters::build_filter_from_config(&config);
 
     // Layers
-    let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = Vec::new();
+    let mut layers: Vec<Box<dyn tracing_subscriber::Layer<_> + Send + Sync>> = Vec::new();
 
     // Console layer
     if config.console_enabled && config.console.enabled {
@@ -64,20 +49,24 @@ pub fn init_logging(
         .with(layers)
         .init();
 
-    // Log startup
+    // Логируем инициализацию
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         log_level = %config.level,
         log_dir = %config.log_dir.display(),
+        console_enabled = config.console_enabled,
+        file_enabled = config.file_enabled,
         "Logging system initialized"
     );
 
-    Ok(LoggingHandle {
-        _file_guard: file_guard,
-    })
+    // Создаём handle с guards
+    let handle = LoggingHandle::new(file_guard, None);
+
+    Ok(handle)
 }
 
 /// Старая функция для обратной совместимости
+#[deprecated(note = "Use init_logging() instead")]
 pub fn init_logging_simple() {
     let config = LoggingConfig::default();
     if let Err(e) = init_logging(config) {
