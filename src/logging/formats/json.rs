@@ -11,8 +11,6 @@ use crate::logging::config::LoggingConfig;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct JsonFormatter {
-    // ранее было: instance_id: Box<JsonFormatter>,
-    // должно быть: Option<String>
     instance_id: Option<String>,
     version: String,
     environment: Option<String>,
