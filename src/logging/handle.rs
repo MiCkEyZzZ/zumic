@@ -218,3 +218,103 @@ impl Drop for LoggingHandle {
 // SAFETY: LoggingHandle is Send + Sync because WorkerGuard is Send + Sync
 unsafe impl Send for LoggingHandle {}
 unsafe impl Sync for LoggingHandle {}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::atomic::Ordering, time::Duration};
+
+    use tokio;
+
+    use super::*;
+
+    // Компиляторная проверка, что тип Send + Sync
+    fn assert_send_sync<T: Send + Sync>() {}
+    // Вспомогалка для сброса метрик
+    fn reset_metrics(metrics: &LoggingMetrics) {
+        metrics.dropped_messages.store(0, Ordering::Relaxed);
+        metrics.flush_count.store(0, Ordering::Relaxed);
+        metrics.shutdown_in_progress.store(false, Ordering::Relaxed);
+    }
+
+    /// Тест проверят, что базовые операции метрик (`record_dropped`,
+    /// `record_flush`) корректно изменяют счётчики и возвращают ожидаемые
+    /// значения.
+    #[test]
+    fn test_logging_metrics_basic_counters() {
+        let m = LoggingMetrics::new();
+        reset_metrics(&m);
+
+        assert_eq!(m.get_dropped_messages(), 0);
+        assert_eq!(m.get_flush_count(), 0);
+        assert!(!m.is_shutdown_in_progress());
+
+        m.record_dropped(5);
+        assert_eq!(m.get_dropped_messages(), 5);
+
+        m.record_flush();
+        m.record_flush();
+        assert_eq!(m.get_flush_count(), 2);
+
+        // start_shutdown() — приватный, проверим через API is_shutdown_in_progress
+        m.start_shutdown();
+        assert!(m.is_shutdown_in_progress());
+    }
+
+    /// Тест проверят, что `LoggingHandle::flush()` увеличивает счётчик
+    /// flush'ей.
+    #[test]
+    fn test_logging_handle_flush_increments_counter() {
+        let handle = LoggingHandle::new(None, None);
+        let metrics = handle.metrics.clone();
+
+        reset_metrics(&metrics);
+
+        handle.flush();
+        assert_eq!(metrics.get_flush_count(), 1);
+
+        handle.flush();
+        assert_eq!(metrics.get_flush_count(), 2);
+    }
+
+    /// Тест проверят, что вызов `shutdown()` устанавливает флаг shutdown в
+    /// метриках.
+    #[test]
+    fn test_logging_handle_shutdown_sets_flag() {
+        let handle = LoggingHandle::new(None, None);
+        let metrics = handle.metrics.clone();
+
+        reset_metrics(&metrics);
+        // до shutdown флаг false
+        assert!(!metrics.is_shutdown_in_progress());
+
+        // Shutdown consumes handle; клон метрик сохраняется
+        handle.shutdown();
+
+        // После shutdown start_shutdown() должен был быть вызван
+        assert!(metrics.is_shutdown_in_progress());
+    }
+
+    /// Тест проверят, что `shutdown_async()` отрабатывает и устанавливает флаг
+    /// shutdown.
+    #[tokio::test]
+    async fn test_logging_handle_shutdown_async_sets_flag() {
+        let handle = LoggingHandle::new(None, None);
+        let metrics = handle.metrics.clone();
+
+        reset_metrics(&metrics);
+        assert!(!metrics.is_shutdown_in_progress());
+
+        // Используем небольшой таймаут — у нас нет реальных guard'ов, поэтому задача
+        // завершится быстро
+        handle.shutdown_async(Duration::from_millis(500)).await;
+
+        assert!(metrics.is_shutdown_in_progress());
+    }
+
+    /// Тест проверят, что `LoggingHandle` является Send + Sync (compile-time
+    /// assertion).
+    #[test]
+    fn test_logging_handle_is_send_sync() {
+        assert_send_sync::<LoggingHandle>();
+    }
+}

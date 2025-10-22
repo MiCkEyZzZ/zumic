@@ -198,7 +198,8 @@ impl SizeRotatingWriter {
 
     fn get_next_filename(&self) -> PathBuf {
         let mut seq = self.sequence.lock().unwrap();
-        *seq += 1;
+        let current_seq = *seq; // берем текущее значение
+        *seq += 1; // инкрементируем после использования
 
         let base_name = self
             .base_path
@@ -219,13 +220,21 @@ impl SizeRotatingWriter {
                 self.base_path
                     .with_file_name(format!("{}-{}.{}", base_name, date, extension))
             }
-            FileNaming::Sequential => self
-                .base_path
-                .with_file_name(format!("{}-{:03}.{}", base_name, *seq, extension)),
+            FileNaming::Sequential => self.base_path.with_file_name(format!(
+                "{}-{:03}.{}",
+                base_name,
+                current_seq + 1,
+                extension
+            )),
             FileNaming::Full => {
                 let date = chrono::Local::now().format("%Y-%m-%d");
-                self.base_path
-                    .with_file_name(format!("{}-{}-{:03}.{}", base_name, date, *seq, extension))
+                self.base_path.with_file_name(format!(
+                    "{}-{}-{:03}.{}",
+                    base_name,
+                    date,
+                    current_seq + 1,
+                    extension
+                ))
             }
         }
     }
@@ -364,4 +373,189 @@ pub fn apply_retention_policy(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{Duration, SystemTime},
+    };
+
+    use filetime::{set_file_mtime, FileTime};
+    use tempfile::tempdir;
+
+    use super::*;
+
+    /// Тест проверят, что compress_log_file создаёт .log.gz, удаляет исходный
+    /// файл, и увеличивает счётчик compressed_count.
+    #[test]
+    fn test_compress_log_file_creates_gz_and_updates_metrics() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.log");
+        fs::write(&path, b"some content to compress").unwrap();
+
+        let metrics = Arc::new(RotationMetrics::new());
+        let res = compress_log_file(&path, &metrics);
+        assert!(res.is_ok());
+        let gz_path = res.unwrap();
+        assert!(gz_path.exists(), "gz file should exist");
+        assert!(!path.exists(), "original file should be removed");
+        let stats = metrics.get_stats();
+        assert_eq!(stats.compressed_count, 1);
+    }
+
+    /// Тест проверят удаление по возрасту (max_age_days).
+    #[test]
+    fn test_apply_retention_policy_deletes_old_files_by_age() {
+        let dir = tempdir().unwrap();
+
+        // Создаем два файла: старый и новый
+        let old = dir.path().join("old.log");
+        let new = dir.path().join("new.log");
+        fs::write(&old, b"old").unwrap();
+        fs::write(&new, b"new").unwrap();
+
+        // Установим mtime старого файла на 10 дней назад
+        let old_time =
+            FileTime::from_system_time(SystemTime::now() - Duration::from_secs(10 * 86400));
+        set_file_mtime(&old, old_time).unwrap();
+
+        let metrics = Arc::new(RotationMetrics::new());
+        let policy = RetentionPolicy {
+            max_age_days: Some(7),
+            ..Default::default()
+        };
+
+        apply_retention_policy(dir.path(), &policy, &metrics).unwrap();
+
+        assert!(!old.exists(), "old file should be deleted by age");
+        assert!(new.exists(), "new file should remain");
+        let s = metrics.get_stats();
+        assert_eq!(s.deleted_count, 1);
+    }
+
+    /// Тест проверят удаление по количеству файлов (max_files).
+    #[test]
+    fn test_apply_retention_policy_deletes_excess_files_by_count() {
+        let dir = tempdir().unwrap();
+
+        // Создаём 5 файлов с разным временем
+        for i in 0..5 {
+            let p = dir.path().join(format!("file-{}.log", i));
+            fs::write(&p, vec![0u8; 10]).unwrap();
+            // выставим разные времена: чем меньше i — тем старее
+            let t = SystemTime::now() - Duration::from_secs((5 - i) as u64 * 86400);
+            set_file_mtime(&p, FileTime::from_system_time(t)).unwrap();
+        }
+
+        let metrics = Arc::new(RotationMetrics::new());
+        let policy = RetentionPolicy {
+            max_files: Some(3),
+            ..Default::default()
+        };
+
+        apply_retention_policy(dir.path(), &policy, &metrics).unwrap();
+
+        // Должно остаться 3 файла
+        let remaining: Vec<_> = fs::read_dir(dir.path()).unwrap().collect();
+        assert_eq!(remaining.len(), 3);
+        let s = metrics.get_stats();
+        assert_eq!(s.deleted_count, 2);
+    }
+
+    /// Тест проверят удаление по общему размеру (max_total_size_bytes).
+    #[test]
+    fn test_apply_retention_policy_deletes_excess_files_by_total_size() {
+        let dir = tempdir().unwrap();
+
+        // Создадим три файла: 1KB, 1KB, 1KB => total 3KB
+        for i in 0..3 {
+            let p = dir.path().join(format!("size-{}.log", i));
+            fs::write(&p, vec![0u8; 1024]).unwrap();
+            // стареее проще не трогать
+        }
+
+        let metrics = Arc::new(RotationMetrics::new());
+        let policy = RetentionPolicy {
+            max_total_size_bytes: Some(1024 * 2), // 2KB
+            ..Default::default()
+        };
+
+        apply_retention_policy(dir.path(), &policy, &metrics).unwrap();
+
+        // После удаления общий размер <= 2KB -> удалено хотя бы 1 файл
+        let s = metrics.get_stats();
+        assert!(s.deleted_count >= 1);
+        // Убедимся, что суммарный размер файлов <= limit
+        let total: u64 = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().metadata().unwrap().len())
+            .sum();
+        assert!(total <= 1024 * 2);
+    }
+
+    /// Тест проверят, что SizeRotatingWriter ротается при достижении лимита
+    /// и метрика rotation_count увеличивается.
+    #[test]
+    fn test_size_rotating_writer_rotates_on_size() {
+        let dir = tempdir().unwrap();
+        let base = dir.path().join("zumic.log");
+        let metrics = Arc::new(RotationMetrics::new());
+
+        // max_size_mb = 1 (1 MiB)
+        let writer =
+            SizeRotatingWriter::new(base.clone(), 1, FileNaming::Sequential, metrics.clone())
+                .expect("failed to create SizeRotatingWriter");
+
+        // Запишем чуть больше 1 MiB чтобы вызвать ротацию
+        let buf = vec![b'x'; 1024 * 1024 + 100]; // 1 MiB + 100 bytes
+        writer.write_all(&buf).expect("write should succeed");
+
+        // После записи должна произойти по крайней мере одна ротация
+        let stats = metrics.get_stats();
+        assert!(stats.rotation_count >= 1, "expected rotation_count >= 1");
+    }
+
+    /// Тест проверят, что get_next_filename использует стратегию
+    /// Dated/Sequential/Full.
+    #[test]
+    fn test_file_naming_strategies_generate_expected_patterns() {
+        let dir = tempdir().unwrap();
+        let base = dir.path().join("zumic.log");
+        let metrics = Arc::new(RotationMetrics::new());
+
+        // For Dated strategy
+        let w_dated =
+            SizeRotatingWriter::new(base.clone(), 1, FileNaming::Dated, metrics.clone()).unwrap();
+        let p1 = w_dated.get_next_filename();
+        assert!(p1
+            .to_string_lossy()
+            .contains(&chrono::Local::now().format("%Y-%m-%d").to_string()));
+
+        // For Sequential strategy - note that constructor already called rotate() once,
+        // so the next filename will be -002
+        let w_seq =
+            SizeRotatingWriter::new(base.clone(), 1, FileNaming::Sequential, metrics.clone())
+                .unwrap();
+        let p2 = w_seq.get_next_filename();
+        assert!(
+            p2.to_string_lossy().contains("-002."),
+            "Expected -002 because constructor already created -001, got: {}",
+            p2.display()
+        );
+
+        // For Full strategy - same applies
+        let w_full =
+            SizeRotatingWriter::new(base.clone(), 1, FileNaming::Full, metrics.clone()).unwrap();
+        let p3 = w_full.get_next_filename();
+        assert!(p3
+            .to_string_lossy()
+            .contains(&chrono::Local::now().format("%Y-%m-%d").to_string()));
+        assert!(
+            p3.to_string_lossy().contains("-002."),
+            "Expected -002 because constructor already created -001, got: {}",
+            p3.display()
+        );
+    }
 }

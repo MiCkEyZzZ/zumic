@@ -236,6 +236,39 @@ cleanup_interval_secs = 3600  # Каждый час
 # Buffer size (байты)
 buffer_size = 8192
 
+# ========================================
+# SLOW QUERY LOGGING (NEW - Issue #LOG-5)
+# ========================================
+[logging.slow_log]
+# Включить slow query logging
+enabled = true
+
+# Отдельный файл для slow queries
+filename = "slow-queries.log"
+
+# Глобальный threshold (миллисекунды)
+threshold_ms = 100
+
+# Sample rate (0.0 - 1.0): 1.0 = log all, 0.1 = log 10%
+sample_rate = 1.0
+
+# Per-command thresholds (override глобальный)
+[logging.slow_log.command_thresholds]
+# GET обычно быстрый, порог 50ms
+GET = 50
+# SET немного медленнее, 100ms
+SET = 100
+# Scan операции могут быть медленными, 500ms
+SCAN = 500
+# KEYS очень медленный, 1000ms
+KEYS = 1000
+
+# Включить backtrace для debugging
+enable_backtrace = false
+
+# Максимальная длина args в логах
+max_args_len = 256
+
 # ===== ПРИМЕРЫ ДЛЯ РАЗНЫХ СЦЕНАРИЕВ =====
 
 # High-volume production:

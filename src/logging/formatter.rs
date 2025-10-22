@@ -45,3 +45,37 @@ where
         LogFormat::Compact => formats::compact::build_compact_layer(config, writer, false),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tracing_subscriber::registry::Registry;
+
+    use super::*;
+    use crate::logging::config::{LogFormat, LoggingConfig};
+
+    // Компиляторная проверка, что тип Send + Sync
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    /// Тест проверят, что функции сборки форматтера не паникуют для всех
+    /// форматов и возвращают валидный boxed layer.
+    #[test]
+    fn test_build_formatter_from_config_smoke() {
+        // используем дефолтную конфигурацию (предварительно реализуйте Default для
+        // LoggingConfig если нужно)
+        let cfg = LoggingConfig::default();
+        // Для конкретного Subscriber используем Registry
+        let _json = build_formatter_from_config::<Registry>(&cfg, LogFormat::Json, true);
+        let _pretty = build_formatter_from_config::<Registry>(&cfg, LogFormat::Pretty, true);
+        let _compact = build_formatter_from_config::<Registry>(&cfg, LogFormat::Compact, true);
+        // Если дошло до сюда — паники не произошло (smoke test)
+    }
+
+    /// Тест проверят, что возвращаемый boxed layer соответствует Send + Sync
+    /// bound.
+    #[test]
+    fn test_layer_is_send_sync() {
+        // проверка на уровне типов — если код компилируется, тест пройден
+        type LayerBox = Box<dyn tracing_subscriber::layer::Layer<Registry> + Send + Sync>;
+        assert_send_sync::<LayerBox>();
+    }
+}

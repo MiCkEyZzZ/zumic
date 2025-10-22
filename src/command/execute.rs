@@ -4,6 +4,8 @@
 //! enum [`Command`], инкапсулирующий все поддерживаемые команды. Это позволяет
 //! обрабатывать любые команды через единый интерфейс.
 
+use std::time::Instant;
+
 use super::{
     AppendCommand, AuthCommand, BitCountCommand, BitOpCommand, DecrByCommand, DecrCommand,
     DelCommand, ExistsCommand, FlushDbCommand, GeoAddCommand, GeoPosCommand,
@@ -17,8 +19,15 @@ use super::{
 };
 use crate::{
     command::pubsub::{PublishCommand, SubscribeCommand, UnsubscribeCommand},
+    logging::slow_log::SlowQueryTracker,
     StorageEngine, StoreError, Value,
 };
+
+/// Обёртка для выполнения команды с дополнительным контекстом.
+pub struct CommandExecutor {
+    pub client_addr: Option<String>,
+    pub slot_id: Option<u16>,
+}
 
 pub trait CommandExecute: std::fmt::Debug {
     /// Выполняет команду, взаимодействуя с хранилищем.
@@ -38,6 +47,16 @@ pub trait CommandExecute: std::fmt::Debug {
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError>;
+
+    /// Возвращает имя команды для logging
+    fn command_name(&self) -> &'static str {
+        "UNKNOWN"
+    }
+
+    /// Возвращает ключ команды (если есть) для logging
+    fn command_key(&self) -> Option<&[u8]> {
+        None
+    }
 }
 
 /// Перечисление всех поддерживаемых команд Zumic.
@@ -106,12 +125,146 @@ pub enum Command {
     Publish(PublishCommand),
 }
 
+impl Command {
+    /// Возвращает имя команды.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::Set(_) => "SET",
+            Command::Get(_) => "GET",
+            Command::Del(_) => "DEL",
+            Command::Exists(_) => "EXISTS",
+            Command::Setnx(_) => "SETNX",
+            Command::MSet(_) => "MSET",
+            Command::MGet(_) => "MGET",
+            Command::Rename(_) => "RENAME",
+            Command::Renamenx(_) => "RENAMENX",
+            Command::Flushdb(_) => "FLUSHDB",
+            Command::Strlen(_) => "STRLEN",
+            Command::Append(_) => "APPEND",
+            Command::Getrange(_) => "GETRANGE",
+            Command::Incr(_) => "INCR",
+            Command::Incrby(_) => "INCRBY",
+            Command::Decr(_) => "DECR",
+            Command::Decrby(_) => "DECRBY",
+            Command::Incrbyfloat(_) => "INCRBYFLOAT",
+            Command::Decrbyfloat(_) => "DECRBYFLOAT",
+            Command::Setfloat(_) => "SETFLOAT",
+            Command::HSet(_) => "HSET",
+            Command::HGet(_) => "HGET",
+            Command::HDel(_) => "HDEL",
+            Command::HGetall(_) => "HGETALL",
+            Command::SAdd(_) => "SADD",
+            Command::SRem(_) => "SREM",
+            Command::SIsmember(_) => "SISMEMBER",
+            Command::SMembers(_) => "SMEMBERS",
+            Command::SCard(_) => "SCARD",
+            Command::ZAdd(_) => "ZADD",
+            Command::ZScore(_) => "ZSCORE",
+            Command::ZCard(_) => "ZCARD",
+            Command::ZRem(_) => "ZREM",
+            Command::ZRange(_) => "ZRANGE",
+            Command::ZRevrange(_) => "ZREVRANGE",
+            Command::LPush(_) => "LPUSH",
+            Command::RPush(_) => "RPUSH",
+            Command::LPop(_) => "LPOP",
+            Command::RPop(_) => "RPOP",
+            Command::LLen(_) => "LLEN",
+            Command::LRange(_) => "LRANGE",
+            Command::Auth(_) => "AUTH",
+            Command::GeoAdd(_) => "GEOADD",
+            Command::GeoDist(_) => "GEODIST",
+            Command::GeoPos(_) => "GEOPOS",
+            Command::GeoRadius(_) => "GEORADIUS",
+            Command::GeoRadiusByMember(_) => "GEORADIUSBYMEMBER",
+            Command::SetBit(_) => "SETBIT",
+            Command::GetBit(_) => "GETBIT",
+            Command::BitCount(_) => "BITCOUNT",
+            Command::BitOp(_) => "BITOP",
+            Command::Subscribe(_) => "SUBSCRIBE",
+            Command::Unsubscribe(_) => "UNSUBSCRIBE",
+            Command::Publish(_) => "PUBLISH",
+        }
+    }
+
+    /// Возвращает ключ команды (если есть).
+    pub fn key(&self) -> Option<&[u8]> {
+        match self {
+            Command::Set(cmd) => Some(cmd.key.as_bytes()),
+            Command::Get(cmd) => Some(cmd.key.as_bytes()),
+            Command::Del(cmd) => Some(cmd.key.as_bytes()),
+            Command::Exists(cmd) => cmd.keys.first().map(|k| k.as_bytes()),
+            Command::MSet(cmd) => cmd.entries.first().map(|(k, _)| k.as_bytes()), /* entries: Vec<(String, Value)> */
+            Command::MGet(cmd) => cmd.keys.first().map(|k| k.as_bytes()),
+            Command::Rename(cmd) => Some(cmd.from.as_bytes()),
+            Command::Renamenx(cmd) => Some(cmd.from.as_bytes()),
+            Command::Flushdb(_) => None,
+            Command::Strlen(cmd) => Some(cmd.key.as_bytes()),
+            Command::Append(cmd) => Some(cmd.key.as_bytes()),
+            Command::Getrange(cmd) => Some(cmd.key.as_bytes()),
+            Command::Incr(cmd) => Some(cmd.key.as_bytes()),
+            Command::Incrby(cmd) => Some(cmd.key.as_bytes()),
+            Command::Decr(cmd) => Some(cmd.key.as_bytes()),
+            Command::Decrby(cmd) => Some(cmd.key.as_bytes()),
+            Command::Incrbyfloat(cmd) => Some(cmd.key.as_bytes()),
+            Command::Decrbyfloat(cmd) => Some(cmd.key.as_bytes()),
+            Command::Setfloat(cmd) => Some(cmd.key.as_bytes()),
+            Command::HSet(cmd) => Some(cmd.key.as_bytes()),
+            Command::HGet(cmd) => Some(cmd.key.as_bytes()),
+            Command::HDel(cmd) => Some(cmd.key.as_bytes()),
+            Command::HGetall(cmd) => Some(cmd.key.as_bytes()),
+            Command::SAdd(cmd) => Some(cmd.key.as_bytes()),
+            Command::SRem(cmd) => Some(cmd.key.as_bytes()),
+            Command::SIsmember(cmd) => Some(cmd.key.as_bytes()),
+            Command::SMembers(cmd) => Some(cmd.key.as_bytes()),
+            Command::SCard(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZAdd(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZScore(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZCard(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZRem(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZRange(cmd) => Some(cmd.key.as_bytes()),
+            Command::ZRevrange(cmd) => Some(cmd.key.as_bytes()),
+            Command::LPush(cmd) => Some(cmd.key.as_bytes()),
+            Command::RPush(cmd) => Some(cmd.key.as_bytes()),
+            Command::LPop(cmd) => Some(cmd.key.as_bytes()),
+            Command::RPop(cmd) => Some(cmd.key.as_bytes()),
+            Command::LLen(cmd) => Some(cmd.key.as_bytes()),
+            Command::LRange(cmd) => Some(cmd.key.as_bytes()),
+            Command::Auth(_) => None,
+            Command::GeoAdd(cmd) => Some(cmd.key.as_bytes()),
+            Command::GeoDist(cmd) => Some(cmd.key.as_bytes()),
+            Command::GeoPos(cmd) => Some(cmd.key.as_bytes()),
+            Command::GeoRadius(cmd) => Some(cmd.key.as_bytes()),
+            Command::GeoRadiusByMember(cmd) => Some(cmd.key.as_bytes()),
+            Command::SetBit(cmd) => Some(cmd.key.as_bytes()),
+            Command::GetBit(cmd) => Some(cmd.key.as_bytes()),
+            Command::BitCount(cmd) => Some(cmd.key.as_bytes()),
+            Command::BitOp(cmd) => cmd.keys.first().map(|k| k.as_bytes()),
+            Command::Subscribe(_) => None,
+            Command::Unsubscribe(_) => None,
+            Command::Publish(_) => None,
+            _ => None,
+        }
+    }
+}
+
 impl CommandExecute for Command {
     fn execute(
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        match self {
+        let start = Instant::now();
+        let command_name = self.name();
+
+        // Создаём tracker
+        let mut tracker = SlowQueryTracker::new(command_name);
+
+        // Добавляем key если есть
+        if let Some(key) = self.key() {
+            tracker.with_field("key", String::from_utf8_lossy(key));
+        }
+
+        // Выполняем команду
+        let result = match self {
             Command::Set(cmd) => cmd.execute(store),
             Command::Get(cmd) => cmd.execute(store),
             Command::Del(cmd) => cmd.execute(store),
@@ -166,6 +319,111 @@ impl CommandExecute for Command {
             Command::Subscribe(cmd) => cmd.execute(store),
             Command::Unsubscribe(cmd) => cmd.execute(store),
             Command::Publish(cmd) => cmd.execute(store),
+        };
+
+        // Добавляем result / error в tracker (используем ссылку, чтобы не перемещать
+        // `result`)
+        match &result {
+            Ok(_) => {
+                tracker.with_field("result", "success");
+            }
+            Err(err) => {
+                tracker.with_field("result", "error");
+                tracker.with_field("error", format!("{err:?}"));
+            }
         }
+
+        // Измеряем длительность и кладём в трекер (мс)
+        let elapsed_ms = start.elapsed().as_millis();
+        tracker.with_field("duration_ms", format!("{elapsed_ms}"));
+
+        // tracker.finish() вызывается автоматически при drop
+        // если команда медленная - она будет залогирована
+
+        result
+    }
+
+    fn command_name(&self) -> &'static str {
+        self.name()
+    }
+
+    fn command_key(&self) -> Option<&[u8]> {
+        self.key()
+    }
+}
+
+impl CommandExecutor {
+    pub fn new() -> Self {
+        Self {
+            client_addr: None,
+            slot_id: None,
+        }
+    }
+
+    pub fn with_client_addr(
+        mut self,
+        addr: String,
+    ) -> Self {
+        self.client_addr = Some(addr);
+        self
+    }
+
+    pub fn with_slot_id(
+        mut self,
+        slot_id: u16,
+    ) -> Self {
+        self.slot_id = Some(slot_id);
+        self
+    }
+
+    /// Выполняет команду с slow query tracking и контекстом.
+    pub fn execute(
+        &self,
+        command: &Command,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let start = Instant::now();
+        let command_name = command.name();
+
+        // Создаём tracker с полным контекстом
+        let mut tracker = SlowQueryTracker::new(command_name);
+
+        if let Some(ref addr) = self.client_addr {
+            tracker.with_field("client_addr", addr);
+        }
+
+        if let Some(slot) = self.slot_id {
+            tracker.with_field("slot_id", slot);
+        }
+
+        if let Some(key) = command.key() {
+            tracker.with_field("key", String::from_utf8_lossy(key));
+        }
+
+        // Выполняем команду
+        let result = command.execute(store);
+
+        // Добавляем результат
+        match result {
+            Ok(_) => {
+                tracker.with_field("result", "success");
+            }
+            Err(ref e) => {
+                tracker.with_field("result", "error");
+                tracker.with_field("error", format!("{e:?}"));
+            }
+        }
+
+        // Измеряем длительность и кладём в трекер (мс)
+        let elapsed_ms = start.elapsed().as_millis();
+        tracker.with_field("duration_ms", format!("{elapsed_ms}"));
+
+        result
+    }
+}
+
+impl Default for CommandExecutor {
+    fn default() -> Self {
+        Self::new()
     }
 }
