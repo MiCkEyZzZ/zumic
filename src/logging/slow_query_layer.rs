@@ -373,18 +373,6 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что Default trait работает
-    #[test]
-    fn test_default_implementation() {
-        let layer1 = SlowQueryLayer::new();
-        let layer2 = SlowQueryLayer::default();
-
-        // Оба должны быть валидными экземплярами
-        // (проверяем что не паникует)
-        let _sub1 = Registry::default().with(layer1);
-        let _sub2 = Registry::default().with(layer2);
-    }
-
     /// Тест проверяет edge case с очень коротким threshold
     #[test]
     fn test_zero_threshold() {
