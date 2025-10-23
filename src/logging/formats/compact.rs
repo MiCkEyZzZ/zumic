@@ -84,8 +84,7 @@ mod tests {
         let content = String::from_utf8(buf.lock().unwrap().clone()).unwrap_or_default();
         assert!(
             content.contains("compact-test-message"),
-            "expected message in output; got: {}",
-            content
+            "expected message in output; got: {content}",
         );
     }
 

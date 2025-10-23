@@ -182,8 +182,7 @@ impl LoggingConfig {
         for level_spec in &self.module_levels {
             if !level_spec.contains('=') {
                 return Err(format!(
-                    "Invalid module level '{}'. Expected: 'module::path=level'",
-                    level_spec
+                    "Invalid module level '{level_spec}'. Expected: 'module::path=level'"
                 ));
             }
         }
