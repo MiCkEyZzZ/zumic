@@ -23,6 +23,14 @@ arbitrary = { version = "1.3", features = ["derive"] }
 unsafe_code = "forbid"
 unused = { level = "warn", priority = -1 }
 
+[[bin]]
+name = "zumic"
+path = "src/main.rs"
+
+[[bin]]
+name = "zumic-cli"
+path = "src/bin/zumic-cli.rs"
+
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5.3"
@@ -81,6 +89,7 @@ zstd = "0.13.3"
 uuid = { version = "1", features = ["serde", "v4"] }
 lazy_static = "1.4"
 parking_lot = "0.12.5"
+clap = { version = "4.5", features = ["derive", "env", "cargo"] }
 
 [dependencies.wasmtime]
 version = "34.0.1"
@@ -116,7 +125,7 @@ harness = false
 [workspace]
 members = [
     ".",    # главный пакет (zumic)
-    "fuzz", # fuzz crate
+    "fuzz"  # fuzz crate
 ]
 
 [workspace.package]
