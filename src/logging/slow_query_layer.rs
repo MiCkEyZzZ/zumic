@@ -26,7 +26,6 @@ where
         id: &span::Id,
         ctx: Context<'_, S>,
     ) {
-        // Сохраняем start time для span
         if let Some(span) = ctx.span(id) {
             let mut extensions = span.extensions_mut();
             extensions.insert(Instant::now());
@@ -41,12 +40,10 @@ where
         if let Some(span) = ctx.span(&id) {
             let metadata = span.metadata();
 
-            // Проверяем target - только для command execution spans
             if !metadata.target().starts_with("zumic::command") {
                 return;
             }
 
-            // Получаем start time (у вас в on_new_span сохраняется Instant)
             let start = {
                 let extensions = span.extensions();
                 extensions.get::<Instant>().copied()
@@ -56,10 +53,7 @@ where
                 let elapsed = start.elapsed();
                 let config = SLOW_LOG_CONFIG.read();
 
-                // Проверяем threshold
                 if elapsed > config.threshold {
-                    // оставляем значения по-умолчанию — если ничего не писали в extensions, они
-                    // останутся None/UNKNOWN
                     let command = String::from("UNKNOWN");
                     let client_addr: Option<String> = None;
                     let key: Option<String> = None;
@@ -67,9 +61,6 @@ where
                     let is_error = false;
                     let error_msg: Option<String> = None;
 
-                    // УБРАЛИ span.with_subscriber(...) — он и вызывал ошибку компиляции
-
-                    // Sampling check
                     if config.sample_rate < 1.0 {
                         use rand::Rng;
                         if rand::thread_rng().gen::<f64>() >= config.sample_rate {
@@ -78,10 +69,8 @@ where
                         }
                     }
 
-                    // Record metric
                     SLOW_LOG_METRICS.record_slow_query(&command);
 
-                    // Create and log entry
                     let mut entry = SlowQueryEntry::new(command, elapsed);
 
                     if let Some(addr) = client_addr {
@@ -117,29 +106,42 @@ impl Default for SlowQueryLayer {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::{
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
     use tracing::{info_span, Instrument};
     use tracing_subscriber::{layer::SubscriberExt, Registry};
 
     use super::*;
 
-    /// Хелпер для создания тестового subscriber с SlowQueryLayer
+    static TEST_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
+
     fn setup_test_subscriber() -> impl Subscriber {
         Registry::default().with(SlowQueryLayer::new())
     }
 
-    /// Тест проверяет, что быстрые команды не попадают в slow log
+    /// Вспомогательная функция: захватывает lock и настраивает конфиг
+    /// Использует unwrap_or_else для обработки PoisonError
+    fn setup_test(
+        threshold_ms: u64,
+        sample_rate: f64,
+    ) -> std::sync::MutexGuard<'static, ()> {
+        let guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let mut config = SLOW_LOG_CONFIG.write();
+        config.threshold = Duration::from_millis(threshold_ms);
+        config.sample_rate = sample_rate;
+        drop(config);
+
+        guard
+    }
+
     #[test]
     fn test_fast_query_not_logged() {
+        let _guard = setup_test(100, 1.0);
         let subscriber = setup_test_subscriber();
-
-        // Устанавливаем высокий threshold
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(100);
-            config.sample_rate = 1.0;
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
@@ -149,7 +151,6 @@ mod tests {
                 "command_execution"
             );
             let _enter = span.enter();
-            // Быстрая операция - не должна логироваться
             std::thread::sleep(Duration::from_millis(10));
         });
 
@@ -160,17 +161,10 @@ mod tests {
         );
     }
 
-    /// Тест проверяет, что медленные команды логируются
     #[test]
     fn test_slow_query_is_logged() {
+        let _guard = setup_test(10, 1.0);
         let subscriber = setup_test_subscriber();
-
-        // Устанавливаем низкий threshold
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
@@ -180,7 +174,6 @@ mod tests {
                 "command_execution"
             );
             let _enter = span.enter();
-            // Медленная операция
             std::thread::sleep(Duration::from_millis(50));
         });
 
@@ -188,21 +181,14 @@ mod tests {
         assert!(final_count > initial_count, "Slow query should be logged");
     }
 
-    /// Тест проверяет, что spans с неправильным target игнорируются
     #[test]
     fn test_non_command_spans_ignored() {
+        let _guard = setup_test(10, 1.0);
         let subscriber = setup_test_subscriber();
-
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
         tracing::subscriber::with_default(subscriber, || {
-            // Span с другим target - должен игнорироваться
             let span = info_span!(
                 target: "zumic::network::tcp",
                 "network_operation"
@@ -218,16 +204,10 @@ mod tests {
         );
     }
 
-    /// Тест проверяет sampling functionality
     #[test]
     fn test_sampling_reduces_logged_queries() {
+        let _guard = setup_test(10, 0.0);
         let subscriber = setup_test_subscriber();
-
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 0.0; // Отключаем логирование
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
         let initial_sampled = SLOW_LOG_METRICS.get_stats().sampled_queries;
@@ -247,31 +227,24 @@ mod tests {
         let final_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
         let final_sampled = SLOW_LOG_METRICS.get_stats().sampled_queries;
 
-        // С sample_rate = 0.0 ничего не должно логироваться
         assert_eq!(
             initial_count, final_count,
             "With 0.0 sample rate, nothing should be logged"
         );
-        // Но sampled counter должен увеличиться
         assert!(
             final_sampled > initial_sampled,
             "Sampled counter should increase"
         );
     }
 
-    /// Тест проверяет разные команды в метриках
     #[test]
     fn test_different_commands_tracked_separately() {
+        let _guard = setup_test(10, 1.0);
         let subscriber = setup_test_subscriber();
 
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
+        let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
         tracing::subscriber::with_default(subscriber, || {
-            // Выполняем разные команды
             for cmd in &["GET", "SET", "DEL"] {
                 let span = info_span!(
                     target: "zumic::command::exec",
@@ -285,23 +258,16 @@ mod tests {
         });
 
         let stats = SLOW_LOG_METRICS.get_stats();
-        // Должно быть хотя бы 3 медленных запроса
         assert!(
-            stats.total_slow_queries >= 3,
+            stats.total_slow_queries >= initial_count + 3,
             "Should have logged at least 3 slow queries"
         );
     }
 
-    /// Тест проверяет concurrent spans
     #[test]
     fn test_concurrent_spans() {
+        let _guard = setup_test(10, 1.0);
         let subscriber = Arc::new(setup_test_subscriber());
-
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
@@ -333,16 +299,10 @@ mod tests {
         );
     }
 
-    /// Тест проверяет nested spans (только внешний должен логироваться)
     #[test]
     fn test_nested_spans() {
+        let _guard = setup_test(10, 1.0);
         let subscriber = setup_test_subscriber();
-
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
@@ -366,22 +326,21 @@ mod tests {
         });
 
         let final_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
-        // Оба span'а должны залогироваться (каждый по отдельности)
         assert!(
             final_count >= initial_count + 2,
             "Both nested spans should be logged"
         );
     }
 
-    /// Тест проверяет edge case с очень коротким threshold
     #[test]
     fn test_zero_threshold() {
+        let _guard = setup_test(0, 1.0);
         let subscriber = setup_test_subscriber();
 
+        // Используем from_nanos для очень маленького threshold
         {
             let mut config = SLOW_LOG_CONFIG.write();
             config.threshold = Duration::from_nanos(1);
-            config.sample_rate = 1.0;
         }
 
         let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
@@ -392,7 +351,6 @@ mod tests {
                 "command_execution"
             );
             let _enter = span.enter();
-            // Даже без sleep - любой span будет "медленным"
         });
 
         let final_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
@@ -402,35 +360,38 @@ mod tests {
         );
     }
 
-    /// Тест проверяет async spans (используя tokio)
     #[tokio::test]
     async fn test_async_spans() {
-        let subscriber = setup_test_subscriber();
+        // Запускаем async работу в блокирующем контексте с удержанием guard
+        let result = tokio::task::spawn_blocking(|| {
+            let _guard = setup_test(10, 1.0);
+            let subscriber = setup_test_subscriber();
 
-        {
-            let mut config = SLOW_LOG_CONFIG.write();
-            config.threshold = Duration::from_millis(10);
-            config.sample_rate = 1.0;
-        }
+            let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
 
-        let initial_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
+            // Создаём tokio runtime внутри блокирующей задачи
+            let rt = tokio::runtime::Runtime::new().unwrap();
 
-        // ВАЖНО: subscriber должен быть установлен ДО создания span
-        let _guard = tracing::subscriber::set_default(subscriber);
+            rt.block_on(async {
+                let _tracing_guard = tracing::subscriber::set_default(subscriber);
 
-        async {
-            tokio::time::sleep(Duration::from_millis(30)).await;
-        }
-        .instrument(info_span!(
-            target: "zumic::command::async_get",
-            "command_execution"
-        ))
-        .await;
+                async {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                }
+                .instrument(info_span!(
+                    target: "zumic::command::async_get",
+                    "command_execution"
+                ))
+                .await;
+            });
 
-        let final_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
-        assert!(
-            final_count > initial_count,
-            "Async slow query should be logged"
-        );
+            let final_count = SLOW_LOG_METRICS.get_stats().total_slow_queries;
+
+            (initial_count, final_count)
+        })
+        .await
+        .unwrap();
+
+        assert!(result.1 > result.0, "Async slow query should be logged");
     }
 }

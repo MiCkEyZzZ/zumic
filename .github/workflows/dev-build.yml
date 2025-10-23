@@ -22,8 +22,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      RUST_TEST_THREADS: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
