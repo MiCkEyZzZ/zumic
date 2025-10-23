@@ -25,7 +25,7 @@ pub fn build_filter_from_config(config: &LoggingConfig) -> EnvFilter {
                 Err(e) => {
                     // Возможно, конфигурация содержит некорректную директиву —
                     // на этот случай печатаем понятное сообщение и падаем
-                    eprintln!("Invalid log filter directive from config ('{}'): {}; falling back to 'info'", directive, e);
+                    eprintln!("Invalid log filter directive from config ('{directive}'): {e}; falling back to 'info'");
                     EnvFilter::new("info")
                 }
             }

@@ -182,6 +182,6 @@ pub fn print_startup_log() {
             ts,
             env!("CARGO_PKG_VERSION")
         );
-        println!("[{}] {} * Ready to accept connections", pid, ts);
+        println!("[{pid}] {ts} * Ready to accept connections");
     }
 }

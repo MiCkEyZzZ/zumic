@@ -88,7 +88,7 @@ impl Server {
             match handle.await {
                 Ok(result) => result,
                 Err(e) => {
-                    error!("Server task panicked: {}", e);
+                    error!("Server task panicked: {e}");
                     Err(e.into())
                 }
             }
@@ -131,7 +131,7 @@ impl Server {
                 accept_result = listener.accept() => {
                     match accept_result {
                         Ok((socket, addr)) => {
-                            info!("Accepting connection from {}", addr);
+                            info!("Accepting connection from {addr}");
 
                             let manager = connection_manager.clone();
                             let eng = engine.clone();
@@ -140,10 +140,10 @@ impl Server {
                                 if let Err(e) = manager.handle_connection(socket, addr, eng).await {
                                     match e.downcast_ref::<std::io::Error>() {
                                         Some(io_err) if Server::is_expected_error(io_err) => {
-                                            tracing::debug!("Connection from {} ended: {}", addr, e);
+                                            tracing::debug!("Connection from {addr} ended: {e}");
                                         }
                                         _ => {
-                                            error!("Unexpected error handling connection from {}: {}", addr, e);
+                                            error!("Unexpected error handling connection from {addr}: {e}");
                                         }
                                     }
                                 }
@@ -153,7 +153,7 @@ impl Server {
                             connection_tasks.retain(|task| !task.is_finished());
                         }
                         Err(e) => {
-                            error!("Failed to accept connection: {}", e);
+                            error!("Failed to accept connection: {e}");
                             if Server::is_critical_accept_error(&e) {
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
@@ -185,7 +185,7 @@ impl Server {
                 accept_result = listener.accept() => {
                     match accept_result {
                         Ok((socket, addr)) => {
-                            info!("Accepting connection from {}", addr);
+                            info!("Accepting connection from {addr}");
 
                             let manager = connection_manager.clone();
                             let eng = engine.clone();
@@ -194,10 +194,10 @@ impl Server {
                                 if let Err(e) = manager.handle_connection(socket, addr, eng).await {
                                     match e.downcast_ref::<std::io::Error>() {
                                         Some(io_err) if Server::is_expected_error(io_err) => {
-                                            tracing::debug!("Connection from {} ended: {}", addr, e);
+                                            tracing::debug!("Connection from {addr} ended: {e}");
                                         }
                                         _ => {
-                                            error!("Unexpected error handling connection from {}: {}", addr, e);
+                                            error!("Unexpected error handling connection from {addr}: {e}");
                                         }
                                     }
                                 }
@@ -207,7 +207,7 @@ impl Server {
                             connection_tasks.retain(|task| !task.is_finished());
                         }
                         Err(e) => {
-                            error!("Failed to accept connection: {}", e);
+                            error!("Failed to accept connection: {e}");
                             if Server::is_critical_accept_error(&e) {
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
@@ -228,7 +228,7 @@ impl Server {
         connection_manager.shutdown();
 
         if let Err(e) = connection_manager.wait_for_shutdown(shutdown_timeout).await {
-            warn!("Not all connections finished gracefully: {}", e);
+            warn!("Not all connections finished gracefully: {e}");
         }
 
         for task in connection_tasks {
