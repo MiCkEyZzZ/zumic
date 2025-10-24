@@ -33,6 +33,60 @@ impl DbContext {
     ) -> StoreResult<bool> {
         self.engine.del(&key)
     }
+    /// Добавляет элементы в множество `SADD`
+    pub fn sadd(
+        &mut self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        self.engine.sadd(key, members)
+    }
+    /// Удаляет элементы из множества `SREM`
+    pub fn srem(
+        &mut self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        self.engine.srem(key, members)
+    }
+    /// Проверяет, есть ли элемент в множестве `SISMEMBER`
+    pub fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        self.engine.sismember(key, member)
+    }
+    /// Возвращает все элементы множества `SMEMBERS`
+    pub fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>> {
+        self.engine.smembers(key)
+    }
+    /// Возвращает количество элементов во множестве `SCARD`
+    pub fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize> {
+        self.engine.scard(key)
+    }
+    /// Возвращает случайный элемент из множества `SRANDMEMBER`
+    pub fn srandmember(
+        &mut self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        self.engine.srandmember(key, count)
+    }
+    /// Удаляет и возвращает случайный элемент из множества `SPOP`
+    pub fn spop(
+        &mut self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        self.engine.spop(key, count)
+    }
 }
 
 #[cfg(test)]

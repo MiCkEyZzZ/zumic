@@ -13,31 +13,52 @@ use std::{
 
 use crate::{Dict, QuickList, Sds, SmartHash, Value};
 
-/// Типы фреймов, поддерживаемые протоколом ZSP.
+/// Типы фреймов, поддерживаемые протоколом ZSP/RESP3.
 ///
-/// Представляет различные виды данных, которые могут быть
-/// переданы в протоколе, включая:
-/// - Простые строки
-/// - Ошибки
-/// - Целые числа
-/// - Числа с плавающей запятой
-/// - Булевы значения
-/// - Бинарные строки (опционально)
-/// - Массивы
-/// - Словари (ассоциативные массивы ключ-значение)
-/// - ZSet'ы (отсортированные множества с float-оценками)
-/// - Null (отсутствие значения)
+/// RESP3 типы:
+/// - InlineString (`+`) - Simple String
+/// - FrameError (`-`) - Error
+/// - Integer (`:`) - Integer
+/// - Float (`,`) - Double
+/// - Bool (`#t`/`#f`) - Boolean
+/// - BinaryString (`$`) - Bulk String
+/// - Null (`_`) - Null
+/// - Array (`*`) - Array
+/// - Dictionary (`%`) - Map
+/// - Set (`~`) - Set
+/// - Push (`>`) - Push (для pub/sub)
+///
+/// ZSP расширения:
+/// - ZSet (`^`) - Sorted Set с членами и счётом
 #[derive(Debug, Clone, PartialEq)]
 pub enum ZspFrame<'a> {
+    /// ZSP: Simple String - +OK\r\n
     InlineString(Cow<'a, str>),
+    /// ZSP: Error - -ERR message\r\n
     FrameError(String),
+    /// ZSP: Integer - :123\r\n
     Integer(i64),
+    /// ZSP: Double - ,3.14\r\n
     Float(f64),
+    /// ZSP: Boolean - #t\r\n или #f\r\n
     Bool(bool),
+    /// ZSP: Binary String - $5\r\nhello\r\n
+    /// None означает $-1\r\n
     BinaryString(Option<Vec<u8>>),
+    /// ZSP: Array - *2\r\n+item1\r\n+item2\r\n
     Array(Vec<ZspFrame<'a>>),
+    /// ZSP: Map (Dictionary) - %2\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
     Dictionary(HashMap<Cow<'a, str>, ZspFrame<'a>>),
+    /// ZSP: Set - ~3\r\n+member1\r\n+member2\r\n+member3\r\n
+    Set(HashSet<ZspFrame<'a>>),
+    /// ZSP: Push - >3\r\n+message\r\n+channel\r\n$7\r\npayload\r\n
+    /// Используется для server-initiated messages (pub/sub)
+    Push(Vec<ZspFrame<'a>>),
+    /// ZSP РАСШИРЕНИЕ: ZSet -
+    /// ^2\r\n$7\r\nmember1\r\n,1.5\r\n$7\r\nmember2\r\n,2.5\r\n Sorted Set
+    /// с парами (member, score)
     ZSet(Vec<(String, f64)>),
+    /// ZSP: Null - _\r\n
     Null,
 }
 
@@ -53,7 +74,7 @@ impl TryFrom<Value> for ZspFrame<'_> {
             Value::Float(f) => Ok(Self::Float(f)),
             Value::Bool(b) => Ok(Self::Bool(b)),
             Value::List(list) => convert_quicklist(list),
-            Value::Set(set) => convert_hashset(set),
+            Value::Set(set) => convert_hashset_to_set(set),
             Value::Hash(smart_hash) => convert_smart_hash(smart_hash),
             Value::ZSet { dict, .. } => convert_zset(dict),
             Value::Null => Ok(ZspFrame::Null),
@@ -71,6 +92,66 @@ impl From<Sds> for ZspFrame<'_> {
     }
 }
 
+// Для использования ZspFrame в HashSet
+impl Eq for ZspFrame<'_> {}
+
+impl std::hash::Hash for ZspFrame<'_> {
+    fn hash<H: std::hash::Hasher>(
+        &self,
+        state: &mut H,
+    ) {
+        match self {
+            ZspFrame::InlineString(s) => {
+                0u8.hash(state);
+                s.hash(state);
+            }
+            ZspFrame::FrameError(e) => {
+                1u8.hash(state);
+                e.hash(state);
+            }
+            ZspFrame::Integer(i) => {
+                2u8.hash(state);
+                i.hash(state);
+            }
+            ZspFrame::Float(f) => {
+                3u8.hash(state);
+                f.to_bits().hash(state);
+            }
+            ZspFrame::Bool(b) => {
+                4u8.hash(state);
+                b.hash(state);
+            }
+            ZspFrame::BinaryString(opt) => {
+                5u8.hash(state);
+                opt.hash(state);
+            }
+            ZspFrame::Null => {
+                6u8.hash(state);
+            }
+            ZspFrame::Array(arr) => {
+                7u8.hash(state);
+                arr.len().hash(state);
+            }
+            ZspFrame::Dictionary(dict) => {
+                8u8.hash(state);
+                dict.len().hash(state);
+            }
+            ZspFrame::Set(set) => {
+                9u8.hash(state);
+                set.len().hash(state);
+            }
+            ZspFrame::Push(push) => {
+                10u8.hash(state);
+                push.len().hash(state);
+            }
+            ZspFrame::ZSet(zset) => {
+                11u8.hash(state);
+                zset.len().hash(state);
+            }
+        }
+    }
+}
+
 /// Преобразует `Sds` в фрейм ZSP. Пытается интерпретировать
 /// как строку UTF-8.
 /// Если интерпретация успешна — возвращает InlineString, иначе
@@ -78,7 +159,14 @@ impl From<Sds> for ZspFrame<'_> {
 pub fn convert_sds_to_frame<'a>(sds: Sds) -> Result<ZspFrame<'a>, String> {
     let bytes = sds.as_ref();
     match std::str::from_utf8(bytes) {
-        Ok(valid_str) => Ok(ZspFrame::InlineString(Cow::Owned(valid_str.to_string()))),
+        Ok(valid_str) => {
+            // Проверяем на CR/LF для InlineString
+            if valid_str.contains('\r') || valid_str.contains('\n') {
+                Ok(ZspFrame::BinaryString(Some(bytes.to_vec())))
+            } else {
+                Ok(ZspFrame::InlineString(Cow::Owned(valid_str.to_string())))
+            }
+        }
         Err(_) => Ok(ZspFrame::BinaryString(Some(bytes.to_vec()))),
     }
 }
@@ -91,6 +179,15 @@ pub fn convert_quicklist<'a>(list: QuickList<Sds>) -> Result<ZspFrame<'a>, Strin
         frames.push(item.clone().into());
     }
     Ok(ZspFrame::Array(frames))
+}
+
+/// Преобразует `HashSet<Sds>` в RESP3 Set.
+pub fn convert_hashset_to_set<'a>(set: HashSet<Sds>) -> Result<ZspFrame<'a>, String> {
+    let mut frames = HashSet::with_capacity(set.len());
+    for item in set {
+        frames.insert(convert_sds_to_frame(item)?);
+    }
+    Ok(ZspFrame::Set(frames))
 }
 
 /// Преобразует `HashSet<Sds>` в фрейм ZSP Array, пытаясь
@@ -112,7 +209,6 @@ pub fn convert_hashset<'a>(set: HashSet<Sds>) -> Result<ZspFrame<'a>, String> {
 #[inline]
 pub fn convert_smart_hash<'a>(mut smart: SmartHash) -> Result<ZspFrame<'a>, String> {
     let mut map = HashMap::with_capacity(smart.len());
-    // Используем итератор, предоставляемый SmartHash
     for (k, v) in smart.iter() {
         let key = String::from_utf8(k.to_vec()).map_err(|e| format!("Invalid hash key: {e}"))?;
         let key_cow: Cow<'a, str> = Cow::Owned(key);
@@ -159,7 +255,6 @@ mod tests {
     /// Тест проверяет конвертации Value::Hash (теперь с SmartHash)
     #[test]
     fn test_convert_smart_hash() {
-        // Создаем SmartHash с несколькими записями.
         let mut sh = SmartHash::new();
         sh.insert(Sds::from_str("key1"), Sds::from_str("val1"));
         sh.insert(Sds::from_str("key2"), Sds::from_str("val2"));
@@ -190,6 +285,20 @@ mod tests {
         let bin = Sds::from_vec(vec![0xFF, 0xFE]);
         let frame = convert_sds_to_frame(bin.clone()).unwrap();
         assert_eq!(frame, ZspFrame::BinaryString(Some(bin.to_vec())));
+    }
+
+    #[test]
+    fn test_hashset_to_resp3_set() {
+        let mut hs = HashSet::new();
+        hs.insert(Sds::from_str("x"));
+        hs.insert(Sds::from_str("y"));
+
+        let zsp = convert_hashset_to_set(hs).unwrap();
+        if let ZspFrame::Set(set) = zsp {
+            assert_eq!(set.len(), 2);
+        } else {
+            panic!("Expected Set frame");
+        }
     }
 
     /// Тест проверяет преобразование QuickList<Sds> в

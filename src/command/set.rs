@@ -4,8 +4,6 @@
 //! элементами множеств по ключу. Каждая команда реализует трейт
 //! [`CommandExecute`].
 
-use std::collections::HashSet;
-
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 /// Команда SADD — добавляет элемент во множество.
@@ -32,20 +30,8 @@ impl CommandExecute for SAddCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        match store.get(&key)? {
-            Some(Value::Set(mut set)) => {
-                let inserted = set.insert(member.clone());
-                store.set(&key, Value::Set(set))?;
-                Ok(Value::Int(inserted as i64))
-            }
-            Some(Value::Null) | None => {
-                let mut set = HashSet::new();
-                set.insert(member);
-                store.set(&key, Value::Set(set))?;
-                Ok(Value::Int(1))
-            }
-            _ => Err(StoreError::InvalidType),
-        }
+        let added = store.sadd(&key, std::slice::from_ref(&member))?;
+        Ok(Value::Int(added as i64))
     }
 }
 
@@ -73,13 +59,8 @@ impl CommandExecute for SRemCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        if let Some(Value::Set(mut set)) = store.get(&key)? {
-            let removed = set.remove(&member);
-            store.set(&key, Value::Set(set))?;
-            Ok(Value::Int(removed as i64))
-        } else {
-            Ok(Value::Int(0))
-        }
+        let removed = store.srem(&key, std::slice::from_ref(&member))?;
+        Ok(Value::Int(removed as i64))
     }
 }
 
@@ -107,11 +88,8 @@ impl CommandExecute for SIsMemberCommand {
         let key = Sds::from_str(&self.key);
         let member = Sds::from_str(&self.member);
 
-        if let Some(Value::Set(set)) = store.get(&key)? {
-            Ok(Value::Int(set.contains(&member) as i64))
-        } else {
-            Ok(Value::Int(0))
-        }
+        let exists = store.sismember(&key, &member)?;
+        Ok(Value::Int(exists as i64))
     }
 }
 
@@ -136,11 +114,14 @@ impl CommandExecute for SMembersCommand {
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        if let Some(Value::Set(set)) = store.get(&key)? {
-            let list = QuickList::from_iter(set.iter().cloned(), 64);
-            Ok(Value::List(list))
-        } else {
-            Ok(Value::Null)
+        match store.get(&key)? {
+            Some(Value::Set(_)) => {
+                let members: Vec<Sds> = store.smembers(&key)?;
+                let list = QuickList::from_iter(members, 64);
+                Ok(Value::List(list))
+            }
+            Some(Value::Null) | None => Ok(Value::Null),
+            Some(_) => Err(StoreError::WrongType("SMEMBERS on non-set key".into())),
         }
     }
 }
@@ -165,11 +146,72 @@ impl CommandExecute for SCardCommand {
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
+        let count = store.scard(&key)?;
+        Ok(Value::Int(count as i64))
+    }
+}
+
+/// Команда SRANDMEMBER — возвращает случайный(е) элемент(ы) множества.
+///
+/// Формат: `SRANDMEMBER key count`
+/// Если count == 1 — вернём массив с одним элементом (упрощённо).
+/// Если ключ отсутствует — возвращаем Null.
+#[derive(Debug)]
+pub struct SRandMemberCommand {
+    pub key: String,
+    pub count: isize,
+}
+
+impl CommandExecute for SRandMemberCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
 
         match store.get(&key)? {
-            Some(Value::Set(set)) => Ok(Value::Int(set.len() as i64)),
-            Some(Value::Null) | None => Ok(Value::Int(0)),
-            _ => Err(StoreError::InvalidType),
+            None | Some(Value::Null) => return Ok(Value::Null),
+            _ => {}
+        }
+
+        let members: Vec<Sds> = store.srandmember(&key, self.count)?;
+        if members.is_empty() {
+            Ok(Value::Null)
+        } else {
+            let list = QuickList::from_iter(members, 64);
+            Ok(Value::List(list))
+        }
+    }
+}
+
+/// Команда SPOP — удаляет и возвращает случайный(е) элемент(ы) множества.
+///
+/// Формат: `SPOP key count`
+/// Если ключ отсутствует — возвращаем Null.
+#[derive(Debug)]
+pub struct SPopCommand {
+    pub key: String,
+    pub count: isize,
+}
+
+impl CommandExecute for SPopCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            None | Some(Value::Null) => return Ok(Value::Null),
+            _ => {}
+        }
+
+        let removed: Vec<Sds> = store.spop(&key, self.count)?;
+        if removed.is_empty() {
+            Ok(Value::Null)
+        } else {
+            let list = QuickList::from_iter(removed, 64);
+            Ok(Value::List(list))
         }
     }
 }
@@ -342,5 +384,93 @@ mod tests {
         };
         let result = smembers.execute(&mut store).unwrap();
         assert_eq!(result, Value::Null);
+    }
+
+    #[test]
+    fn test_srandmember_single_and_multiple() {
+        let mut store = create_store();
+
+        // заполняем множество
+        let sadd = SAddCommand {
+            // подставьте путь если у вас иначе
+            key: "myset".to_string(),
+            member: "a".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "b".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "c".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+
+        let cmd = SRandMemberCommand {
+            key: "myset".into(),
+            count: 1,
+        };
+        let res = cmd.execute(&mut store).unwrap();
+        match res {
+            Value::List(l) => assert_eq!(l.len(), 1),
+            _ => panic!("Expected list"),
+        }
+
+        let cmd = SRandMemberCommand {
+            key: "myset".into(),
+            count: 2,
+        };
+        let res = cmd.execute(&mut store).unwrap();
+        match res {
+            Value::List(l) => assert!((1..=2).contains(&l.len())),
+            _ => panic!("Expected list"),
+        }
+    }
+
+    #[test]
+    fn test_spop_removes() {
+        let mut store = create_store();
+
+        // подготовка
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "a".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+        let sadd = SAddCommand {
+            key: "myset".to_string(),
+            member: "b".to_string(),
+        };
+        sadd.execute(&mut store).unwrap();
+
+        // SPOP 1
+        let pop1 = SPopCommand {
+            key: "myset".into(),
+            count: 1,
+        };
+        let res1 = pop1.execute(&mut store).unwrap();
+        match res1 {
+            Value::List(l) => assert_eq!(l.len(), 1),
+            _ => panic!("Expected list"),
+        }
+
+        // SPOP 10 (больше, чем осталось) — удалит оставшиеся
+        let pop_all = SPopCommand {
+            key: "myset".into(),
+            count: 10,
+        };
+        let res_all = pop_all.execute(&mut store).unwrap();
+        match res_all {
+            Value::List(l) => {
+                // один элемент должен был остаться и быть возвращён
+                assert!(l.len() <= 1);
+            }
+            Value::Null => {
+                // если предыдущее споп удалил всё, допустимо получить Null
+            }
+            _ => panic!("Expected list or null"),
+        }
     }
 }

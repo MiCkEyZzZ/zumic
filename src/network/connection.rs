@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     io::ErrorKind,
     net::SocketAddr,
@@ -11,7 +12,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::{tcp::OwnedWriteHalf, TcpStream},
     select,
     sync::Semaphore,
@@ -19,7 +20,10 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{Sds, StorageEngine, Value};
+use crate::{
+    zsp::{ZspDecoder, ZspEncoder, ZspFrame},
+    Sds, StorageEngine, Value,
+};
 
 /// Конфигурация для обработки соединений
 #[derive(Debug, Clone)]
@@ -64,6 +68,8 @@ pub struct ConnectionHandler {
     config: ConnectionConfig,
     shutdown_signal: Arc<tokio::sync::Notify>,
     last_activity: Instant,
+    decoder: ZspDecoder<'static>,
+    recv_buf: Vec<u8>,
 }
 
 impl ConnectionManager {
@@ -250,36 +256,33 @@ impl ConnectionHandler {
             config,
             shutdown_signal,
             last_activity: Instant::now(),
+            decoder: ZspDecoder::new(),
+            recv_buf: Vec::new(),
         }
     }
 
     /// Основной цикл обработки соединения.
     /// Основной цикл обработки соединения.
-    async fn run(self) -> Result<()> {
-        // Деструктурируем self чтобы избежать проблем с частичным перемещением
-        let ConnectionHandler {
-            connection_id,
-            reader,
-            mut writer,
-            addr,
-            engine,
-            config,
-            shutdown_signal,
-            mut last_activity,
-        } = self;
+    async fn run(mut self) -> Result<()> {
+        let connection_id = self.connection_id;
+        let mut writer = self.writer;
+        let addr = self.addr;
+        let engine = self.engine.clone();
+        let config = self.config.clone();
+        let shutdown = self.shutdown_signal.clone();
+        let mut last_activity = self.last_activity;
 
-        let mut lines = reader.lines();
+        // Временный буфер для чтения
+        let mut tmp = vec![0u8; config.read_buffer_size];
 
         loop {
             select! {
-                // Проверяем сигнал shutdown
-                _ = shutdown_signal.notified() => {
+                _ = shutdown.notified() => {
                     info!("Connection {} ({}): Received shutdown signal", connection_id, addr);
                     Self::send_response_to_writer(&mut writer, "-ERR Server shutting down\r\n", config.write_timeout).await?;
                     break;
                 }
 
-                // Проверяем таймаут простоя
                 _ = sleep(config.idle_timeout) => {
                     if last_activity.elapsed() >= config.idle_timeout {
                         warn!("Connection {} ({}): Idle timeout", connection_id, addr);
@@ -288,44 +291,106 @@ impl ConnectionHandler {
                     }
                 }
 
-                // Читаем команду с таймаутом
-                line_result = timeout(config.read_timeout, lines.next_line()) => {
-                    match line_result {
-                        Ok(Ok(Some(line))) => {
+                read_res = timeout(config.read_timeout, self.reader.read(&mut tmp)) => {
+                    match read_res {
+                        Ok(Ok(0)) => {
+                            debug!("Connection {} ({}): Client closed connection", connection_id, addr);
+                            break;
+                        }
+                        Ok(Ok(n)) => {
                             last_activity = Instant::now();
-                            trace!("Connection {} ({}): Received command: {}", connection_id, addr, line.trim());
 
-                            match Self::process_command(&engine, &line) {
-                                Ok(response) => {
-                                    if let Err(e) = Self::send_response_to_writer(&mut writer, &response, config.write_timeout).await {
-                                        error!("Connection {} ({}): Failed to send response: {}", connection_id, addr, e);
-                                        break;
-                                    }
+                            // добавляем прочитанные байты в накопительный буфер
+                            self.recv_buf.extend_from_slice(&tmp[..n]);
 
-                                    // Проверяем, была ли это команда QUIT
-                                    if response == "+OK\r\n" && line.trim().to_uppercase() == "QUIT" {
-                                        info!("Connection {} ({}): Client sent QUIT, closing", connection_id, addr);
-                                        break;
+                            // Если первый байт явно не ZSP-тип — fallback на текстовую обработку.
+                            // Типы ZSP начинаются с одного из: + - : , # $ _ * % ~ > ^
+                            if self.recv_buf.is_empty() {
+                                continue;
+                            }
+
+                            let first = self.recv_buf[0];
+                            let is_zsp = matches!(first,
+                                b'+' | b'-' | b':' | b',' | b'#' | b'$' | b'_' | b'*' | b'%' | b'~' | b'>' | b'^'
+                            );
+
+                            if !is_zsp {
+                                // Текстовый inline-protocol: читаем строку до CRLF или используем весь буфер
+                                // (у нас тут простой реализм: split по '\n')
+                                if let Some(pos) = self.recv_buf.iter().position(|&b| b == b'\n') {
+                                    // берем до pos (включая возможный '\r')
+                                    let line_bytes = self.recv_buf.drain(..=pos).collect::<Vec<u8>>();
+                                    let line = String::from_utf8_lossy(&line_bytes).to_string();
+                                    trace!("Connection {} ({}): Received text command: {}", connection_id, addr, line.trim());
+
+                                    match Self::process_command(&engine, &line) {
+                                        Ok(response) => {
+                                            if let Err(e) = Self::send_response_to_writer(&mut writer, &response, config.write_timeout).await {
+                                                error!("Connection {} ({}): Failed to send response: {}", connection_id, addr, e);
+                                                break;
+                                            }
+                                            if response == "+OK\r\n" && line.trim().to_uppercase() == "QUIT" {
+                                                info!("Connection {} ({}): Client sent QUIT, closing", connection_id, addr);
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Connection {} ({}): Command processing error: {}", connection_id, addr, e);
+                                            if let Err(e) = Self::send_response_to_writer(&mut writer, "-ERR Internal server error\r\n", config.write_timeout).await {
+                                                error!("Connection {} ({}): Failed to send error response: {}", connection_id, addr, e);
+                                                break;
+                                            }
+                                        }
                                     }
+                                } else {
+                                    // ещё нет конца линии — ждём следующего чтения (продолжаем loop)
+                                    continue;
                                 }
-                                Err(e) => {
-                                    error!("Connection {} ({}): Command processing error: {}", connection_id, addr, e);
-                                    if let Err(e) = Self::send_response_to_writer(&mut writer, "-ERR Internal server error\r\n", config.write_timeout).await {
-                                        error!("Connection {} ({}): Failed to send error response: {}", connection_id, addr, e);
-                                        break;
+                            } else {
+                                // Пытаемся декодировать ZSP. Для этого создаём 'static срез из накопленного буфера.
+                                // (временный leak — как у client.receive_response; если нужно, улучшим позже)
+                                let boxed = self.recv_buf.clone().into_boxed_slice();
+                                let total = boxed.len();
+                                let leaked: &'static mut [u8] = Box::leak(boxed);
+                                let mut slice: &'static [u8] = &leaked[..];
+
+                                match self.decoder.decode(&mut slice) {
+                                    Ok(Some(frame)) => {
+                                        // сколько байт было потреблено?
+                                        let remaining = slice.len();
+                                        let consumed = total - remaining;
+                                        // удаляем потреблённые байты из recv_buf
+                                        self.recv_buf.drain(..consumed);
+
+                                        // Обрабатываем фрейм
+                                        if let Err(e) = Self::handle_zsp_frame(&engine, frame, &mut writer, &config).await {
+                                            error!("Connection {} ({}): ZSP handling error: {}", connection_id, addr, e);
+                                            // отправим ZSP-ошибку назад
+                                            let err_frame = ZspFrame::FrameError(format!("ERR {}", e));
+                                            let enc = ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
+                                            timeout(config.write_timeout, writer.write_all(&enc)).await.context("Write timeout")??
+                                        }
+
+                                        // Возможно в recv_buf остались дополнительные фреймы — обработаем их в цикле (loop будет итеративно читать)
+                                    }
+                                    Ok(None) => {
+                                        // частичный фрейм — ждём доп. байтов
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        // ошибка декодирования — логируем и отправляем ZSP-ошибку
+                                        error!("Connection {} ({}): ZSP decode error: {}", connection_id, addr, e);
+                                        let err_frame = ZspFrame::FrameError(format!("ERR zsp decode: {}", e));
+                                        let enc = ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
+                                        timeout(config.write_timeout, writer.write_all(&enc)).await.context("Write timeout")??
                                     }
                                 }
                             }
                         }
-                        Ok(Ok(None)) => {
-                            // Клиент закрыл соединение
-                            debug!("Connection {} ({}): Client closed connection", connection_id, addr);
-                            break;
-                        }
                         Ok(Err(e)) => {
                             if e.kind() == ErrorKind::InvalidData {
                                 warn!("Connection {} ({}): Ignoring invalid UTF-8 from client", connection_id, addr);
-                                continue; // не рвём соединение
+                                continue;
                             }
                             if Self::is_recoverable_error(&e) {
                                 debug!("Connection {} ({}): Recoverable error: {}", connection_id, addr, e);
@@ -342,14 +407,13 @@ impl ConnectionHandler {
                             }
                             break;
                         }
-                    }
-                }
-            }
-        }
+                    } // match read_res
+                } // read branch
+            } // select
+        } // loop
 
-        // Graceful close
         Self::graceful_close_writer(connection_id, writer).await
-    }
+    } // run
 
     /// Обрабатывает команду (статический метод)
     fn process_command(
@@ -534,6 +598,152 @@ impl ConnectionHandler {
                     }
                 }
             }
+            "SADD" if parts.len() >= 3 => {
+                let k = Sds::from(parts[1].as_bytes());
+                let members: Vec<Sds> =
+                    parts[2..].iter().map(|s| Sds::from(s.as_bytes())).collect();
+                match engine.sadd(&k, &members) {
+                    Ok(added) => format!(":{}\r\n", added),
+                    Err(e) => {
+                        error!("SADD command failed: {e}");
+                        "-ERR SADD failed\r\n".to_string()
+                    }
+                }
+            }
+            "SMEMBERS" if parts.len() == 2 => {
+                let k = Sds::from(parts[1].as_bytes());
+                match engine.smembers(&k) {
+                    Ok(members) => {
+                        let mut resp = format!("*{}\r\n", members.len());
+                        for m in members {
+                            let b = m.as_bytes();
+                            resp += &format!("${}\r\n", b.len());
+                            resp += &String::from_utf8_lossy(b);
+                            resp += "\r\n";
+                        }
+                        resp
+                    }
+                    Err(e) => {
+                        error!("SMEMBERS failed: {}", e);
+                        "-ERR SMEMBERS failed\r\n".to_string()
+                    }
+                }
+            }
+            "SCARD" if parts.len() == 2 => {
+                let k = Sds::from(parts[1].as_bytes());
+                match engine.scard(&k) {
+                    Ok(n) => format!(":{}\r\n", n),
+                    Err(e) => {
+                        error!("SCARD failed: {}", e);
+                        "-ERR SCARD failed\r\n".to_string()
+                    }
+                }
+            }
+            "SISMEMBER" if parts.len() == 3 => {
+                let k = Sds::from(parts[1].as_bytes());
+                let m = Sds::from(parts[2].as_bytes());
+                match engine.sismember(&k, &m) {
+                    Ok(true) => ":1\r\n".to_string(),
+                    Ok(false) => ":0\r\n".to_string(),
+                    Err(e) => {
+                        error!("SISMEMBER failed: {}", e);
+                        "-ERR SISMEMBER failed\r\n".to_string()
+                    }
+                }
+            }
+            "SREM" if parts.len() >= 3 => {
+                let k = Sds::from(parts[1].as_bytes());
+                let members: Vec<Sds> =
+                    parts[2..].iter().map(|s| Sds::from(s.as_bytes())).collect();
+                match engine.srem(&k, &members) {
+                    Ok(removed) => format!(":{}\r\n", removed),
+                    Err(e) => {
+                        error!("SREM failed: {}", e);
+                        "-ERR SREM failed\r\n".to_string()
+                    }
+                }
+            }
+            "SRANDMEMBER" if parts.len() == 2 || parts.len() == 3 => {
+                let k = Sds::from(parts[1].as_bytes());
+                if parts.len() == 3 {
+                    let cnt: isize = parts[2].parse().unwrap_or(1);
+                    match engine.srandmember(&k, cnt) {
+                        Ok(vec) => {
+                            if cnt == 1 {
+                                if vec.is_empty() {
+                                    "$-1\r\n".to_string()
+                                } else {
+                                    let b = vec.into_iter().next().unwrap().as_bytes().to_vec();
+                                    format!("${}\r\n{}\r\n", b.len(), String::from_utf8_lossy(&b))
+                                }
+                            } else {
+                                // array
+                                let mut resp = format!("*{}\r\n", vec.len());
+                                for m in vec {
+                                    let b = m.as_bytes();
+                                    resp += &format!("${}\r\n", b.len());
+                                    resp += &String::from_utf8_lossy(b);
+                                    resp += "\r\n";
+                                }
+                                resp
+                            }
+                        }
+                        Err(e) => {
+                            error!("SRANDMEMBER failed: {}", e);
+                            "-ERR SRANDMEMBER failed\r\n".to_string()
+                        }
+                    }
+                } else {
+                    // single
+                    match engine.srandmember(&k, 1) {
+                        Ok(mut v) => {
+                            if v.is_empty() {
+                                "$-1\r\n".to_string()
+                            } else {
+                                let b = v.remove(0).as_bytes().to_vec();
+                                format!("${}\r\n{}\r\n", b.len(), String::from_utf8_lossy(&b))
+                            }
+                        }
+                        Err(e) => {
+                            error!("SRANDMEMBER failed: {e}");
+                            "-ERR SRANDMEMBER failed\r\n".to_string()
+                        }
+                    }
+                }
+            }
+            "SPOP" if parts.len() == 2 || parts.len() == 3 => {
+                let k = Sds::from(parts[1].as_bytes());
+                let cnt = if parts.len() == 3 {
+                    parts[2].parse::<isize>().unwrap_or(1)
+                } else {
+                    1
+                };
+                match engine.spop(&k, cnt) {
+                    Ok(vec) => {
+                        if cnt == 1 {
+                            if vec.is_empty() {
+                                "$-1\r\n".to_string()
+                            } else {
+                                let b = vec.into_iter().next().unwrap().as_bytes().to_vec();
+                                format!("${}\r\n{}\r\n", b.len(), String::from_utf8_lossy(&b))
+                            }
+                        } else {
+                            let mut resp = format!("*{}\r\n", vec.len());
+                            for m in vec {
+                                let b = m.as_bytes();
+                                resp += &format!("${}\r\n", b.len());
+                                resp += &String::from_utf8_lossy(b);
+                                resp += "\r\n";
+                            }
+                            resp
+                        }
+                    }
+                    Err(e) => {
+                        error!("SPOP failed: {e}");
+                        "-ERR SPOP failed\r\n".to_string()
+                    }
+                }
+            }
             _ => "-ERR Unknown command\r\n".to_string(),
         };
 
@@ -580,6 +790,112 @@ impl ConnectionHandler {
         }
         debug!("Connection {} closed gracefully", connection_id);
         Ok(())
+    }
+
+    async fn handle_zsp_frame(
+        engine: &Arc<StorageEngine>,
+        frame: ZspFrame<'static>,
+        writer: &mut OwnedWriteHalf,
+        config: &ConnectionConfig,
+    ) -> Result<(), anyhow::Error> {
+        // используем твой парсер: parse_command -> StoreCommand
+        // путь к parse_command зависит от реэкспортов; если у тебя другой путь,
+        // поправь.
+        use crate::network::zsp::protocol::parser::parse_command;
+
+        match parse_command(frame) {
+            Ok(store_cmd) => {
+                // Выполнение команды и получение ZspFrame ответа
+                let resp = execute_store_command(engine, store_cmd);
+                match resp {
+                    Ok(frame) => {
+                        let encoded = ZspEncoder::encode(&frame)
+                            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                        timeout(config.write_timeout, writer.write_all(&encoded))
+                            .await
+                            .context("Write timeout")??;
+                        timeout(config.write_timeout, writer.flush())
+                            .await
+                            .context("Write timeout")??;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        let err_frame = ZspFrame::FrameError(format!("ERR exec: {}", e));
+                        let enc = ZspEncoder::encode(&err_frame)
+                            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                        timeout(config.write_timeout, writer.write_all(&enc))
+                            .await
+                            .context("Write timeout")??;
+                        Ok(())
+                    }
+                }
+            }
+            Err(e) => {
+                // ошибки парсинга возвращаем клиенту как ZSP error
+                let err_frame = ZspFrame::FrameError(format!("ERR parse: {}", e));
+                let enc =
+                    ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                timeout(config.write_timeout, writer.write_all(&enc))
+                    .await
+                    .context("Write timeout")??;
+                Ok(())
+            }
+        }
+    }
+}
+
+// Вспомогательная функция: исполняет StoreCommand на engine и возвращает
+// ZspFrame результат. Подправь варианты/пути StoreCommand в соответствии с
+// твоим кодом, если нужно.
+fn execute_store_command(
+    engine: &Arc<StorageEngine>,
+    cmd: crate::StoreCommand,
+) -> Result<ZspFrame<'static>, String> {
+    use crate::{Sds, Value};
+    match cmd {
+        crate::StoreCommand::Set(set) => {
+            let k = Sds::from_str(&set.key);
+            engine.set(&k, set.value).map_err(|e| e.to_string())?;
+            Ok(ZspFrame::InlineString(Cow::Owned("OK".into())))
+        }
+        crate::StoreCommand::Get(get) => {
+            let k = Sds::from_str(&get.key);
+            match engine.get(&k).map_err(|e| e.to_string())? {
+                Some(Value::Str(s)) => Ok(ZspFrame::BinaryString(Some(s.to_vec()))),
+                Some(_) => Ok(ZspFrame::FrameError("ERR Unsupported type".into())),
+                None => Ok(ZspFrame::BinaryString(None)),
+            }
+        }
+        crate::StoreCommand::Del(del) => {
+            let k = Sds::from_str(&del.key);
+            let r = engine.del(&k).map_err(|e| e.to_string())?;
+            Ok(ZspFrame::Integer(if r { 1 } else { 0 }))
+        }
+        crate::StoreCommand::MSet(mset) => {
+            for (k_s, v) in mset.entries {
+                let k = Sds::from_str(&k_s);
+                engine.set(&k, v).map_err(|e| e.to_string())?;
+            }
+            Ok(ZspFrame::InlineString(Cow::Owned("OK".into())))
+        }
+        crate::StoreCommand::MGet(mget) => {
+            let keys: Vec<Sds> = mget.keys.into_iter().map(|s| Sds::from_str(&s)).collect();
+            let refs: Vec<&Sds> = keys.iter().collect();
+            let vals = engine.mget(&refs).map_err(|e| e.to_string())?;
+            {
+                let arr = vals
+                    .into_iter()
+                    .map(|opt| match opt {
+                        Some(Value::Str(s)) => ZspFrame::BinaryString(Some(s.to_vec())),
+                        Some(_v) => ZspFrame::FrameError("ERR unsupported type".into()),
+                        None => ZspFrame::BinaryString(None),
+                    })
+                    .collect();
+                Ok(ZspFrame::Array(arr))
+            }
+        }
+        // Добавь другие варианты по необходимости (SetNx, Rename, Auth...) или верни ошибку.
+        _ => Ok(ZspFrame::FrameError("ERR unsupported command".into())),
     }
 }
 

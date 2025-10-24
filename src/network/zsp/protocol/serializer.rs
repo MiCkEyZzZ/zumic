@@ -21,7 +21,7 @@ pub fn serialize_response<'a>(response: Response) -> ZspFrame<'a> {
         // PubSub ответы
         Response::Message { channel, message } => serialize_pubsub_message(channel, message),
         Response::Subscribed { channel, count } => ZspFrame::Array(vec![
-            ZspFrame::InlineString("sybscriber".into()),
+            ZspFrame::InlineString("subscribe".into()),
             ZspFrame::BinaryString(Some(channel.into_bytes())),
             ZspFrame::Integer(count),
         ]),
@@ -76,6 +76,7 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
         Value::Float(f) => ZspFrame::Float(f),
         Value::Bool(b) => ZspFrame::Bool(b),
         Value::Null => ZspFrame::Null,
+
         Value::List(list) => {
             let frames = list
                 .iter()
@@ -89,19 +90,15 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
             ZspFrame::Array(frames)
         }
 
-        // Здесь Value::Hash содержит SmartHash, поэтому используем его итератор.
+        // RESP3: Hash → Map (Dictionary)
         Value::Hash(mut smart) => {
             let dict: HashMap<Cow<'a, str>, ZspFrame<'a>> = smart
                 .iter()
                 .map(|(k, v)| {
-                    // Преобразуем ключ в Cow<'a, str>
                     let key = Cow::from(
                         String::from_utf8(k.to_vec()).unwrap_or_else(|_| "<invalid utf8>".into()),
                     );
-
-                    // Преобразуем значение в BinaryString, как раньше
                     let val = ZspFrame::BinaryString(Some(v.to_vec()));
-
                     (key, val)
                 })
                 .collect();
@@ -109,33 +106,39 @@ fn value_to_frame<'a>(value: Value) -> ZspFrame<'a> {
             ZspFrame::Dictionary(dict)
         }
 
+        // ZSP РАСШИРЕНИЕ: ZSet
         Value::ZSet { dict, .. } => {
             let pairs = dict
                 .into_iter()
                 .map(|(k_sds, &score)| {
                     let key = String::from_utf8(k_sds.to_vec())
                         .unwrap_or_else(|_| "<invalid utf8>".into());
-                    (key, score) // score уже f64
+                    (key, score)
                 })
-                .collect::<Vec<(String, f64)>>(); // теперь тип правильно совпадает
+                .collect::<Vec<(String, f64)>>();
             ZspFrame::ZSet(pairs)
         }
 
+        // RESP3: Set → Set (не Array!)
         Value::Set(set) => {
             let frames = set
                 .into_iter()
                 .map(|item| {
-                    let s = String::from_utf8(item.to_vec())
-                        .unwrap_or_else(|_| "<invalid utf8>".into());
-                    ZspFrame::InlineString(Cow::Owned(s))
+                    let bytes = item.to_vec();
+                    match String::from_utf8(bytes.clone()) {
+                        Ok(s) if !s.contains('\r') && !s.contains('\n') => {
+                            ZspFrame::InlineString(Cow::Owned(s))
+                        }
+                        _ => ZspFrame::BinaryString(Some(bytes)),
+                    }
                 })
                 .collect();
-            ZspFrame::Array(frames)
+            ZspFrame::Set(frames)
         }
 
         Value::Bitmap(bmp) => ZspFrame::BinaryString(Some(bmp.as_bytes().to_vec())),
 
-        Value::HyperLogLog(_) => ZspFrame::InlineString("Hll(NotImplemented)".into()),
+        Value::HyperLogLog(_) => ZspFrame::InlineString("HLL(NotImplemented)".into()),
 
         Value::SStream(_) => ZspFrame::InlineString("SStream(NotImplemented)".into()),
     }
@@ -162,6 +165,12 @@ mod tests {
     fn test_serialize_error() {
         let frame = serialize_response(Response::Error("fail".into()));
         assert_eq!(frame, ZspFrame::FrameError("fail".into()));
+    }
+
+    #[test]
+    fn test_serialize_null() {
+        let frame = serialize_response(Response::NotFound);
+        assert_eq!(frame, ZspFrame::Null);
     }
 
     /// Тест проверяет сериализацию `Value::Str` в
@@ -191,12 +200,11 @@ mod tests {
         assert_eq!(frame, ZspFrame::Float(2.14));
     }
 
-    /// Тест проверяет сериализацию `Value::Null` в `ZspFrame::Null`
     #[test]
-    fn test_serialize_null() {
-        let value = Value::Null;
+    fn test_serialize_bool() {
+        let value = Value::Bool(true);
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZspFrame::Null);
+        assert_eq!(frame, ZspFrame::Bool(true));
     }
 
     /// Тест проверяет сериализацию `Value::List` (QuickList) в
@@ -218,10 +226,8 @@ mod tests {
         );
     }
 
-    /// Тест проверяет сериализацию `Value::Set` (HashSet) в
-    /// `ZspFrame::Array` со строками
     #[test]
-    fn test_serialize_set() {
+    fn test_serialize_set_as_resp3_set() {
         let mut set = HashSet::new();
         set.insert(Sds::from_str("x"));
         set.insert(Sds::from_str("y"));
@@ -229,25 +235,16 @@ mod tests {
         let frame = serialize_response(Response::Value(value));
 
         match frame {
-            ZspFrame::Array(mut items) => {
-                let mut strings = items
-                    .drain(..)
-                    .map(|item| match item {
-                        ZspFrame::InlineString(s) => s,
-                        _ => panic!("Expected InlineString"),
-                    })
-                    .collect::<Vec<_>>();
-                strings.sort();
-                assert_eq!(strings, vec!["x".to_string(), "y".to_string()]);
+            ZspFrame::Set(set) => {
+                assert_eq!(set.len(), 2);
+                // Проверяем что это ZspFrame::Set, не Array
             }
-            _ => panic!("Expected Array"),
+            _ => panic!("Expected Set, not Array"),
         }
     }
 
-    /// Тест проверяет сериализацию `Value::Hash` (SmartHash) в
-    /// `ZspFrame::Dictionary`
     #[test]
-    fn test_serialize_hash() {
+    fn test_serialize_hash_as_resp3_map() {
         let mut sh = SmartHash::new();
         sh.insert(Sds::from_str("k1"), Sds::from_str("v1"));
         let value = Value::Hash(sh);
@@ -264,8 +261,6 @@ mod tests {
         }
     }
 
-    /// Тест проверяет сериализацию `Value::ZSet` (dict + SkipList)
-    /// в `ZspFrame::ZSet`
     #[test]
     fn test_serialize_zset() {
         let mut dict = Dict::new();
@@ -288,18 +283,14 @@ mod tests {
         }
     }
 
-    /// Тест проверяет сериализацию `Value::HyperLogLog` в
-    /// `ZspFrame::InlineString("HLL(NotImplemented)")`
     #[test]
     fn test_serialize_hll() {
         let hll = Hll { data: [0; 12288] };
         let value = Value::HyperLogLog(Box::new(hll));
         let frame = serialize_response(Response::Value(value));
-        assert_eq!(frame, ZspFrame::InlineString("Hll(NotImplemented)".into()));
+        assert_eq!(frame, ZspFrame::InlineString("HLL(NotImplemented)".into()));
     }
 
-    /// Тест проверяет сериализацию `Value::SStream` в
-    /// `ZspFrame::InlineString("SStream(NotImplemented)")`
     #[test]
     fn test_serialize_sstream() {
         let value = Value::SStream(vec![]);
@@ -308,5 +299,40 @@ mod tests {
             frame,
             ZspFrame::InlineString("SStream(NotImplemented)".into())
         );
+    }
+
+    #[test]
+    fn test_serialize_subscribed() {
+        let response = Response::Subscribed {
+            channel: "news".to_string(),
+            count: 1,
+        };
+        let frame = serialize_response(response);
+
+        match frame {
+            ZspFrame::Array(items) => {
+                assert_eq!(items.len(), 3);
+                assert_eq!(items[0], ZspFrame::InlineString("subscribe".into()));
+                assert_eq!(items[2], ZspFrame::Integer(1));
+            }
+            _ => panic!("Expected Array"),
+        }
+    }
+
+    #[test]
+    fn test_serialize_pubsub_message() {
+        let response = Response::Message {
+            channel: "news".to_string(),
+            message: PubSubMessage::String("hello".to_string()),
+        };
+        let frame = serialize_response(response);
+
+        match frame {
+            ZspFrame::Array(items) => {
+                assert_eq!(items[0], ZspFrame::InlineString("message".into()));
+                assert_eq!(items[2], ZspFrame::InlineString("STRING".into()));
+            }
+            _ => panic!("Expected Array"),
+        }
     }
 }

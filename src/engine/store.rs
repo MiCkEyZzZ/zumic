@@ -256,6 +256,88 @@ impl StorageEngine {
             StorageEngine::Persistent(store) => store.geo_radius(key, lon, lat, radius, unit),
         }
     }
+
+    pub fn sadd(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        match self {
+            StorageEngine::Memory(store) => store.sadd(key, members),
+            StorageEngine::Cluster(store) => store.sadd(key, members),
+            StorageEngine::Persistent(store) => store.sadd(key, members),
+        }
+    }
+
+    pub fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>> {
+        match self {
+            StorageEngine::Memory(store) => store.smembers(key),
+            StorageEngine::Cluster(store) => store.smembers(key),
+            StorageEngine::Persistent(store) => store.smembers(key),
+        }
+    }
+
+    pub fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize> {
+        match self {
+            StorageEngine::Memory(store) => store.scard(key),
+            StorageEngine::Cluster(store) => store.scard(key),
+            StorageEngine::Persistent(store) => store.scard(key),
+        }
+    }
+
+    pub fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        match self {
+            StorageEngine::Memory(store) => store.sismember(key, member),
+            StorageEngine::Cluster(store) => store.sismember(key, member),
+            StorageEngine::Persistent(store) => store.sismember(key, member),
+        }
+    }
+
+    pub fn srem(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        match self {
+            StorageEngine::Memory(store) => store.srem(key, members),
+            StorageEngine::Cluster(store) => store.srem(key, members),
+            StorageEngine::Persistent(store) => store.srem(key, members),
+        }
+    }
+
+    pub fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        match self {
+            StorageEngine::Memory(store) => store.srandmember(key, count),
+            StorageEngine::Cluster(store) => store.srandmember(key, count),
+            StorageEngine::Persistent(store) => store.srandmember(key, count),
+        }
+    }
+
+    pub fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        match self {
+            StorageEngine::Memory(store) => store.spop(key, count),
+            StorageEngine::Cluster(store) => store.spop(key, count),
+            StorageEngine::Persistent(store) => store.spop(key, count),
+        }
+    }
 }
 
 #[cfg(test)]

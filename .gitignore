@@ -43,5 +43,4 @@ test_zdb_roundtrip.**
 
 # Разное
 debug/
-client
 results

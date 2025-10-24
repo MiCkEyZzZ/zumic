@@ -10,7 +10,10 @@
 //! словари. Каждый тип фрейма имеет свои особенности в
 //! декодировании, которые обрабатываются в отдельных методах.
 
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 use bytes::Buf;
 use memchr::memchr;
@@ -45,6 +48,22 @@ pub enum ZspDecodeState<'a> {
         data: Vec<u8>,
     },
     PartialArray {
+        len: usize,
+        items: Vec<ZspFrame<'a>>,
+        remaining: usize,
+    },
+    PartialDictionary {
+        len: usize,
+        items: HashMap<Cow<'a, str>, ZspFrame<'a>>,
+        remaining: usize,
+        pending_key: Option<Cow<'a, str>>,
+    },
+    PartialSet {
+        len: usize,
+        items: HashSet<ZspFrame<'a>>,
+        remaining: usize,
+    },
+    PartialPush {
         len: usize,
         items: Vec<ZspFrame<'a>>,
         remaining: usize,
@@ -94,6 +113,60 @@ impl<'a> ZspDecoder<'a> {
                     Ok(None)
                 }
             },
+            ZspDecodeState::PartialDictionary {
+                len,
+                mut items,
+                mut remaining,
+                mut pending_key,
+            } => {
+                match self.continue_dictionary(
+                    slice,
+                    &mut items,
+                    &mut remaining,
+                    &mut pending_key,
+                )? {
+                    Some(dict) => Ok(Some(dict)),
+                    None => {
+                        self.state = ZspDecodeState::PartialDictionary {
+                            len,
+                            items,
+                            remaining,
+                            pending_key,
+                        };
+                        Ok(None)
+                    }
+                }
+            }
+            ZspDecodeState::PartialSet {
+                len,
+                mut items,
+                mut remaining,
+            } => match self.continue_set(slice, &mut items, &mut remaining)? {
+                Some(set) => Ok(Some(set)),
+                None => {
+                    self.state = ZspDecodeState::PartialSet {
+                        len,
+                        items,
+                        remaining,
+                    };
+                    Ok(None)
+                }
+            },
+            ZspDecodeState::PartialPush {
+                len,
+                mut items,
+                mut remaining,
+            } => match self.continue_push(slice, &mut items, &mut remaining)? {
+                Some(push) => Ok(Some(push)),
+                None => {
+                    self.state = ZspDecodeState::PartialPush {
+                        len,
+                        items,
+                        remaining,
+                    };
+                    Ok(None)
+                }
+            },
             ZspDecodeState::PartialZSet {
                 len,
                 mut items,
@@ -122,59 +195,6 @@ impl<'a> ZspDecoder<'a> {
         }
     }
 
-    /// Продолжить декодирование ZSet при частичных данных.
-    fn continue_zset(
-        &mut self,
-        slice: &mut &'a [u8],
-        _len: usize,
-        items: &mut Vec<(String, f64)>,
-        pending_member: &mut Option<String>,
-        remaining: &mut usize,
-    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
-        while *remaining > 0 {
-            if pending_member.is_none() {
-                // ожидаем member
-                match self.decode(slice)? {
-                    Some(frame) => {
-                        let member = match frame {
-                            ZspFrame::InlineString(cow) => cow.into_owned(),
-                            ZspFrame::BinaryString(Some(bytes)) => String::from_utf8(bytes)
-                                .map_err(|_| {
-                                    ZspDecodeError::InvalidData(
-                                        "Invalid UTF-8 in zset member".to_string(),
-                                    )
-                                })?,
-                            _ => {
-                                return Err(ZspDecodeError::InvalidData(
-                                    "Expected string for zset member".to_string(),
-                                ));
-                            }
-                        };
-                        *pending_member = Some(member);
-                    }
-                    None => return Ok(None),
-                }
-            } else {
-                // ожидаем score
-                let score = match self.decode(slice)? {
-                    Some(ZspFrame::Float(f)) => f,
-                    Some(ZspFrame::Integer(i)) => i as f64,
-                    Some(_) => {
-                        return Err(ZspDecodeError::InvalidData(
-                            "Expected float/integer for zset score".to_string(),
-                        ))
-                    }
-                    None => return Ok(None),
-                };
-                let member = pending_member.take().unwrap();
-                items.push((member, score));
-                *remaining -= 1;
-            }
-        }
-        // всё прочитано
-        Ok(Some(ZspFrame::ZSet(std::mem::take(items))))
-    }
-
     fn initial_decode(
         &mut self,
         slice: &mut &'a [u8],
@@ -188,11 +208,16 @@ impl<'a> ZspDecoder<'a> {
             b':' => self.parse_integer(slice),
             b',' => self.parse_float(slice),
             b'#' => self.parse_bool(slice),
-            b'^' => self.parse_zset(slice),
             b'$' => self.parse_binary_string(slice),
+            b'_' => self.parse_null(slice),
             b'*' => self.parse_array(slice, 0),
             b'%' => self.parse_dictionary(slice),
-            _ => Err(ZspDecodeError::InvalidData("Unknown ZSP type".to_string())),
+            b'~' => self.parse_set(slice),
+            b'>' => self.parse_push(slice),
+            b'^' => self.parse_zset(slice),
+            _ => Err(ZspDecodeError::InvalidData(
+                "Unknown ZSP/RESP3 type".to_string(),
+            )),
         }
     }
 
@@ -217,10 +242,9 @@ impl<'a> ZspDecoder<'a> {
         slice: &mut &'a [u8],
     ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
-        let num = line.parse::<i64>().map_err(|_| {
-            let err_msg = "Invalid integer".to_string();
-            ZspDecodeError::InvalidData(err_msg)
-        })?;
+        let num = line
+            .parse::<i64>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid integer".to_string()))?;
         Ok(Some(ZspFrame::Integer(num)))
     }
 
@@ -231,10 +255,16 @@ impl<'a> ZspDecoder<'a> {
         slice: &mut &'a [u8],
     ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         let line = self.read_line(slice)?;
-        let num = line.parse::<f64>().map_err(|_| {
-            let err_msg = "Invalid float".to_string();
-            ZspDecodeError::InvalidData(err_msg)
-        })?;
+
+        // RESP3 поддерживает inf и -inf
+        let num = match line {
+            "inf" => f64::INFINITY,
+            "-inf" => f64::NEG_INFINITY,
+            _ => line
+                .parse::<f64>()
+                .map_err(|_| ZspDecodeError::InvalidData("Invalid float".to_string()))?,
+        };
+
         Ok(Some(ZspFrame::Float(num)))
     }
 
@@ -258,14 +288,28 @@ impl<'a> ZspDecoder<'a> {
         }
     }
 
+    fn parse_null(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        if slice.len() < 2 {
+            return Err(ZspDecodeError::UnexpectedEof("Incomplete null".into()));
+        }
+        if slice[0] != b'\r' || slice[1] != b'\n' {
+            return Err(ZspDecodeError::InvalidData("Invalid null format".into()));
+        }
+        *slice = &slice[2..];
+        Ok(Some(ZspFrame::Null))
+    }
+
     fn parse_binary_string(
         &mut self,
         slice: &mut &'a [u8],
     ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
-        let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
-            let err_msg = "Invalid binary".to_string();
-            ZspDecodeError::InvalidData(err_msg)
-        })?;
+        let len = self
+            .read_line(slice)?
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid binary".to_string()))?;
 
         match len {
             -1 => Ok(Some(ZspFrame::BinaryString(None))),
@@ -289,10 +333,9 @@ impl<'a> ZspDecoder<'a> {
                     Ok(None)
                 }
             }
-            _ => {
-                let err_msg = "Negative binary length".to_string();
-                Err(ZspDecodeError::InvalidData(err_msg))
-            }
+            _ => Err(ZspDecodeError::InvalidData(
+                "Negative binary length".to_string(),
+            )),
         }
     }
 
@@ -305,12 +348,10 @@ impl<'a> ZspDecoder<'a> {
         let remaining_bytes = len - data.len();
         let available = slice.remaining().min(remaining_bytes);
 
-        // Резервируем память, если не хватит (защита от realloc)
         if data.capacity() < len {
             data.reserve(len - data.capacity());
         }
 
-        // Безопасное разделение с минимальными копиями
         let (to_copy, rest) = slice.split_at(available);
         data.extend_from_slice(to_copy);
         *slice = rest;
@@ -329,26 +370,25 @@ impl<'a> ZspDecoder<'a> {
         depth: usize,
     ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
         if depth > MAX_ARRAY_DEPTH {
-            let err_msg = "Max array depth exceeded".to_string();
-            return Err(ZspDecodeError::InvalidData(err_msg));
+            return Err(ZspDecodeError::InvalidData(
+                "Max array depth exceeded".to_string(),
+            ));
         }
 
-        let len = self.read_line(slice)?.parse::<isize>().map_err(|_| {
-            let err_msg = "Invalid array length".to_string();
-            ZspDecodeError::InvalidData(err_msg)
-        })?;
+        let len = self
+            .read_line(slice)?
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid array length".to_string()))?;
 
         match len {
-            -1 => Ok(Some(ZspFrame::Array(Vec::new()))),
-            len if len >= 0 => {
+            -1 | 0 => Ok(Some(ZspFrame::Array(Vec::new()))),
+            len if len > 0 => {
                 let len = len as usize;
                 let mut items = Vec::with_capacity(len);
                 let mut remaining = len;
 
                 while remaining > 0 {
-                    let decoded = self.decode(slice)?;
-
-                    match decoded {
+                    match self.decode(slice)? {
                         Some(frame) => {
                             items.push(frame);
                             remaining -= 1;
@@ -366,109 +406,8 @@ impl<'a> ZspDecoder<'a> {
 
                 Ok(Some(ZspFrame::Array(items)))
             }
-            _ => {
-                let err_msg = "Negative array length".to_string();
-                Err(ZspDecodeError::InvalidData(err_msg))
-            }
-        }
-    }
-
-    fn parse_dictionary(
-        &mut self,
-        slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
-        let len_str = self.read_line(slice)?;
-        let len = len_str
-            .parse::<isize>()
-            .map_err(|_| ZspDecodeError::InvalidData("Invalid dictionary length".to_string()))?;
-
-        match len {
-            -1 => Ok(Some(ZspFrame::Dictionary(HashMap::new()))),
-            len if len >= 0 => {
-                let len = len as usize;
-                let mut items = HashMap::with_capacity(len);
-
-                for _ in 0..len {
-                    let key = match self.decode(slice)? {
-                        Some(frame) => frame,
-                        None => return Ok(None),
-                    };
-
-                    let value = match self.decode(slice)? {
-                        Some(frame) => frame,
-                        None => return Ok(None),
-                    };
-
-                    match key {
-                        ZspFrame::InlineString(key_str) => {
-                            items.insert(key_str, value);
-                        }
-                        _ => {
-                            return Err(ZspDecodeError::InvalidData(
-                                "Expected InlineString as key".to_string(),
-                            ));
-                        }
-                    }
-                }
-
-                Ok(Some(ZspFrame::Dictionary(items)))
-            }
             _ => Err(ZspDecodeError::InvalidData(
-                "Negative dictionary length".to_string(),
-            )),
-        }
-    }
-
-    /// Декодирует фрейм ZSet (префикс `^`).
-    /// Содержит <count> пар "член-оценка", где оценка — число
-    /// с плавающей точкой:contentReference[oaicite:7]{index=7}.
-    /// Пример: `^2\r\n$3\r\nfoo\r\n,1.23\r\n$3\r\nbar\r\n,4.56\r\n`.
-    fn parse_zset(
-        &mut self,
-        slice: &mut &'a [u8],
-    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
-        // Считываем количество элементов ZSET
-        let len_str = self.read_line(slice)?;
-        let len = len_str
-            .parse::<isize>()
-            .map_err(|_| ZspDecodeError::InvalidData("Invalid zset length".to_string()))?;
-
-        match len {
-            // Null-ZSET
-            -1 => Ok(Some(ZspFrame::ZSet(Vec::new()))),
-
-            // Положительное число элементов
-            len if len >= 0 => {
-                let len = len as usize;
-                let mut items = Vec::with_capacity(len);
-                let mut pending_member = None;
-                let mut remaining = len;
-
-                // попытаться декодировать как можно больше элементов
-                match self.continue_zset(
-                    slice,
-                    len,
-                    &mut items,
-                    &mut pending_member,
-                    &mut remaining,
-                )? {
-                    Some(zs) => Ok(Some(zs)),
-                    None => {
-                        // не всё прочитано — сохраняем состояние
-                        self.state = ZspDecodeState::PartialZSet {
-                            len,
-                            items,
-                            pending_member,
-                            remaining,
-                        };
-                        Ok(None)
-                    }
-                }
-            }
-
-            // Отрицательное число, не равное -1
-            _ => Err(ZspDecodeError::InvalidData(
-                "Negative zset length".to_string(),
+                "Negative array length".to_string(),
             )),
         }
     }
@@ -488,8 +427,293 @@ impl<'a> ZspDecoder<'a> {
                 None => return Ok(None),
             }
         }
-
         Ok(Some(ZspFrame::Array(std::mem::take(items))))
+    }
+
+    /// ZSP: Map - %2\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+    fn parse_dictionary(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        let len_str = self.read_line(slice)?;
+        let len = len_str
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid dictionary length".to_string()))?;
+
+        match len {
+            0 => Ok(Some(ZspFrame::Dictionary(HashMap::new()))),
+            len if len > 0 => {
+                let len = len as usize;
+                let mut items = HashMap::with_capacity(len);
+                let mut remaining = len;
+                let mut pending_key = None;
+
+                match self.continue_dictionary(
+                    slice,
+                    &mut items,
+                    &mut remaining,
+                    &mut pending_key,
+                )? {
+                    Some(dict) => Ok(Some(dict)),
+                    None => {
+                        self.state = ZspDecodeState::PartialDictionary {
+                            len,
+                            items,
+                            remaining,
+                            pending_key,
+                        };
+                        Ok(None)
+                    }
+                }
+            }
+            _ => Err(ZspDecodeError::InvalidData(
+                "Negative dictionary length".to_string(),
+            )),
+        }
+    }
+
+    fn continue_dictionary(
+        &mut self,
+        slice: &mut &'a [u8],
+        items: &mut HashMap<Cow<'a, str>, ZspFrame<'a>>,
+        remaining: &mut usize,
+        pending_key: &mut Option<Cow<'a, str>>,
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        while *remaining > 0 {
+            if pending_key.is_none() {
+                // Читаем ключ
+                match self.decode(slice)? {
+                    Some(frame) => {
+                        let key = match frame {
+                            ZspFrame::BinaryString(Some(bytes)) => String::from_utf8(bytes)
+                                .map_err(|_| {
+                                    ZspDecodeError::InvalidData("Key not UTF-8".to_string())
+                                })?,
+                            ZspFrame::InlineString(s) => s.into_owned(),
+                            _ => {
+                                return Err(ZspDecodeError::InvalidData(
+                                    "Expected string key".to_string(),
+                                ))
+                            }
+                        };
+                        *pending_key = Some(Cow::Owned(key));
+                    }
+                    None => return Ok(None),
+                }
+            } else {
+                // Читаем значение
+                match self.decode(slice)? {
+                    Some(value) => {
+                        let key = pending_key.take().unwrap();
+                        items.insert(key, value);
+                        *remaining -= 1;
+                    }
+                    None => return Ok(None),
+                }
+            }
+        }
+        Ok(Some(ZspFrame::Dictionary(std::mem::take(items))))
+    }
+
+    /// ZSP: Set - ~3\r\n+member1\r\n+member2\r\n+member3\r\n
+    fn parse_set(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        let len_str = self.read_line(slice)?;
+        let len = len_str
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid set length".to_string()))?;
+
+        match len {
+            0 => Ok(Some(ZspFrame::Set(HashSet::new()))),
+            len if len > 0 => {
+                let len = len as usize;
+                let mut items = HashSet::with_capacity(len);
+                let mut remaining = len;
+
+                match self.continue_set(slice, &mut items, &mut remaining)? {
+                    Some(set) => Ok(Some(set)),
+                    None => {
+                        self.state = ZspDecodeState::PartialSet {
+                            len,
+                            items,
+                            remaining,
+                        };
+                        Ok(None)
+                    }
+                }
+            }
+            _ => Err(ZspDecodeError::InvalidData(
+                "Negative set length".to_string(),
+            )),
+        }
+    }
+
+    fn continue_set(
+        &mut self,
+        slice: &mut &'a [u8],
+        items: &mut HashSet<ZspFrame<'a>>,
+        remaining: &mut usize,
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        while *remaining > 0 {
+            match self.decode(slice)? {
+                Some(frame) => {
+                    items.insert(frame);
+                    *remaining -= 1;
+                }
+                None => return Ok(None),
+            }
+        }
+        Ok(Some(ZspFrame::Set(std::mem::take(items))))
+    }
+
+    /// ZSP: Push - >3\r\n+message\r\n+channel\r\n$7\r\npayload\r\n
+    fn parse_push(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        let len_str = self.read_line(slice)?;
+        let len = len_str
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid push length".to_string()))?;
+
+        match len {
+            0 => Ok(Some(ZspFrame::Push(Vec::new()))),
+            len if len > 0 => {
+                let len = len as usize;
+                let mut items = Vec::with_capacity(len);
+                let mut remaining = len;
+
+                match self.continue_push(slice, &mut items, &mut remaining)? {
+                    Some(push) => Ok(Some(push)),
+                    None => {
+                        self.state = ZspDecodeState::PartialPush {
+                            len,
+                            items,
+                            remaining,
+                        };
+                        Ok(None)
+                    }
+                }
+            }
+            _ => Err(ZspDecodeError::InvalidData(
+                "Negative push length".to_string(),
+            )),
+        }
+    }
+
+    fn continue_push(
+        &mut self,
+        slice: &mut &'a [u8],
+        items: &mut Vec<ZspFrame<'a>>,
+        remaining: &mut usize,
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        while *remaining > 0 {
+            match self.decode(slice)? {
+                Some(frame) => {
+                    items.push(frame);
+                    *remaining -= 1;
+                }
+                None => return Ok(None),
+            }
+        }
+        Ok(Some(ZspFrame::Push(std::mem::take(items))))
+    }
+
+    /// ZSP: ZSet -
+    /// ^2\r\n$7\r\nmember1\r\n,1.5\r\n$7\r\nmember2\r\n,2.5\r\n
+    fn parse_zset(
+        &mut self,
+        slice: &mut &'a [u8],
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        let len_str = self.read_line(slice)?;
+        let len = len_str
+            .parse::<isize>()
+            .map_err(|_| ZspDecodeError::InvalidData("Invalid zset length".to_string()))?;
+
+        match len {
+            -1 | 0 => Ok(Some(ZspFrame::ZSet(Vec::new()))),
+            len if len > 0 => {
+                let len = len as usize;
+                let mut items = Vec::with_capacity(len);
+                let mut pending_member = None;
+                let mut remaining = len;
+
+                match self.continue_zset(
+                    slice,
+                    len,
+                    &mut items,
+                    &mut pending_member,
+                    &mut remaining,
+                )? {
+                    Some(zs) => Ok(Some(zs)),
+                    None => {
+                        self.state = ZspDecodeState::PartialZSet {
+                            len,
+                            items,
+                            pending_member,
+                            remaining,
+                        };
+                        Ok(None)
+                    }
+                }
+            }
+            _ => Err(ZspDecodeError::InvalidData(
+                "Invalid zset length".to_string(),
+            )),
+        }
+    }
+
+    fn continue_zset(
+        &mut self,
+        slice: &mut &'a [u8],
+        _len: usize,
+        items: &mut Vec<(String, f64)>,
+        pending_member: &mut Option<String>,
+        remaining: &mut usize,
+    ) -> Result<Option<ZspFrame<'a>>, ZspDecodeError> {
+        while *remaining > 0 {
+            if pending_member.is_none() {
+                // Ожидаем member
+                match self.decode(slice)? {
+                    Some(frame) => {
+                        let member = match frame {
+                            ZspFrame::InlineString(cow) => cow.into_owned(),
+                            ZspFrame::BinaryString(Some(bytes)) => String::from_utf8(bytes)
+                                .map_err(|_| {
+                                    ZspDecodeError::InvalidData(
+                                        "Invalid UTF-8 in zset member".to_string(),
+                                    )
+                                })?,
+                            _ => {
+                                return Err(ZspDecodeError::InvalidData(
+                                    "Expected string for zset member".to_string(),
+                                ))
+                            }
+                        };
+                        *pending_member = Some(member);
+                    }
+                    None => return Ok(None),
+                }
+            } else {
+                // Ожидаем score
+                let score = match self.decode(slice)? {
+                    Some(ZspFrame::Float(f)) => f,
+                    Some(ZspFrame::Integer(i)) => i as f64,
+                    Some(_) => {
+                        return Err(ZspDecodeError::InvalidData(
+                            "Expected float/integer for zset score".to_string(),
+                        ))
+                    }
+                    None => return Ok(None),
+                };
+                let member = pending_member.take().unwrap();
+                items.push((member, score));
+                *remaining -= 1;
+            }
+        }
+        Ok(Some(ZspFrame::ZSet(std::mem::take(items))))
     }
 
     fn read_line(
@@ -505,7 +729,6 @@ impl<'a> ZspDecoder<'a> {
                 return Ok(result);
             }
         }
-
         Err(ZspDecodeError::UnexpectedEof("Incomplete line".to_string()))
     }
 
@@ -787,5 +1010,84 @@ mod tests {
         let mut buf = b"#f\r\n".as_ref();
         let frame = dec.decode(&mut buf).unwrap().unwrap();
         assert_eq!(frame, ZspFrame::Bool(false));
+    }
+
+    #[test]
+    fn test_resp3_null() {
+        let mut decoder = ZspDecoder::new();
+        let mut slice = b"_\r\n".as_ref();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+        assert_eq!(frame, ZspFrame::Null);
+    }
+
+    #[test]
+    fn test_resp3_map_with_binary_keys() {
+        let mut decoder = ZspDecoder::new();
+        let data = b"%1\r\n$4\r\nkey1\r\n+value1\r\n".to_vec();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+
+        if let ZspFrame::Dictionary(dict) = frame {
+            assert_eq!(dict.len(), 1);
+            assert!(dict.contains_key("key1"));
+        } else {
+            panic!("Expected Dictionary");
+        }
+    }
+
+    #[test]
+    fn test_resp3_set() {
+        let mut decoder = ZspDecoder::new();
+        let data = b"~2\r\n+member1\r\n+member2\r\n".to_vec();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+
+        if let ZspFrame::Set(set) = frame {
+            assert_eq!(set.len(), 2);
+        } else {
+            panic!("Expected Set");
+        }
+    }
+
+    #[test]
+    fn test_resp3_push() {
+        let mut decoder = ZspDecoder::new();
+        let data = b">3\r\n+message\r\n+channel\r\n$7\r\npayload\r\n".to_vec();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+
+        if let ZspFrame::Push(items) = frame {
+            assert_eq!(items.len(), 3);
+        } else {
+            panic!("Expected Push");
+        }
+    }
+
+    #[test]
+    fn test_float_infinity() {
+        let mut decoder = ZspDecoder::new();
+        let mut slice = b",inf\r\n".as_ref();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+        assert_eq!(frame, ZspFrame::Float(f64::INFINITY));
+
+        let mut slice = b",-inf\r\n".as_ref();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+        assert_eq!(frame, ZspFrame::Float(f64::NEG_INFINITY));
+    }
+
+    #[test]
+    fn test_zset_with_binary_strings() {
+        let mut decoder = ZspDecoder::new();
+        let data = b"^2\r\n$7\r\nmember1\r\n,1.5\r\n$7\r\nmember2\r\n,2.5\r\n".to_vec();
+        let mut slice = data.as_slice();
+        let frame = decoder.decode(&mut slice).unwrap().unwrap();
+
+        assert_eq!(
+            frame,
+            ZspFrame::ZSet(vec![
+                ("member1".to_string(), 1.5),
+                ("member2".to_string(), 2.5),
+            ])
+        );
     }
 }

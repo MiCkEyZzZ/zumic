@@ -5,6 +5,8 @@ use std::{
     sync::{atomic::Ordering, Mutex},
 };
 
+use rand::{seq::IteratorRandom, thread_rng};
+
 use super::{
     aof::{AofOp, SyncPolicy},
     write_stream, AofLog, Storage, StreamReader,
@@ -814,6 +816,288 @@ impl Storage for InPersistentStore {
         } else {
             Ok(vec![])
         }
+    }
+
+    fn sadd(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        // результат и буфер для новой сериализации чтобы залогировать в AOF позже
+        let mut added = 0usize;
+        let mut new_buf_opt: Option<Vec<u8>> = None;
+        let mut was_new_key = false;
+
+        shard.write(|data| -> Result<(), StoreError> {
+            if let Some(raw) = data.get(key_b) {
+                // существующее значение — парсим
+                let mut val = Value::from_bytes(raw)?;
+                match &mut val {
+                    Value::Set(set) => {
+                        for m in members {
+                            if set.insert(m.clone()) {
+                                added += 1;
+                            }
+                        }
+                        let bytes = val.to_bytes();
+                        data.insert(key_b.to_vec(), bytes.clone());
+                        new_buf_opt = Some(bytes);
+                    }
+                    _ => return Err(StoreError::WrongType("SADD: key is not a set".into())),
+                }
+            } else {
+                // создаём новый set
+                let mut set = std::collections::HashSet::with_capacity(members.len());
+                for m in members {
+                    if set.insert(m.clone()) {
+                        added += 1;
+                    }
+                }
+                let val = Value::Set(set);
+                let bytes = val.to_bytes();
+                data.insert(key_b.to_vec(), bytes.clone());
+                new_buf_opt = Some(bytes);
+                was_new_key = true;
+            }
+
+            // обновляем метрики, если появился новый ключ
+            if was_new_key {
+                if let Some(metrics) = shard.metrics.as_ref() {
+                    metrics.increment_key_count();
+                }
+            }
+
+            Ok(())
+        })?;
+
+        // Логируем в AOF только если изменили или создали ключ
+        if let Some(buf) = new_buf_opt {
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_set(key_b, &buf)?;
+        }
+
+        Ok(added)
+    }
+
+    fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        shard.read(|data| {
+            if let Some(raw) = data.get(key_b) {
+                let val = Value::from_bytes(raw)?;
+                match val {
+                    Value::Set(set) => Ok(set.into_iter().collect()),
+                    _ => Err(StoreError::WrongType("SMEMBERS: key is not a set".into())),
+                }
+            } else {
+                Ok(Vec::new())
+            }
+        })
+    }
+
+    fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        shard.read(|data| {
+            if let Some(raw) = data.get(key_b) {
+                let val = Value::from_bytes(raw)?;
+                match val {
+                    Value::Set(set) => Ok(set.len()),
+                    _ => Err(StoreError::WrongType("SCARD: key is not a set".into())),
+                }
+            } else {
+                Ok(0)
+            }
+        })
+    }
+
+    fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        shard.read(|data| {
+            if let Some(raw) = data.get(key_b) {
+                let val = Value::from_bytes(raw)?;
+                match val {
+                    Value::Set(set) => Ok(set.contains(member)),
+                    _ => Err(StoreError::WrongType("SISMEMBER: key is not a set".into())),
+                }
+            } else {
+                Ok(false)
+            }
+        })
+    }
+
+    fn srem(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        let mut removed = 0usize;
+        let mut new_buf_opt: Option<Vec<u8>> = None;
+        let mut remove_key = false;
+
+        shard.write(|data| -> Result<(), StoreError> {
+            if let Some(raw) = data.get(key_b) {
+                let mut val = Value::from_bytes(raw)?;
+                match &mut val {
+                    Value::Set(set) => {
+                        for m in members {
+                            if set.remove(m) {
+                                removed += 1;
+                            }
+                        }
+                        if set.is_empty() {
+                            // пометим на удаление
+                            remove_key = true;
+                        } else {
+                            let bytes = val.to_bytes();
+                            data.insert(key_b.to_vec(), bytes.clone());
+                            new_buf_opt = Some(bytes);
+                        }
+                    }
+                    _ => return Err(StoreError::WrongType("SREM: key is not a set".into())),
+                }
+            } else {
+                // ключ не существует
+                return Ok(());
+            }
+
+            Ok(())
+        })?;
+
+        // если нужно — удаляем ключ и обновляем метрики
+        if remove_key {
+            let shard = self.index.get_shard(key_b);
+            shard.write(|data| {
+                if data.remove(key_b).is_some() {
+                    if let Some(metrics) = shard.metrics.as_ref() {
+                        metrics.decrement_key_count();
+                    }
+                }
+            });
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_del(key_b)?;
+        } else if let Some(buf) = new_buf_opt {
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_set(key_b, &buf)?;
+        }
+
+        Ok(removed)
+    }
+
+    fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        shard.read(|data| {
+            if let Some(raw) = data.get(key_b) {
+                let val = Value::from_bytes(raw)?;
+                match val {
+                    Value::Set(set) => {
+                        let mut rng = thread_rng();
+                        if count == 1 {
+                            Ok(set.iter().cloned().choose(&mut rng).into_iter().collect())
+                        } else if count > 1 {
+                            let cnt = count as usize;
+                            Ok(set.into_iter().choose_multiple(&mut rng, cnt))
+                        } else {
+                            Ok(Vec::new())
+                        }
+                    }
+                    _ => Err(StoreError::WrongType(
+                        "SRANDMEMBER: key is not a set".into(),
+                    )),
+                }
+            } else {
+                Ok(Vec::new())
+            }
+        })
+    }
+
+    fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        let key_b = key.as_bytes();
+        let shard = self.index.get_shard(key_b);
+
+        let mut out = Vec::new();
+        let mut new_buf_opt: Option<Vec<u8>> = None;
+        let mut remove_key = false;
+
+        shard.write(|data| -> Result<(), StoreError> {
+            if let Some(raw) = data.get(key_b) {
+                let mut val = Value::from_bytes(raw)?;
+                match &mut val {
+                    Value::Set(set) => {
+                        let mut rng = thread_rng();
+                        let cnt = if count <= 0 { 1 } else { count as usize };
+                        for _ in 0..cnt {
+                            if let Some(item) = set.iter().cloned().choose(&mut rng) {
+                                set.remove(&item);
+                                out.push(item);
+                            } else {
+                                break;
+                            }
+                        }
+                        if set.is_empty() {
+                            remove_key = true;
+                        } else {
+                            let bytes = val.to_bytes();
+                            data.insert(key_b.to_vec(), bytes.clone());
+                            new_buf_opt = Some(bytes);
+                        }
+                    }
+                    _ => return Err(StoreError::WrongType("SPOP: key is not a set".into())),
+                }
+            } else {
+                // ключ не существует
+                return Ok(());
+            }
+            Ok(())
+        })?;
+
+        if remove_key {
+            let shard = self.index.get_shard(key_b);
+            shard.write(|data| {
+                if data.remove(key_b).is_some() {
+                    if let Some(metrics) = shard.metrics.as_ref() {
+                        metrics.decrement_key_count();
+                    }
+                }
+            });
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_del(key_b)?;
+        } else if let Some(buf) = new_buf_opt {
+            let mut aof = self.aof.lock().unwrap();
+            aof.append_set(key_b, &buf)?;
+        }
+
+        Ok(out)
     }
 }
 
