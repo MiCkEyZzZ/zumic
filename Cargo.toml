@@ -125,7 +125,7 @@ harness = false
 [workspace]
 members = [
     ".",    # главный пакет (zumic)
-    "fuzz"  # fuzz crate
+    "fuzz", # fuzz crate
 ]
 
 [workspace.package]

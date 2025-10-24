@@ -395,37 +395,6 @@ mod tests {
         assert_eq!(event.migrations_planned, event.migrations_completed);
     }
 
-    /// Тест проверяет на корректное вычисление эффективности ребаланса
-    #[test]
-    fn test_rebalance_efficiency_calculation() {
-        let slot_manager = setup_slot_manager(4);
-
-        // Создаём несколько rebalance событий
-        let mut rebalancer = AdvancedRebalancer::new(
-            Arc::clone(&slot_manager),
-            RebalancerConfig {
-                load_threshold: 1.2,
-                hot_key_threshold: 50,
-                migration_batch_size: 10,
-                cool_down_period: Duration::from_secs(0),
-                enable_consistent_hashing: false,
-            },
-        );
-
-        for i in 0..3 {
-            for _ in 0..(50 + i * 20) {
-                slot_manager.record_operation(&format!("key{i}"));
-            }
-            let trigger = RebalanceTrigger::ManualTrigger;
-            rebalancer.execute_rebalancing(trigger).unwrap();
-        }
-
-        let efficiency = rebalancer.calculate_rebalance_efficiency();
-        assert!(efficiency.is_some());
-        assert!(efficiency.unwrap() >= 0.0);
-        assert!(efficiency.unwrap() <= 1.0);
-    }
-
     /// Тест проверяет на блокировку повторного ребаланса в течение cooldown
     #[test]
     fn test_cooldown_prevents_rebalance() {

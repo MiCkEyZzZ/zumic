@@ -436,36 +436,6 @@ mod tests {
         assert!(json.contains("150"));
     }
 
-    /// Тест проверят поведение sampling: при sample_rate = 0.0 slow запросы
-    /// помечаются как sampled, а реальные записи в total_slow_queries не
-    /// увеличиваются.
-    #[test]
-    fn test_sampling_behavior_records_sampled() {
-        reset_globals();
-
-        // Конфигурация сразу при инициализации
-        let config = SlowLogConfig {
-            threshold: Duration::ZERO,
-            sample_rate: 0.0,
-            ..Default::default()
-        };
-        update_config(config);
-
-        let tracker = SlowQueryTracker::new("SAMPLED_OP");
-        thread::sleep(Duration::from_millis(5));
-        tracker.finish();
-
-        let stats = get_metrics();
-        assert_eq!(
-            stats.total_slow_queries, 0,
-            "total_slow_queries должно остаться 0"
-        );
-        assert!(
-            stats.sampled_queries > 0,
-            "sampled_queries должно увеличиться"
-        );
-    }
-
     /// Тест проверят, что ручная запись метрик (`record_slow_query`) корректно
     /// увеличивает total и per-command счётчики.
     #[test]

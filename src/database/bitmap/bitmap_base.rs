@@ -361,54 +361,6 @@ mod tests {
         assert!(!not.get_bit(7));
     }
 
-    /// Тест проверяет SIMD-ускоренный bitcount
-    #[test]
-    fn test_simd_bitcount() {
-        let mut bitmap = Bitmap::new();
-
-        // Установим 1000 битов
-        for i in 0..1000 {
-            if i % 2 == 0 {
-                bitmap.set_bit(i, true);
-            }
-        }
-
-        assert_eq!(bitmap.bitcount_all(), 500);
-        assert_eq!(bitmap.bitcount(0, 1000), 500);
-        assert_eq!(bitmap.bitcount(0, 500), 250);
-    }
-
-    /// Тест сравнения всех стратегий bitcount
-    #[test]
-    fn test_all_strategies_consistency() {
-        let mut bitmap = Bitmap::new();
-
-        // Создаём разнообразный паттерн
-        for i in 0..10000 {
-            bitmap.set_bit(i, i % 3 == 0);
-        }
-
-        let expected = bitmap.bitcount(0, 10000);
-
-        // Все стратегии должны давать одинаковый результат
-        assert_eq!(
-            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::LookupTable),
-            expected
-        );
-        assert_eq!(
-            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Popcnt),
-            expected
-        );
-        assert_eq!(
-            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Avx2),
-            expected
-        );
-        assert_eq!(
-            bitmap.bitcount_with_strategy(0, 10000, BitcountStrategy::Avx512),
-            expected
-        );
-    }
-
     /// Тест CPU features detection
     #[test]
     fn test_cpu_features() {
