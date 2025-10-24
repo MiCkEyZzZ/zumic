@@ -8,7 +8,11 @@ use std::{net::SocketAddr, time::Duration};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tracing::{debug, info};
+use tracing::debug;
+use zumic::{
+    client::{ClientConfig, ZumicClient},
+    Value as ZumicValue,
+}; // <- добавлено для форматирования вывода
 
 /// Основная структура CLI аргументов
 ///
@@ -67,6 +71,9 @@ struct Cli {
     /// Включить подробный вывод (debug)
     #[arg(short, long, help = "Включить подробный вывод для отладки")]
     verbose: bool,
+    /// Подавить большинство логов (только warn/error)
+    #[arg(short = 'q', long, help = "Подавить логирование (только warn/error)")]
+    quiet: bool,
     /// Формат вывода результатов
     #[arg(
         long,
@@ -180,16 +187,7 @@ enum Commands {
 #[derive(Debug, Clone)]
 struct CliConfig {
     server_addr: SocketAddr,
-    #[allow(dead_code)]
-    auth: Option<String>,
-    #[allow(dead_code)]
-    timeout: Duration,
-    #[allow(dead_code)]
-    read_timeout: Duration,
-    #[allow(dead_code)]
-    write_timeout: Duration,
-    #[allow(dead_code)]
-    verbose: bool,
+    client_config: ClientConfig,
     #[allow(dead_code)]
     output_format: OutputFormat,
 }
@@ -202,13 +200,17 @@ impl TryFrom<&Cli> for CliConfig {
             .parse()
             .context("Неверный формат адреса сервера")?;
 
-        Ok(Self {
-            server_addr,
-            auth: cli.auth.clone(),
-            timeout: Duration::from_secs(cli.timeout),
+        let client_config = ClientConfig {
+            connect_timeout: Duration::from_secs(cli.timeout),
             read_timeout: Duration::from_secs(cli.read_timeout),
             write_timeout: Duration::from_secs(cli.write_timeout),
-            verbose: cli.verbose,
+            password: cli.auth.clone(),
+            username: None,
+        };
+
+        Ok(Self {
+            server_addr,
+            client_config,
             output_format: cli.output.clone(),
         })
     }
@@ -222,17 +224,21 @@ impl TryFrom<&Cli> for CliConfig {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Инициализация логирования
-    init_logging(cli.verbose)?;
+    // Инициализация логирования (учитываем quiet)
+    init_logging(cli.verbose, cli.quiet)?;
 
-    // Баннер CLI
-    print_banner();
+    // Баннер CLI — печатаем только в интерактивном режиме (как redis-cli)
+    // или если явно запрошен вывод баннера через флаг в будущем.
+    let should_print_banner = matches!(cli.command, Some(Commands::Interactive { .. }));
+    if should_print_banner {
+        print_banner();
+    }
 
     // Конфигурация CLI
     let config = CliConfig::try_from(&cli)?;
 
     debug!("Конфигурация CLI: {config:?}");
-    info!("Подключение к {}...", config.server_addr);
+    // debug!("Подключение к {}...", config.server_addr);
 
     // Обработка команды
     match handle_command(&cli, &config).await {
@@ -255,7 +261,7 @@ async fn handle_command(
     match &cli.command {
         // Interactive mode
         Some(Commands::Interactive { history }) => {
-            info!("Запуск интерактивного режима...");
+            debug!("Запуск интерактивного режима...");
             interactive_mode(config, history).await
         }
 
@@ -287,7 +293,7 @@ async fn handle_command(
         None => {
             if cli.args.is_empty() {
                 // Default to interactive mode
-                info!("Команда не указана, запускается интерактивный режим...");
+                debug!("Команда не указана, запускается интерактивный режим...");
                 interactive_mode(config, "~/.zumic_history").await
             } else {
                 // Execute direct command
@@ -299,14 +305,29 @@ async fn handle_command(
 }
 
 /// Инициализация логирования
-fn init_logging(verbose: bool) -> Result<()> {
+fn init_logging(
+    verbose: bool,
+    quiet: bool,
+) -> Result<()> {
     use tracing_subscriber::{fmt, EnvFilter};
 
-    let filter = if verbose {
-        EnvFilter::new("debug")
+    // quiet имеет приоритет — если задан, отключаем почти всё (ERROR -> повторно
+    // quiet => OFF) Поведение:
+    // - quiet == true  -> ERROR (только ошибки). Можно поставить "off" если хочешь
+    //   полностью молчать.
+    // - verbose == true -> DEBUG
+    // - по умолчанию -> ERROR (убираем INFO)
+    let level = if quiet {
+        // Полностью молчать: "off"
+        "off"
+    } else if verbose {
+        "debug"
     } else {
-        EnvFilter::new("info")
+        // по умолчанию показываем только ошибки — INFO скрыты
+        "error"
     };
+
+    let filter = EnvFilter::new(level);
 
     fmt()
         .with_env_filter(filter)
@@ -314,6 +335,8 @@ fn init_logging(verbose: bool) -> Result<()> {
         .with_thread_ids(false)
         .with_file(false)
         .with_line_number(false)
+        // не печатаем цветной префикс уровня (чтобы вывод был очень чистым)
+        .with_level(true)
         .try_init()
         .map_err(|e| anyhow::anyhow!("Ошибка инициализации логирования: {e}"))?;
 
@@ -322,14 +345,7 @@ fn init_logging(verbose: bool) -> Result<()> {
 
 /// Баннер CLI
 fn print_banner() {
-    println!("┌─────────────────────────────────────────┐");
-    println!(
-        "│                   Zumic CLI v{}         │",
-        env!("CARGO_PKG_VERSION")
-    );
-    println!("│   Интерфейс командной строки            │");
-    println!("└─────────────────────────────────────────┘");
-    println!();
+    println!("zumic-cli {}", env!("CARGO_PKG_VERSION"));
 }
 
 /// Интерактивный режим (REPL)
@@ -337,13 +353,47 @@ async fn interactive_mode(
     config: &CliConfig,
     _history_path: &str,
 ) -> Result<()> {
-    println!("🚧 Интерактивный режим - пока заглушка");
+    println!("🚧 Интерактивный режим - Coming in Issue #4");
     println!("   Сервер: {}", config.server_addr);
-    println!("   Введите 'help' для списка команд");
-    println!("   Введите 'quit' или 'exit' для выхода");
     println!();
     println!("Пока используйте: zumic-cli exec <команда>");
     Ok(())
+}
+
+/// Небольшая утилита для удобного отображения Value в CLI
+fn format_value_for_cli(v: &ZumicValue) -> String {
+    match v {
+        ZumicValue::Str(s) => String::from_utf8_lossy(s).to_string(),
+        ZumicValue::Int(i) => i.to_string(),
+        ZumicValue::Float(f) => f.to_string(),
+        ZumicValue::Bool(b) => b.to_string(),
+        ZumicValue::Null => "(nil)".to_string(),
+        ZumicValue::Array(arr) => {
+            let inner: Vec<String> = arr.iter().map(format_value_for_cli).collect();
+            format!("[{}]", inner.join(", "))
+        }
+        ZumicValue::List(list) => {
+            let items: Vec<String> = list
+                .iter()
+                .map(|s| String::from_utf8_lossy(s).to_string())
+                .collect();
+            format!("[{}]", items.join(", "))
+        }
+        ZumicValue::Set(set) => {
+            let mut items: Vec<String> = set
+                .iter()
+                .map(|s| String::from_utf8_lossy(s).to_string())
+                .collect();
+            items.sort();
+            format!("[{}]", items.join(", "))
+        }
+        ZumicValue::Bitmap(bmp) => String::from_utf8_lossy(bmp.as_bytes()).to_string(),
+        // Для сложных/неподдерживаемых типов — краткая метка
+        ZumicValue::Hash(_) => "(hash)".to_string(),
+        ZumicValue::ZSet { .. } => "(zset)".to_string(),
+        ZumicValue::HyperLogLog(_) => "(hll)".to_string(),
+        ZumicValue::SStream(_) => "(stream)".to_string(),
+    }
 }
 
 /// Выполнение одной команды
@@ -351,13 +401,66 @@ async fn execute_command(
     config: &CliConfig,
     args: &[String],
 ) -> Result<()> {
-    println!("🚧 Режим выполнения команды - пока заглушка");
-    println!("   Сервер: {}", config.server_addr);
-    println!("   Команда: {}", args.join(" "));
-    println!();
-    println!("Следующие шаги:");
-    println!("   1. Реализовать подключение к ZSP клиенту");
-    println!("   2. Добавить выполнение команд");
+    if args.is_empty() {
+        anyhow::bail!("Не указана команда");
+    }
+
+    // Подключаемся к серверу
+    let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
+        .await
+        .context("Не удалось подключиться к серверу")?;
+
+    // Перекладываем служебный вывод в debug, чтобы он не мешал результату при
+    // обычном запуске.
+    debug!("✓ Подключено к {}", config.server_addr);
+
+    // Парсим и выполняем команду
+    let cmd = args[0].to_uppercase();
+
+    match cmd.as_str() {
+        "PING" => {
+            let result = client.ping().await?;
+            if result {
+                println!("PONG");
+            }
+        }
+        "GET" => {
+            if args.len() != 2 {
+                anyhow::bail!("Использование: GET <ключ>");
+            }
+            match client.get(&args[1]).await? {
+                Some(value) => {
+                    println!("{}", format_value_for_cli(&value));
+                }
+                None => {
+                    println!("(nil)");
+                }
+            }
+        }
+        "SET" => {
+            if args.len() != 3 {
+                anyhow::bail!("Использование: SET <ключ> <значение>");
+            }
+            let value = zumic::Value::Str(zumic::Sds::from_str(&args[2]));
+            client.set(&args[1], value).await?;
+            println!("OK");
+        }
+        "DEL" => {
+            if args.len() != 2 {
+                anyhow::bail!("Использование: DEL <ключ>");
+            }
+            let deleted = client.del(&args[1]).await?;
+            println!("{}", if deleted { "1" } else { "0" });
+        }
+        _ => {
+            anyhow::bail!(
+                "Неизвестная команда: {}. Поддерживаются: PING, GET, SET, DEL",
+                cmd
+            );
+        }
+    }
+
+    client.close().await?;
     Ok(())
 }
 
@@ -367,11 +470,54 @@ async fn ping_server(
     count: u32,
     interval: Duration,
 ) -> Result<()> {
-    println!("🚧 Режим Ping - пока заглушка");
-    println!("   Сервер: {}", config.server_addr);
-    println!("   Количество пингов: {count}, Интервал: {interval:?}");
+    println!("🔄 PING {}", config.server_addr);
     println!();
-    println!("Будет отправлен PING и измерена задержка");
+
+    let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
+        .await
+        .context("Не удалось подключиться к серверу")?;
+
+    let mut successful = 0;
+    let mut total_time = Duration::ZERO;
+
+    for i in 1..=count {
+        let start = std::time::Instant::now();
+
+        match client.ping().await {
+            Ok(true) => {
+                let elapsed = start.elapsed();
+                total_time += elapsed;
+                successful += 1;
+                println!(
+                    "#{}: PONG - время={:.2}ms",
+                    i,
+                    elapsed.as_secs_f64() * 1000.0
+                );
+            }
+            Ok(false) => {
+                println!("#{}: Неожиданный ответ", i);
+            }
+            Err(e) => {
+                println!("#{}: Ошибка - {}", i, e);
+            }
+        }
+
+        if i < count {
+            tokio::time::sleep(interval).await;
+        }
+    }
+
+    println!();
+    println!("--- Статистика ---");
+    println!("Отправлено: {}", count);
+    println!("Успешно: {}", successful);
+    println!("Потеряно: {}", count - successful);
+    if successful > 0 {
+        let avg_ms = (total_time.as_secs_f64() * 1000.0) / successful as f64;
+        println!("Среднее время: {:.2}ms", avg_ms);
+    }
+
+    client.close().await?;
     Ok(())
 }
 

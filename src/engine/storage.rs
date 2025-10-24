@@ -110,6 +110,46 @@ pub trait Storage {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>>;
+
+    fn sadd(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize>;
+
+    fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>>;
+
+    fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize>;
+
+    fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool>;
+
+    fn srem(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize>;
+
+    fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>>;
+
+    fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>>;
 }
 
 /// Трейт `AsyncStorage` определяет интерфейс для реализаций хранилища
@@ -197,4 +237,38 @@ pub trait AsyncStorage: Send + Sync + 'static {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>>;
+
+    async fn sadd(
+        &self,
+        key: &Sds,
+        members: Vec<Sds>,
+    ) -> StoreResult<usize>;
+    async fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>>;
+    async fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize>;
+    async fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool>;
+    async fn srem(
+        &self,
+        key: &Sds,
+        members: Vec<Sds>,
+    ) -> StoreResult<usize>;
+    async fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>>;
+    async fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>>;
 }

@@ -416,6 +416,88 @@ impl Storage for InClusterStore {
         let shard = self.shard_by_id(shard_id)?;
         shard.geo_radius_by_member(key, member, radius, unit)
     }
+
+    fn sadd(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.sadd(key, members)
+    }
+
+    fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.smembers(key)
+    }
+
+    fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.scard(key)
+    }
+
+    fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.sismember(key, member)
+    }
+
+    fn srem(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.srem(key, members)
+    }
+
+    fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.srandmember(key, count)
+    }
+
+    fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        self.record_operation(key);
+        let ks = Self::sds_to_str(key);
+        let shard_id = self.slot_manager.get_key_shard(ks.as_ref());
+        let shard = self.shard_by_id(shard_id)?;
+        shard.spop(key, count)
+    }
 }
 
 impl Drop for InClusterStore {

@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use dashmap::DashMap;
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{GeoPoint, GeoSet, Sds, Storage, StoreError, StoreResult, Value};
 
@@ -278,6 +279,183 @@ impl Storage for InMemoryStore {
             None => return Ok(vec![]),
         };
         self.geo_radius(key, center.lon, center.lat, radius, unit)
+    }
+
+    fn sadd(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        // Попробуем получить мутируемый доступ, если ключ уже существует
+        if let Some(mut entry) = self.data.get_mut(key) {
+            match &mut *entry {
+                Value::Set(set) => {
+                    let mut added = 0usize;
+                    for m in members {
+                        if set.insert(m.clone()) {
+                            added += 1;
+                        }
+                    }
+                    return Ok(added);
+                }
+                _ => return Err(StoreError::WrongType("SADD: key is not a set".into())),
+            }
+        }
+
+        // Если ключа нет — создаём новое множество
+        let mut set = HashSet::with_capacity(members.len());
+        let mut added = 0usize;
+        for m in members {
+            if set.insert(m.clone()) {
+                added += 1;
+            }
+        }
+        self.data.insert(key.clone(), Value::Set(set));
+        Ok(added)
+    }
+
+    fn smembers(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<Vec<Sds>> {
+        match self.data.get(key) {
+            Some(entry) => match &*entry {
+                Value::Set(set) => Ok(set.iter().cloned().collect()),
+                _ => Err(StoreError::WrongType("SMEMBERS: key is not a set".into())),
+            },
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn scard(
+        &self,
+        key: &Sds,
+    ) -> StoreResult<usize> {
+        match self.data.get(key) {
+            Some(entry) => match &*entry {
+                Value::Set(set) => Ok(set.len()),
+                _ => Err(StoreError::WrongType("SCARD: key is not a set".into())),
+            },
+            None => Ok(0),
+        }
+    }
+
+    fn sismember(
+        &self,
+        key: &Sds,
+        member: &Sds,
+    ) -> StoreResult<bool> {
+        match self.data.get(key) {
+            Some(entry) => match &*entry {
+                Value::Set(set) => Ok(set.contains(member)),
+                _ => Err(StoreError::WrongType("SISMEMBER: key is not a set".into())),
+            },
+            None => Ok(false),
+        }
+    }
+
+    fn srem(
+        &self,
+        key: &Sds,
+        members: &[Sds],
+    ) -> StoreResult<usize> {
+        let mut removed = 0usize;
+        let mut remove_key = false;
+
+        if let Some(mut entry) = self.data.get_mut(key) {
+            match &mut *entry {
+                Value::Set(set) => {
+                    for m in members {
+                        if set.remove(m) {
+                            removed += 1;
+                        }
+                    }
+                    if set.is_empty() {
+                        // не удаляем сразу — выставляем флаг и удалим после выхода из блока
+                        remove_key = true;
+                    }
+                }
+                _ => return Err(StoreError::WrongType("SREM: key is not a set".into())),
+            }
+            // entry dropped here (end of this scope)
+        } else {
+            return Ok(0);
+        }
+
+        if remove_key {
+            // безопасно удалить, так как entry уже вышел из области видимости
+            self.data.remove(key);
+        }
+
+        Ok(removed)
+    }
+
+    fn srandmember(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        match self.data.get(key) {
+            Some(entry) => match &*entry {
+                Value::Set(set) => {
+                    let mut rng = thread_rng();
+                    if count == 1 {
+                        let opt = set.iter().cloned().choose(&mut rng);
+                        Ok(opt.into_iter().collect())
+                    } else if count > 1 {
+                        let cnt = count as usize;
+                        let chosen = set.iter().cloned().choose_multiple(&mut rng, cnt);
+                        Ok(chosen)
+                    } else {
+                        // count <= 0 semantics: возвращаем пустой вектор
+                        Ok(Vec::new())
+                    }
+                }
+                _ => Err(StoreError::WrongType(
+                    "SRANDMEMBER: key is not a set".into(),
+                )),
+            },
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn spop(
+        &self,
+        key: &Sds,
+        count: isize,
+    ) -> StoreResult<Vec<Sds>> {
+        let mut out = Vec::new();
+        let mut remove_key = false;
+
+        if let Some(mut entry) = self.data.get_mut(key) {
+            match &mut *entry {
+                Value::Set(set) => {
+                    let mut rng = thread_rng();
+                    let cnt = if count <= 0 { 1 } else { count as usize };
+                    for _ in 0..cnt {
+                        if let Some(item) = set.iter().cloned().choose(&mut rng) {
+                            set.remove(&item);
+                            out.push(item);
+                        } else {
+                            break;
+                        }
+                    }
+                    if set.is_empty() {
+                        remove_key = true;
+                    }
+                }
+                _ => return Err(StoreError::WrongType("SPOP: key is not a set".into())),
+            }
+            // entry dropped here
+        } else {
+            return Ok(Vec::new());
+        }
+
+        if remove_key {
+            self.data.remove(key);
+        }
+
+        Ok(out)
     }
 }
 

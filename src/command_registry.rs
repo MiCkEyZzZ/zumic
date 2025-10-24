@@ -40,6 +40,130 @@ impl CommandRegistry {
             .unwrap_or_else(|| panic!("Unknown command: {name}"));
         h(ctx, data)
     }
+
+    /// Регистрирует все стандартные команды ZSP.
+    pub fn register_builtin_commands(&mut self) {
+        use crate::{Sds, Value};
+
+        // === PING ===
+        self.register("PING", |_ctx, _| b"+PONG\r\n".to_vec());
+
+        // === ECHO ===
+        self.register("ECHO", |_ctx, data| {
+            let val = Value::from_bytes(data).unwrap_or(Value::Null);
+            val.to_bytes()
+        });
+
+        // === SADD ===
+        self.register("SADD", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.len() < 2 {
+                return b"-ERR wrong number of arguments for 'SADD'\r\n".to_vec();
+            }
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let members: Vec<Sds> = arr[1..]
+                .iter()
+                .map(|v| Sds::from(v.as_str().unwrap().as_bytes()))
+                .collect();
+            let added = ctx.sadd(&key, &members).unwrap_or(0);
+            format!(":{}\r\n", added).into_bytes()
+        });
+
+        // === SMEMBERS ===
+        self.register("SMEMBERS", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.len() != 1 {
+                return b"-ERR wrong number of arguments for 'SMEMBERS'\r\n".to_vec();
+            }
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let members = ctx.smembers(&key).unwrap_or_default();
+            let values: Vec<Value> = members.into_iter().map(Value::Str).collect();
+            Value::Array(values).to_bytes()
+        });
+
+        // === SCARD ===
+        self.register("SCARD", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.len() != 1 {
+                return b"-ERR wrong number of arguments for 'SCARD'\r\n".to_vec();
+            }
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let count = ctx.scard(&key).unwrap_or(0);
+            format!(":{}\r\n", count).into_bytes()
+        });
+
+        // === SREM ===
+        self.register("SREM", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.len() < 2 {
+                return b"-ERR wrong number of arguments for 'SREM'\r\n".to_vec();
+            }
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let members: Vec<Sds> = arr[1..]
+                .iter()
+                .map(|v| Sds::from(v.as_str().unwrap().as_bytes()))
+                .collect();
+            let removed = ctx.srem(&key, &members).unwrap_or(0);
+            format!(":{}\r\n", removed).into_bytes()
+        });
+
+        // === SISMEMBER ===
+        self.register("SISMEMBER", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.len() != 2 {
+                return b"-ERR wrong number of arguments for 'SISMEMBER'\r\n".to_vec();
+            }
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let member = Sds::from(arr[1].as_str().unwrap().as_bytes());
+            let exists = ctx.sismember(&key, &member).unwrap_or(false);
+            format!(":{}\r\n", if exists { 1 } else { 0 }).into_bytes()
+        });
+
+        // === SRANDMEMBER ===
+        self.register("SRANDMEMBER", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.is_empty() {
+                return b"-ERR wrong number of arguments for 'SRANDMEMBER'\r\n".to_vec();
+            }
+
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let count = if arr.len() > 1 {
+                arr[1].as_int().unwrap_or(1)
+            } else {
+                1
+            };
+
+            let members = ctx.srandmember(&key, count as isize).unwrap_or_default();
+            let values: Vec<Value> = members.into_iter().map(Value::Str).collect();
+            Value::Array(values).to_bytes()
+        });
+
+        // === SPOP ===
+        self.register("SPOP", |ctx, data| {
+            let args = Value::from_bytes(data).unwrap();
+            let arr = args.as_array().unwrap();
+            if arr.is_empty() {
+                return b"-ERR wrong number of arguments for 'SPOP'\r\n".to_vec();
+            }
+
+            let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
+            let count = if arr.len() > 1 {
+                arr[1].as_int().unwrap_or(1)
+            } else {
+                1
+            };
+
+            let popped = ctx.spop(&key, count as isize).unwrap_or_default();
+            let values: Vec<Value> = popped.into_iter().map(Value::Str).collect();
+            Value::Array(values).to_bytes()
+        });
+    }
 }
 
 impl Default for CommandRegistry {

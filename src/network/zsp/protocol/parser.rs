@@ -29,7 +29,7 @@ impl IntoExecutable for ZSPCommand {
                 pass,
             })),
 
-            // Заглушки для pub/sub, так как store command пока нет.
+            // Заглушки для pub/sub
             ZSPCommand::Publish { .. } => Err(ParseError::UnknownCommand),
             ZSPCommand::Subscribe { .. } => Err(ParseError::UnknownCommand),
             ZSPCommand::Unsubscribe { .. } => Err(ParseError::UnknownCommand),
@@ -51,17 +51,16 @@ pub fn parse_command(frame: ZspFrame) -> Result<StoreCommand, ParseError> {
 fn parse_raw_command(frame: ZspFrame) -> Result<ZSPCommand, ParseError> {
     match frame {
         ZspFrame::Array(items) if !items.is_empty() => {
-            if let ZspFrame::InlineString(cmd) = &items[0] {
-                return parse_from_str_command(cmd, &items);
-            }
+            // RESP3: команды могут приходить как InlineString или BulkString
+            let cmd_str = match &items[0] {
+                ZspFrame::InlineString(cmd) => cmd.to_string(),
+                ZspFrame::BinaryString(Some(bytes)) => {
+                    String::from_utf8(bytes.clone()).map_err(|_| ParseError::InvalidUtf8)?
+                }
+                _ => return Err(ParseError::CommandMustBeString),
+            };
 
-            if let ZspFrame::BinaryString(Some(bytes)) = &items[0] {
-                let cmd_str =
-                    String::from_utf8(bytes.clone()).map_err(|_| ParseError::InvalidUtf8)?;
-                return parse_from_str_command(&cmd_str, &items);
-            }
-
-            Err(ParseError::CommandMustBeString)
+            parse_from_str_command(&cmd_str, &items)
         }
         _ => Err(ParseError::ExpectedArray),
     }
@@ -194,10 +193,6 @@ fn parse_from_str_command(
             Ok(ZSPCommand::Unsubscribe { channels })
         }
         "publish" => {
-            // Поддерживаем два формата:
-            // Legacy: PUBLISH channel message_data
-            // Enhanced: PUBLISH channel message_type message_data [content_type]
-
             if items.len() < 3 {
                 return Err(ParseError::WrongArgCount("PUBLISH", 2));
             }
@@ -300,6 +295,9 @@ fn parse_value(
         ZspFrame::InlineString(s) => Ok(Value::Str(Sds::from_str(s))),
         ZspFrame::BinaryString(Some(bytes)) => Ok(Value::Str(Sds::from_vec(bytes.clone()))),
         ZspFrame::Integer(n) => Ok(Value::Int(*n)),
+        ZspFrame::Float(f) => Ok(Value::Float(*f)),
+        ZspFrame::Bool(b) => Ok(Value::Bool(*b)),
+        ZspFrame::Null => Ok(Value::Null),
         _ => Err(ParseError::InvalidValueType(cmd)),
     }
 }
@@ -334,7 +332,7 @@ mod tests {
     /// Тест проверяет парсинг команды GET с аргументом в виде
     /// BinaryString
     #[test]
-    fn test_parse_get_command_with_bulk_key() {
+    fn test_parse_get_command_with_binary_key() {
         let frame = ZspFrame::Array(vec![
             ZspFrame::BinaryString(Some(b"GET".to_vec())),
             ZspFrame::BinaryString(Some(b"anton".to_vec())),
@@ -441,5 +439,43 @@ mod tests {
         let frame = ZspFrame::Array(vec![]);
         let err = parse_command(frame).unwrap_err();
         assert_eq!(err.to_string(), "Expected array for command");
+    }
+
+    #[test]
+    fn test_parse_set_with_float() {
+        let frame = ZspFrame::Array(vec![
+            ZspFrame::BinaryString(Some(b"SET".to_vec())),
+            ZspFrame::BinaryString(Some(b"price".to_vec())),
+            ZspFrame::Float(19.99),
+        ]);
+
+        let set_cmd = parse_command(frame).unwrap();
+
+        match set_cmd {
+            StoreCommand::Set(set) => {
+                assert_eq!(set.key, "price");
+                assert_eq!(set.value, Value::Float(19.99));
+            }
+            _ => panic!("Expected SetCommand"),
+        }
+    }
+
+    #[test]
+    fn test_parse_set_with_bool() {
+        let frame = ZspFrame::Array(vec![
+            ZspFrame::InlineString(Cow::Borrowed("SET")),
+            ZspFrame::InlineString(Cow::Borrowed("active")),
+            ZspFrame::Bool(true),
+        ]);
+
+        let set_cmd = parse_command(frame).unwrap();
+
+        match set_cmd {
+            StoreCommand::Set(set) => {
+                assert_eq!(set.key, "active");
+                assert_eq!(set.value, Value::Bool(true));
+            }
+            _ => panic!("Expected SetCommand"),
+        }
     }
 }

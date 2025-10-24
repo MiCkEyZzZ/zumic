@@ -15,13 +15,13 @@ cd zumic
 cargo build
 
 # Run in-memory mode
-RUST_ENV=memory cargo run
+RUST_ENV=memory cargo run --bin zumic
 
 # Run persistent mode
-RUST_ENV=persistent cargo run
+RUST_ENV=persistent cargo run --bin zumic
 
 # Run cluster mode
-RUST_ENV=cluster cargo run
+RUST_ENV=cluster cargo run --bin zumic
 ```
 
 ### Storage Modes
@@ -41,7 +41,7 @@ RUST_ENV=cluster cargo run
 ### Starting the Server
 
 ```zsh
-RUST_ENV=memory cargo run
+RUST_ENV=memory cargo run --bin zumic
 ```
 
 **Output:**
@@ -102,6 +102,45 @@ $9
 55.751244
 GEORADIUS places 0 0 not_a_number km
 *0
+```
+
+### Working with SET Commands
+
+```zsh
+$ nc 127.0.0.1 6174
+SADD myset a b c
+:3
+SMEMBERS myset
+*3
+$1
+a
+$1
+b
+$1
+c
+SCARD myset
+:3
+SISMEMBER myset a
+:1
+SISMEMBER myset z
+:0
+SREM myset b
+:1
+SMEMBERS myset
+*2
+$1
+a
+$1
+c
+SRANDMEMBER myset 2
+*2
+$1
+a
+$1
+c
+SPOP myset
+$1
+a
 ```
 
 ## License

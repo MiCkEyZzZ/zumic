@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use rand::Rng;
 use serde::Serialize;
 use tracing::{span, Level, Span};
 
@@ -200,8 +201,11 @@ impl SlowQueryTracker {
         if elapsed > threshold {
             // Sampling check
             if config.sample_rate < 1.0 {
-                use rand::Rng;
-                let should_log = rand::thread_rng().gen::<f64>() < config.sample_rate;
+                let should_log = if config.sample_rate <= 0.0 {
+                    false
+                } else {
+                    rand::thread_rng().gen::<f64>() < config.sample_rate
+                };
 
                 if !should_log {
                     SLOW_LOG_METRICS.record_sampled();
@@ -441,8 +445,8 @@ mod tests {
 
         // Конфигурация сразу при инициализации
         let config = SlowLogConfig {
-            threshold: Duration::from_millis(1), // очень маленький порог
-            sample_rate: 0.0,                    // ничего не логируем, только sample метрика
+            threshold: Duration::ZERO,
+            sample_rate: 0.0,
             ..Default::default()
         };
         update_config(config);
