@@ -14,13 +14,9 @@ cd zumic
 # Build
 cargo build
 
-# Run in-memory mode
+# Run server (memory / persistent / cluster)
 RUST_ENV=memory cargo run --bin zumic
-
-# Run persistent mode
 RUST_ENV=persistent cargo run --bin zumic
-
-# Run cluster mode
 RUST_ENV=cluster cargo run --bin zumic
 ```
 
@@ -35,6 +31,24 @@ RUST_ENV=cluster cargo run --bin zumic
 **Memory mode**: All data stored in RAM only. Fast, but data is lost on restart.
 **Persistent mode**: Data is written to `zumic.aof` file. After server restart, all data is restored automatically.
 **Cluster mode**: Distributed mode (work in progress).
+
+## Protocol vs CLI output — short explanation
+
+There are two common ways to interact with Zumic:
+
+* **Wire(raw)** — the exact bytes exchanged on the network ZSP. Tools like `nc` show raw frames including protocol prefixes (`+`, `:`, `,`, `$`, `*`, etc.). Use this for protocol debugging and tests.
+* **CLI(pretty)** — the Zumic client parses protocol frames and prints the *semantic* value only (no protocol prefixes). This is human-friendly and is the CLI default.
+* **JSON** — is a machine-readable output, convenient for scripts and CI.
+
+Mapping examples:
+
+| Wire (ZSP)       | CLI (pretty)                                         |
+| ---------------- | ---------------------------------------------------- |
+| `+OK`            | `OK`                                                 |
+| `+bar`           | `bar`                                                |
+| `:1`             | `1`                                                  |
+| `$-1`            | `(nil)`                                              |
+| `*3` / bulks     | printed as list or one-per-line depending on command |
 
 ## Example Usage
 
@@ -65,136 +79,76 @@ RUST_ENV=memory cargo run --bin zumic
 [184167] 07 Oct 2025 08:25:34.626 * Ready to accept connections
 ```
 
-### Working with GEO Commands
+### Raw wire interaction (via `nc`)
 
-```zsh
+```bash
 $ nc 127.0.0.1 6174
-GEOADD places 37.618423 55.751244 Moscow
+SET foo bar
++OK
+GET foo
++bar
+DEL foo
 :1
-GEOADD places 30.314130 59.938631 SaintPetersburg
-:1
-GEOPOS places Moscow
-*2
-$9
-37.618423
-$9
-55.751244
-GEOPOS places SaintPetersburg
-*2
-$8
-30.31413
-$9
-59.938631
-GEOPOS places NonExistentCity
-$-1
-GEODIST places Moscow SaintPetersburg km
-+634.6290840673386
-GEORADIUS places 37.618423 55.751244 100 km
-*1
-*3
-$6
-Moscow
-+0
-*2
-$9
-37.618423
-$9
-55.751244
-GEORADIUS places 0 0 not_a_number km
-*0
 ```
 
-### Working with SET Commands
+### CLI — pretty (default)
 
-```zsh
-$ nc 127.0.0.1 6174
-SADD myset a b c
-:3
-SMEMBERS myset
-*3
-$1
-a
-$1
-b
-$1
-c
-SCARD myset
-:3
-SISMEMBER myset a
-:1
-SISMEMBER myset z
-:0
-SREM myset b
-:1
-SMEMBERS myset
-*2
-$1
-a
-$1
-c
-SRANDMEMBER myset 2
-*2
-$1
-a
-$1
-c
-SPOP myset
-$1
-a
+```bash
+# by default zumic-cli prints parsed, human-friendly values
+$ cargo run --bin zumic-cli -- SET foo bar
+OK
+
+$ cargo run --bin zumic-cli -- GET foo
+bar
+
+$ cargo run --bin zumic-cli -- DEL foo
+1
 ```
 
-## Example Usage CLI
+### CLI — raw (show protocol frames)
 
-### Starting the Server
-
-```zsh
-RUST_ENV=memory cargo run --bin zumic
+```bash
+# instruct CLI to output raw protocol frames
+$ cargo run --bin zumic-cli -- --output raw -- GET foo
++bar
 ```
 
-### Working with BASE Commands
+### CLI — json (machine-readable)
 
-#### Пример 1
-
-```zsh
-cargo run --bin zumic-cli -- SET foo bar
-$ OK
-cargo run --bin zumic-cli -- GET foo
-$ bar
-cargo run --bin zumic-cli -- DEL foo
-$ 1
+```bash
+# JSON output for integration / scripts
+$ cargo run --bin zumic-cli -- --output json -- GET foo
+"bar"
 ```
 
-#### Пример 2
+## Using the CLI
 
-```zsh
-# Set and get
-cargo run --bin zumic-cli -- SET mykey "Hello World"
-$ OK
-cargo run --bin zumic-cli -- GET mykey
-$ Hello World
+`zumic-cli` supports subcommands and flags. Important option:
 
-# Delete and get
-cargo run --bin zumic-cli -- DEL mykey
-$ 1
-cargo run --bin zumic-cli -- GET mykey
-$ (nil)
+* `--output <pretty|raw|json>` — controls how responses are printed.
+
+  * `pretty` — default, human readable.
+  * `raw` — prints wire-level frames.
+  * `json` — prints JSON-encoded semantic values.
+
+Examples:
+
+```bash
+cargo run --bin zumic-cli -- --output pretty GET mykey
+cargo run --bin zumic-cli -- --output raw    GET mykey
+cargo run --bin zumic-cli -- --output json   GET mykey
 ```
 
-### Help & Version Tests
+## Troubleshooting
 
-```zsh
-# Display help
-cargo run --bin zumic-cli -- --help
-# Display version
-cargo run --bin zumic-cli -- --version
-# Short help
-cargo run --bin zumic-cli -- -h
-```
+* If `nc` output differs from `zumic-cli` output, that is expected: `nc` shows protocol frames; `zumic-cli` prints parsed values.
+* If you need protocol-level debugging, use `nc` or `--output raw`.
+* To integrate Zumic into scripts, prefer `--output json` for deterministic parsing.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Follow tests and linting rules before submitting PRs.
 
 ## License
 
 See. [LICENSE](LICENSE)
-
-## Contributing
-
-See. [CONTRIBUTING.md](CONTRIBUTING.md)
