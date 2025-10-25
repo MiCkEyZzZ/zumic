@@ -8,6 +8,7 @@ use std::{net::SocketAddr, time::Duration};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use serde_json::json;
 use tracing::debug;
 use zumic::{
     client::{ClientConfig, ZumicClient},
@@ -15,9 +16,6 @@ use zumic::{
 };
 
 /// Основная структура CLI аргументов
-///
-/// Содержит параметры подключения к серверу, таймауты, формат вывода,
-/// а также подкоманду или прямой набор аргументов.
 #[derive(Parser)]
 #[command(name = "zumic-cli")]
 #[command(author = "Zumic Contributors")]
@@ -182,13 +180,10 @@ enum Commands {
 }
 
 /// Конфигурация CLI после разбора аргументов
-///
-/// Содержит серверный адрес, таймауты, пароль и формат вывода
 #[derive(Debug, Clone)]
 struct CliConfig {
     server_addr: SocketAddr,
     client_config: ClientConfig,
-    #[allow(dead_code)]
     output_format: OutputFormat,
 }
 
@@ -216,36 +211,22 @@ impl TryFrom<&Cli> for CliConfig {
     }
 }
 
-/// Точка входа в CLI
-///
-/// Разбирает аргументы, инициализирует логирование, печатает баннер
-/// и вызывает обработчик команды.
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Инициализация логирования (учитываем quiet)
     init_logging(cli.verbose, cli.quiet)?;
 
-    // Баннер CLI — печатаем только в интерактивном режиме (как redis-cli)
-    // или если явно запрошен вывод баннера через флаг в будущем.
     let should_print_banner = matches!(cli.command, Some(Commands::Interactive { .. }));
     if should_print_banner {
         print_banner();
     }
 
-    // Конфигурация CLI
     let config = CliConfig::try_from(&cli)?;
-
     debug!("Конфигурация CLI: {config:?}");
-    // debug!("Подключение к {}...", config.server_addr);
 
-    // Обработка команды
     match handle_command(&cli, &config).await {
-        Ok(_) => {
-            debug!("Команда выполнена успешно");
-            Ok(())
-        }
+        Ok(_) => Ok(()),
         Err(e) => {
             eprintln!("Error: {e}");
             std::process::exit(1);
@@ -253,80 +234,45 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Обработчик выполнения команд
 async fn handle_command(
     cli: &Cli,
     config: &CliConfig,
 ) -> Result<()> {
     match &cli.command {
-        // Интерактивный режим
-        Some(Commands::Interactive { history }) => {
-            debug!("Запуск интерактивного режима...");
-            interactive_mode(config, history).await
-        }
-
-        // Выполнить одиночную команду из подкоманды
-        Some(Commands::Exec { args }) => {
-            debug!("Выполнение команды: {args:?}");
-            execute_command(config, args).await
-        }
-
-        // Команда Ping
+        Some(Commands::Interactive { history }) => interactive_mode(config, history).await,
+        Some(Commands::Exec { args }) => execute_command(config, args).await,
         Some(Commands::Ping { count, interval }) => {
             ping_server(config, *count, Duration::from_millis(*interval)).await
         }
-
-        // Информационная команда
         Some(Commands::Info { section }) => get_server_info(config, section.as_deref()).await,
-
-        // Режим мониторинга
         Some(Commands::Monitor) => monitor_mode(config).await,
-
-        // Контрольный режим
         Some(Commands::Benchmark {
             requests,
             clients,
             tests,
         }) => run_benchmark(config, *requests, *clients, tests).await,
-
-        // Нет подкоманды - проверьте, указаны ли аргументы
         None => {
             if cli.args.is_empty() {
-                // По умолчанию используется интерактивный режим
-                debug!("Команда не указана, запускается интерактивный режим...");
                 interactive_mode(config, "~/.zumic_history").await
             } else {
-                // Выполнить прямую команду
-                debug!("Выполнение прямой команды: {:?}", cli.args);
                 execute_command(config, &cli.args).await
             }
         }
     }
 }
 
-/// Инициализация логирования
 fn init_logging(
     verbose: bool,
     quiet: bool,
 ) -> Result<()> {
     use tracing_subscriber::{fmt, EnvFilter};
-
-    // quiet имеет приоритет — если задан, отключаем почти всё (ERROR -> повторно
-    // quiet => OFF) Поведение:
-    // - quiet == true  -> ERROR (только ошибки). Можно поставить "off" если хочешь
-    //   полностью молчать.
-    // - verbose == true -> DEBUG
-    // - по умолчанию -> ERROR (убираем INFO)
     let level = if quiet {
-        // Полностью молчать: "off"
         "off"
     } else if verbose {
         "debug"
     } else {
-        // по умолчанию показываем только ошибки — INFO скрыты
         "error"
     };
-
     let filter = EnvFilter::new(level);
 
     fmt()
@@ -335,7 +281,6 @@ fn init_logging(
         .with_thread_ids(false)
         .with_file(false)
         .with_line_number(false)
-        // не печатаем цветной префикс уровня (чтобы вывод был очень чистым)
         .with_level(true)
         .try_init()
         .map_err(|e| anyhow::anyhow!("Ошибка инициализации логирования: {e}"))?;
@@ -343,24 +288,20 @@ fn init_logging(
     Ok(())
 }
 
-/// Баннер CLI
 fn print_banner() {
     println!("zumic-cli {}", env!("CARGO_PKG_VERSION"));
 }
 
-/// Интерактивный режим (REPL)
 async fn interactive_mode(
     config: &CliConfig,
     _history_path: &str,
 ) -> Result<()> {
-    println!("🚧 Интерактивный режим - Coming in Issue #4");
-    println!("   Сервер: {}", config.server_addr);
-    println!();
+    println!("Интерактивный режим - заглушка");
+    println!("Сервер: {}", config.server_addr);
     println!("Пока используйте: zumic-cli exec <команда>");
     Ok(())
 }
 
-/// Небольшая утилита для удобного отображения Value в CLI
 fn format_value_for_cli(v: &ZumicValue) -> String {
     match v {
         ZumicValue::Str(s) => String::from_utf8_lossy(s).to_string(),
@@ -388,7 +329,6 @@ fn format_value_for_cli(v: &ZumicValue) -> String {
             format!("[{}]", items.join(", "))
         }
         ZumicValue::Bitmap(bmp) => String::from_utf8_lossy(bmp.as_bytes()).to_string(),
-        // Для сложных/неподдерживаемых типов — краткая метка
         ZumicValue::Hash(_) => "(hash)".to_string(),
         ZumicValue::ZSet { .. } => "(zset)".to_string(),
         ZumicValue::HyperLogLog(_) => "(hll)".to_string(),
@@ -396,7 +336,103 @@ fn format_value_for_cli(v: &ZumicValue) -> String {
     }
 }
 
-/// Выполнение одной команды
+/// Форматирует значение как wire-level ZSP/RESP3-подобный фрейм.
+/// Возвращает строку содержащую CRLF где нужно.
+fn format_value_raw(v: &ZumicValue) -> String {
+    match v {
+        ZumicValue::Str(s) => {
+            let s_text = String::from_utf8_lossy(s);
+            format!("+{}\r\n", s_text)
+        }
+        ZumicValue::Int(i) => format!(":{}\r\n", i),
+        ZumicValue::Float(f) => format!(",{}\r\n", f),
+        ZumicValue::Bool(b) => format!("#{}\r\n", if *b { "t" } else { "f" }),
+        ZumicValue::Null => "$-1\r\n".to_string(),
+        ZumicValue::Array(arr) => {
+            let mut out = format!("*{}\r\n", arr.len());
+            for item in arr {
+                match item {
+                    ZumicValue::Str(s) => {
+                        let s_text = String::from_utf8_lossy(s);
+                        out.push_str(&format!("${}\r\n{}\r\n", s_text.len(), s_text));
+                    }
+                    ZumicValue::Int(i) => out.push_str(&format!(":{}\r\n", i)),
+                    ZumicValue::Float(f) => out.push_str(&format!(",{}\r\n", f)),
+                    ZumicValue::Null => out.push_str("$-1\r\n"),
+                    other => {
+                        let pretty = format_value_for_cli(other);
+                        out.push_str(&format!("${}\r\n{}\r\n", pretty.len(), pretty));
+                    }
+                }
+            }
+            out
+        }
+        ZumicValue::List(list) => {
+            let mut out = format!("*{}\r\n", list.len());
+            for item in list.iter() {
+                let s = String::from_utf8_lossy(item);
+                out.push_str(&format!("${}\r\n{}\r\n", s.len(), s));
+            }
+            out
+        }
+        ZumicValue::Set(set) => {
+            let mut items: Vec<String> = set
+                .iter()
+                .map(|b| String::from_utf8_lossy(b).to_string())
+                .collect();
+            items.sort();
+            let mut out = format!("*{}\r\n", items.len());
+            for s in items {
+                out.push_str(&format!("${}\r\n{}\r\n", s.len(), s));
+            }
+            out
+        }
+        ZumicValue::Bitmap(bmp) => {
+            let bytes = bmp.as_bytes();
+            format!("${}\r\n{}\r\n", bytes.len(), String::from_utf8_lossy(bytes))
+        }
+        ZumicValue::Hash(_)
+        | ZumicValue::ZSet { .. }
+        | ZumicValue::HyperLogLog(_)
+        | ZumicValue::SStream(_) => {
+            let pretty = format_value_for_cli(v);
+            format!("${}\r\n{}\r\n", pretty.len(), pretty)
+        }
+    }
+}
+
+/// Конвертирует ZumicValue в serde_json::Value для --output json
+fn to_json_value(v: &ZumicValue) -> serde_json::Value {
+    match v {
+        ZumicValue::Str(s) => json!(String::from_utf8_lossy(s).to_string()),
+        ZumicValue::Int(i) => json!(i),
+        ZumicValue::Float(f) => json!(f),
+        ZumicValue::Bool(b) => json!(b),
+        ZumicValue::Null => serde_json::Value::Null,
+        ZumicValue::Array(arr) => serde_json::Value::Array(arr.iter().map(to_json_value).collect()),
+        ZumicValue::List(list) => serde_json::Value::Array(
+            list.iter()
+                .map(|b| json!(String::from_utf8_lossy(b).to_string()))
+                .collect(),
+        ),
+        ZumicValue::Set(set) => {
+            let mut v: Vec<serde_json::Value> = set
+                .iter()
+                .map(|b| json!(String::from_utf8_lossy(b).to_string()))
+                .collect();
+            v.sort_by_key(|a| a.to_string());
+            serde_json::Value::Array(v)
+        }
+        ZumicValue::Bitmap(bmp) => json!(String::from_utf8_lossy(bmp.as_bytes()).to_string()),
+        ZumicValue::Hash(_)
+        | ZumicValue::ZSet { .. }
+        | ZumicValue::HyperLogLog(_)
+        | ZumicValue::SStream(_) => {
+            json!(format_value_for_cli(v))
+        }
+    }
+}
+
 async fn execute_command(
     config: &CliConfig,
     args: &[String],
@@ -405,23 +441,39 @@ async fn execute_command(
         anyhow::bail!("Не указана команда");
     }
 
-    // Подключаемся к серверу
     let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
         .await
         .context("Не удалось подключиться к серверу")?;
 
-    // Перекладываем служебный вывод в debug, чтобы он не мешал результату при
-    // обычном запуске.
     debug!("✓ Подключено к {}", config.server_addr);
 
-    // Парсим и выполняем команду
     let cmd = args[0].to_uppercase();
 
     match cmd.as_str() {
         "PING" => {
             let result = client.ping().await?;
-            if result {
-                println!("PONG");
+            match config.output_format {
+                OutputFormat::Pretty => {
+                    if result {
+                        println!("PONG");
+                    } else {
+                        println!("(nil)");
+                    }
+                }
+                OutputFormat::Raw => {
+                    if result {
+                        print!("+PONG\r\n");
+                    } else {
+                        print!("$-1\r\n");
+                    }
+                }
+                OutputFormat::Json => {
+                    if result {
+                        println!("{}", serde_json::to_string(&json!("PONG"))?);
+                    } else {
+                        println!("null");
+                    }
+                }
             }
         }
         "GET" => {
@@ -429,12 +481,18 @@ async fn execute_command(
                 anyhow::bail!("Использование: GET <ключ>");
             }
             match client.get(&args[1]).await? {
-                Some(value) => {
-                    println!("{}", format_value_for_cli(&value));
-                }
-                None => {
-                    println!("(nil)");
-                }
+                Some(value) => match config.output_format {
+                    OutputFormat::Pretty => println!("{}", format_value_for_cli(&value)),
+                    OutputFormat::Raw => print!("{}", format_value_raw(&value)),
+                    OutputFormat::Json => {
+                        println!("{}", serde_json::to_string(&to_json_value(&value))?)
+                    }
+                },
+                None => match config.output_format {
+                    OutputFormat::Pretty => println!("(nil)"),
+                    OutputFormat::Raw => print!("$-1\r\n"),
+                    OutputFormat::Json => println!("null"),
+                },
             }
         }
         "SET" => {
@@ -443,14 +501,23 @@ async fn execute_command(
             }
             let value = zumic::Value::Str(zumic::Sds::from_str(&args[2]));
             client.set(&args[1], value).await?;
-            println!("OK");
+            match config.output_format {
+                OutputFormat::Pretty => println!("OK"),
+                OutputFormat::Raw => print!("+OK\r\n"),
+                OutputFormat::Json => println!("{}", serde_json::to_string(&json!("OK"))?),
+            }
         }
         "DEL" => {
             if args.len() != 2 {
                 anyhow::bail!("Использование: DEL <ключ>");
             }
             let deleted = client.del(&args[1]).await?;
-            println!("{}", if deleted { "1" } else { "0" });
+            let n = if deleted { 1 } else { 0 };
+            match config.output_format {
+                OutputFormat::Pretty => println!("{}", n),
+                OutputFormat::Raw => print!(":{}\r\n", n),
+                OutputFormat::Json => println!("{}", serde_json::to_string(&json!(n))?),
+            }
         }
         _ => {
             anyhow::bail!(
@@ -464,13 +531,12 @@ async fn execute_command(
     Ok(())
 }
 
-/// Ping сервера
 async fn ping_server(
     config: &CliConfig,
     count: u32,
     interval: Duration,
 ) -> Result<()> {
-    println!("🔄 PING {}", config.server_addr);
+    println!("PING {}", config.server_addr);
     println!();
 
     let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
@@ -488,11 +554,7 @@ async fn ping_server(
                 let elapsed = start.elapsed();
                 total_time += elapsed;
                 successful += 1;
-                println!(
-                    "#{}: PONG - время={:.2}ms",
-                    i,
-                    elapsed.as_secs_f64() * 1000.0
-                );
+                println!("#{i}: PONG - время={:.2}ms", elapsed.as_secs_f64() * 1000.0);
             }
             Ok(false) => {
                 println!("#{i}: Неожиданный ответ");
@@ -521,43 +583,37 @@ async fn ping_server(
     Ok(())
 }
 
-/// Информация о сервере
 async fn get_server_info(
     config: &CliConfig,
     section: Option<&str>,
 ) -> Result<()> {
-    println!("🚧 Режим информации - пока заглушка");
-    println!("   Сервер: {}", config.server_addr);
+    println!("Режим информации - заглушка");
+    println!("Сервер: {}", config.server_addr);
     if let Some(sec) = section {
-        println!("   Раздел: {sec}");
+        println!("Раздел: {sec}");
     }
     println!();
-    println!("Будет получена статистика и конфигурация сервера");
     Ok(())
 }
 
-/// Режим мониторинга команд
 async fn monitor_mode(config: &CliConfig) -> Result<()> {
-    println!("🚧 Режим мониторинга - пока заглушка");
-    println!("   Сервер: {}", config.server_addr);
+    println!("Режим мониторинга - заглушка");
+    println!("Сервер: {}", config.server_addr);
     println!();
-    println!("Будет отображаться поток команд в реальном времени");
     Ok(())
 }
 
-/// Запуск бенчмарка
 async fn run_benchmark(
     config: &CliConfig,
     requests: usize,
     clients: usize,
     tests: &str,
 ) -> Result<()> {
-    println!("🚧 Режим бенчмарка - пока заглушка");
-    println!("   Сервер: {}", config.server_addr);
-    println!("   Запросов: {requests}, Клиентов: {clients}");
-    println!("   Тестируемые команды: {tests}");
+    println!("Режим бенчмарка - заглушка");
+    println!("Сервер: {}", config.server_addr);
+    println!("Запросов: {requests}, Клиентов: {clients}");
+    println!("Тестируемые команды: {tests}");
     println!();
-    println!("Будет выполнено тестирование производительности");
     Ok(())
 }
 
@@ -568,14 +624,12 @@ mod tests {
     #[test]
     fn verify_cli_parsing() {
         let cli = Cli::parse_from(["zumic-cli", "--help"]);
-        // Исправлено: используем is_none() вместо matches!(..., None) чтобы
-        // удовлетворить clippy
         assert!(cli.command.is_none());
     }
 
     #[test]
     fn test_config_from_cli() {
-        let cli = Cli::parse_from(["zumic-cli", "-h", "localhost", "-p", "6174"]);
+        let cli = Cli::parse_from(["zumic-cli", "-H", "localhost", "-p", "6174"]);
         let config = CliConfig::try_from(&cli).unwrap();
         assert_eq!(config.server_addr.port(), 6174);
     }
