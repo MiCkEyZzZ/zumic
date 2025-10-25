@@ -514,16 +514,13 @@ async fn execute_command(
             let deleted = client.del(&args[1]).await?;
             let n = if deleted { 1 } else { 0 };
             match config.output_format {
-                OutputFormat::Pretty => println!("{}", n),
-                OutputFormat::Raw => print!(":{}\r\n", n),
+                OutputFormat::Pretty => println!("{n}"),
+                OutputFormat::Raw => print!(":{n}\r\n"),
                 OutputFormat::Json => println!("{}", serde_json::to_string(&json!(n))?),
             }
         }
         _ => {
-            anyhow::bail!(
-                "Неизвестная команда: {}. Поддерживаются: PING, GET, SET, DEL",
-                cmd
-            );
+            anyhow::bail!("Неизвестная команда: {cmd}. Поддерживаются: PING, GET, SET, DEL");
         }
     }
 

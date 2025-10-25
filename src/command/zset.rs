@@ -261,7 +261,6 @@ impl CommandExecute for ZRevRangeCommand {
 
         match store.get(&key)? {
             Some(Value::ZSet { sorted, .. }) => {
-                // Собрать члены в обратном порядке по баллу.
                 let all: Vec<Sds> = sorted
                     .iter_rev()
                     .map(|(_, member)| member.clone())

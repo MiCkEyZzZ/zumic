@@ -4,7 +4,7 @@
 //! сгруппированные по функциональным подмодулям:
 //!
 //! - [`auth`] — аутентификация и управление доступом.
-//! - [`basic`] — базовые утилитарные команды (например, `ping`, `echo`,
+//! - [`keys`] — базовые утилитарные команды (например, `ping`, `echo`,
 //!   `select`).
 //! - [`bitmap`] — битовые операции (`SETBIT`, `GETBIT`, `BITCOUNT`, `BITOP`).
 //! - [`execute`] — диспетчеризация и единый интерфейс выполнения команд.
@@ -21,13 +21,13 @@
 //! единый интерфейс.
 
 pub mod auth;
-pub mod basic;
 pub mod bitmap;
 pub mod execute;
 pub mod float;
 pub mod geo;
 pub mod hash;
 pub mod int;
+pub mod keys;
 pub mod list;
 pub mod pubsub;
 pub mod set;
@@ -37,13 +37,13 @@ pub mod zset;
 // Публичный экспорт всех типов ошибок и функций из вложенных
 // модулей, чтобы упростить доступ к ним из внешнего кода.
 pub use auth::*;
-pub use basic::*;
 pub use bitmap::*;
 pub use execute::*;
 pub use float::*;
 pub use geo::*;
 pub use hash::*;
 pub use int::*;
+pub use keys::*;
 pub use list::*;
 pub use set::*;
 pub use string::*;

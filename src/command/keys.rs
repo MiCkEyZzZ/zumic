@@ -1,53 +1,9 @@
-//! Базовые команды key-value для Zumic: SET, GET, DEL, EXISTS, MSET, MGET и др.
+//! Команды для работы с ключами в Zumic.
 //!
-//! Реализация основных команд для работы с ключами и значениями в хранилище
-//! Zumic. Каждая команда реализует трейт [`CommandExecute`].
+//! Реализует команды DEL, EXISTS, RENAME, RENAMENX, FLUSHDB для управления
+//! ключами и базой данных. Каждая команда реализует трейт [`CommandExecute`].
 
-use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
-
-/// Команда SET — устанавливает значение по ключу.
-///
-/// # Поля
-/// * `key` — ключ, по которому сохраняется значение.
-/// * `value` — сохраняемое значение.
-#[derive(Debug)]
-pub struct SetCommand {
-    pub key: String,
-    pub value: Value,
-}
-
-impl CommandExecute for SetCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        store.set(&Sds::from_str(self.key.as_str()), self.value.clone())?;
-        Ok(Value::Null)
-    }
-}
-
-/// Команда GET — получает значение по ключу.
-///
-/// # Поля
-/// * `key` — ключ, значение которого требуется получить.
-#[derive(Debug)]
-pub struct GetCommand {
-    pub key: String,
-}
-
-impl CommandExecute for GetCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        let result = store.get(&Sds::from_str(self.key.as_str()));
-        match result {
-            Ok(Some(value)) => Ok(value),
-            Ok(None) => Ok(Value::Null),
-            Err(e) => Err(e),
-        }
-    }
-}
+use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 /// Команда DEL — удаляет значение по ключу.
 ///
@@ -91,105 +47,6 @@ impl CommandExecute for ExistsCommand {
             .count();
 
         Ok(Value::Int(count as i64))
-    }
-}
-
-/// Команда SETNX — устанавливает значение по ключу, только если ключ не
-/// существует.
-///
-/// # Поля
-/// * `key` — ключ, по которому сохраняется значение.
-/// * `value` — сохраняемое значение.
-#[derive(Debug)]
-pub struct SetNxCommand {
-    pub key: String,
-    pub value: Value,
-}
-
-impl CommandExecute for SetNxCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        let exists = store.get(&Sds::from_str(&self.key))?.is_some();
-        if !exists {
-            store.set(&Sds::from_str(&self.key), self.value.clone())?;
-            Ok(Value::Int(1))
-        } else {
-            Ok(Value::Int(0))
-        }
-    }
-}
-
-/// Команда MSET — устанавливает значения по нескольким ключам одновременно.
-///
-/// # Поля
-/// * `entries` — вектор пар (ключ, значение) для установки.
-#[derive(Debug)]
-pub struct MSetCommand {
-    pub entries: Vec<(String, Value)>,
-}
-
-impl CommandExecute for MSetCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        let mut keys: Vec<Sds> = Vec::with_capacity(self.entries.len());
-        for (k, _) in &self.entries {
-            keys.push(Sds::from_str(k));
-        }
-        let converted: Vec<(&Sds, Value)> = keys
-            .iter()
-            .zip(self.entries.iter().map(|(_, v)| v.clone()))
-            .collect();
-
-        store.mset(converted)?;
-        Ok(Value::Null)
-    }
-}
-
-/// Команда MGET — получает значения по нескольким ключам одновременно.
-///
-/// # Поля
-/// * `keys` — список ключей для получения значений.
-#[derive(Debug)]
-pub struct MGetCommand {
-    pub keys: Vec<String>,
-}
-
-impl CommandExecute for MGetCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        // 1. Сначала переводим все String → Sds и храним их, чтобы ссылки на них были
-        //    валидны
-        let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
-
-        // 2. Собираем Vec<&Sds> из уже существующих Sds
-        let key_refs: Vec<&Sds> = converted_keys.iter().collect();
-
-        // 3. Вызываем mget, передавая &[&Sds]
-        let values = store.mget(&key_refs)?;
-
-        // 4. Преобразуем Vec<Option<Value>> → Vec<Sds>, обрабатывая None/ошибки
-        let vec: Vec<Sds> = values
-            .into_iter()
-            .map(|opt| match opt {
-                Some(Value::Str(s)) => Ok(s),
-                Some(_) => Err(StoreError::WrongType("Неверный тип".into())),
-                None => Ok(Sds::from_str("")), // пустая строка для None
-            })
-            .collect::<Result<_, _>>()?;
-
-        // 5. Упаковываем в QuickList
-        let mut list = QuickList::new(64);
-        for item in vec {
-            list.push_back(item);
-        }
-
-        Ok(Value::List(list))
     }
 }
 
@@ -252,52 +109,15 @@ impl CommandExecute for FlushDbCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::{MGetCommand, MSetCommand, SetCommand};
-    use crate::{
-        CommandExecute, DelCommand, ExistsCommand, FlushDbCommand, GetCommand, InMemoryStore,
-        RenameCommand, RenameNxCommand, Sds, SetNxCommand, StorageEngine, Value,
-    };
+    use super::*;
+    use crate::{GetCommand, InMemoryStore, SetCommand, Value};
 
-    /// Тестирование команды `SetCommand` и `GetCommand`.
-    /// Проверяется, что после установки значения с помощью `SetCommand`
-    /// оно может быть корректно получено с помощью `GetCommand`.
-    #[test]
-    fn test_set_and_get() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let set_cmd = SetCommand {
-            key: "test_key".to_string(),
-            value: Value::Str(Sds::from_str("test_value")),
-        };
-
-        let result = set_cmd.execute(&mut store);
-        assert!(result.is_ok(), "SetCommand failed: {result:?}");
-
-        let get_cmd = GetCommand {
-            key: "test_key".to_string(),
-        };
-
-        let result = get_cmd.execute(&mut store);
-        assert!(result.is_ok(), "GetCommand failed: {result:?}");
-
-        assert_eq!(result.unwrap(), Value::Str(Sds::from_str("test_value")));
+    // Вспомогательная функция для создания нового хранилища в памяти.
+    fn create_store() -> StorageEngine {
+        StorageEngine::Memory(InMemoryStore::new())
     }
 
-    /// Тестирование `GetCommand` для несуществующего ключа.
-    /// Проверяет, что команда возвращает `Null` для отсутствующих ключей.
-    #[test]
-    fn test_get_non_existent_key() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let get_command = GetCommand {
-            key: "non_existent_key".to_string(),
-        };
-
-        let result = get_command.execute(&mut store);
-        assert!(result.is_ok(), "GetCommand failed: {result:?}");
-
-        assert_eq!(result.unwrap(), Value::Null);
-    }
+    // ==================== Тесты для DEL ====================
 
     /// Тестирование `DelCommand` для существующего ключа.
     /// Проверяет, что удаление возвращает 1 и ключ действительно удалён.
@@ -347,6 +167,8 @@ mod tests {
         assert_eq!(del_result.unwrap(), Value::Bool(false));
     }
 
+    // ==================== Тесты для EXISTS ====================
+
     /// Тестирование `ExistsCommand`.
     /// Проверяет, что команда правильно считает количество существующих ключей.
     #[test]
@@ -391,128 +213,7 @@ mod tests {
         assert_eq!(result.unwrap(), Value::Int(0));
     }
 
-    /// Тестирование `SetNxCommand` для отсутствующего ключа.
-    /// Проверяет, что ключ устанавливается и возвращается 1.
-    #[test]
-    fn test_setnx_key_not_exists() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let setnx_cmd = SetNxCommand {
-            key: "new_key".to_string(),
-            value: Value::Str(Sds::from_str("new_value")),
-        };
-
-        let result = setnx_cmd.execute(&mut store);
-
-        assert!(result.is_ok(), "SetNxCommand failed: {result:?}");
-        assert_eq!(result.unwrap(), Value::Int(1));
-
-        let get_cmd = GetCommand {
-            key: "new_key".to_string(),
-        };
-        let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
-        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("new_value")));
-    }
-
-    /// Тестирование `SetNxCommand` для существующего ключа.
-    /// Проверяет, что команда возвращает 0 и не перезаписывает значение.
-    #[test]
-    fn test_setnx_key_exists() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let set_cmd = SetNxCommand {
-            key: "existing_key".to_string(),
-            value: Value::Str(Sds::from_str("value")),
-        };
-
-        let _ = set_cmd.execute(&mut store);
-
-        let setnx_cmd = SetNxCommand {
-            key: "existing_key".to_string(),
-            value: Value::Str(Sds::from_str("new_value")),
-        };
-
-        let result = setnx_cmd.execute(&mut store);
-
-        assert!(result.is_ok(), "SetNxCommand failed: {result:?}");
-        assert_eq!(result.unwrap(), Value::Int(0));
-
-        let get_cmd = GetCommand {
-            key: "existing_key".to_string(),
-        };
-        let get_result = get_cmd.execute(&mut store);
-        assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
-        assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value")));
-    }
-
-    /// Тестирование `MSetCommand` для установки нескольких ключей.
-    /// Проверяет, что команда корректно устанавливает значения для всех ключей.
-    #[test]
-    fn test_mset() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let mset_cmd = MSetCommand {
-            entries: vec![
-                ("key1".to_string(), Value::Str(Sds::from_str("value1"))),
-                ("key2".to_string(), Value::Str(Sds::from_str("value2"))),
-            ],
-        };
-
-        let result = mset_cmd.execute(&mut store);
-        assert!(result.is_ok(), "MSetCommand failed: {result:?}");
-
-        let get_cmd1 = GetCommand {
-            key: "key1".to_string(),
-        };
-
-        let get_result1 = get_cmd1.execute(&mut store);
-        assert!(get_result1.is_ok(), "GetCommand failed: {get_result1:?}");
-        assert_eq!(get_result1.unwrap(), Value::Str(Sds::from_str("value1")));
-
-        let get_cmd2 = GetCommand {
-            key: "key2".to_string(),
-        };
-
-        let get_result2 = get_cmd2.execute(&mut store);
-        assert!(get_result2.is_ok(), "GetCommand failed: {get_result2:?}");
-        assert_eq!(get_result2.unwrap(), Value::Str(Sds::from_str("value2")));
-    }
-
-    /// Тестирование `MGetCommand`.
-    /// Проверяет, что после установки значений через `MSetCommand`,
-    /// `MGetCommand` корректно возвращает список значений в том же порядке.
-    #[test]
-    fn test_mget() {
-        let mut store = StorageEngine::Memory(InMemoryStore::new());
-
-        let mset_cmd = MSetCommand {
-            entries: vec![
-                ("key1".to_string(), Value::Str(Sds::from_str("value1"))),
-                ("key2".to_string(), Value::Str(Sds::from_str("value2"))),
-            ],
-        };
-        mset_cmd.execute(&mut store).unwrap();
-
-        let mget_cmd = MGetCommand {
-            keys: vec!["key1".to_string(), "key2".to_string()],
-        };
-
-        let result = mget_cmd.execute(&mut store);
-        assert!(result.is_ok(), "MGetCommand failed: {result:?}");
-
-        let result_list = match result.unwrap() {
-            Value::List(list) => list,
-            _ => panic!("Expected Value::List, got something else"),
-        };
-
-        let values: Vec<String> = result_list
-            .into_iter()
-            .map(|item| String::from_utf8_lossy(&item).to_string())
-            .collect();
-
-        assert_eq!(values, vec!["value1".to_string(), "value2".to_string()]);
-    }
+    // ==================== Тесты для RENAME ====================
 
     /// Этот тест проверяет, что `RenameCommand` работает как ожидается.
     /// Он переименовывает существующий ключ в новое имя.
@@ -637,6 +338,40 @@ mod tests {
         );
         assert_eq!(get_result_new.unwrap(), Value::Str(Sds::from_str("value1")));
     }
+
+    /// Тестирование `RenameNxCommand` когда целевой ключ уже существует.
+    /// Проверяет, что команда возвращает 0 и не перезаписывает существующий
+    /// ключ.
+    #[test]
+    fn test_rename_nx_target_exists() {
+        let mut store = create_store();
+
+        store
+            .set(&Sds::from_str("key1"), Value::Str(Sds::from_str("value1")))
+            .unwrap();
+        store
+            .set(&Sds::from_str("key2"), Value::Str(Sds::from_str("value2")))
+            .unwrap();
+
+        let rename_nx_cmd = RenameNxCommand {
+            from: "key1".to_string(),
+            to: "key2".to_string(),
+        };
+
+        let result = rename_nx_cmd.execute(&mut store);
+        assert!(result.is_ok(), "RenameNxCommand failed: {result:?}");
+        assert_eq!(result.unwrap(), Value::Int(0));
+
+        // Проверяем, что key1 всё ещё существует
+        let get1 = store.get(&Sds::from_str("key1"));
+        assert_eq!(get1.unwrap(), Some(Value::Str(Sds::from_str("value1"))));
+
+        // Проверяем, что key2 не изменился
+        let get2 = store.get(&Sds::from_str("key2"));
+        assert_eq!(get2.unwrap(), Some(Value::Str(Sds::from_str("value2"))));
+    }
+
+    // ==================== Тесты для FLUSHDB ====================
 
     /// This test ensures that the `FlushDbCommand` properly clears all keys
     /// from the database. It first adds two keys, executes the flush

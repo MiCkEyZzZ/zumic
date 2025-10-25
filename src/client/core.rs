@@ -109,7 +109,7 @@ impl ZumicClient {
         &mut self,
         key: &str,
     ) -> ClientResult<Option<Value>> {
-        debug!("GET {}", key);
+        debug!("GET {key}");
 
         let command = Command::Get {
             key: key.to_string(),
@@ -130,7 +130,7 @@ impl ZumicClient {
         key: &str,
         value: Value,
     ) -> ClientResult<()> {
-        debug!("SET {} = {:?}", key, value);
+        debug!("SET {key} = {value:?}");
 
         let command = Command::Set {
             key: key.to_string(),

@@ -115,9 +115,9 @@ impl ClientConnection {
                         let consumed = total - remaining;
                         // удаляем потреблённые байты (кол-во consumed)
                         read_buf.drain(..consumed);
-                        trace!("Получен фрейм: {:?}", frame);
+                        trace!("Получен фрейм: {frame:?}");
                         let response = frame_to_response(frame)?;
-                        trace!("Ответ распознан: {:?}", response);
+                        trace!("Ответ распознан: {response:?}");
                         return Ok(response);
                     }
                     Ok(None) => {
