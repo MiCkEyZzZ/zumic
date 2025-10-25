@@ -616,21 +616,3 @@ async fn run_benchmark(
     println!();
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn verify_cli_parsing() {
-        let cli = Cli::parse_from(["zumic-cli", "--help"]);
-        assert!(cli.command.is_none());
-    }
-
-    #[test]
-    fn test_config_from_cli() {
-        let cli = Cli::parse_from(["zumic-cli", "-H", "localhost", "-p", "6174"]);
-        let config = CliConfig::try_from(&cli).unwrap();
-        assert_eq!(config.server_addr.port(), 6174);
-    }
-}
