@@ -171,9 +171,10 @@ impl Settings {
         settings.logging.apply_env_overrides();
 
         // Валидация логирования
-        settings.logging.validate().map_err(|e| {
-            ConfigError::Message(format!("Logging config validation failed: {}", e))
-        })?;
+        settings
+            .logging
+            .validate()
+            .map_err(|e| ConfigError::Message(format!("Logging config validation failed: {e}")))?;
 
         Ok(settings)
     }

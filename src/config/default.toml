@@ -152,7 +152,7 @@ rotation_days = 30
 # Per-module уровня (опционально)
 module_levels = []
 # Примеры:
-# module_levels = ["zumic::engine=debug", ""zumic::network=trace]
+# module_levels = ["zumic::engine=debug", "zumic::network=trace"]
 
 # ===== CUSTOM FIELDS (NEW) =====
 [logging.custom_fields]

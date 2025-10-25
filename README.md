@@ -143,6 +143,54 @@ $1
 a
 ```
 
+## Example Usage CLI
+
+### Starting the Server
+
+```zsh
+RUST_ENV=memory cargo run --bin zumic
+```
+
+### Working with BASE Commands
+
+#### Пример 1
+
+```zsh
+cargo run --bin zumic-cli -- SET foo bar
+$ OK
+cargo run --bin zumic-cli -- GET foo
+$ bar
+cargo run --bin zumic-cli -- DEL foo
+$ 1
+```
+
+#### Пример 2
+
+```zsh
+# Set and get
+cargo run --bin zumic-cli -- SET mykey "Hello World"
+$ OK
+cargo run --bin zumic-cli -- GET mykey
+$ Hello World
+
+# Delete and get
+cargo run --bin zumic-cli -- DEL mykey
+$ 1
+cargo run --bin zumic-cli -- GET mykey
+$ (nil)
+```
+
+### Help & Version Tests
+
+```zsh
+# Display help
+cargo run --bin zumic-cli -- --help
+# Display version
+cargo run --bin zumic-cli -- --version
+# Short help
+cargo run --bin zumic-cli -- -h
+```
+
 ## License
 
 See. [LICENSE](LICENSE)

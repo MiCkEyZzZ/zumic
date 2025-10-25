@@ -12,7 +12,7 @@ use tracing::debug;
 use zumic::{
     client::{ClientConfig, ZumicClient},
     Value as ZumicValue,
-}; // <- добавлено для форматирования вывода
+};
 
 /// Основная структура CLI аргументов
 ///
@@ -22,7 +22,7 @@ use zumic::{
 #[command(name = "zumic-cli")]
 #[command(author = "Zumic Contributors")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "CLI клиент для Zumic сервера", long_about = None)]
+#[command(about = "Zumic CLI - Command line client for Zumic server", long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
     /// Хост сервера (IP или доменное имя)
@@ -259,44 +259,44 @@ async fn handle_command(
     config: &CliConfig,
 ) -> Result<()> {
     match &cli.command {
-        // Interactive mode
+        // Интерактивный режим
         Some(Commands::Interactive { history }) => {
             debug!("Запуск интерактивного режима...");
             interactive_mode(config, history).await
         }
 
-        // Execute single command from subcommand
+        // Выполнить одиночную команду из подкоманды
         Some(Commands::Exec { args }) => {
             debug!("Выполнение команды: {args:?}");
             execute_command(config, args).await
         }
 
-        // Ping command
+        // Команда Ping
         Some(Commands::Ping { count, interval }) => {
             ping_server(config, *count, Duration::from_millis(*interval)).await
         }
 
-        // Info command
+        // Информационная команда
         Some(Commands::Info { section }) => get_server_info(config, section.as_deref()).await,
 
-        // Monitor mode
+        // Режим мониторинга
         Some(Commands::Monitor) => monitor_mode(config).await,
 
-        // Benchmark mode
+        // Контрольный режим
         Some(Commands::Benchmark {
             requests,
             clients,
             tests,
         }) => run_benchmark(config, *requests, *clients, tests).await,
 
-        // No subcommand - check if args provided
+        // Нет подкоманды - проверьте, указаны ли аргументы
         None => {
             if cli.args.is_empty() {
-                // Default to interactive mode
+                // По умолчанию используется интерактивный режим
                 debug!("Команда не указана, запускается интерактивный режим...");
                 interactive_mode(config, "~/.zumic_history").await
             } else {
-                // Execute direct command
+                // Выполнить прямую команду
                 debug!("Выполнение прямой команды: {:?}", cli.args);
                 execute_command(config, &cli.args).await
             }
@@ -495,10 +495,10 @@ async fn ping_server(
                 );
             }
             Ok(false) => {
-                println!("#{}: Неожиданный ответ", i);
+                println!("#{i}: Неожиданный ответ");
             }
             Err(e) => {
-                println!("#{}: Ошибка - {}", i, e);
+                println!("#{i}: Ошибка - {e}");
             }
         }
 
@@ -514,7 +514,7 @@ async fn ping_server(
     println!("Потеряно: {}", count - successful);
     if successful > 0 {
         let avg_ms = (total_time.as_secs_f64() * 1000.0) / successful as f64;
-        println!("Среднее время: {:.2}ms", avg_ms);
+        println!("Среднее время: {avg_ms:.2}ms");
     }
 
     client.close().await?;
