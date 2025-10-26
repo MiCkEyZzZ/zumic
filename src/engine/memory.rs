@@ -6,13 +6,6 @@ use rand::{seq::IteratorRandom, thread_rng};
 use crate::{GeoPoint, GeoSet, Sds, Storage, StoreError, StoreResult, Value};
 
 /// Потокобезопасное in-memory хранилище ключ-значение.
-///
-/// Использует [`DashMap`] с обёрткой [`Arc`] для безопасного
-/// совместного использования.
-///
-/// Содержит реализацию интерфейса [`Storage`] и поддерживает
-/// базовые операции, включая множественные вставки/чтения
-/// (`mset` / `mget`) и атомарные переименования (`rename`, `renamenx`).
 #[derive(Debug)]
 pub struct InMemoryStore {
     #[allow(clippy::arc_with_non_send_sync)]
@@ -456,6 +449,20 @@ impl Storage for InMemoryStore {
         }
 
         Ok(out)
+    }
+
+    /// Возвращает кол-во ключей в базе данных.
+    fn dbsize(&self) -> StoreResult<usize> {
+        Ok(self.data.len())
+    }
+
+    /// Сохранение для in-memory хранилища не поддерживается.
+    /// Возвращает ошибку, т.к. данные хранятся только в памяти.
+    fn save(&self) -> StoreResult<()> {
+        // In-memory store не поддерживает персистентность
+        Err(StoreError::UnsupportedOperation(
+            "SAVE not supported for in-memory storage".into(),
+        ))
     }
 }
 

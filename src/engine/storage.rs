@@ -64,6 +64,14 @@ pub trait Storage {
     /// Очищает базу данных, удаляя все ключи.
     fn flushdb(&self) -> StoreResult<()>;
 
+    /// Очищает базу данных, удаляя все ключи.
+    fn dbsize(&self) -> StoreResult<usize>;
+
+    /// Сохраняет состояние базы данных на диск (для персистентных хранилищ).
+    /// Для in-memory хранилищ может быть пустой реализацией или возвращать
+    /// ошибку.
+    fn save(&self) -> StoreResult<()>;
+
     /// Добавляет точку в гео-множество.
     /// Возвращает `Ok(true)`, если member новый, иначе `Ok(false)`.
     fn geo_add(
@@ -197,6 +205,10 @@ pub trait AsyncStorage: Send + Sync + 'static {
     ) -> StoreResult<bool>;
 
     async fn flushdb(&self) -> StoreResult<()>;
+
+    async fn dbsize(&self) -> StoreResult<usize>;
+
+    async fn save(&self) -> StoreResult<()>;
 
     // GEO методы
     async fn geo_add(

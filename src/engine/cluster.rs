@@ -498,6 +498,48 @@ impl Storage for InClusterStore {
         let shard = self.shard_by_id(shard_id)?;
         shard.spop(key, count)
     }
+
+    fn dbsize(&self) -> StoreResult<usize> {
+        let mut total: usize = 0;
+        for shard in &self.shards {
+            match shard.dbsize() {
+                Ok(n) => total = total.saturating_add(n),
+                Err(e) => {
+                    self.record_failed_operation();
+                    return Err(e);
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    fn save(&self) -> StoreResult<()> {
+        let mut any_saved = false;
+        for shard in &self.shards {
+            match shard.save() {
+                Ok(_) => {
+                    any_saved = true;
+                }
+                Err(StoreError::UnsupportedOperation(_)) => {
+                    // shard не поддерживает persist — просто пропускаем
+                    continue;
+                }
+                Err(e) => {
+                    self.record_failed_operation();
+                    return Err(e);
+                }
+            }
+        }
+
+        // Если ни один шар не поддерживал save — можно вернуть UnsupportedOperation
+        if !any_saved {
+            return Err(StoreError::UnsupportedOperation(
+                "No shard supports SAVE".into(),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for InClusterStore {

@@ -22,6 +22,10 @@ impl CommandExecute for DelCommand {
         let deleted = store.del(&Sds::from_str(&self.key))?;
         Ok(Value::Bool(deleted))
     }
+
+    fn command_name(&self) -> &'static str {
+        "DEL"
+    }
 }
 
 /// Команда EXISTS — проверяет существование одного или нескольких ключей.
@@ -48,6 +52,10 @@ impl CommandExecute for ExistsCommand {
 
         Ok(Value::Int(count as i64))
     }
+
+    fn command_name(&self) -> &'static str {
+        "EXISTS"
+    }
 }
 
 /// Команда RENAME — переименовывает существующий ключ.
@@ -68,6 +76,10 @@ impl CommandExecute for RenameCommand {
     ) -> Result<Value, StoreError> {
         store.rename(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Str(Sds::from_str("")))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "RENAME"
     }
 }
 
@@ -91,6 +103,10 @@ impl CommandExecute for RenameNxCommand {
         let success = store.renamenx(&Sds::from_str(&self.from), &Sds::from_str(&self.to))?;
         Ok(Value::Int(if success { 1 } else { 0 }))
     }
+
+    fn command_name(&self) -> &'static str {
+        "RENAMENX"
+    }
 }
 
 /// Команда FLUSHDB — удаляет все ключи из текущей базы данных.
@@ -105,6 +121,10 @@ impl CommandExecute for FlushDbCommand {
         store.flushdb()?;
         Ok(Value::Str(Sds::from_str("OK")))
     }
+
+    fn command_name(&self) -> &'static str {
+        "FLUSHDB"
+    }
 }
 
 #[cfg(test)]
@@ -116,8 +136,6 @@ mod tests {
     fn create_store() -> StorageEngine {
         StorageEngine::Memory(InMemoryStore::new())
     }
-
-    // ==================== Тесты для DEL ====================
 
     /// Тестирование `DelCommand` для существующего ключа.
     /// Проверяет, что удаление возвращает 1 и ключ действительно удалён.
@@ -167,8 +185,6 @@ mod tests {
         assert_eq!(del_result.unwrap(), Value::Bool(false));
     }
 
-    // ==================== Тесты для EXISTS ====================
-
     /// Тестирование `ExistsCommand`.
     /// Проверяет, что команда правильно считает количество существующих ключей.
     #[test]
@@ -212,8 +228,6 @@ mod tests {
         let result = exists_cmd.execute(&mut store);
         assert_eq!(result.unwrap(), Value::Int(0));
     }
-
-    // ==================== Тесты для RENAME ====================
 
     /// Этот тест проверяет, что `RenameCommand` работает как ожидается.
     /// Он переименовывает существующий ключ в новое имя.
@@ -370,8 +384,6 @@ mod tests {
         let get2 = store.get(&Sds::from_str("key2"));
         assert_eq!(get2.unwrap(), Some(Value::Str(Sds::from_str("value2"))));
     }
-
-    // ==================== Тесты для FLUSHDB ====================
 
     /// This test ensures that the `FlushDbCommand` properly clears all keys
     /// from the database. It first adds two keys, executes the flush

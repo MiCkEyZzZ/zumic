@@ -33,6 +33,10 @@ impl CommandExecute for SAddCommand {
         let added = store.sadd(&key, std::slice::from_ref(&member))?;
         Ok(Value::Int(added as i64))
     }
+
+    fn command_name(&self) -> &'static str {
+        "SADD"
+    }
 }
 
 /// Команда SREM — удаляет элемент из множества.
@@ -62,6 +66,10 @@ impl CommandExecute for SRemCommand {
         let removed = store.srem(&key, std::slice::from_ref(&member))?;
         Ok(Value::Int(removed as i64))
     }
+
+    fn command_name(&self) -> &'static str {
+        "SREM"
+    }
 }
 
 /// Команда SISMEMBER — проверяет наличие элемента во множестве.
@@ -90,6 +98,10 @@ impl CommandExecute for SIsMemberCommand {
 
         let exists = store.sismember(&key, &member)?;
         Ok(Value::Int(exists as i64))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SISMEMBER"
     }
 }
 
@@ -124,6 +136,10 @@ impl CommandExecute for SMembersCommand {
             Some(_) => Err(StoreError::WrongType("SMEMBERS on non-set key".into())),
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "SMEMBERS"
+    }
 }
 
 /// Команда SCARD — возвращает количество элементов во множестве.
@@ -148,6 +164,10 @@ impl CommandExecute for SCardCommand {
         let key = Sds::from_str(&self.key);
         let count = store.scard(&key)?;
         Ok(Value::Int(count as i64))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SCARD"
     }
 }
 
@@ -182,6 +202,10 @@ impl CommandExecute for SRandMemberCommand {
             Ok(Value::List(list))
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "SRANDMEMBER"
+    }
 }
 
 /// Команда SPOP — удаляет и возвращает случайный(е) элемент(ы) множества.
@@ -213,6 +237,10 @@ impl CommandExecute for SPopCommand {
             let list = QuickList::from_iter(removed, 64);
             Ok(Value::List(list))
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SPOP"
     }
 }
 

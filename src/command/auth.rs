@@ -28,6 +28,10 @@ impl CommandExecute for AuthCommand {
             None => Ok(Value::Str(Sds::from_str("USER_NOT_FOUND"))),
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "AUTH"
+    }
 }
 
 #[cfg(test)]

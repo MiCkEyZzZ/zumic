@@ -338,6 +338,22 @@ impl StorageEngine {
             StorageEngine::Persistent(store) => store.spop(key, count),
         }
     }
+
+    pub fn dbsize(&self) -> StoreResult<usize> {
+        match self {
+            StorageEngine::Memory(store) => store.dbsize(),
+            StorageEngine::Cluster(store) => store.dbsize(),
+            StorageEngine::Persistent(store) => store.dbsize(),
+        }
+    }
+
+    pub fn save(&self) -> StoreResult<()> {
+        match self {
+            StorageEngine::Memory(store) => store.save(),
+            StorageEngine::Cluster(store) => store.save(),
+            StorageEngine::Persistent(store) => store.save(),
+        }
+    }
 }
 
 #[cfg(test)]
