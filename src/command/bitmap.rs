@@ -34,6 +34,10 @@ impl CommandExecute for SetBitCommand {
         store.set(&Sds::from_str(&self.key), Value::Bitmap(bmp))?;
         Ok(Value::Int(old as i64))
     }
+
+    fn command_name(&self) -> &'static str {
+        "SETBIT"
+    }
 }
 
 /// Команда GETBIT — получает значение бита по смещению.
@@ -58,6 +62,10 @@ impl CommandExecute for GetBitCommand {
             false
         };
         Ok(Value::Int(bit as i64))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GETBIT"
     }
 }
 
@@ -85,6 +93,10 @@ impl CommandExecute for BitCountCommand {
             0
         };
         Ok(Value::Int(cnt as i64))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "BITCOUNT"
     }
 }
 
@@ -136,6 +148,10 @@ impl CommandExecute for BitOpCommand {
         // сохраняем и возвращаем длину в битах
         store.set(&Sds::from_str(&self.dest), Value::Bitmap(result.clone()))?;
         Ok(Value::Int(result.bit_len() as i64))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "BITOP"
     }
 }
 

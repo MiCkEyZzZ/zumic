@@ -47,6 +47,10 @@ impl CommandExecute for HSetCommand {
             }
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "HSET"
+    }
 }
 
 /// Команда HGET — получает значение поля из хеша.
@@ -81,6 +85,10 @@ impl CommandExecute for HGetCommand {
             }
         }
         Ok(Value::Null)
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HGET"
     }
 }
 
@@ -118,6 +126,10 @@ impl CommandExecute for HDelCommand {
         }
         Ok(Value::Int(0))
     }
+
+    fn command_name(&self) -> &'static str {
+        "HDEL"
+    }
 }
 
 /// Команда HGETALL — получает все поля и значения хеша.
@@ -152,6 +164,10 @@ impl CommandExecute for HGetAllCommand {
             return Ok(Value::List(result));
         }
         Ok(Value::Null)
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HGETALL"
     }
 }
 

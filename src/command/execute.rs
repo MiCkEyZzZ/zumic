@@ -18,7 +18,11 @@ use super::{
     ZRangeCommand, ZRemCommand, ZRevRangeCommand, ZScoreCommand,
 };
 use crate::{
-    command::pubsub::{PublishCommand, SubscribeCommand, UnsubscribeCommand},
+    command::{
+        pubsub::{PublishCommand, SubscribeCommand, UnsubscribeCommand},
+        BgSaveCommand, DbSizeCommand, EchoCommand, InfoCommand, PingCommand, SaveCommand,
+        SelectCommand, ShutdownCommand, TimeCommand,
+    },
     logging::slow_log::SlowQueryTracker,
     StorageEngine, StoreError, Value,
 };
@@ -123,6 +127,15 @@ pub enum Command {
     Subscribe(SubscribeCommand),
     Unsubscribe(UnsubscribeCommand),
     Publish(PublishCommand),
+    Ping(PingCommand),
+    Echo(EchoCommand),
+    DbSize(DbSizeCommand),
+    Info(InfoCommand),
+    Time(TimeCommand),
+    Select(SelectCommand),
+    Save(SaveCommand),
+    BgSave(BgSaveCommand),
+    Shutdown(ShutdownCommand),
 }
 
 impl Command {
@@ -183,6 +196,15 @@ impl Command {
             Command::Subscribe(_) => "SUBSCRIBE",
             Command::Unsubscribe(_) => "UNSUBSCRIBE",
             Command::Publish(_) => "PUBLISH",
+            Command::Ping(_) => "PING",
+            Command::Echo(_) => "ECHO",
+            Command::DbSize(_) => "DBSIZE",
+            Command::Info(_) => "INFO",
+            Command::Time(_) => "TIME",
+            Command::Select(_) => "SELECT",
+            Command::Save(_) => "SAVE",
+            Command::BgSave(_) => "BGSAVE",
+            Command::Shutdown(_) => "SHUTDOWN",
         }
     }
 
@@ -242,6 +264,15 @@ impl Command {
             Command::Subscribe(_) => None,
             Command::Unsubscribe(_) => None,
             Command::Publish(_) => None,
+            Command::Ping(_) => None,
+            Command::Echo(_) => None,
+            Command::DbSize(_) => None,
+            Command::Info(_) => None,
+            Command::Time(_) => None,
+            Command::Select(_) => None,
+            Command::Save(_) => None,
+            Command::BgSave(_) => None,
+            Command::Shutdown(_) => None,
             _ => None,
         }
     }
@@ -319,6 +350,15 @@ impl CommandExecute for Command {
             Command::Subscribe(cmd) => cmd.execute(store),
             Command::Unsubscribe(cmd) => cmd.execute(store),
             Command::Publish(cmd) => cmd.execute(store),
+            Command::Ping(cmd) => cmd.execute(store),
+            Command::Echo(cmd) => cmd.execute(store),
+            Command::DbSize(cmd) => cmd.execute(store),
+            Command::Info(cmd) => cmd.execute(store),
+            Command::Time(cmd) => cmd.execute(store),
+            Command::Select(cmd) => cmd.execute(store),
+            Command::Save(cmd) => cmd.execute(store),
+            Command::BgSave(cmd) => cmd.execute(store),
+            Command::Shutdown(cmd) => cmd.execute(store),
         };
 
         // Добавляем result / error в tracker (используем ссылку, чтобы не перемещать

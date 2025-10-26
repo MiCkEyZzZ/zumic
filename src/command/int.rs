@@ -43,6 +43,10 @@ impl CommandExecute for IncrCommand {
             }
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "INCR"
+    }
 }
 
 /// Команда INCRBY — увеличивает целочисленное значение по ключу на заданное
@@ -85,6 +89,10 @@ impl CommandExecute for IncrByCommand {
             }
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "INCRBY"
+    }
 }
 
 /// Команда DECR — уменьшает целочисленное значение по ключу на 1.
@@ -123,6 +131,10 @@ impl CommandExecute for DecrCommand {
                 Ok(Value::Int(-1))
             }
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "DECR"
     }
 }
 
@@ -165,6 +177,10 @@ impl CommandExecute for DecrByCommand {
                 Ok(Value::Int(-self.decrement))
             }
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "DECRBY"
     }
 }
 

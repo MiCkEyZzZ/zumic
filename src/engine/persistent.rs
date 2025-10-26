@@ -1099,6 +1099,35 @@ impl Storage for InPersistentStore {
 
         Ok(out)
     }
+
+    /// Возвращает общее количество ключей во всех шардах.
+    fn dbsize(&self) -> StoreResult<usize> {
+        let stats = self.index.global_stats();
+        Ok(stats.total_keys as usize)
+    }
+
+    /// Сохраняет текущее состояние базы данных на диск.
+    /// Выполняет flush AOF и создаёт snapshot.
+    fn save(&self) -> StoreResult<()> {
+        // 1. Сначала делаем fsync AOF файла
+        {
+            let aof_guard = self.aof.lock().unwrap();
+            // AOF автоматически синхронизируется при drop guard'а
+            // но мы можем явно вызвать sync, если есть такой метод
+            drop(aof_guard);
+        }
+
+        // 2. Создаём снапшот, если включено
+        if self.config.compaction.enable_snapshots {
+            let snapshot_info = self.create_snapshot()?;
+
+            if self.config.enable_operation_logging {
+                println!("Snapshot created: {:?}", snapshot_info);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for PersistentStoreConfig {

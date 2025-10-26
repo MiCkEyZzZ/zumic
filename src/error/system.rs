@@ -82,4 +82,13 @@ pub enum StoreError {
 
     #[error("Unknown BITOP: {0}")]
     Syntax(String),
+
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
+
+    #[error("Server shutdown")]
+    ServerShutdown,
+
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
 }

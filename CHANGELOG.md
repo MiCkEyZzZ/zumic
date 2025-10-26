@@ -111,6 +111,8 @@
   - Добавил в `Value` дополнительные методы для работы с массивами, строками и числами в `types.rs`: `as_array`, `as_array_mut`, `as_str`, `as_int`;
 - **error***
   - Добавлены ошибки для клиента в `client`;
+- **command**
+  - Добавил команды для работы с сервером в `server.rs`: `INFO`, `DBSIZE`, `TIME`, `SELECT`, `SAVE`, `BGSAVE`, `SHUTDOWN`, `PING`, `ECHO`;
 
 ### Изменено
 

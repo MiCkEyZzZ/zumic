@@ -25,6 +25,10 @@ impl CommandExecute for SetCommand {
         store.set(&Sds::from_str(self.key.as_str()), self.value.clone())?;
         Ok(Value::Null)
     }
+
+    fn command_name(&self) -> &'static str {
+        "SET"
+    }
 }
 
 /// Команда GET — получает значение по ключу.
@@ -47,6 +51,10 @@ impl CommandExecute for GetCommand {
             Ok(None) => Ok(Value::Null),
             Err(e) => Err(e),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GET"
     }
 }
 
@@ -74,6 +82,10 @@ impl CommandExecute for SetNxCommand {
         } else {
             Ok(Value::Int(0))
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SETNX"
     }
 }
 
@@ -103,6 +115,10 @@ impl CommandExecute for MSetCommand {
         store.mset(converted)?;
         Ok(Value::Null)
     }
+
+    fn command_name(&self) -> &'static str {
+        "MSET"
+    }
 }
 
 /// Команда MGET — получает значения по нескольким ключам одновременно.
@@ -119,17 +135,9 @@ impl CommandExecute for MGetCommand {
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        // 1. Сначала переводим все String → Sds и храним их, чтобы ссылки на них были
-        //    валидны
         let converted_keys: Vec<Sds> = self.keys.iter().map(|k| Sds::from_str(k)).collect();
-
-        // 2. Собираем Vec<&Sds> из уже существующих Sds
         let key_refs: Vec<&Sds> = converted_keys.iter().collect();
-
-        // 3. Вызываем mget, передавая &[&Sds]
         let values = store.mget(&key_refs)?;
-
-        // 4. Преобразуем Vec<Option<Value>> → Vec<Sds>, обрабатывая None/ошибки
         let vec: Vec<Sds> = values
             .into_iter()
             .map(|opt| match opt {
@@ -138,14 +146,16 @@ impl CommandExecute for MGetCommand {
                 None => Ok(Sds::from_str("")), // пустая строка для None
             })
             .collect::<Result<_, _>>()?;
-
-        // 5. Упаковываем в QuickList
         let mut list = QuickList::new(64);
         for item in vec {
             list.push_back(item);
         }
 
         Ok(Value::List(list))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "MGET"
     }
 }
 
@@ -178,6 +188,10 @@ impl CommandExecute for StrLenCommand {
         } else {
             Ok(Value::Int(0))
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "STRLEN"
     }
 }
 
@@ -223,6 +237,10 @@ impl CommandExecute for AppendCommand {
                 Ok(Value::Int(new_value.len() as i64))
             }
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "APPEND"
     }
 }
 
@@ -281,6 +299,10 @@ impl CommandExecute for GetRangeCommand {
         }
         Ok(Value::Null)
     }
+
+    fn command_name(&self) -> &'static str {
+        "GETRANGE"
+    }
 }
 
 #[cfg(test)]
@@ -292,8 +314,6 @@ mod tests {
     fn create_store() -> StorageEngine {
         StorageEngine::Memory(InMemoryStore::new())
     }
-
-    // ==================== Тесты для SET/GET ====================
 
     /// Тестирование команды `SetCommand` и `GetCommand`.
     /// Проверяется, что после установки значения с помощью `SetCommand`
@@ -335,8 +355,6 @@ mod tests {
 
         assert_eq!(result.unwrap(), Value::Null);
     }
-
-    // ==================== Тесты для SETNX ====================
 
     /// Тестирование `SetNxCommand` для отсутствующего ключа.
     /// Проверяет, что ключ устанавливается и возвращается 1.
@@ -392,8 +410,6 @@ mod tests {
         assert!(get_result.is_ok(), "GetCommand failed: {get_result:?}");
         assert_eq!(get_result.unwrap(), Value::Str(Sds::from_str("value")));
     }
-
-    // ==================== Тесты для MSET/MGET ====================
 
     /// Тестирование `MSetCommand` для установки нескольких ключей.
     /// Проверяет, что команда корректно устанавливает значения для всех ключей.
@@ -463,8 +479,6 @@ mod tests {
         assert_eq!(values, vec!["value1".to_string(), "value2".to_string()]);
     }
 
-    // ==================== Тесты для STRLEN ====================
-
     /// Тестирует, что команда `StrLenCommand` правильно возвращает длину
     /// существующей строки.
     #[test]
@@ -494,8 +508,6 @@ mod tests {
         let result = strlen_cmd.execute(&mut store).unwrap();
         assert_eq!(result, Value::Int(0));
     }
-
-    // ==================== Тесты для APPEND ====================
 
     /// Тестирует, что команда `AppendCommand` правильно добавляет данные к
     /// существующему строковому ключу.
@@ -557,8 +569,6 @@ mod tests {
         };
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(0));
     }
-
-    // ==================== Тесты для GETRANGE ====================
 
     /// Тестирует, что команда `GetRangeCommand` корректно возвращает подстроку
     /// из сохранённого значения.

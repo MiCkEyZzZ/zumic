@@ -10,9 +10,11 @@ impl CommandExecute for SubscribeCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        // Тут вызывается логика движка по подписке на каналы
-        // Например: store.pubsub_subscribe(&self.channels)
         Ok(Value::Null)
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SUBSCRIBE"
     }
 }
 
@@ -26,8 +28,11 @@ impl CommandExecute for UnsubscribeCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<Value, crate::StoreError> {
-        // Логика отписки
         Ok(Value::Null)
+    }
+
+    fn command_name(&self) -> &'static str {
+        "UNSUBSCRIBE"
     }
 }
 
@@ -42,7 +47,10 @@ impl CommandExecute for PublishCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<Value, crate::StoreError> {
-        // Логика публикации сообщения в канал
-        Ok(Value::Int(1)) // например, кол-во получателей
+        Ok(Value::Int(1))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "PUBLISH"
     }
 }

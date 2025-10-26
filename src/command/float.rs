@@ -37,6 +37,10 @@ impl CommandExecute for IncrByFloatCommand {
             }
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "INCRBYFLOAT"
+    }
 }
 
 /// Команда DECRBYFLOAT — уменьшает значение float по ключу на заданное число.
@@ -70,6 +74,10 @@ impl CommandExecute for DecrByFloatCommand {
             }
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "DECRBYFLOAT"
+    }
 }
 
 /// Команда SETFLOAT — устанавливает значение float по ключу.
@@ -91,6 +99,10 @@ impl CommandExecute for SetFloatCommand {
         let key_bytes = Sds::from_str(&self.key);
         store.set(&key_bytes, Value::Float(self.value))?;
         Ok(Value::Float(self.value))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SETFLOAT"
     }
 }
 

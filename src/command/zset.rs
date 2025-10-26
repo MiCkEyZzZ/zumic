@@ -59,6 +59,10 @@ impl CommandExecute for ZAddCommand {
         store.set(&key, Value::ZSet { dict, sorted })?;
         Ok(Value::Int(if is_new { 1 } else { 0 }))
     }
+
+    fn command_name(&self) -> &'static str {
+        "ZADD"
+    }
 }
 
 /// Команда ZREM — удаляет элемент из упорядоченного множества.
@@ -109,6 +113,10 @@ impl CommandExecute for ZRemCommand {
         // Ключа нет или тип не ZSet
         Ok(Value::Int(0))
     }
+
+    fn command_name(&self) -> &'static str {
+        "ZREM"
+    }
 }
 
 /// Команда ZSCORE — возвращает балл (score) элемента.
@@ -148,6 +156,10 @@ impl CommandExecute for ZScoreCommand {
             None => Ok(Value::Null),
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "ZSCORE"
+    }
 }
 
 /// Команда ZCARD — возвращает количество элементов в упорядоченном множестве.
@@ -175,6 +187,10 @@ impl CommandExecute for ZCardCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Int(0)),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZCARD"
     }
 }
 
@@ -230,6 +246,10 @@ impl CommandExecute for ZRangeCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Null),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZRANGE"
     }
 }
 
@@ -287,5 +307,9 @@ impl CommandExecute for ZRevRangeCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Null),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZREVRANGE"
     }
 }

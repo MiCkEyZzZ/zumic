@@ -39,6 +39,10 @@ impl CommandExecute for GeoAddCommand {
         }
         Ok(Value::Int(added))
     }
+
+    fn command_name(&self) -> &'static str {
+        "GEOADD"
+    }
 }
 
 /// Команда GEODIST — вычисляет расстояние между двумя точками.
@@ -77,6 +81,10 @@ impl CommandExecute for GetDistCommand {
             None => Ok(Value::Null),
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "GEODIST"
+    }
 }
 
 /// Команда GEOPOS — возвращает координаты для указанных точек.
@@ -114,6 +122,10 @@ impl CommandExecute for GeoPosCommand {
             }
         }
         Ok(Value::Array(result))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GEOPOS"
     }
 }
 
@@ -163,6 +175,10 @@ impl CommandExecute for GeoRadiusCommand {
             .collect();
 
         Ok(Value::Array(result))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GEORADIUS"
     }
 }
 
@@ -215,6 +231,10 @@ impl CommandExecute for GeoRadiusByMemberCommand {
             .collect();
 
         Ok(Value::Array(result))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GEORADIUSBYMEMBER"
     }
 }
 

@@ -41,6 +41,10 @@ impl CommandExecute for LPushCommand {
         store.set(&key, Value::List(list))?;
         Ok(Value::Int(len))
     }
+
+    fn command_name(&self) -> &'static str {
+        "LPUSH"
+    }
 }
 
 /// Команда RPUSH — добавляет элемент в конец списка.
@@ -78,6 +82,10 @@ impl CommandExecute for RPushCommand {
         store.set(&key, Value::List(list))?;
         Ok(Value::Int(len))
     }
+
+    fn command_name(&self) -> &'static str {
+        "RPUSH"
+    }
 }
 
 /// Команда LPOP — удаляет и возвращает первый элемент списка.
@@ -113,6 +121,10 @@ impl CommandExecute for LPopCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Null),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "LPOP"
     }
 }
 
@@ -150,6 +162,10 @@ impl CommandExecute for RPopCommand {
             None => Ok(Value::Null),
         }
     }
+
+    fn command_name(&self) -> &'static str {
+        "RPOP"
+    }
 }
 
 /// Команда LLEN — возвращает длину списка.
@@ -177,6 +193,10 @@ impl CommandExecute for LLenCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Int(0)),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "LLEN"
     }
 }
 
@@ -229,6 +249,10 @@ impl CommandExecute for LRangeCommand {
             Some(_) => Err(StoreError::InvalidType),
             None => Ok(Value::Null),
         }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "LRANGE"
     }
 }
 
