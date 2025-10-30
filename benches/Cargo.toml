@@ -1,0 +1,18 @@
+[package]
+name = "zumic-benchmark"
+version = "0.1.0"
+edition = "2021"
+description = "zumic benchmarking suite"
+license = "Apache-2.0"
+publish = false
+
+[[bench]]
+name = "zumic-benchmark"
+path = "benches/benches/float-benchmark/float.rs"
+harness = false
+
+[lints]
+workspace = true
+
+[dependencies]
+criterion = { workspace = true }

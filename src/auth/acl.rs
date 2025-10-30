@@ -6,6 +6,7 @@ use std::{
 use dashmap::DashMap;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use once_cell::sync::Lazy;
+use phf::phf_map;
 
 use crate::error::auth::AclError;
 
@@ -45,7 +46,7 @@ pub fn lookup_cmd_idx(cmd: &str) -> Option<usize> {
 }
 
 /// Список всех команд и их индексы для битовой маски.
-static COMMAND_INDEX: phf::Map<&'static str, usize> = phf::phf_map! {
+static COMMAND_INDEX: phf::Map<&'static str, usize> = phf_map! {
     "get" => 0,
     "set" => 1,
     "del" => 2,

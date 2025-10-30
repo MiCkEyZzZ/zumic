@@ -3878,8 +3878,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "zumic-fuzz"
+name = "zumic-benchmark"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
+
+[[package]]
+name = "zumic-fuzz"
+version = "0.0.0"
 dependencies = [
  "arbitrary",
  "libfuzzer-sys",
