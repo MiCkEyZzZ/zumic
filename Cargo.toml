@@ -123,6 +123,7 @@ members = [
     ".",
     "fuzz",
     "benches",
+    "zumic-error",
 ]
 
 [profile.release]
