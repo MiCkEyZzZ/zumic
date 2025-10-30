@@ -8,7 +8,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/benches/float-benchmark/float.rs"
+path = "benches/float-benchmark/float.rs"
 harness = false
 
 [lints]
