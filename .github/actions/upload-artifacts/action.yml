@@ -1,32 +1,107 @@
 name: Upload artifacts
-description: Upload artifacts
+description: Upload artifacts (copy specified files, create tar.gz, compute sha256 and upload)
 
 inputs:
   artifacts-dir:
-    description: Directory to store artifacts
+    description: Directory to store artifacts (relative to working-dir)
     required: true
   target-files:
-    description: The multiple target files to upload, separated by comma
+    description: Comma-separated list of files/paths to copy into artifacts-dir (optional)
     required: false
+    default: ""
   version:
-    description: Version of the artifact
+    description: Version of the artifact (used in filenames)
     required: true
   working-dir:
-    description: Working directory to upload the artifacts
+    description: Working directory where files are located
     required: false
-    default: .
+    default: "."
+  retention-days:
+    description: Retention days for uploaded artifacts
+    required: false
+    default: "7"
 
 runs:
   using: composite
   steps:
-    - name: Create artifacts directory
-      if: ${{ inputs.target-files != '' }}
+    - name: Prepare artifacts directory (copy target files when provided)
       working-directory: ${{ inputs.working-dir }}
       shell: bash
       run: |
-        set -e
-        mkdir -p ${{ inputs.artifacts-dir }}
-        IFS=',' read -ra FILES <<< "${{ inputs.target-files }}"
-        for file in "${FILES[@]}"; do
-          cp "$file" ${{ inputs.artifacts-dir }}/
-        done
+        set -euo pipefail
+        ART_DIR="${{ inputs.artifacts-dir }}"
+        mkdir -p "${ART_DIR}"
+
+        if [ -n "${{ inputs.target-files }}" ]; then
+          IFS=',' read -ra FILES <<< "${{ inputs.target-files }}"
+          for file in "${FILES[@]}"; do
+            # trim spaces
+            file="$(echo "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            if [ -z "$file" ]; then
+              continue
+            fi
+            if [ -e "$file" ]; then
+              cp -r "$file" "${ART_DIR}/" || true
+            else
+              echo "warning: target file not found: $file"
+            fi
+          done
+        else
+          echo "no target-files specified — assuming outputs already in ${ART_DIR}"
+        fi
+
+    - name: Create tar.gz archive
+      working-directory: ${{ inputs.working-dir }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        ART_DIR="${{ inputs.artifacts-dir }}"
+        VERSION="${{ inputs.version }}"
+        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
+        rm -f "${ARCHIVE_NAME}"
+        tar -C "${ART_DIR}" -czf "${ARCHIVE_NAME}" .
+        echo "Created archive: ${ARCHIVE_NAME}"
+
+    - name: Calculate checksum (Unix)
+      if: runner.os != 'Windows'
+      working-directory: ${{ inputs.working-dir }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        ART_DIR="${{ inputs.artifacts-dir }}"
+        VERSION="${{ inputs.version }}"
+        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
+        SHA_FILE="${ART_DIR}-${VERSION}.sha256sum"
+        if command -v shasum >/dev/null 2>&1; then
+          shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+        else
+          sha256sum "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+        fi
+        echo "Created checksum: ${SHA_FILE}"
+
+    - name: Calculate checksum (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ${{ inputs.working-dir }}
+      shell: pwsh
+      run: |
+        $art = "${{ inputs.artifacts-dir }}"
+        $v = "${{ inputs.version }}"
+        $archive = "$art-$v.tar.gz"
+        $sha = "$art-$v.sha256sum"
+        $h = Get-FileHash -Path $archive -Algorithm SHA256
+        $h.Hash | Out-File -FilePath $sha -Encoding ascii
+        Write-Host "Created checksum: $sha"
+
+    - name: Upload archive artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
+        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Upload checksum artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
+        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
+        retention-days: ${{ inputs.retention-days }}
