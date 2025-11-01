@@ -1,0 +1,65 @@
+name: Build zumic binary
+description: Build and upload the single linux artifact
+
+inputs:
+  cargo-profile:
+    description: Cargo profile to build (dev|release|nightly)
+    required: true
+  artifacts-dir:
+    description: Directory to store artifacts
+    required: true
+    default: artifacts
+  version:
+    description: Version of the artifact
+    required: true
+  working-dir:
+    description: Working directory to build the artifacts
+    required: false
+    default: .
+  disable-run-tests:
+    description: Disable running integration tests ("true"|"false")
+    required: false
+    default: "true"
+  binary-name:
+    description: Name of produced binary
+    required: false
+    default: zumic
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
+        override: true
+      shell: bash
+
+    - name: Build binary
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        PROFILE="${{ inputs.cargo-profile }}"
+        if [ "$PROFILE" = "release" ]; then
+          cargo build --release
+        elif [ "$PROFILE" = "nightly" ]; then
+          cargo +nightly build
+        else
+          cargo build
+        fi
+
+    - name: (Optional) Run tests
+      if: ${{ inputs.disable-run-tests == 'false' }}
+      shell: bash
+      run: |
+        cd "${{ inputs.working-dir }}"
+        cargo test -- --nocapture || true
+
+    - name: Upload artifacts (use shared action)
+      uses: ./.github/actions/upload-artifacts
+      with:
+        artifacts-dir: ${{ inputs.artifacts-dir }}
+        target-files: target/${{ inputs.cargo-profile == 'dev' && 'debug' || inputs.cargo-profile }}/{{ inputs.binary-name }}
+        version: ${{ inputs.version }}
+        working-dir: ${{ inputs.working-dir }}
