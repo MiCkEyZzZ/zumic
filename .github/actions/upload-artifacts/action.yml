@@ -1,0 +1,32 @@
+name: Upload artifacts
+description: Upload artifacts
+
+inputs:
+  artifacts-dir:
+    description: Directory to store artifacts
+    required: true
+  target-files:
+    description: The multiple target files to upload, separated by comma
+    required: false
+  version:
+    description: Version of the artifact
+    required: true
+  working-dir:
+    description: Working directory to upload the artifacts
+    required: false
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - name: Create artifacts directory
+      if: ${{ inputs.target-files != '' }}
+      working-directory: ${{ inputs.working-dir }}
+      shell: bash
+      run: |
+        set -e
+        mkdir -p ${{ inputs.artifacts-dir }}
+        IFS=',' read -ra FILES <<< "${{ inputs.target-files }}"
+        for file in "${FILES[@]}"; do
+          cp "$file" ${{ inputs.artifacts-dir }}/
+        done
