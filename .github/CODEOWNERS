@@ -1,5 +1,7 @@
 # Zumic CODEOWNERS
 
+# These owners will be the default owners for everything in the repo.
+
 /src/ @MiCkEyZzZ
 /src/auth/ @MiCkEyZzZ
 /.github/workflows/ @MiCkEyZzZ

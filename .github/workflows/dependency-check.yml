@@ -2,23 +2,63 @@ name: Check Dependencies
 
 on:
   pull_request:
-    branches: [master]
+    branches:
+      - master
+  schedule:
+    - cron: "0 3 * * 0" # опционально: еженедельно в воскресенье 03:00 UTC
+  workflow_dispatch: {}
 
 jobs:
-  check-crates:
+  check-dependencies:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: List dependencies
-        run: cargo tree --prefix none | awk '{print $1}' > deps.txt
+      - name: Set up Rust (stable)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-      - name: Check blacklist
+      - name: Run cargo tree
+        run: cargo tree --prefix none > dependencies.txt
+
+      - name: Extract dependency names
+        run: awk '{print $1}' dependencies.txt > dependency_names.txt
+
+      - name: Prepare normalized blacklist (remove comments/empty lines/CRLF)
         run: |
-          while read crate; do
-            if grep -qx "$crate" .github/cargo-blacklist.txt; then
-              echo "❌ Blacklisted crate: $crate"
-              exit 1
-            fi
-          done < deps.txt
-          echo "✅ OK"
+          tr -d '\r' < .github/cargo-blacklist.txt \
+            | sed 's/#.*$//' \
+            | sed '/^\s*$/d' \
+            > blacklist.norm
+
+      - name: Check for blacklisted crates (report matches)
+        run: |
+          if [ ! -s blacklist.norm ]; then
+            echo "Blacklist is empty — nothing to check."
+            exit 0
+          fi
+
+          # Find matches (intersection)
+          matches=$(grep -Fxf blacklist.norm dependency_names.txt || true)
+
+          if [ -n "$matches" ]; then
+            echo "❌ Found blacklisted dependency(ies):"
+            echo "$matches" | sed 's/^/ - /'
+            exit 1
+          fi
+
+          echo "✅ No blacklisted crates found."
+
+      # optional: run cargo-audit for CVE checks
+      - name: Run cargo-audit (optional)
+        if: always() && github.event_name != 'pull_request' # по желанию — не запускать на каждом PR
+        run: |
+          if ! command -v cargo-audit >/dev/null 2>&1; then
+            cargo install cargo-audit
+          fi
+          cargo audit || true
