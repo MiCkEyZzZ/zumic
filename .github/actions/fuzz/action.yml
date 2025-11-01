@@ -18,8 +18,18 @@ runs:
     - name: Run Fuzz Test
       shell: bash
       run: |
+        set -euo pipefail
+
+        # ensure cargo-fuzz is available
+        if ! command -v cargo-fuzz >/dev/null 2>&1; then
+          echo "cargo-fuzz not found, installing..."
+          cargo install cargo-fuzz
+        fi
+
         FUZZ_ARGS=""
         if [ "${{ inputs.unstable }}" = "true" ]; then
           FUZZ_ARGS="--features=unstable"
         fi
-        cargo fuzz run ${{ inputs.target }} --fuzz-dir fuzz -D -s none $FUZZ_ARGS -- -max_total_time=${{ inputs.max_total_time }}
+
+        # run fuzz (repo has `fuzz/` directory)
+        cargo fuzz run "${{ inputs.target }}" --fuzz-dir fuzz -D -s none $FUZZ_ARGS -- -max_total_time=${{ inputs.max_total_time }}
