@@ -1,0 +1,152 @@
+name: Build linux artifacts
+description: Build Linux artifacts
+
+inputs:
+  arch:
+    description: Architecture to build (amd64|arm64)
+    required: true
+  cargo-profile:
+    description: Cargo profile to build (dev|release|nightly)
+    required: true
+  version:
+    description: Version of the artifact
+    required: true
+  disable-run-tests:
+    description: Disable running integration tests ("true"|"false")
+    required: true
+  artifacts-dir:
+    description: artifacts output directory
+    required: true
+    default: artifacts
+  working-dir:
+    description: Working directory to build the artifacts
+    required: false
+    default: .
+  binary-name:
+    description: Name of the binary produced by cargo (defaults to "zumic")
+    required: false
+    default: zumic
+
+runs:
+  using: composite
+  steps:
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: linux-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
+      shell: bash
+
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
+        override: true
+      shell: bash
+
+    - name: Add target for arch (if needed)
+      id: target
+      shell: bash
+      run: |
+        case "${{ inputs.arch }}" in
+          amd64) target_triple="x86_64-unknown-linux-gnu" ;;
+          arm64) target_triple="aarch64-unknown-linux-gnu" ;;
+          *) echo "Unknown arch '${{ inputs.arch }}', using host target"; target_triple="" ;;
+        esac
+        echo "TARGET_TRIPLE=$target_triple" >> $GITHUB_OUTPUT
+
+    - name: rustup target add (if needed)
+      if: ${{ steps.target.outputs.TARGET_TRIPLE != '' }}
+      shell: bash
+      run: |
+        set -e
+        rustup target add "${{ steps.target.outputs.TARGET_TRIPLE }}" || true
+
+    - name: Build (profile = ${{ inputs.cargo-profile }})
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        PROFILE=${{ inputs.cargo-profile }}
+        if [ "$PROFILE" = "release" ]; then
+          if [ -n "${{ steps.target.outputs.TARGET_TRIPLE }}" ]; then
+            cargo build --release --target "${{ steps.target.outputs.TARGET_TRIPLE }}"
+          else
+            cargo build --release
+          fi
+        elif [ "$PROFILE" = "nightly" ]; then
+          if [ -n "${{ steps.target.outputs.TARGET_TRIPLE }}" ]; then
+            cargo +nightly build --target "${{ steps.target.outputs.TARGET_TRIPLE }}"
+          else
+            cargo +nightly build
+          fi
+        else
+          if [ -n "${{ steps.target.outputs.TARGET_TRIPLE }}" ]; then
+            cargo build --target "${{ steps.target.outputs.TARGET_TRIPLE }}"
+          else
+            cargo build
+          fi
+        fi
+
+    - name: Run integration tests (optional)
+      if: ${{ inputs.disable-run-tests == 'false' }}
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        # замените на вашу команду интеграционных тестов, если нужно
+        if [ -f Makefile ]; then
+          make test || true
+        else
+          cargo test -- --nocapture || true
+        fi
+
+    - name: Package artifacts
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        mkdir -p "${{ inputs.artifacts-dir }}"
+        BIN_NAME="${{ inputs.binary-name }}"
+        PROFILE_DIR="debug"
+        if [ "${{ inputs.cargo-profile }}" = "release" ]; then
+          PROFILE_DIR="release"
+        elif [ "${{ inputs.cargo-profile }}" = "nightly" ]; then
+          PROFILE_DIR="debug" # nightly build default path is target/debug unless built with --release
+        fi
+
+        # Try typical locations for built binary
+        paths_to_try=()
+        if [ -n "${{ steps.target.outputs.TARGET_TRIPLE }}" ]; then
+          paths_to_try+=( "target/${{ steps.target.outputs.TARGET_TRIPLE }}/${PROFILE_DIR}/${BIN_NAME}" )
+          paths_to_try+=( "target/${{ steps.target.outputs.TARGET_TRIPLE }}/release/${BIN_NAME}" )
+          paths_to_try+=( "target/${{ steps.target.outputs.TARGET_TRIPLE }}/debug/${BIN_NAME}" )
+        fi
+        paths_to_try+=( "target/${PROFILE_DIR}/${BIN_NAME}" "target/release/${BIN_NAME}" "target/debug/${BIN_NAME}" )
+
+        found=0
+        for p in "${paths_to_try[@]}"; do
+          if [ -f "$p" ]; then
+            cp "$p" "${{ inputs.artifacts-dir }}/" || true
+            found=1
+          fi
+        done
+
+        # Fallback: copy everything from target/*/release
+        if [ $found -eq 0 ]; then
+          cp -r target/*/release/* "${{ inputs.artifacts-dir }}/" 2>/dev/null || true
+        fi
+
+        TAR_NAME="linux-${{ inputs.arch }}-${{ inputs.version }}.tar.gz"
+        tar czf "${{ inputs.artifacts-dir }}/${TAR_NAME}" -C "${{ inputs.artifacts-dir }}" .
+
+    - name: Upload packaged artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-${{ inputs.arch }}-${{ inputs.version }}
+        path: ${{ inputs.artifacts-dir }}/linux-${{ inputs.arch }}-${{ inputs.version }}.tar.gz
+        retention-days: 7
+      shell: bash

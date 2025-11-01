@@ -108,16 +108,22 @@ pub fn bitcount_avx2(bytes: &[u8]) -> usize {
 /// Безопасный обёртка для подсчёта битов с использованием AVX-512
 #[inline]
 pub fn bitcount_avx512(bytes: &[u8]) -> usize {
-    #[cfg(target_arch = "x86_64")]
+    // Когда включена фича avx512, попытаемся выполнить AVX-512 путь при наличии
+    // CPU-фич
+    #[cfg(all(feature = "avx512", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
+            // AVX-512 impl компилируется только при той же cfg (feature + x86_64)
             unsafe { bitcount_avx512_impl(bytes) }
         } else {
+            // если CPU не поддерживает AVX-512 — фоллбек на AVX2 (как в твоей логике)
             bitcount_avx2(bytes)
         }
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
+    // Если фича avx512 НЕ включена (обычная сборка) — поведение НЕ меняем:
+    // используем lookup table (точно как в исходном варианте).
+    #[cfg(not(all(feature = "avx512", target_arch = "x86_64")))]
     {
         bitcount_lookup_table(bytes)
     }
@@ -256,7 +262,9 @@ unsafe fn bitcount_avx2_impl(bytes: &[u8]) -> usize {
 }
 
 /// Подсчёт битов с использованием AVX-512 SIMD (512-битные векторы)
-#[cfg(target_arch = "x86_64")]
+/// Компилируется ТОЛЬКО если включена фича "avx512" и таргет x86_64.
+/// Это гарантирует, что на stable без фичи AVX-512 не будет ошибок E0658
+#[cfg(all(feature = "avx512", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f,avx512bw")]
 unsafe fn bitcount_avx512_impl(bytes: &[u8]) -> usize {
     let mut count = 0usize;

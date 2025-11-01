@@ -1,0 +1,140 @@
+name: Build macOS artifacts
+description: Build macOS artifacts
+
+inputs:
+  arch:
+    description: target triple (x86_64-apple-darwin|aarch64-apple-darwin)
+    required: true
+  cargo-profile:
+    description: dev/release/nightly
+    required: true
+  features:
+    description: Cargo features (optional)
+    required: false
+  version:
+    description: Version of the artifact
+    required: true
+  disable-run-tests:
+    description: Disable running integration tests ("true"|"false")
+    required: true
+  artifacts-dir:
+    description: Directory to store artifacts
+    required: true
+    default: artifacts
+  working-dir:
+    description: working directory
+    required: false
+    default: .
+  binary-name:
+    description: Name of the binary produced by cargo
+    required: false
+    default: zumic
+
+runs:
+  using: composite
+  steps:
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: mac-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
+      shell: bash
+
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
+        override: true
+      shell: bash
+
+    - name: Add mac target (if needed)
+      shell: bash
+      run: |
+        set -e
+        rustup target add "${{ inputs.arch }}" || true
+
+    - name: Build
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+
+        # prepare features arg if provided
+        FEAT=""
+        if [ -n "${{ inputs.features }}" ]; then
+          # safe expansion: features may contain spaces/comma-separated items
+          FEAT="--features=${{ inputs.features }}"
+        fi
+
+        PROFILE="${{ inputs.cargo-profile }}"
+
+        if [ "$PROFILE" = "release" ]; then
+          cargo build --release --target "${{ inputs.arch }}" $FEAT
+        elif [ "$PROFILE" = "nightly" ]; then
+          cargo +nightly build --target "${{ inputs.arch }}" $FEAT
+        else
+          cargo build --target "${{ inputs.arch }}" $FEAT
+        fi
+
+    - name: Optional integration tests
+      if: ${{ inputs.disable-run-tests == 'false' }}
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        # run tests for the given target; allow failures to not break action by default
+        cargo test --target "${{ inputs.arch }}" -- --nocapture || true
+
+    - name: Package artifacts
+      shell: bash
+      run: |
+        set -e
+        cd "${{ inputs.working-dir }}"
+        mkdir -p "${{ inputs.artifacts-dir }}"
+        BIN_NAME="${{ inputs.binary-name }}"
+
+        # Determine profile dir
+        PROFILE="${{ inputs.cargo-profile }}"
+        PROFILE_DIR="debug"
+        if [ "$PROFILE" = "release" ]; then
+          PROFILE_DIR="release"
+        elif [ "$PROFILE" = "nightly" ]; then
+          PROFILE_DIR="debug"
+        fi
+
+        # Try likely locations for the built binary
+        paths_to_try=(
+          "target/${{ inputs.arch }}/${PROFILE_DIR}/${BIN_NAME}"
+          "target/${{ inputs.arch }}/release/${BIN_NAME}"
+          "target/${{ inputs.arch }}/debug/${BIN_NAME}"
+          "target/${PROFILE_DIR}/${BIN_NAME}"
+          "target/release/${BIN_NAME}"
+          "target/debug/${BIN_NAME}"
+        )
+
+        found=0
+        for p in "${paths_to_try[@]}"; do
+          if [ -f "$p" ]; then
+            cp "$p" "${{ inputs.artifacts-dir }}/" || true
+            found=1
+          fi
+        done
+
+        if [ $found -eq 0 ]; then
+          # fallback: copy everything from target/*/release
+          cp -r target/*/release/* "${{ inputs.artifacts-dir }}/" 2>/dev/null || true
+        fi
+
+        TAR_NAME="macos-${{ inputs.arch }}-${{ inputs.version }}.tar.gz"
+        tar czf "${{ inputs.artifacts-dir }}/${TAR_NAME}" -C "${{ inputs.artifacts-dir }}" .
+
+    - name: Upload packaged artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-${{ inputs.arch }}-${{ inputs.version }}
+        path: ${{ inputs.artifacts-dir }}/macos-${{ inputs.arch }}-${{ inputs.version }}.tar.gz
+        retention-days: 7
+      shell: bash

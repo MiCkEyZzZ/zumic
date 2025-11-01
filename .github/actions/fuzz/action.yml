@@ -1,0 +1,25 @@
+name: Fuzz
+description: "Fuzz test given setup and service"
+
+inputs:
+  target:
+    description: "The fuzz target to test"
+    required: true
+  max_total_time:
+    description: "Max total time(secs)"
+    required: true
+  unstable:
+    default: "false"
+    description: "Enable unstable feature"
+
+runs:
+  using: composite
+  steps:
+    - name: Run Fuzz Test
+      shell: bash
+      run: |
+        FUZZ_ARGS=""
+        if [ "${{ inputs.unstable }}" = "true" ]; then
+          FUZZ_ARGS="--features=unstable"
+        fi
+        cargo fuzz run ${{ inputs.target }} --fuzz-dir fuzz -D -s none $FUZZ_ARGS -- -max_total_time=${{ inputs.max_total_time }}

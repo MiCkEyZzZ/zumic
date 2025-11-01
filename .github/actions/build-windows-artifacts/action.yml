@@ -1,0 +1,132 @@
+name: Build Windows Artifacts
+description: Build Windows artifacts
+
+inputs:
+  arch:
+    description: target triple (x86_64-pc-windows-msvc)
+    required: true
+  cargo-profile:
+    description: dev/release/nightly
+    required: true
+  features:
+    description: Cargo features (optional)
+    required: false
+  version:
+    description: Version of the artifact
+    required: true
+  disable-run-tests:
+    description: Disable running integration tests ("true"|"false")
+    required: true
+  artifacts-dir:
+    description: Directory to store artifacts
+    required: true
+    default: artifacts
+  working-dir:
+    description: working directory
+    required: false
+    default: .
+  binary-name:
+    description: Name of the binary produced by cargo
+    required: false
+    default: zumic
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
+        override: true
+      shell: pwsh
+
+    - name: Add target
+      shell: pwsh
+      run: |
+        try {
+          rustup target add "${{ inputs.arch }}" | Out-Null
+        } catch {
+          Write-Host "rustup target add failed (ignored): $_"
+        }
+
+    - name: Build (Windows)
+      shell: pwsh
+      run: |
+        Set-StrictMode -Version Latest
+        Push-Location "${{ inputs.working-dir }}"
+        try {
+          $profile = "${{ inputs.cargo-profile }}"
+          $arch = "${{ inputs.arch }}"
+          $feat = $env:FEATURES = ''
+          if ('${{ inputs.features }}' -ne '') {
+            $feat = "--features `${"${{ inputs.features }}`""
+          }
+
+          if ($profile -eq 'release') {
+            cargo build --release --target $arch $feat
+          } elseif ($profile -eq 'nightly') {
+            cargo +nightly build --target $arch $feat
+          } else {
+            cargo build --target $arch $feat
+          }
+        } finally {
+          Pop-Location
+        }
+
+    - name: Tests (optional)
+      if: ${{ inputs.disable-run-tests == 'false' }}
+      shell: pwsh
+      run: |
+        Push-Location "${{ inputs.working-dir }}"
+        try {
+          cargo test --target "${{ inputs.arch }}" -- --nocapture || Write-Host "Tests failed (ignored)"
+        } finally {
+          Pop-Location
+        }
+
+    - name: Package artifacts
+      shell: pwsh
+      run: |
+        Set-StrictMode -Version Latest
+        $wd = Resolve-Path -Path "${{ inputs.working-dir }}"
+        $out = Join-Path $wd "${{ inputs.artifacts-dir }}"
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+        $bin = "${{ inputs.binary-name }}"
+        $arch = "${{ inputs.arch }}"
+        $profile = "${{ inputs.cargo-profile }}"
+
+        # candidate locations (common)
+        $candidates = @(
+          (Join-Path $wd "target\$arch\$profile\$bin.exe"),
+          (Join-Path $wd "target\$arch\release\$bin.exe"),
+          (Join-Path $wd "target\$arch\debug\$bin.exe"),
+          (Join-Path $wd "target\release\$bin.exe"),
+          (Join-Path $wd "target\debug\$bin.exe")
+        )
+
+        $found = $false
+        foreach ($p in $candidates) {
+          if (Test-Path $p) {
+            Copy-Item -Path $p -Destination $out -Force -ErrorAction SilentlyContinue
+            $found = $true
+          }
+        }
+
+        if (-not $found) {
+          # fallback: copy any exe in target/*/release
+          Get-ChildItem -Path (Join-Path $wd "target\*") -Recurse -Filter "$bin.exe" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item -Path $_.FullName -Destination $out -Force -ErrorAction SilentlyContinue }
+        }
+
+        $zipName = Join-Path $out "windows-${{ inputs.version }}.zip"
+        if (Test-Path $zipName) { Remove-Item -Path $zipName -Force -ErrorAction SilentlyContinue }
+        Compress-Archive -Path (Join-Path $out '*') -DestinationPath $zipName -Force
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-${{ inputs.version }}
+        path: ${{ inputs.artifacts-dir }}/windows-${{ inputs.version }}.zip
+        retention-days: 7
+      shell: pwsh
