@@ -12,6 +12,10 @@ inputs:
   version:
     description: Version of the artifact (used in filenames)
     required: true
+  archive-prefix:
+    description: Optional prefix for archive name (e.g. "zumic"). If set, archive will be "<prefix>-<version>.tar.gz"
+    required: false
+    default: ""
   working-dir:
     description: Working directory where files are located
     required: false
@@ -57,8 +61,23 @@ runs:
         set -euo pipefail
         ART_DIR="${{ inputs.artifacts-dir }}"
         VERSION="${{ inputs.version }}"
-        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
-        rm -f "${ARCHIVE_NAME}"
+        PREFIX="${{ inputs.archive-prefix }}"
+
+        # Determine archive basename:
+        if [ -n "$PREFIX" ]; then
+          ARCHIVE_BASE="${PREFIX}-${VERSION}"
+        else
+          # fallback to using the artifacts dir name as base
+          # strip any trailing slashes from ART_DIR for cleanliness
+          CLEAN_ART_DIR=$(basename "${ART_DIR%/}")
+          ARCHIVE_BASE="${CLEAN_ART_DIR}-${VERSION}"
+        fi
+
+        ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz"
+        SHA_FILE="${ARCHIVE_BASE}.sha256sum"
+
+        rm -f "${ARCHIVE_NAME}" "${SHA_FILE}"
+        # create archive containing contents of ART_DIR (files at archive root)
         tar -C "${ART_DIR}" -czf "${ARCHIVE_NAME}" .
         echo "Created archive: ${ARCHIVE_NAME}"
 
@@ -68,10 +87,19 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        ART_DIR="${{ inputs.artifacts-dir }}"
         VERSION="${{ inputs.version }}"
-        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
-        SHA_FILE="${ART_DIR}-${VERSION}.sha256sum"
+        PREFIX="${{ inputs.archive-prefix }}"
+
+        if [ -n "$PREFIX" ]; then
+          ARCHIVE_BASE="${PREFIX}-${VERSION}"
+        else
+          CLEAN_ART_DIR=$(basename "${{ inputs.artifacts-dir%/ }}")
+          ARCHIVE_BASE="${CLEAN_ART_DIR}-${VERSION}"
+        fi
+
+        ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz"
+        SHA_FILE="${ARCHIVE_BASE}.sha256sum"
+
         if command -v shasum >/dev/null 2>&1; then
           shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
         else
@@ -84,10 +112,16 @@ runs:
       working-directory: ${{ inputs.working-dir }}
       shell: pwsh
       run: |
-        $art = "${{ inputs.artifacts-dir }}"
+        $prefix = "${{ inputs.archive-prefix }}"
         $v = "${{ inputs.version }}"
-        $archive = "$art-$v.tar.gz"
-        $sha = "$art-$v.sha256sum"
+        if ($prefix -ne "") {
+          $base = "$prefix-$v"
+        } else {
+          $ad = "${{ inputs.artifacts-dir }}".TrimEnd('\','/')
+          $base = ([IO.Path]::GetFileName($ad)) + "-$v"
+        }
+        $archive = "$base.tar.gz"
+        $sha = "$base.sha256sum"
         $h = Get-FileHash -Path $archive -Algorithm SHA256
         $h.Hash | Out-File -FilePath $sha -Encoding ascii
         Write-Host "Created checksum: $sha"
@@ -95,13 +129,13 @@ runs:
     - name: Upload archive artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
-        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
+        name: ${{ inputs.archive-prefix != '' && format('{0}-{1}.tar.gz', inputs.archive-prefix, inputs.version) || format('{0}-{1}.tar.gz', basename(inputs.artifacts-dir), inputs.version) }}
+        path: ${{ inputs.working-dir }}/${{ inputs.archive-prefix != '' && (inputs.archive-prefix + '-' + inputs.version + '.tar.gz') || ( (inputs.artifacts-dir | split('/'))[-1] + '-' + inputs.version + '.tar.gz' ) }}
         retention-days: ${{ inputs.retention-days }}
 
     - name: Upload checksum artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
-        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
+        name: ${{ inputs.archive-prefix != '' && format('{0}-{1}.sha256sum', inputs.archive-prefix, inputs.version) || format('{0}-{1}.sha256sum', basename(inputs.artifacts-dir), inputs.version) }}
+        path: ${{ inputs.working-dir }}/${{ inputs.archive-prefix != '' && (inputs.archive-prefix + '-' + inputs.version + '.sha256sum') || ( (inputs.artifacts-dir | split('/'))[-1] + '-' + inputs.version + '.sha256sum' ) }}
         retention-days: ${{ inputs.retention-days }}

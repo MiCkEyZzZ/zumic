@@ -1,0 +1,241 @@
+on:
+  schedule:
+    - cron: "0 15 * * 1-5"
+  merge_group:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "docs/**"
+      - "book/**"
+      - "config/**"
+      - "**.md"
+      - ".dockerignore"
+      - "docker/**"
+      - ".gitignore"
+      - "grafana/**"
+      - "Makefile"
+  workflow_dispatch:
+
+name: CI
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  ARTIFACTS_DIR: artifacts
+  BUILD_VERSION: ci-${{ github.sha }}
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  dependency-check:
+    name: Dependency check
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Rust (stable)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Run cargo tree
+        run: cargo tree --prefix none > dependencies.txt
+      - name: Extract dependency names
+        run: awk '{print $1}' dependencies.txt > dependency_names.txt
+      - name: Prepare normalized blacklist (remove comments/empty lines)
+        run: |
+          tr -d '\r' < .github/cargo-blacklist.txt \
+            | sed 's/#.*$//' \
+            | sed '/^\s*$/d' \
+            > blacklist.norm
+      - name: Check for blacklisted crates (report matches)
+        run: |
+          if [ ! -s blacklist.norm ]; then
+            echo "Blacklist is empty — nothing to check."
+            exit 0
+          fi
+          matches=$(grep -Fxf blacklist.norm dependency_names.txt || true)
+          if [ -n "$matches" ]; then
+            echo "❌ Found blacklisted dependency(ies):"
+            echo "$matches" | sed 's/^/ - /'
+            exit 1
+          fi
+          echo "✅ No blacklisted crates found."
+
+  build-linux-amd64:
+    name: Build linux (amd64)
+    runs-on: ubuntu-latest
+    needs: dependency-check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build linux amd64 artifact
+        uses: ./.github/actions/build-linux-artifacts
+        with:
+          arch: amd64
+          cargo-profile: dev
+          version: ${{ env.BUILD_VERSION }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+  build-linux-arm64:
+    name: Build linux (arm64)
+    runs-on: ubuntu-latest
+    needs: dependency-check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build linux arm64 artifact
+        uses: ./.github/actions/build-linux-artifacts
+        with:
+          arch: arm64
+          cargo-profile: dev
+          version: ${{ env.BUILD_VERSION }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: dependency-check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build macOS artifact
+        uses: ./.github/actions/build-macos-artifacts
+        with:
+          arch: x86_64-apple-darwin
+          cargo-profile: dev
+          version: ${{ env.BUILD_VERSION }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: dependency-check
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Windows artifact
+        uses: ./.github/actions/build-windows-artifacts
+        with:
+          arch: x86_64-pc-windows-msvc
+          cargo-profile: dev
+          version: ${{ env.BUILD_VERSION }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+  gather-and-upload:
+    name: Gather artifacts & upload combined archive
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-macos
+      - build-windows
+    steps:
+      - name: Create combined artifacts dir
+        run: |
+          mkdir -p combined_artifacts
+
+      - name: Download linux-amd64 artifact (if any)
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-${{ env.BUILD_VERSION }}
+          path: combined_artifacts
+        continue-on-error: true
+
+      - name: Download linux-arm64 artifact (if any)
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arm64-${{ env.BUILD_VERSION }}
+          path: combined_artifacts
+        continue-on-error: true
+
+      - name: Download macos artifact (if any)
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-x86_64-apple-darwin-${{ env.BUILD_VERSION }}
+          path: combined_artifacts
+        continue-on-error: true
+
+      - name: Download windows artifact (if any)
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-${{ env.BUILD_VERSION }}
+          path: combined_artifacts
+        continue-on-error: true
+
+      - name: List combined_artifacts (debug)
+        run: |
+          echo "combined_artifacts contents:"
+          ls -la combined_artifacts || true
+
+      - name: Check combined_artifacts non-empty
+        id: check_combined
+        run: |
+          if [ -z "$(ls -A combined_artifacts 2>/dev/null)" ]; then
+            echo "No artifacts found; will skip upload-artifacts composite."
+            echo "SKIP_UPLOAD=true" >> $GITHUB_ENV
+          else
+            echo "SKIP_UPLOAD=false" >> $GITHUB_ENV
+          fi
+
+      - name: Run upload-artifacts composite (create tar + sha)
+        if: env.SKIP_UPLOAD != 'true'
+        uses: ./.github/actions/upload-artifacts
+        with:
+          artifacts-dir: combined_artifacts
+          target-files: ""
+          version: ${{ env.BUILD_VERSION }}
+          archive-prefix: zumic
+          working-dir: .
+          retention-days: "7"
+
+      - name: Notice about skipped upload (no artifacts)
+        if: env.SKIP_UPLOAD == 'true'
+        run: echo "No artifacts were produced by platform builds — upload skipped."
+
+  fuzztest:
+    name: Fuzz tests
+    runs-on: ubuntu-latest
+    needs: gather-and-upload
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly and cargo-fuzz
+        shell: bash
+        run: |
+          rustup toolchain install nightly || true
+          cargo +nightly install cargo-fuzz --force || true
+
+      - name: (Optional) download built binaries (if fuzz needs them)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.ARTIFACTS_DIR }}-${{ env.BUILD_VERSION }}.tar.gz
+          path: ./fuzz_inputs
+        continue-on-error: true
+
+      - name: Run fuzz action
+        uses: ./.github/actions/fuzz
+        with:
+          target: decode_value
+          max_total_time: "120"
+          unstable: "false"
