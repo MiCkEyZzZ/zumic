@@ -145,8 +145,12 @@ runs:
           cp -r target/*/release/* "${{ inputs.artifacts-dir }}/" 2>/dev/null || true
         fi
 
+        # Create archive using temporary directory to avoid "file changed" error
         TAR_NAME="linux-${{ inputs.arch }}-${{ inputs.version }}.tar.gz"
-        tar czf "${{ inputs.artifacts-dir }}/${TAR_NAME}" -C "${{ inputs.artifacts-dir }}" .
+        TEMP_DIR=$(mktemp -d)
+        cp -a "${{ inputs.artifacts-dir }}/." "$TEMP_DIR/" || true
+        tar czf "${{ inputs.artifacts-dir }}/${TAR_NAME}" -C "$TEMP_DIR" .
+        rm -rf "$TEMP_DIR"
 
     - name: Upload packaged artifact
       uses: actions/upload-artifact@v4

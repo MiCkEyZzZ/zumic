@@ -1,6 +1,5 @@
 name: Build Windows Artifacts
 description: Build Windows artifacts
-
 inputs:
   arch:
     description: target triple (x86_64-pc-windows-msvc)
@@ -29,7 +28,6 @@ inputs:
     description: Name of the binary produced by cargo
     required: false
     default: zumic
-
 runs:
   using: composite
   steps:
@@ -38,7 +36,6 @@ runs:
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-
     - name: Add target
       shell: pwsh
       run: |
@@ -47,7 +44,6 @@ runs:
         } catch {
           Write-Host "rustup target add failed (ignored): $_"
         }
-
     - name: Build (Windows)
       shell: pwsh
       env:
@@ -58,23 +54,36 @@ runs:
         try {
           $profile = "${{ inputs.cargo-profile }}"
           $arch = "${{ inputs.arch }}"
-          $featArg = ""
-          if ($env:FEATURES -ne "") {
-            # pass features as single argument
-            $featArg = "--features " + $env:FEATURES
+          $buildArgs = @('build')
+
+          # Add profile flag
+          if ($profile -eq 'release') {
+            $buildArgs += '--release'
           }
 
-          if ($profile -eq 'release') {
-            cargo build --release --target $arch $featArg
-          } elseif ($profile -eq 'nightly') {
-            cargo +nightly build --target $arch $featArg
+          # Add target
+          $buildArgs += '--target'
+          $buildArgs += $arch
+
+          # Add features if provided
+          if ($env:FEATURES -and $env:FEATURES -ne "") {
+            $buildArgs += '--features'
+            $buildArgs += $env:FEATURES
+          }
+
+          # Execute build with proper argument array
+          if ($profile -eq 'nightly') {
+            & cargo +nightly @buildArgs
           } else {
-            cargo build --target $arch $featArg
+            & cargo @buildArgs
+          }
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cargo build failed with exit code $LASTEXITCODE"
           }
         } finally {
           Pop-Location
         }
-
     - name: Tests (optional)
       if: ${{ inputs.disable-run-tests == 'false' }}
       shell: pwsh
@@ -85,7 +94,6 @@ runs:
         } finally {
           Pop-Location
         }
-
     - name: Package artifacts
       shell: pwsh
       run: |
@@ -93,11 +101,9 @@ runs:
         $wd = Resolve-Path -Path "${{ inputs.working-dir }}"
         $out = Join-Path $wd "${{ inputs.artifacts-dir }}"
         New-Item -ItemType Directory -Force -Path $out | Out-Null
-
         $bin = "${{ inputs.binary-name }}"
         $arch = "${{ inputs.arch }}"
         $profile = "${{ inputs.cargo-profile }}"
-
         $candidates = @(
           (Join-Path $wd "target\$arch\$profile\$bin.exe"),
           (Join-Path $wd "target\$arch\release\$bin.exe"),
@@ -105,7 +111,6 @@ runs:
           (Join-Path $wd "target\release\$bin.exe"),
           (Join-Path $wd "target\debug\$bin.exe")
         )
-
         $found = $false
         foreach ($p in $candidates) {
           if (Test-Path $p) {
@@ -113,16 +118,13 @@ runs:
             $found = $true
           }
         }
-
         if (-not $found) {
           Get-ChildItem -Path (Join-Path $wd "target\*") -Recurse -Filter "$bin.exe" -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item -Path $_.FullName -Destination $out -Force -ErrorAction SilentlyContinue }
         }
-
         $zipName = Join-Path $out "windows-${{ inputs.version }}.zip"
         if (Test-Path $zipName) { Remove-Item -Path $zipName -Force -ErrorAction SilentlyContinue }
         Compress-Archive -Path (Join-Path $out '*') -DestinationPath $zipName -Force
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
