@@ -129,8 +129,10 @@ avx512 = []
 [workspace]
 members = [
     ".",
-    "fuzz",
     "benches",
+]
+exclude = [
+    "fuzz",
 ]
 
 [profile.release]
