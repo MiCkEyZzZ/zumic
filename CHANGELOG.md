@@ -117,6 +117,8 @@
   - Добавил `actions`: `build-linux-artifacts`, `build-macos-artifacts`, `build-windows-artifacts`, `build-zumic-binary`, `fuzz`, `upload-artifacts`
 - **zumic**
   - Добавил отдельный крейт для обработки ошибок: `zumic-error`
+- **scripts**
+  - Добавил дополнительный скрипт для `prepare-release.sh`
 
 ### Изменено
 
@@ -149,7 +151,16 @@
     - Опционально запускается `cargo-audit` для проверки CVE, но не на каждом PR.
     - Workflow теперь триггерится не только на PR, но и по расписанию (`cron`) и вручную (`workflow_dispatch`).
     - Повышена стабильность и читаемость скрипта, улучшено логирование результатов проверки зависимостей.
-
+- **Makefile**
+  - Добавлены новые CI/CD команды: `make ci-local`, `make simulate-ci`, `make test-ci`
+  - Добавлены улучшенные fuzz команды: `make fuzz`, `make fuzz-quick`, `make fuzz-long`, `make fuzz-build`, `make fuzz-clean`, `make fuzz-target TARGET=decode_value MINUTES=10`
+  - Добавлен улучшенный процесс релиза: `make prepare-release VERSION=v0.5.0`, `make release-all `, `make git-release VERSION=v0.5.0`
+  - Добавлена мультиплатформенная сборка: `make build-all-platforms`
+- **scripts**
+  - Добавил улучшения для `run_fuzz.sh`: `красивый вывод с рамками и иконками`,
+  `автоустановка cargo-fuzz если отсутствует`, `подсчёт артефактов и крашей`, `показывает последние 10 строк лога`, `правильные коды выхода`, `работает из директории fuzz (избегает путаницы с путями)`
+- **github/workflows**
+  - Добавил улучшения сборки для релиза: `мультиплатформенная сборка`, `использование composite actions`, `автоматические SHA256 чексуммы`, `извлечение changelog`
 
 ### Исправлено
 

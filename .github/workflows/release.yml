@@ -1,33 +1,208 @@
 name: Release
+
 permissions:
   contents: write
+
 on:
   push:
     tags:
-      - "v*.*.*" # Запускать только на пуш тега вида v1.2.3
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g., v1.0.0)"
+        required: true
+        type: string
+
+env:
+  ARTIFACTS_DIR: artifacts
+
 jobs:
-  build-and-release:
+  create-release:
+    name: Create Release
     runs-on: ubuntu-latest
-    env:
-      TARGET: x86_64-unknown-linux-gnu # замените, если другой таргет
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build release
-        run: cargo build --release --target $TARGET
-
-      - name: Package binary
+      - name: Extract version
+        id: version
         run: |
-          TARGET_DIR=target/${TARGET}/release
-          mkdir dist
-          ls -l $TARGET_DIR
-          cp $TARGET_DIR/zumic dist/
-          cd dist
-          tar czf zumic-${GITHUB_REF_NAME}.tar.gz zumic
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            # Extract changelog for this version
+            sed -n "/## \[${{ steps.version.outputs.version }}\]/,/## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+          else
+            echo "Release ${{ steps.version.outputs.version }}" > release_notes.md
+          fi
 
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/zumic-${GITHUB_REF_NAME}.tar.gz
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-amd64:
+    name: Build Linux (amd64)
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release artifact
+        uses: ./.github/actions/build-linux-artifacts
+        with:
+          arch: amd64
+          cargo-profile: release
+          version: ${{ needs.create-release.outputs.version }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACTS_DIR }}/linux-amd64-${{ needs.create-release.outputs.version }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-arm64:
+    name: Build Linux (arm64)
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release artifact
+        uses: ./.github/actions/build-linux-artifacts
+        with:
+          arch: arm64
+          cargo-profile: release
+          version: ${{ needs.create-release.outputs.version }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACTS_DIR }}/linux-arm64-${{ needs.create-release.outputs.version }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release artifact
+        uses: ./.github/actions/build-macos-artifacts
+        with:
+          arch: x86_64-apple-darwin
+          cargo-profile: release
+          version: ${{ needs.create-release.outputs.version }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACTS_DIR }}/macos-${{ needs.create-release.outputs.version }}.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release artifact
+        uses: ./.github/actions/build-windows-artifacts
+        with:
+          arch: x86_64-pc-windows-msvc
+          cargo-profile: release
+          version: ${{ needs.create-release.outputs.version }}
+          disable-run-tests: "true"
+          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
+          working-dir: .
+          binary-name: zumic
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACTS_DIR }}/windows-${{ needs.create-release.outputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-checksums:
+    name: Publish checksums
+    runs-on: ubuntu-latest
+    needs:
+      - create-release
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-macos
+      - build-windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Generate checksums
+        run: |
+          cd release-artifacts
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: release-artifacts/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-release:
+    name: Notify release completion
+    runs-on: ubuntu-latest
+    needs:
+      - create-release
+      - publish-checksums
+    steps:
+      - name: Release summary
+        run: |
+          echo "✅ Release ${{ needs.create-release.outputs.version }} completed successfully!"
+          echo "Download: https://github.com/${{ github.repository }}/releases/tag/${{ needs.create-release.outputs.version }}"
