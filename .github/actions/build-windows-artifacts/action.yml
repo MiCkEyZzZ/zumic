@@ -38,7 +38,6 @@ runs:
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: pwsh
 
     - name: Add target
       shell: pwsh
@@ -99,7 +98,6 @@ runs:
         $arch = "${{ inputs.arch }}"
         $profile = "${{ inputs.cargo-profile }}"
 
-        # candidate locations (common)
         $candidates = @(
           (Join-Path $wd "target\$arch\$profile\$bin.exe"),
           (Join-Path $wd "target\$arch\release\$bin.exe"),
@@ -117,7 +115,6 @@ runs:
         }
 
         if (-not $found) {
-          # fallback: copy any exe in target/*/release
           Get-ChildItem -Path (Join-Path $wd "target\*") -Recurse -Filter "$bin.exe" -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item -Path $_.FullName -Destination $out -Force -ErrorAction SilentlyContinue }
         }

@@ -38,14 +38,12 @@ runs:
           ~/.cargo/git
           target
         key: linux-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
-      shell: bash
 
     - name: Setup Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: bash
 
     - name: Add target for arch (if needed)
       id: target
@@ -66,14 +64,12 @@ runs:
         rustup target add "${{ steps.target.outputs.TARGET_TRIPLE }}" || true
 
     - name: Install aarch64 cross-compiler on ubuntu runners (if needed)
-      # install only when building for aarch64 to allow building zstd-sys and other C crates
       if: ${{ steps.target.outputs.TARGET_TRIPLE != '' && contains(steps.target.outputs.TARGET_TRIPLE, 'aarch64') }}
       shell: bash
       run: |
         set -e
         echo "Installing cross-compiler for aarch64 target..."
         sudo apt-get update -qq
-        # package present on GitHub ubuntu runners; if not found it will fail but we attempt
         sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross || true
         echo "Cross-compiler installation step finished (errors ignored if package missing)."
 
@@ -109,7 +105,6 @@ runs:
       run: |
         set -e
         cd "${{ inputs.working-dir }}"
-        # замените на вашу команду интеграционных тестов, если нужно
         if [ -f Makefile ]; then
           make test || true
         else
@@ -127,10 +122,9 @@ runs:
         if [ "${{ inputs.cargo-profile }}" = "release" ]; then
           PROFILE_DIR="release"
         elif [ "${{ inputs.cargo-profile }}" = "nightly" ]; then
-          PROFILE_DIR="debug" # nightly build default path is target/debug unless built with --release
+          PROFILE_DIR="debug"
         fi
 
-        # Try typical locations for built binary
         paths_to_try=()
         if [ -n "${{ steps.target.outputs.TARGET_TRIPLE }}" ]; then
           paths_to_try+=( "target/${{ steps.target.outputs.TARGET_TRIPLE }}/${PROFILE_DIR}/${BIN_NAME}" )
@@ -147,7 +141,6 @@ runs:
           fi
         done
 
-        # Fallback: copy everything from target/*/release
         if [ $found -eq 0 ]; then
           cp -r target/*/release/* "${{ inputs.artifacts-dir }}/" 2>/dev/null || true
         fi
