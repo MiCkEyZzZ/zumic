@@ -134,6 +134,8 @@ jobs:
       - build-linux-arm64
       - build-macos
     steps:
+      - uses: actions/checkout@v4
+
       - name: Create combined artifacts dir
         run: |
           mkdir -p combined_artifacts
@@ -205,7 +207,7 @@ jobs:
       - name: (Optional) download built binaries (if fuzz needs them)
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.ARTIFACTS_DIR }}-${{ env.BUILD_VERSION }}.tar.gz
+          name: zumic-${{ env.BUILD_VERSION }}.tar.gz
           path: ./fuzz_inputs
         continue-on-error: true
 
