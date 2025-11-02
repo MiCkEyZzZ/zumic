@@ -38,7 +38,6 @@ runs:
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: pwsh
 
     - name: Add target
       shell: pwsh
@@ -129,4 +128,3 @@ runs:
         name: windows-${{ inputs.version }}
         path: ${{ inputs.artifacts-dir }}/windows-${{ inputs.version }}.zip
         retention-days: 7
-      shell: pwsh

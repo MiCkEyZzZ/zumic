@@ -38,14 +38,12 @@ runs:
           ~/.cargo/git
           target
         key: linux-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
-      shell: bash
 
     - name: Setup Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: bash
 
     - name: Add target for arch (if needed)
       id: target
@@ -149,4 +147,3 @@ runs:
         name: linux-${{ inputs.arch }}-${{ inputs.version }}
         path: ${{ inputs.artifacts-dir }}/linux-${{ inputs.arch }}-${{ inputs.version }}.tar.gz
         retention-days: 7
-      shell: bash

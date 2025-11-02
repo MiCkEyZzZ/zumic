@@ -33,7 +33,6 @@ runs:
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: bash
 
     - name: Build binary
       shell: bash
