@@ -126,23 +126,6 @@ jobs:
           working-dir: .
           binary-name: zumic
 
-  build-windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: dependency-check
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build Windows artifact
-        uses: ./.github/actions/build-windows-artifacts
-        with:
-          arch: x86_64-pc-windows-msvc
-          cargo-profile: dev
-          version: ${{ env.BUILD_VERSION }}
-          disable-run-tests: "true"
-          artifacts-dir: ${{ env.ARTIFACTS_DIR }}
-          working-dir: .
-          binary-name: zumic
-
   gather-and-upload:
     name: Gather artifacts & upload combined archive
     runs-on: ubuntu-latest
@@ -150,7 +133,6 @@ jobs:
       - build-linux-amd64
       - build-linux-arm64
       - build-macos
-      - build-windows
     steps:
       - name: Create combined artifacts dir
         run: |
@@ -174,13 +156,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: macos-x86_64-apple-darwin-${{ env.BUILD_VERSION }}
-          path: combined_artifacts
-        continue-on-error: true
-
-      - name: Download windows artifact (if any)
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-${{ env.BUILD_VERSION }}
           path: combined_artifacts
         continue-on-error: true
 
