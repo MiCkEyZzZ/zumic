@@ -38,6 +38,7 @@ runs:
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
+      shell: pwsh
 
     - name: Add target
       shell: pwsh
@@ -50,23 +51,26 @@ runs:
 
     - name: Build (Windows)
       shell: pwsh
+      env:
+        FEATURES: ${{ inputs.features }}
       run: |
         Set-StrictMode -Version Latest
         Push-Location "${{ inputs.working-dir }}"
         try {
           $profile = "${{ inputs.cargo-profile }}"
           $arch = "${{ inputs.arch }}"
-          $feat = $env:FEATURES = ''
-          if ('${{ inputs.features }}' -ne '') {
-            $feat = "--features `${"${{ inputs.features }}`""
+          $featArg = ""
+          if ($env:FEATURES -ne "") {
+            # pass features as single argument
+            $featArg = "--features " + $env:FEATURES
           }
 
           if ($profile -eq 'release') {
-            cargo build --release --target $arch $feat
+            cargo build --release --target $arch $featArg
           } elseif ($profile -eq 'nightly') {
-            cargo +nightly build --target $arch $feat
+            cargo +nightly build --target $arch $featArg
           } else {
-            cargo build --target $arch $feat
+            cargo build --target $arch $featArg
           }
         } finally {
           Pop-Location

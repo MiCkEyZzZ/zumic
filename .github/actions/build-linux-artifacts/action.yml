@@ -38,12 +38,14 @@ runs:
           ~/.cargo/git
           target
         key: linux-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
+      shell: bash
 
     - name: Setup Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
+      shell: bash
 
     - name: Add target for arch (if needed)
       id: target
@@ -62,6 +64,18 @@ runs:
       run: |
         set -e
         rustup target add "${{ steps.target.outputs.TARGET_TRIPLE }}" || true
+
+    - name: Install aarch64 cross-compiler on ubuntu runners (if needed)
+      # install only when building for aarch64 to allow building zstd-sys and other C crates
+      if: ${{ steps.target.outputs.TARGET_TRIPLE != '' && contains(steps.target.outputs.TARGET_TRIPLE, 'aarch64') }}
+      shell: bash
+      run: |
+        set -e
+        echo "Installing cross-compiler for aarch64 target..."
+        sudo apt-get update -qq
+        # package present on GitHub ubuntu runners; if not found it will fail but we attempt
+        sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross || true
+        echo "Cross-compiler installation step finished (errors ignored if package missing)."
 
     - name: Build (profile = ${{ inputs.cargo-profile }})
       shell: bash

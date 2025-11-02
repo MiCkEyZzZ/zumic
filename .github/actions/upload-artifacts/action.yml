@@ -1,5 +1,5 @@
 name: Upload artifacts
-description: Upload artifacts (copy specified files, create tar.gz, compute sha256 and upload)
+description: Upload specified files into an archive, compute sha256 and upload both artifacts.
 
 inputs:
   artifacts-dir:
@@ -12,10 +12,6 @@ inputs:
   version:
     description: Version of the artifact (used in filenames)
     required: true
-  archive-prefix:
-    description: Optional prefix for archive name (e.g. "zumic"). If set, archive will be "<prefix>-<version>.tar.gz"
-    required: false
-    default: ""
   working-dir:
     description: Working directory where files are located
     required: false
@@ -24,6 +20,10 @@ inputs:
     description: Retention days for uploaded artifacts
     required: false
     default: "7"
+  archive-prefix:
+    description: Optional prefix to put before archive filename (e.g. 'zumic')
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -54,88 +54,65 @@ runs:
           echo "no target-files specified — assuming outputs already in ${ART_DIR}"
         fi
 
-    - name: Create tar.gz archive
+    - name: Create archive + checksum (safe copy to temp to avoid 'file changed' race)
       working-directory: ${{ inputs.working-dir }}
       shell: bash
+      id: create
       run: |
         set -euo pipefail
+
         ART_DIR="${{ inputs.artifacts-dir }}"
         VERSION="${{ inputs.version }}"
         PREFIX="${{ inputs.archive-prefix }}"
 
-        # Determine archive basename:
-        if [ -n "$PREFIX" ]; then
-          ARCHIVE_BASE="${PREFIX}-${VERSION}"
+        # Decide base name
+        if [ -n "${PREFIX}" ]; then
+          BASE="${PREFIX}-${VERSION}"
         else
-          # fallback to using the artifacts dir name as base
-          # strip any trailing slashes from ART_DIR for cleanliness
           CLEAN_ART_DIR=$(basename "${ART_DIR%/}")
-          ARCHIVE_BASE="${CLEAN_ART_DIR}-${VERSION}"
+          BASE="${CLEAN_ART_DIR}-${VERSION}"
         fi
 
-        ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz"
-        SHA_FILE="${ARCHIVE_BASE}.sha256sum"
+        ARCHIVE_NAME="${BASE}.tar.gz"
+        SHA_NAME="${BASE}.sha256sum"
 
-        rm -f "${ARCHIVE_NAME}" "${SHA_FILE}"
-        # create archive containing contents of ART_DIR (files at archive root)
-        tar -C "${ART_DIR}" -czf "${ARCHIVE_NAME}" .
-        echo "Created archive: ${ARCHIVE_NAME}"
+        echo "Archiving '${ART_DIR}' -> ${ARCHIVE_NAME} (via temporary copy)..."
 
-    - name: Calculate checksum (Unix)
-      if: runner.os != 'Windows'
-      working-directory: ${{ inputs.working-dir }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        VERSION="${{ inputs.version }}"
-        PREFIX="${{ inputs.archive-prefix }}"
+        TMPDIR="$(mktemp -d)"
+        # copy contents (preserve attributes where possible); ignore errors copying ephemeral things
+        cp -a "${ART_DIR}/." "${TMPDIR}/" || true
 
-        if [ -n "$PREFIX" ]; then
-          ARCHIVE_BASE="${PREFIX}-${VERSION}"
-        else
-          CLEAN_ART_DIR=$(basename "${{ inputs.artifacts-dir%/ }}")
-          ARCHIVE_BASE="${CLEAN_ART_DIR}-${VERSION}"
-        fi
-
-        ARCHIVE_NAME="${ARCHIVE_BASE}.tar.gz"
-        SHA_FILE="${ARCHIVE_BASE}.sha256sum"
-
+        # create archive from tmpdir to avoid "file changed as we read it"
+        tar -C "${TMPDIR}" -czf "${ARCHIVE_NAME}" .
+        # compute checksum
         if command -v shasum >/dev/null 2>&1; then
-          shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+          shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_NAME}"
         else
-          sha256sum "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+          sha256sum "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_NAME}"
         fi
-        echo "Created checksum: ${SHA_FILE}"
 
-    - name: Calculate checksum (Windows)
-      if: runner.os == 'Windows'
-      working-directory: ${{ inputs.working-dir }}
-      shell: pwsh
-      run: |
-        $prefix = "${{ inputs.archive-prefix }}"
-        $v = "${{ inputs.version }}"
-        if ($prefix -ne "") {
-          $base = "$prefix-$v"
-        } else {
-          $ad = "${{ inputs.artifacts-dir }}".TrimEnd('\','/')
-          $base = ([IO.Path]::GetFileName($ad)) + "-$v"
-        }
-        $archive = "$base.tar.gz"
-        $sha = "$base.sha256sum"
-        $h = Get-FileHash -Path $archive -Algorithm SHA256
-        $h.Hash | Out-File -FilePath $sha -Encoding ascii
-        Write-Host "Created checksum: $sha"
+        # move outputs to working dir (so later upload path is predictable)
+        mv -f "${ARCHIVE_NAME}" "${{ inputs.working-dir }}/" || true
+        mv -f "${SHA_NAME}" "${{ inputs.working-dir }}/" || true
+
+        # cleanup
+        rm -rf "${TMPDIR}"
+
+        echo "Created files: ${ARCHIVE_NAME} ${SHA_NAME}"
+        # export outputs for later steps
+        echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+        echo "SHA_NAME=${SHA_NAME}" >> $GITHUB_OUTPUT
 
     - name: Upload archive artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.archive-prefix != '' && format('{0}-{1}.tar.gz', inputs.archive-prefix, inputs.version) || format('{0}-{1}.tar.gz', basename(inputs.artifacts-dir), inputs.version) }}
-        path: ${{ inputs.working-dir }}/${{ inputs.archive-prefix != '' && (inputs.archive-prefix + '-' + inputs.version + '.tar.gz') || ( (inputs.artifacts-dir | split('/'))[-1] + '-' + inputs.version + '.tar.gz' ) }}
+        name: ${{ steps.create.outputs.ARCHIVE_NAME }}
+        path: ${{ inputs.working-dir }}/${{ steps.create.outputs.ARCHIVE_NAME }}
         retention-days: ${{ inputs.retention-days }}
 
     - name: Upload checksum artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.archive-prefix != '' && format('{0}-{1}.sha256sum', inputs.archive-prefix, inputs.version) || format('{0}-{1}.sha256sum', basename(inputs.artifacts-dir), inputs.version) }}
-        path: ${{ inputs.working-dir }}/${{ inputs.archive-prefix != '' && (inputs.archive-prefix + '-' + inputs.version + '.sha256sum') || ( (inputs.artifacts-dir | split('/'))[-1] + '-' + inputs.version + '.sha256sum' ) }}
+        name: ${{ steps.create.outputs.SHA_NAME }}
+        path: ${{ inputs.working-dir }}/${{ steps.create.outputs.SHA_NAME }}
         retention-days: ${{ inputs.retention-days }}
