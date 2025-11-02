@@ -31,10 +31,10 @@
   - Добавлены ошибки для парсинга zsp-протокола: `zsp_parser`;
   - Добавлены ошибки для сериализации zsp-протокола: `zsp_serialization`;
 - **zsp**
-  - Добавил файл для версионирования протокола: `version.rs`;
+  - Добавлен файл для версионирования протокола: `version.rs`;
 - **zumic**
-  - добавил дполнительные правила в: `taplo.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `clippy.toml`
-  - добавил подробное описание в `Makefile`
+  - Добавлены дполнительные правила в: `taplo.toml`, `rustfmt.toml`, `rust-toolchain.toml`, `clippy.toml`
+  - Добавлено подробное описание в `Makefile`
   Отлично! Давай аккуратно добавим выполнение **Issue #GEO-1** в твой Changelog. Можно оформить так:
 - **database/geo**
   - Реализован **R-tree** для 2D spatial indexing (Issue **#GEO-1**):
@@ -98,27 +98,29 @@
     - Метрики ротации: события ротации, количество сжатых/удалённых файлов, освобождённый объём диска.
     - Новые файлы: `src/logging/sinks/rotation.rs`, расширение `src/logging/sinks/file.rs`.
 - **logging**
-  - Добавил тесты для `handle.rs`
-  - Добавил тесты для `slow_log.rs`
-  - Добавил тесты для `formatter.rs`
-  - Добавил тесты для `filters.rs`
-  - Добавил тесты для `config.rs`
-  - Добавил тесты для `sinks/console.rs`
-  - Добавил тесты для `sinks/file.rs`
+  - Добавлены тесты для `handle.rs`
+  - Добавлены тесты для `slow_log.rs`
+  - Добавлены тесты для `formatter.rs`
+  - Добавлены тесты для `filters.rs`
+  - Добавлены тесты для `config.rs`
+  - Добавлены тесты для `sinks/console.rs`
+  - Добавлены тесты для `sinks/file.rs`
 - **README**
-  - Добавил пример работы с `SET` командами
+  - Добавлен пример работы с `SET` командами
 - **Database**
-  - Добавил в `Value` дополнительные методы для работы с массивами, строками и числами в `types.rs`: `as_array`, `as_array_mut`, `as_str`, `as_int`;
+  - Добавлен в `Value` дополнительные методы для работы с массивами, строками и числами в `types.rs`: `as_array`, `as_array_mut`, `as_str`, `as_int`;
 - **error***
   - Добавлены ошибки для клиента в `client`;
 - **command**
-  - Добавил команды для работы с сервером в `server.rs`: `INFO`, `DBSIZE`, `TIME`, `SELECT`, `SAVE`, `BGSAVE`, `SHUTDOWN`, `PING`, `ECHO`;
+  - Добавлены команды для работы с сервером в `server.rs`: `INFO`, `DBSIZE`, `TIME`, `SELECT`, `SAVE`, `BGSAVE`, `SHUTDOWN`, `PING`, `ECHO`;
 - **.github**
-  - Добавил `actions`: `build-linux-artifacts`, `build-macos-artifacts`, `build-windows-artifacts`, `build-zumic-binary`, `fuzz`, `upload-artifacts`
+  - Добавлен `actions`: `build-linux-artifacts`, `build-macos-artifacts`, `build-windows-artifacts`, `build-zumic-binary`, `fuzz`, `upload-artifacts`
 - **zumic**
-  - Добавил отдельный крейт для обработки ошибок: `zumic-error`
+  - Добавлен отдельный крейт для обработки ошибок: `zumic-error`
 - **scripts**
-  - Добавил дополнительный скрипт для `prepare-release.sh`
+  - Добавлен дополнительный скрипт для `prepare-release.sh`
+- **ZDB**
+  - Добавлены regression тесты для `decode`
 
 ### Изменено
 
@@ -157,10 +159,14 @@
   - Добавлен улучшенный процесс релиза: `make prepare-release VERSION=v0.5.0`, `make release-all `, `make git-release VERSION=v0.5.0`
   - Добавлена мультиплатформенная сборка: `make build-all-platforms`
 - **scripts**
-  - Добавил улучшения для `run_fuzz.sh`: `красивый вывод с рамками и иконками`,
+  - Добавлены улучшения для `run_fuzz.sh`: `красивый вывод с рамками и иконками`,
   `автоустановка cargo-fuzz если отсутствует`, `подсчёт артефактов и крашей`, `показывает последние 10 строк лога`, `правильные коды выхода`, `работает из директории fuzz (избегает путаницы с путями)`
 - **github/workflows**
-  - Добавил улучшения сборки для релиза: `мультиплатформенная сборка`, `использование composite actions`, `автоматические SHA256 чексуммы`, `извлечение changelog`
+  - Добавлены улучшения сборки для релиза: `мультиплатформенная сборка`, `использование composite actions`, `автоматические SHA256 чексуммы`, `извлечение changelog`
+- **ZDB**
+  - Добавлены константы безопасности: `MAX_COMPRESSED_SIZE`, `MAX_STRING_SIZE`, `MAX_COLLECTION_SIZE`, `MAX_BITMAP_SIZE`,
+  - Исправлена `read_compressed_value`
+  - Добавлены проверки во все функции чтения: `read_string_value`, `read_hash_value`, `read_zset_value`, `read_set_value`, `read_array_value`, `read_bitmap_value`, `read_dump_with_version`, `StreamReader::next`
 
 ### Исправлено
 
@@ -184,7 +190,7 @@
 ## Удалено
 
 - Удалены файлы из модуля error: `decode.rs` и `encode.rs`;
-- Удалил модуль `error` из проекта, так как был добавлен отдельный крей для обработки ошибок `zumic-error`
+- Удалён модуль `error` из проекта, так как был добавлен отдельный крей для обработки ошибок `zumic-error`
 
 ## [v0.4.0] - 2025-09-08
 
