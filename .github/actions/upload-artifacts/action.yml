@@ -1,5 +1,5 @@
 name: Upload artifacts
-description: Upload artifacts (copy specified files, create tar.gz, compute sha256 and upload)
+description: Upload specified files into an archive, compute sha256 and upload both artifacts.
 
 inputs:
   artifacts-dir:
@@ -20,6 +20,10 @@ inputs:
     description: Retention days for uploaded artifacts
     required: false
     default: "7"
+  archive-prefix:
+    description: Optional prefix to put before archive filename (e.g. 'zumic')
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -50,58 +54,65 @@ runs:
           echo "no target-files specified — assuming outputs already in ${ART_DIR}"
         fi
 
-    - name: Create tar.gz archive
+    - name: Create archive + checksum (safe copy to temp to avoid 'file changed' race)
       working-directory: ${{ inputs.working-dir }}
       shell: bash
+      id: create
       run: |
         set -euo pipefail
-        ART_DIR="${{ inputs.artifacts-dir }}"
-        VERSION="${{ inputs.version }}"
-        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
-        rm -f "${ARCHIVE_NAME}"
-        tar -C "${ART_DIR}" -czf "${ARCHIVE_NAME}" .
-        echo "Created archive: ${ARCHIVE_NAME}"
 
-    - name: Calculate checksum (Unix)
-      if: runner.os != 'Windows'
-      working-directory: ${{ inputs.working-dir }}
-      shell: bash
-      run: |
-        set -euo pipefail
         ART_DIR="${{ inputs.artifacts-dir }}"
         VERSION="${{ inputs.version }}"
-        ARCHIVE_NAME="${ART_DIR}-${VERSION}.tar.gz"
-        SHA_FILE="${ART_DIR}-${VERSION}.sha256sum"
-        if command -v shasum >/dev/null 2>&1; then
-          shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+        PREFIX="${{ inputs.archive-prefix }}"
+
+        # Decide base name
+        if [ -n "${PREFIX}" ]; then
+          BASE="${PREFIX}-${VERSION}"
         else
-          sha256sum "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_FILE}"
+          CLEAN_ART_DIR=$(basename "${ART_DIR%/}")
+          BASE="${CLEAN_ART_DIR}-${VERSION}"
         fi
-        echo "Created checksum: ${SHA_FILE}"
 
-    - name: Calculate checksum (Windows)
-      if: runner.os == 'Windows'
-      working-directory: ${{ inputs.working-dir }}
-      shell: pwsh
-      run: |
-        $art = "${{ inputs.artifacts-dir }}"
-        $v = "${{ inputs.version }}"
-        $archive = "$art-$v.tar.gz"
-        $sha = "$art-$v.sha256sum"
-        $h = Get-FileHash -Path $archive -Algorithm SHA256
-        $h.Hash | Out-File -FilePath $sha -Encoding ascii
-        Write-Host "Created checksum: $sha"
+        ARCHIVE_NAME="${BASE}.tar.gz"
+        SHA_NAME="${BASE}.sha256sum"
+
+        echo "Archiving '${ART_DIR}' -> ${ARCHIVE_NAME} (via temporary copy)..."
+
+        TMPDIR="$(mktemp -d)"
+        # copy contents (preserve attributes where possible); ignore errors copying ephemeral things
+        cp -a "${ART_DIR}/." "${TMPDIR}/" || true
+
+        # create archive from tmpdir to avoid "file changed as we read it"
+        tar -C "${TMPDIR}" -czf "${ARCHIVE_NAME}" .
+        # compute checksum
+        if command -v shasum >/dev/null 2>&1; then
+          shasum -a 256 "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_NAME}"
+        else
+          sha256sum "${ARCHIVE_NAME}" | awk '{print $1}' > "${SHA_NAME}"
+        fi
+
+        # move outputs to working dir (so later upload path is predictable)
+        mv -f "${ARCHIVE_NAME}" "${{ inputs.working-dir }}/" || true
+        mv -f "${SHA_NAME}" "${{ inputs.working-dir }}/" || true
+
+        # cleanup
+        rm -rf "${TMPDIR}"
+
+        echo "Created files: ${ARCHIVE_NAME} ${SHA_NAME}"
+        # export outputs for later steps
+        echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+        echo "SHA_NAME=${SHA_NAME}" >> $GITHUB_OUTPUT
 
     - name: Upload archive artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
-        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.tar.gz
+        name: ${{ steps.create.outputs.ARCHIVE_NAME }}
+        path: ${{ inputs.working-dir }}/${{ steps.create.outputs.ARCHIVE_NAME }}
         retention-days: ${{ inputs.retention-days }}
 
     - name: Upload checksum artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
-        path: ${{ inputs.working-dir }}/${{ inputs.artifacts-dir }}-${{ inputs.version }}.sha256sum
+        name: ${{ steps.create.outputs.SHA_NAME }}
+        path: ${{ inputs.working-dir }}/${{ steps.create.outputs.SHA_NAME }}
         retention-days: ${{ inputs.retention-days }}

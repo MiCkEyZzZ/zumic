@@ -41,14 +41,12 @@ runs:
           ~/.cargo/git
           target
         key: mac-cargo-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
-      shell: bash
 
     - name: Setup Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: ${{ inputs.cargo-profile == 'nightly' && 'nightly' || 'stable' }}
         override: true
-      shell: bash
 
     - name: Add mac target (if needed)
       shell: bash
@@ -137,4 +135,3 @@ runs:
         name: macos-${{ inputs.arch }}-${{ inputs.version }}
         path: ${{ inputs.artifacts-dir }}/macos-${{ inputs.arch }}-${{ inputs.version }}.tar.gz
         retention-days: 7
-      shell: bash

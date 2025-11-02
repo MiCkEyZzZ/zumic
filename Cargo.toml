@@ -123,14 +123,16 @@ optional = true
 [features]
 default = []
 concurrent = []
-fuzz = ["arbitrary"]
+fuzz = []
 avx512 = []
 
 [workspace]
 members = [
     ".",
-    "fuzz",
     "benches",
+]
+exclude = [
+    "fuzz",
 ]
 
 [profile.release]
