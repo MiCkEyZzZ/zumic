@@ -266,6 +266,15 @@ run-compact: ## Запуск Зумик с коротким баннером (fo
 run-release: ## Запуск Зумик в релизной версии
 	cargo build --release $(TARGET_ARG) && ./$(TARGET_DIR)release/zumic
 
+run-m: ## Запуск Зумик в режиме memory
+	RUST_ENV=memory cargo run --bin zumic
+
+run-p: ## Запуск Зумик в режиме persistent
+	RUST_ENV=persistent cargo run --bin zumic
+
+run-c: ## Запуск Зумик в режиме cluster
+	RUST_ENV=cluster cargo run --bin zumic
+
 ##@ CI/CD
 .PHONY: ci-local simulate-ci
 

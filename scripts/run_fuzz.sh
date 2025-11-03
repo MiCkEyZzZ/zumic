@@ -15,7 +15,7 @@ RESULTS_DIR="${ROOT}/results/${TIMESTAMP}"
 LOG_FILE="${RESULTS_DIR}/${TARGET}.log"
 PID_FILE="${RESULTS_DIR}/${TARGET}.pid"
 
-# Создаём каталоги
+# Создание каталога
 mkdir -p "${RESULTS_DIR}"
 mkdir -p "${ROOT}/fuzz/artifacts/${TARGET}"
 mkdir -p "${ROOT}/fuzz/corpus/${TARGET}"
@@ -31,22 +31,22 @@ echo "Results:      ${RESULTS_DIR}"
 echo "Log:          ${LOG_FILE}"
 echo ""
 
-# Проверяем, установлен ли Cargo-Fuzz
+# Проверка, установлен ли Cargo-Fuzz
 if ! command -v cargo-fuzz &> /dev/null; then
     echo "⚠️  cargo-fuzz not found. Installing..."
     cargo +nightly install cargo-fuzz
 fi
 
-# Конвертируем минуты в секунды
+# Конвертирование минуты в секунды
 SECONDS=$((MINUTES * 60))
 
-# Устанавливаем среду
+# Установка среды
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-1}
 
 echo "Starting fuzzer..."
 echo ""
 
-# Запускаем fuzz в фоновом режиме
+# Запуск fuzz в фоновом режиме
 cd "${ROOT}/fuzz"
 nohup cargo +nightly fuzz run "${TARGET}" -- \
     -max_total_time=${SECONDS} \
@@ -59,7 +59,7 @@ echo ${FZ_PID} > "${PID_FILE}"
 echo "Fuzzer PID: ${FZ_PID}"
 echo ""
 
-# Дождаемся завершения
+# Ожидание завершения
 if wait ${FZ_PID}; then
     echo "✅ Fuzzer completed successfully"
     EXIT_CODE=0
@@ -71,7 +71,7 @@ fi
 echo ""
 echo "Gathering artifacts..."
 
-# Копируем артефакты
+# Копирование артефактов
 if [ -d "${ROOT}/fuzz/artifacts/${TARGET}" ]; then
     ARTIFACT_COUNT=$(find "${ROOT}/fuzz/artifacts/${TARGET}" -type f | wc -l)
     if [ ${ARTIFACT_COUNT} -gt 0 ]; then
@@ -82,7 +82,7 @@ if [ -d "${ROOT}/fuzz/artifacts/${TARGET}" ]; then
     fi
 fi
 
-# Объединяем новые тестовые случаи в корпус
+# Объединение новых тестовых случаев в корпус
 if [ -d "${ROOT}/fuzz/artifacts/${TARGET}/crashes" ]; then
     CRASH_COUNT=$(find "${ROOT}/fuzz/artifacts/${TARGET}/crashes" -type f | wc -l)
     if [ ${CRASH_COUNT} -gt 0 ]; then
@@ -103,7 +103,7 @@ echo "Results:      ${RESULTS_DIR}"
 echo "Log file:     ${LOG_FILE}"
 echo ""
 
-# Отображаем последние строки журнала
+# Отображение последних строк журнала
 if [ -f "${LOG_FILE}" ]; then
     echo "Last 10 lines of log:"
     echo "─────────────────────────────────────────────────────────────"
