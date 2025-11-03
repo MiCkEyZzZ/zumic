@@ -1,17 +1,17 @@
-storage_type = "cluster"          # Тип хранилища — кластерное
-listen_address = "0.0.0.0:6174"   # Адрес и порт для прослушивания
-log_level = "info"                # Уровень логов
+storage_type = "cluster"        # Тип хранилища — кластерное
+listen_address = "0.0.0.0:6174" # Адрес и порт для прослушивания
+log_level = "info"              # Уровень логов
 
 [cluster]
-enabled = true                    # Включить кластерный режим
+enabled = true # Включить кластерный режим
 nodes = [
-    "127.0.0.1:6174",             # Список узлов кластера
-    "127.0.0.1:6175",
-    "127.0.0.1:6176"
+  "127.0.0.1:6174", # Список узлов кластера
+  "127.0.0.1:6175",
+  "127.0.0.1:6176",
 ]
-replica_factor = 2                 # Фактор репликации
-consistency = "eventual"           # Уровень согласованности: "strong" | "eventual"
+replica_factor = 2 # Фактор репликации
+consistency = "eventual" # Уровень согласованности: "strong" | "eventual"
 
 [monitoring]
-metrics_enabled = true             # Включить сбор метрик
-metrics_port = 9090                # Порт для Prometheus
+metrics_enabled = true # Включить сбор метрик
+metrics_port = 9090    # Порт для Prometheus

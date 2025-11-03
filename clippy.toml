@@ -1,13 +1,13 @@
 # Основные настройки для Clippy
-upper-case-acronyms-aggressive = true  # Применяйте строгий стиль для сокращений
+upper-case-acronyms-aggressive = true # Применяйте строгий стиль для сокращений
 
 # Немного смягчены правила, чтобы избежать блокировки полезного кода.
-avoid-breaking-exported-api = false  # Не блокировать изменения в экспортируемых API
+avoid-breaking-exported-api = false # Не блокировать изменения в экспортируемых API
 
 # --- Безопасные/критичные запреты ---
 [[disallowed-methods]]
 path = "time::now"
-allow-invalid = true    # <- подавляет warning "does not refer to a reachable function"
+allow-invalid = true                                                                                    # <- подавляет warning "does not refer to a reachable function"
 reason = "time::now небезопасен (RUSTSEC) — используйте std::time::Instant или chrono/explicit clocks."
 
 [[disallowed-methods]]

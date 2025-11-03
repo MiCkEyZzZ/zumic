@@ -12,8 +12,8 @@ default = []
 unstable = []
 
 [dependencies]
-libfuzzer-sys = "0.4"
 arbitrary = { version = "1.3", features = ["derive"] }
+libfuzzer-sys = "0.4"
 
 # Подключаем основной проект ZUMIC как зависимость
 zumic = { path = ".." }

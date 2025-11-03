@@ -10,22 +10,22 @@
 # ========================================
 
 # Сеть
-listen_address = "127.0.0.1:6174"                           # Адрес и порт для подключений
-max_connections = 10000                                     # Максимальное число одновременных соединений
-max_connections_per_ip = 100                                # Максимум соединений с одного IP
+listen_address = "127.0.0.1:6174" # Адрес и порт для подключений
+max_connections = 10000           # Максимальное число одновременных соединений
+max_connections_per_ip = 100      # Максимум соединений с одного IP
 
 # Таймауты (в секундах)
-connection_timeout = 300                                    # Время простоя до разрыва соединения
-read_timeout = 30                                           # Время ожидания команды от клиента
-write_timeout = 10                                          # Время ожидания записи ответа
+connection_timeout = 300 # Время простоя до разрыва соединения
+read_timeout = 30        # Время ожидания команды от клиента
+write_timeout = 10       # Время ожидания записи ответа
 
 # Буферы
-read_buffer_size = 8192                                     # Размер буфера чтения (байт)
-shutdown_timeout = 30                                       # Время ожидания при graceful shutdown
+read_buffer_size = 8192 # Размер буфера чтения (байт)
+shutdown_timeout = 30   # Время ожидания при graceful shutdown
 
 # Пул потоков
-thread_pool_size = 8                                        # Количество потоков для тяжёлых задач
-worker_threads = 4                                          # Количество worker-потоков (опционально)
+thread_pool_size = 8 # Количество потоков для тяжёлых задач
+worker_threads = 4   # Количество worker-потоков (опционально)
 
 # ========================================
 # НАСТРОЙКИ ХРАНИЛИЩА
@@ -35,60 +35,60 @@ worker_threads = 4                                          # Количеств
 storage_type = "memory"
 
 # Память (для всех типов хранилища)
-max_memory = "2GB"                                          # Лимит памяти
-memory_policy = "allkeys-lru"                               # Политика вытеснения (опционально)
+max_memory = "2GB"            # Лимит памяти
+memory_policy = "allkeys-lru" # Политика вытеснения (опционально)
 
 # Персистентность
-aof_path = "./data/dump.aof"                                # Путь к AOF файлу
-snapshot_freq = 300                                         # Частота снапшотов (секунды)
-data_dir = "./data"                                         # Папка с данными
-checkpoint_interval = 300                                   # Интервал чекпоинтов (секунды)
-wal_enabled = true                                          # Включить WAL журналирование
-compression = "lz4"                                         # Сжатие: "none" | "lz4" | "gzip"
+aof_path = "./data/dump.aof" # Путь к AOF файлу
+snapshot_freq = 300          # Частота снапшотов (секунды)
+data_dir = "./data"          # Папка с данными
+checkpoint_interval = 300    # Интервал чекпоинтов (секунды)
+wal_enabled = true           # Включить WAL журналирование
+compression = "lz4"          # Сжатие: "none" | "lz4" | "gzip"
 
 # ========================================
 # НАСТРОЙКИ ПЕРСИСТЕНТНОГО ХРАНИЛИЩА
 # ========================================
 
 [persistent_store]
-sync_policy = "EverySecond"                                 # "Always" | "EverySecond" | "Manual"
-enable_operation_logging = false                            # Логирование операций
+sync_policy = "EverySecond"      # "Always" | "EverySecond" | "Manual"
+enable_operation_logging = false # Логирование операций
 
 # Шардирование
 [persistent_store.sharding]
-num_shards = 8                                              # Количество шардов (рекомендуется: CPU cores * 2)
-enable_metrics = true                                       # Включить метрики шардов
-slow_operation_threshold_us = 1000                          # Порог медленных операций (микросекунды)
+num_shards = 8                     # Количество шардов (рекомендуется: CPU cores * 2)
+enable_metrics = true              # Включить метрики шардов
+slow_operation_threshold_us = 1000 # Порог медленных операций (микросекунды)
 
 # ========================================
 # НАСТРОЙКИ КЛАСТЕРА
 # ========================================
 
 [cluster]
-enabled = false                                             # Включить кластерный режим
-nodes = ["127.0.0.1:6175", "127.0.0.1:6176"]              # Список узлов кластера
-replica_factor = 1                                          # Фактор репликации
-consistency = "eventual"                                    # Уровень консистентности: "strong" | "eventual"
+enabled = false                              # Включить кластерный режим
+nodes = ["127.0.0.1:6175", "127.0.0.1:6176"] # Список узлов кластера
+replica_factor = 1                           # Фактор репликации
+consistency = "eventual"                     # Уровень консистентности: "strong" | "eventual"
 
 # ========================================
 # МОНИТОРИНГ И МЕТРИКИ
 # ========================================
 
 [monitoring]
-metrics_enabled = true                                      # Включить сбор метрик
-metrics_port = 9090                                         # Порт для метрик (Prometheus)
-health_check_port = 8080                                    # Порт для health check
-profiling_enabled = false                                   # Включить профилирование
+metrics_enabled = true    # Включить сбор метрик
+metrics_port = 9090       # Порт для метрик (Prometheus)
+health_check_port = 8080  # Порт для health check
+profiling_enabled = false # Включить профилирование
 
 # ========================================
 # БЕЗОПАСНОСТЬ И TLS
 # ========================================
 
 [tls]
-enabled = false                                             # Включить TLS
-cert = "server.crt"                                         # Путь к сертификату (опционально)
-key = "server.key"                                          # Путь к ключу (опционально)
-allowed_ips = ["127.0.0.1", "192.168.1.0/24"]             # Разрешённые IP адреса
+enabled = false                               # Включить TLS
+cert = "server.crt"                           # Путь к сертификату (опционально)
+key = "server.key"                            # Путь к ключу (опционально)
+allowed_ips = ["127.0.0.1", "192.168.1.0/24"] # Разрешённые IP адреса
 
 # Простая аутентификация (опционально)
 # requirepass = "supersecret"
@@ -101,24 +101,24 @@ allowed_ips = ["127.0.0.1", "192.168.1.0/24"]             # Разрешённы
 [[users]]
 name = "default"
 nopass = true
-pattern = "*"                                               # Доступ ко всем ключам
-roles = ["admin"]                                           # Роли пользователя
+pattern = "*"     # Доступ ко всем ключам
+roles = ["admin"] # Роли пользователя
 
 # Пример пользователя с ограниченными правами
 [[users]]
 name = "anton"
-password_env = "ZUMIC_USER_ANTON_PASSWORD"                  # Пароль из переменной окружения
-pattern = "data:*"                                          # Доступ только к ключам с префиксом "data:"
-permissions = ["get", "set"]                                # Разрешённые команды
+password_env = "ZUMIC_USER_ANTON_PASSWORD" # Пароль из переменной окружения
+pattern = "data:*"                         # Доступ только к ключам с префиксом "data:"
+permissions = ["get", "set"]               # Разрешённые команды
 
 # ========================================
 # НАСТРОЙКИ ПРОИЗВОДИТЕЛЬНОСТИ
 # ========================================
 
 # TCP настройки
-tcp_nodelay = true                                          # Отключить алгоритм Nagle для меньшей задержки
-tcp_keepalive = true                                        # Включить TCP keepalive
-so_reuseaddr = true                                         # Разрешить reuse адреса
+tcp_nodelay = true   # Отключить алгоритм Nagle для меньшей задержки
+tcp_keepalive = true # Включить TCP keepalive
+so_reuseaddr = true  # Разрешить reuse адреса
 
 # ========================================
 # ЛОГИРОВАНИЕ (РАСШИРЕННОЕ)
@@ -196,9 +196,9 @@ max_depth = 5
 [logging.console]
 enabled = true
 # format = "pretty" # Override формат для консоли
-with_ansi = true # Цвет ANSI
-with_target = true # Показывать module path
-with_thread_ids = false # Показывать thread IDs
+with_ansi = true          # Цвет ANSI
+with_target = true        # Показывать module path
+with_thread_ids = false   # Показывать thread IDs
 with_line_numbers = false # Показывать номера строк
 
 # ========================================
@@ -226,13 +226,13 @@ filename = "zumic.log"
 # full:       zumic-2025-10-06-001.log
 naming = "dated"
 # Compression старых файлов (gzip)
-compress_old = false  # true для production
+compress_old = false # true для production
 # Retention policy
-retention_days = 30  # Удалять файлы старше 30 дней
+retention_days = 30 # Удалять файлы старше 30 дней
 # Автоматический cleanup
 auto_cleanup = true
 # Интервал для background cleanup (секунды)
-cleanup_interval_secs = 3600  # Каждый час
+cleanup_interval_secs = 3600 # Каждый час
 # Buffer size (байты)
 buffer_size = 8192
 

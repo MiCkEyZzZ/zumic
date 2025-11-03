@@ -2,24 +2,15 @@
 # Включить проверку на уязвимость
 enabled = true
 # Сообщаем об опасных зависимостях, даже если они не в Cargo.lock
-yanked = "deny"  # Запрещаем зависимости, которые были отозваны
-unmaintained = "deny"  # Запрещаем не поддерживаемые библиотеки
-unsound = "deny"  # Запрещаем небезопасные зависимости
+yanked = "deny"       # Запрещаем зависимости, которые были отозваны
+unmaintained = "deny" # Запрещаем не поддерживаемые библиотеки
+unsound = "deny"      # Запрещаем небезопасные зависимости
 
 [licenses]
 # Разрешённые лицензии для зависимостей
-allow = [
-    "MIT",
-    "Apache-2.0",
-    "BSD-3-Clause",
-    "ISC"
-]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC"]
 # Явно запрещённые лицензии
-deny = [
-    "GPL-3.0",
-    "AGPL-3.0",
-    "LGPL-3.0"
-]
+deny = ["GPL-3.0", "AGPL-3.0", "LGPL-3.0"]
 # Разрешаем временно использовать зависимости без указанных лицензий (не рекомендовано для продакшена)
 unlicensed = "warn"
 # Лицензии, которые требуют ручной оценки
@@ -28,13 +19,13 @@ copyleft = "deny"
 [bans]
 # Блокировка конкретных версий зависимостей из-за уязвимостей
 deny = [
-    { name = "openssl", version = "<0.10.60", reason = "RUSTSEC-2025-0004: use-after-free in select_next_proto" },
-    { name = "openssl", version = "0.10.63", reason = "RUSTSEC-2024-0357: MemBio unsoundness" }
+  { name = "openssl", version = "<0.10.60", reason = "RUSTSEC-2025-0004: use-after-free in select_next_proto" },
+  { name = "openssl", version = "0.10.63", reason = "RUSTSEC-2024-0357: MemBio unsoundness" },
 ]
 
 # Запрещаем старые версии time из-за уязвимости
 skip-tree = [
-    { name = "time", version = "<0.3.20", reason = "RUSTSEC-2020-0071: time::now is unsound" }
+  { name = "time", version = "<0.3.20", reason = "RUSTSEC-2020-0071: time::now is unsound" },
 ]
 
 [duplicate]
