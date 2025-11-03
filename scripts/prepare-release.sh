@@ -11,21 +11,21 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
-# Remove 'v' prefix for Cargo.toml
+# Удаление префикса "v" для Cargo.toml
 VERSION_NUMBER="${VERSION#v}"
 
 echo "Preparing release $VERSION..."
 
-# 1. Update version in Cargo.toml
+# 1. Обновление версии в Cargo.toml
 echo "Updating Cargo.toml version to $VERSION_NUMBER..."
 sed -i.bak "s/^version = \".*\"/version = \"$VERSION_NUMBER\"/" Cargo.toml
 rm Cargo.toml.bak
 
-# 2. Update Cargo.lock
+# 2. Обновление Cargo.lock
 echo "Updating Cargo.lock..."
 cargo update -p zumic
 
-# 3. Create changelog entry (if doesn't exist)
+# 3. Создание записи в журнале изменений (если она не существует).
 if [ -f CHANGELOG.md ]; then
   if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
     echo "Adding changelog entry for $VERSION..."
@@ -48,11 +48,11 @@ if [ -f CHANGELOG.md ]; then
   fi
 fi
 
-# 4. Run tests
+# 4. Запуск тестов
 echo "Running tests..."
 cargo test
 
-# 5. Build release locally (sanity check)
+# 5. Локальная сборка релиза (проверка работоспособности)
 echo "Building release (sanity check)..."
 cargo build --release
 
