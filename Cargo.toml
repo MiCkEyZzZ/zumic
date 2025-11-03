@@ -136,7 +136,7 @@ fuzz = []
 avx512 = []
 
 [workspace]
-members = [".", "benches"]
+members = [".", "benches", "zumic-error"]
 exclude = ["fuzz"]
 
 [profile.release]
