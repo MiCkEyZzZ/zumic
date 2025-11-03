@@ -1,7 +1,7 @@
-storage_type = "memory"      # Используем только память
-log_level = "debug"          # Подробные логи для отладки
-max_connections = 100        # Ограничение на соединения в dev
+storage_type = "memory" # Используем только память
+log_level = "debug"     # Подробные логи для отладки
+max_connections = 100   # Ограничение на соединения в dev
 
 [monitoring]
-metrics_enabled = true       # Метрики включены
-profiling_enabled = true     # Профайлинг включен для анализа производительности
+metrics_enabled = true   # Метрики включены
+profiling_enabled = true # Профайлинг включен для анализа производительности

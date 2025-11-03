@@ -1,3 +1,4 @@
 [toolchain]
+# Конкретный nightly для воспроизводимости. Обновляй по необходимости.
 channel = "nightly-2025-05-10"
 components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]

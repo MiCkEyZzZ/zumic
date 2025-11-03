@@ -41,12 +41,12 @@ internal_use_git2 = false
 # Настройки для профилирования или кросс-компиляции
 # (опционально)
 [profile.dev]
-opt-level = 2           # Уровень оптимизаций для разработки
+opt-level = 2          # Уровень оптимизаций для разработки
 debug = true
 overflow-checks = true
 
 [profile.release]
-opt-level = 3           # Высокий уровень оптимизаций для релиза
-lto = true              # Включение Link-Time Optimization для улучшения производительности
-codegen-units = 1       # Медленнее компиляция, но лучше оптимизация
-strip = "debuginfo"     # Убираем debug-символы (меньше размер бинаря)
+opt-level = 3       # Высокий уровень оптимизаций для релиза
+lto = true          # Включение Link-Time Optimization для улучшения производительности
+codegen-units = 1   # Медленнее компиляция, но лучше оптимизация
+strip = "debuginfo" # Убираем debug-символы (меньше размер бинаря)
