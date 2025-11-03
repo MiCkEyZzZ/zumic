@@ -1,0 +1,35 @@
+[package]
+name = "zumic-error"
+version = "0.1.0"
+edition = "2021"
+author = ["MickeyZzz<https://t.me/Mickey_Zzz>"]
+description = "Centralized error handling system for Zumic"
+license = "Apache-2.0"
+
+[lints]
+workspace = true
+
+[features]
+# Фичи, включённые по умолчанию
+default = []
+# Дополнительные фичи
+extras = ["strum", "strum_macros", "serde", "serde_repr", "tokio", "globset"]
+
+[dependencies]
+# Библиотека для объявления ошибок через derive
+thiserror = { workspace = true }
+
+globset = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+# Вспомогательная библиотека для enum
+strum = { workspace = true, optional = true }
+# Макросы derive для strum
+strum_macros = { workspace = true, optional = true }
+# Преобразования enum <-> числа
+num_enum = { workspace = true }
+
+# Сериализация/десериализация
+serde = { workspace = true, optional = true }
+# Сериализация enum по числовому коду
+serde_repr = { workspace = true, optional = true }
