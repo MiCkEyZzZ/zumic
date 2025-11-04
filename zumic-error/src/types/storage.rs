@@ -203,6 +203,7 @@ impl ErrorExt for StorageError {
 mod tests {
     use super::*;
 
+    /// Тест проверяет: статус и клиентское сообщение для варианта KeyNotFound.
     #[test]
     fn test_key_not_found() {
         let err = StorageError::KeyNotFound {
@@ -212,6 +213,7 @@ mod tests {
         assert_eq!(err.client_message(), "Key not found");
     }
 
+    /// Тест проверяет: статус и метки (metrics_tags) для варианта WrongType.
     #[test]
     fn test_wrong_type() {
         let err = StorageError::WrongType {
@@ -228,6 +230,8 @@ mod tests {
         assert!(tags.iter().any(|(k, v)| k == &"actual_type" && v == "hash"));
     }
 
+    /// Тест проверяет: статус DiskFull и критичность статуса (если
+    /// реализовано).
     #[test]
     fn test_disk_full() {
         let err = StorageError::DiskFull {
@@ -236,5 +240,166 @@ mod tests {
         };
         assert_eq!(err.status_code(), StatusCode::DiskFull);
         assert!(err.status_code().is_critical());
+    }
+
+    /// Тест проверяет: статус, клиентское сообщение и Display для KeyExists,
+    /// InvalidKey и InvalidValue.
+    #[test]
+    fn test_key_exists_and_invalids() {
+        let exists = StorageError::KeyExists { key: "k".into() };
+        assert_eq!(exists.status_code(), StatusCode::AlreadyExists);
+        assert_eq!(exists.client_message(), "Key already exists");
+
+        let invalid_key = StorageError::InvalidKey {
+            key: "bad:key".into(),
+            reason: "contains space".into(),
+        };
+        assert_eq!(invalid_key.status_code(), StatusCode::InvalidKey);
+        assert!(invalid_key.to_string().contains("Invalid key"));
+        assert_eq!(invalid_key.client_message(), "Invalid key");
+
+        let invalid_value = StorageError::InvalidValue {
+            reason: "not json".into(),
+        };
+        assert_eq!(invalid_value.status_code(), StatusCode::InvalidValue);
+        assert_eq!(invalid_value.client_message(), "Invalid value");
+    }
+
+    /// Тест проверяет: статус IndexOutOfBounds, клиентское сообщение и вывод
+    /// Display.
+    #[test]
+    fn test_index_out_of_bounds_and_display() {
+        let idx = StorageError::IndexOutOfBounds { index: 10, size: 5 };
+        assert_eq!(idx.status_code(), StatusCode::IndexOutOfBounds);
+        assert_eq!(idx.client_message(), "Index out of bounds");
+        assert!(idx.to_string().contains("out of bounds"));
+    }
+
+    /// Тест проверяет: StorageUnavailable и DiskFull — статусы, клиентские
+    /// сообщения и Display для DiskFull.
+    #[test]
+    fn test_storage_unavailable_and_diskfull() {
+        let su = StorageError::StorageUnavailable {
+            reason: "db locked".into(),
+        };
+        assert_eq!(su.status_code(), StatusCode::StorageUnavailable);
+        assert_eq!(su.client_message(), "Storage temporarily unavailable");
+
+        let df = StorageError::DiskFull {
+            available: 0,
+            required: 1024,
+        };
+        assert_eq!(df.status_code(), StatusCode::DiskFull);
+        assert_eq!(df.client_message(), "Insufficient storage space");
+        // assuming StatusCode has an is_critical or similar; keep check simple
+        assert!(df.to_string().contains("Disk full"));
+    }
+
+    /// Тест проверяет: CorruptedData, SerializationFailed и
+    /// DeserializationFailed — статусы, сообщения и Display.
+    #[test]
+    fn test_corrupted_and_serialization_errors() {
+        let corrupt = StorageError::CorruptedData {
+            location: "segment-1".into(),
+            reason: "checksum mismatch".into(),
+        };
+        assert_eq!(corrupt.status_code(), StatusCode::CorruptedData);
+        assert_eq!(corrupt.client_message(), "Internal server error");
+        assert!(corrupt.to_string().contains("Corrupted data"));
+
+        let ser = StorageError::SerializationFailed {
+            type_name: "Msg".into(),
+            reason: "json error".into(),
+        };
+        assert_eq!(ser.status_code(), StatusCode::SerializationFailed);
+        assert_eq!(ser.client_message(), "Internal server error");
+
+        let deser = StorageError::DeserializationFailed {
+            type_name: "Msg".into(),
+            reason: "truncated".into(),
+        };
+        assert_eq!(deser.status_code(), StatusCode::DeserializationFailed);
+        assert_eq!(deser.client_message(), "Internal server error");
+    }
+
+    /// Тест проверяет: CompressionFailed и DecompressionFailed — статус и
+    /// клиентское сообщение.
+    #[test]
+    fn test_compression_errors() {
+        let comp = StorageError::CompressionFailed {
+            reason: "zlib error".into(),
+        };
+        assert_eq!(comp.status_code(), StatusCode::CompressionFailed);
+        assert_eq!(comp.client_message(), "Internal server error");
+
+        let decomp = StorageError::DecompressionFailed {
+            reason: "truncated stream".into(),
+        };
+        assert_eq!(decomp.status_code(), StatusCode::CompressionFailed);
+        assert_eq!(decomp.client_message(), "Internal server error");
+    }
+
+    /// Тест проверяет: WrongShard (статус, клиентское сообщение и метки
+    /// expected/actual) и LockError (статус и Display).
+    #[test]
+    fn test_wrong_shard_and_lock_error_tags() {
+        let ws = StorageError::WrongShard {
+            key: "user:1".into(),
+            expected: 2,
+            actual: 3,
+        };
+        assert_eq!(ws.status_code(), StatusCode::WrongShard);
+        assert_eq!(ws.client_message(), "Key belongs to different shard");
+        let tags = ws.metrics_tags();
+        assert!(tags.iter().any(|(k, v)| k == &"expected_shard" && v == "2"));
+        assert!(tags.iter().any(|(k, v)| k == &"actual_shard" && v == "3"));
+
+        let lock = StorageError::LockError {
+            resource: "file.db".into(),
+            reason: "poisoned".into(),
+        };
+        assert_eq!(lock.status_code(), StatusCode::LockError);
+        assert_eq!(lock.client_message(), "Internal server error");
+        assert!(lock.to_string().contains("Lock error"));
+    }
+
+    /// Тест проверяет: SizeLimit (статус, клиентское сообщение и метки
+    /// data_type) и NotImplemented (статус и сообщение).
+    #[test]
+    fn test_size_limit_and_not_implemented() {
+        let sl = StorageError::SizeLimit {
+            limit: 1024,
+            actual: 2048,
+            data_type: "value".into(),
+        };
+        assert_eq!(sl.status_code(), StatusCode::SizeLimit);
+        assert!(sl.client_message().contains("size limit exceeded"));
+        let tags = sl.metrics_tags();
+        assert!(tags.iter().any(|(k, v)| k == &"data_type" && v == "value"));
+
+        let ni = StorageError::NotImplemented {
+            operation: "ZADD".into(),
+        };
+        assert_eq!(ni.status_code(), StatusCode::NotImplemented);
+        assert!(ni.client_message().contains("Operation not implemented"));
+    }
+
+    /// Тест проверяет: as_any downcast для варианта KeyNotFound и корректность
+    /// Display для WrongType.
+    #[test]
+    fn test_as_any_downcast_and_display_all() {
+        // pick a variant and ensure as_any allows downcast
+        let err = StorageError::KeyNotFound { key: "k".into() };
+        let any_ref = err.as_any();
+        assert!(any_ref.downcast_ref::<StorageError>().is_some());
+
+        // Also ensure Display is meaningful for some variants
+        let s = StorageError::WrongType {
+            key: "k".into(),
+            expected: "string".into(),
+            actual: "list".into(),
+        };
+        let disp = s.to_string();
+        assert!(disp.contains("Wrong type for key"));
     }
 }
