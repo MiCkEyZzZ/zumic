@@ -197,4 +197,135 @@ mod tests {
         assert_eq!(err.status_code(), StatusCode::TooManyAttempts);
         assert!(err.client_message().contains("60 seconds"));
     }
+
+    #[test]
+    fn test_user_not_found_and_exists() {
+        let not_found = AuthError::UserNotFound {
+            username: "none".to_string(),
+        };
+        assert_eq!(not_found.status_code(), StatusCode::UserNotFound);
+        assert_eq!(
+            not_found.client_message(),
+            "Authentication failed".to_string()
+        );
+        assert!(not_found.to_string().contains("User not found"));
+
+        let exists = AuthError::UserExists {
+            username: "exists".to_string(),
+        };
+        assert_eq!(exists.status_code(), StatusCode::UserExists);
+        assert_eq!(exists.client_message(), "User already exists".to_string());
+        assert!(exists.to_string().contains("User already exists"));
+    }
+
+    #[test]
+    fn test_password_errors() {
+        let hash_failed = AuthError::PasswordHashFailed {
+            reason: "bcrypt failed".to_string(),
+        };
+        assert_eq!(hash_failed.status_code(), StatusCode::PasswordHashFailed);
+        assert_eq!(
+            hash_failed.client_message(),
+            "Internal server error".to_string()
+        );
+        assert!(hash_failed.to_string().contains("Password hashing failed"));
+
+        let verify_failed = AuthError::PasswordVerifyFailed;
+        assert_eq!(verify_failed.status_code(), StatusCode::InvalidCredentials);
+        assert_eq!(
+            verify_failed.client_message(),
+            "Authentication failed".to_string()
+        );
+    }
+
+    #[test]
+    fn test_token_and_session() {
+        let texp = AuthError::TokenExpired {
+            token_id: "tok1".to_string(),
+        };
+        assert_eq!(texp.status_code(), StatusCode::SessionExpired);
+        assert_eq!(texp.client_message(), "Token has expired".to_string());
+        assert!(texp.to_string().contains("Token expired"));
+
+        let inval_tok = AuthError::InvalidToken {
+            reason: "bad sig".to_string(),
+        };
+        assert_eq!(inval_tok.status_code(), StatusCode::InvalidToken);
+        assert_eq!(
+            inval_tok.client_message(),
+            "Invalid authentication token".to_string()
+        );
+
+        let s_exp = AuthError::SessionExpired {
+            session_id: "sess1".to_string(),
+        };
+        assert_eq!(s_exp.status_code(), StatusCode::SessionExpired);
+        assert!(s_exp.to_string().contains("Session expired"));
+
+        let inval_sess = AuthError::InvalidSession {
+            session_id: "sess2".to_string(),
+        };
+        assert_eq!(inval_sess.status_code(), StatusCode::InvalidToken);
+    }
+
+    #[test]
+    fn test_channel_access_and_acl() {
+        let ch = AuthError::ChannelAccessDenied {
+            channel: "chan42".to_string(),
+            username: "bob".to_string(),
+        };
+        assert_eq!(ch.status_code(), StatusCode::PermissionDenied);
+        let tags = ch.metrics_tags();
+        assert!(tags.iter().any(|(k, v)| k == &"username" && v == "bob"));
+        assert!(tags.iter().any(|(k, v)| k == &"channel" && v == "chan42"));
+        assert_eq!(
+            ch.client_message(),
+            "Access denied to channel: chan42".to_string()
+        );
+
+        let invalid_acl = AuthError::InvalidAclRule {
+            rule: "foo".to_string(),
+            reason: "bad format".to_string(),
+        };
+        assert_eq!(invalid_acl.status_code(), StatusCode::InvalidArgs);
+        assert!(invalid_acl.client_message().contains("Invalid ACL rule"));
+        // metrics_tags should still include status_code tag
+        let tags2 = invalid_acl.metrics_tags();
+        assert!(tags2.iter().any(|(k, _)| k == &"status_code"));
+    }
+
+    #[test]
+    fn test_acl_serialization() {
+        let ser_err = AuthError::AclSerializationFailed {
+            reason: "json error".to_string(),
+        };
+        assert_eq!(ser_err.status_code(), StatusCode::SerializationFailed);
+        assert_eq!(
+            ser_err.client_message(),
+            "Internal server error".to_string()
+        );
+    }
+
+    #[test]
+    fn test_too_many_attempts_tags_and_message() {
+        let tma = AuthError::TooManyAttempts {
+            username: "eve".to_string(),
+            retry_after: 120,
+        };
+        assert_eq!(tma.status_code(), StatusCode::TooManyAttempts);
+        let cm = tma.client_message();
+        assert!(cm.contains("120"));
+        let tags = tma.metrics_tags();
+        assert!(tags.iter().any(|(k, v)| k == &"username" && v == "eve"));
+    }
+
+    #[test]
+    fn test_as_any_downcast() {
+        let err = AuthError::UserNotFound {
+            username: "noone".to_string(),
+        };
+        let any_ref = err.as_any();
+        // Убедимся, что можно сделать downcast_ref к AuthError
+        assert!(any_ref.downcast_ref::<AuthError>().is_some());
+    }
 }
