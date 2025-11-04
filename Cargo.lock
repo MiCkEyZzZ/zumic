@@ -3965,6 +3965,7 @@ dependencies = [
  "wasmtime",
  "wasmtime-wit-bindgen 31.0.0",
  "zstd",
+ "zumic-error",
 ]
 
 [[package]]
