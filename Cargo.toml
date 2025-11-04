@@ -25,6 +25,7 @@ strum = "0.27"
 strum_macros = "0.27"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["full", "test-util"] }
+zumic-error = { path = "zumic-error" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -102,6 +103,7 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 uuid = { version = "1", features = ["serde", "v4"] }
 zstd = "0.13.3"
+zumic-error = { workspace = true }
 
 [dependencies.wasmtime]
 version = "34.0.1"
