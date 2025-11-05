@@ -6,9 +6,9 @@ use tokio::{
     time::timeout,
 };
 use tracing::{debug, trace};
+use zumic_error::{ClientError, ResultExt, ZumicResult as ClientResult};
 
 use crate::{
-    error::{ClientError, ClientResult},
     zsp::{Command as ZspCommand, Response, ZspDecoder, ZspEncoder, ZspFrame},
     Sds, Value,
 };
@@ -46,7 +46,10 @@ impl ClientConnection {
         let stream = timeout(connect_timeout, TcpStream::connect(addr))
             .await
             .map_err(|_| ClientError::ConnectionTimeout)?
-            .map_err(ClientError::Io)?;
+            .map_err(|e| ClientError::ConnectionFailed {
+                address: addr.to_string(),
+                reason: e.to_string(),
+            })?;
         debug!("Соединение установленно с {addr}");
 
         // Разделяем stream на read/write половины
@@ -75,20 +78,21 @@ impl ClientConnection {
         let frame = command_to_frame(command)?;
 
         // Кодируем фрейм используя существующий ZspEncoder
-        let encoded =
-            ZspEncoder::encode(&frame).map_err(|e| ClientError::EncodingError(e.to_string()))?;
+        let encoded = ZspEncoder::encode(&frame).map_err(|e| ClientError::EncodingError {
+            reason: e.to_string(),
+        })?;
 
         // Отправляем с таймаутом
         timeout(self.write_timeout, self.writer.write_all(&encoded))
             .await
             .map_err(|_| ClientError::WriteTimeout)?
-            .map_err(ClientError::Io)?;
+            .map_err(|e: std::io::Error| e)?;
 
         // Сбрасываем буфер
         timeout(self.write_timeout, self.writer.flush())
             .await
             .map_err(|_| ClientError::WriteTimeout)?
-            .map_err(ClientError::Io)?;
+            .map_err(|e: std::io::Error| e)?;
 
         trace!("Команда отправлена успешно");
 
@@ -124,7 +128,10 @@ impl ClientConnection {
                         // данные неполные — нужно читать ещё
                     }
                     Err(e) => {
-                        return Err(ClientError::DecodingError(e.to_string()));
+                        return Err(ClientError::DecodingError {
+                            reason: e.to_string(),
+                        }
+                        .into());
                     }
                 }
             }
@@ -134,17 +141,20 @@ impl ClientConnection {
             let n = timeout(self.read_timeout, self.reader.read(&mut tmp))
                 .await
                 .map_err(|_| ClientError::ReadTimeout)?
-                .map_err(ClientError::Io)?;
+                .map_err(|e: std::io::Error| e)?;
 
             if n == 0 {
-                return Err(ClientError::ConnectionClosed);
+                return Err(ClientError::ConnectionClosed.into());
             }
 
             read_buf.extend_from_slice(&tmp[..n]);
 
             // Если буфер очень вырос — защитный предел
             if read_buf.len() > 10 * 1024 * 1024 {
-                return Err(ClientError::Protocol("Frame too large".to_string()));
+                return Err(ClientError::Protocol {
+                    reason: "Frame too large (>10MB)".to_string(),
+                }
+                .into());
             }
 
             // и loop продолжится — попытка декодирования выполнится снова
@@ -156,8 +166,12 @@ impl ClientConnection {
         &mut self,
         command: &ZspCommand,
     ) -> ClientResult<Response> {
-        self.send_command(command).await?;
-        self.receive_response().await
+        self.send_command(command)
+            .await
+            .context("Failed to send command")?;
+        self.receive_response()
+            .await
+            .context("Failed to receive response")
     }
 
     /// Возвращает адрес сервера
@@ -168,7 +182,11 @@ impl ClientConnection {
     /// Закрывает соединение
     pub async fn close(mut self) -> ClientResult<()> {
         debug!("Закрытие соединения с {}", self.addr);
-        self.writer.shutdown().await.map_err(ClientError::Io)?;
+        self.writer
+            .shutdown()
+            .await
+            .map_err(|e: std::io::Error| e)
+            .context("Failed to shutdown connection")?;
         Ok(())
     }
 }
@@ -209,7 +227,10 @@ fn command_to_frame(command: &ZspCommand) -> ClientResult<ZspFrame<'static>> {
             frames.push(ZspFrame::InlineString(Cow::Owned(pass.clone())));
             Ok(ZspFrame::Array(frames))
         }
-        _ => Err(ClientError::UnknownCommand(format!("{command:?}"))),
+        _ => Err(ClientError::UnknownCommand {
+            command: format!("{command:?}"),
+        }
+        .into()),
     }
 }
 
@@ -221,7 +242,10 @@ fn value_to_frame(value: &Value) -> ClientResult<ZspFrame<'static>> {
         Value::Float(f) => Ok(ZspFrame::Float(*f)),
         Value::Bool(b) => Ok(ZspFrame::Bool(*b)),
         Value::Null => Ok(ZspFrame::Null),
-        _ => Err(ClientError::Protocol("Unsupported value type".to_string())),
+        _ => Err(ClientError::Protocol {
+            reason: format!("Unsupported value type: {:?}", value),
+        }
+        .into()),
     }
 }
 
@@ -245,6 +269,6 @@ fn frame_to_response(frame: ZspFrame) -> ClientResult<Response> {
             Ok(Response::Value(Value::Str(sds)))
         }
         ZspFrame::BinaryString(None) => Ok(Response::NotFound),
-        _ => Err(ClientError::UnexpectedResponse),
+        _ => Err(ClientError::UnexpectedResponse.into()),
     }
 }

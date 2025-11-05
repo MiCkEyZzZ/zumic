@@ -1,10 +1,10 @@
 use std::{net::SocketAddr, time::Duration};
 
 use tracing::{debug, info};
+use zumic_error::{ClientError, ZumicResult as ClientResult};
 
 use crate::{
     client::ClientConnection,
-    error::{ClientError, ClientResult},
     zsp::{Command, Response},
     Value,
 };
@@ -67,11 +67,13 @@ impl ZumicClient {
 
     /// Аутентификация на сервере
     pub async fn authenticate(&mut self) -> ClientResult<()> {
-        let password = self
-            .config
-            .password
-            .clone()
-            .ok_or_else(|| ClientError::AuthenticationFailed("No password provided".into()))?;
+        let password =
+            self.config
+                .password
+                .clone()
+                .ok_or_else(|| ClientError::AuthenticationFailed {
+                    reason: "No password provided".to_string(),
+                })?;
 
         debug!("Аутентификация на сервере");
 
@@ -86,8 +88,11 @@ impl ZumicClient {
                 info!("Аутентификация успешна");
                 Ok(())
             }
-            Response::Error(msg) => Err(ClientError::AuthenticationFailed(msg)),
-            _ => Err(ClientError::UnexpectedResponse),
+            Response::Error(msg) => Err(ClientError::AuthenticationFailed {
+                reason: msg.to_string(),
+            }
+            .into()),
+            _ => Err(ClientError::UnexpectedResponse.into()),
         }
     }
 
@@ -100,8 +105,12 @@ impl ZumicClient {
         match response {
             Response::Ok => Ok(true),
             Response::String(ref s) if s == "PONG" => Ok(true),
-            Response::Error(msg) => Err(ClientError::ServerError(msg)),
-            _ => Err(ClientError::UnexpectedResponse),
+            // Response::Error(msg) => Err(ClientError::ServerError(msg)),
+            Response::Error(msg) => Err(ClientError::ServerError {
+                message: msg.to_string(),
+            }
+            .into()),
+            _ => Err(ClientError::UnexpectedResponse.into()),
         }
     }
 
@@ -120,8 +129,11 @@ impl ZumicClient {
         match response {
             Response::Value(val) => Ok(Some(val)),
             Response::NotFound => Ok(None),
-            Response::Error(msg) => Err(ClientError::ServerError(msg)),
-            _ => Err(ClientError::UnexpectedResponse),
+            Response::Error(msg) => Err(ClientError::ServerError {
+                message: msg.to_string(),
+            }
+            .into()),
+            _ => Err(ClientError::UnexpectedResponse.into()),
         }
     }
 
@@ -141,8 +153,11 @@ impl ZumicClient {
 
         match response {
             Response::Ok => Ok(()),
-            Response::Error(msg) => Err(ClientError::ServerError(msg)),
-            _ => Err(ClientError::UnexpectedResponse),
+            Response::Error(msg) => Err(ClientError::ServerError {
+                message: msg.to_string(),
+            }
+            .into()),
+            _ => Err(ClientError::UnexpectedResponse.into()),
         }
     }
 
@@ -160,8 +175,11 @@ impl ZumicClient {
         match response {
             Response::Integer(1) => Ok(true),
             Response::Integer(0) => Ok(false),
-            Response::Error(msg) => Err(ClientError::ServerError(msg)),
-            _ => Err(ClientError::UnexpectedResponse),
+            Response::Error(msg) => Err(ClientError::ServerError {
+                message: msg.to_string(),
+            }
+            .into()),
+            _ => Err(ClientError::UnexpectedResponse.into()),
         }
     }
 
