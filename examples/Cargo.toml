@@ -1,0 +1,11 @@
+[package]
+name = "examples"
+authors = ["Mikhail <mikhail.f.zhuravlev@gmail.com>"]
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zumic = { path = "../" }
+
+[lints]
+workspace = true

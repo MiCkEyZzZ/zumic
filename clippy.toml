@@ -7,7 +7,7 @@ avoid-breaking-exported-api = false # Не блокировать изменен
 # --- Безопасные/критичные запреты ---
 [[disallowed-methods]]
 path = "time::now"
-allow-invalid = true                                                                                    # <- подавляет warning "does not refer to a reachable function"
+allow-invalid = true
 reason = "time::now небезопасен (RUSTSEC) — используйте std::time::Instant или chrono/explicit clocks."
 
 [[disallowed-methods]]

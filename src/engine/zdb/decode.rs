@@ -8,7 +8,8 @@
 
 use std::{
     collections::HashSet,
-    io::{self, Error, ErrorKind, Read},
+    fs::File,
+    io::{self, Error, ErrorKind, Read, Seek, SeekFrom},
 };
 
 use byteorder::{BigEndian, ReadBytesExt};
@@ -16,9 +17,10 @@ use crc32fast::Hasher;
 use ordered_float::OrderedFloat;
 
 use super::{
-    decompress_block, CompatibilityInfo, FormatVersion, VersionUtils, FILE_MAGIC, TAG_ARRAY,
-    TAG_BITMAP, TAG_BOOL, TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL,
-    TAG_SET, TAG_STR, TAG_ZSET,
+    streaming::{CollectHandler, StreamingParser},
+    CompatibilityInfo, Crc32Read, FormatVersion, VersionUtils, FILE_MAGIC, TAG_ARRAY, TAG_BITMAP,
+    TAG_BOOL, TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_NULL, TAG_SET,
+    TAG_STR, TAG_ZSET,
 };
 use crate::{database::Bitmap, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE};
 
@@ -91,12 +93,63 @@ impl<R: Read> StreamReader<R> {
     }
 }
 
+impl<R: Read> Iterator for StreamReader<R> {
+    type Item = io::Result<(Sds, Value)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // проверяем EOF
+        let mut peek = [0u8; 1];
+        if let Err(e) = self.inner.read_exact(&mut peek) {
+            return Some(Err(e));
+        }
+
+        if peek[0] == TAG_EOF {
+            self.done = true;
+            return None;
+        }
+
+        // это первая байта длины ключа
+        let mut len_buf = [0u8; 4];
+        len_buf[0] = peek[0];
+        if let Err(e) = self.inner.read_exact(&mut len_buf[1..]) {
+            return Some(Err(e));
+        }
+
+        let klen = u32::from_be_bytes(len_buf);
+
+        // Валидация длины ключа
+        if klen > MAX_STRING_SIZE {
+            return Some(Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Key length too large: {klen} bytes"),
+            )));
+        }
+
+        let mut kb = vec![0; klen as usize];
+        if let Err(e) = self.inner.read_exact(&mut kb) {
+            return Some(Err(e));
+        }
+
+        let key = Sds::from_vec(kb);
+
+        // читаем значение с учётом версии
+        match read_value_with_version(&mut self.inner, self.version) {
+            Ok(v) => Some(Ok((key, v))),
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
 /// Десериализует значение `Value`] из бинарного потока.
 pub fn read_value<R: Read>(r: &mut R) -> io::Result<Value> {
     read_value_with_version(r, FormatVersion::current())
 }
 
-/// Собственно реализация с явной версией.
+/// Десериализует значение с явной версией формата.
 pub fn read_value_with_version<R: Read>(
     r: &mut R,
     version: FormatVersion,
@@ -122,25 +175,73 @@ pub fn read_value_with_version<R: Read>(
     }
 }
 
-/// Расширенная функция чтения дампа с проверкой совместимости версий.
+/// read_dump (legacy wrapper) - сохраняем для обратной совместимости
 pub fn read_dump<R: Read>(r: &mut R) -> io::Result<Vec<(Sds, Value)>> {
     read_dump_with_version(r, FormatVersion::current())
 }
 
+/// Попытка streaming-safe чтения дампа из файла (без read_to_end()).
+/// Для файлов: читает тело (file_len - 4) через Crc32Read, парсит, затем
+/// сверяет CRC.
+pub fn read_dump_streaming_file(path: &str) -> io::Result<Vec<(Sds, Value)>> {
+    let mut file = File::open(path)?;
+    let file_size = file.metadata()?.len();
+
+    if file_size < 8 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Dump too small"));
+    }
+
+    let body_len = file_size - 4;
+
+    // Создаём take поверх клона файла, чтобы не двигать основную позицию
+    let take = file.try_clone()?.take(body_len);
+    let crc_reader = Crc32Read::new(take);
+
+    // Парсим через streaming parser (парсер добавит BufReader)
+    let mut parser = StreamingParser::new(crc_reader)?;
+    let mut handler = CollectHandler::new();
+    parser.parse(&mut handler)?;
+
+    // Извлекаем внутренний reader чтобы получить computed CRC
+    let buf_reader = parser.into_inner(); // BufReader<Crc32Read<_>>
+    let crc_wrapped = buf_reader.into_inner(); // Crc32Read<Take<File>>
+    let (_take_back, computed_crc) = crc_wrapped.into_inner_and_finalize();
+
+    // Читаем записанный CRC из конца файла
+    file.seek(SeekFrom::End(-4))?;
+    let recorded_crc = file.read_u32::<BigEndian>()?;
+
+    if computed_crc != recorded_crc {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "CRC mismatch: computed={:08x}, recorded={:08x}",
+                computed_crc, recorded_crc
+            ),
+        ));
+    }
+
+    Ok(handler.into_items())
+}
+
 /// Читает дамп с явно указанной версией читателя.
+///
+/// По возможности использует streaming-first подход; для потоков без seek -
+/// fall back на legacy (read_to_end) чтобы сохранить поведение.
 pub fn read_dump_with_version<R: Read>(
     r: &mut R,
     reader_version: FormatVersion,
 ) -> io::Result<Vec<(Sds, Value)>> {
-    // 1) Считываем весь поток в буфере
+    // Попытка: если у нас есть File-like (неизвестно на этапе компиляции), то
+    // вызывающая сторона может использовать read_dump_streaming_file(path).
+    // Здесь оставляем прежнюю реализацию для совместимости (fallback).
     let mut data = Vec::new();
     r.read_to_end(&mut data)?;
 
-    if data.len() < 7 {
+    if data.len() < 8 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Dump too small"));
     }
 
-    // 2) Отделяем CRC32 и проверяем
     let body_len = data.len() - 4;
     let (body, crc_bytes) = data.split_at(body_len);
     let recorded_crc = (&crc_bytes[..4]).read_u32::<BigEndian>()?;
@@ -151,61 +252,170 @@ pub fn read_dump_with_version<R: Read>(
         return Err(io::Error::new(io::ErrorKind::InvalidData, "CRC mismatch"));
     }
 
-    // 3) Работаем по Cursor
-    let mut cursor = io::Cursor::new(body);
-
-    // проверяем магию
-    let mut magic = [0u8; 3];
-    cursor.read_exact(&mut magic)?;
-    if &magic != FILE_MAGIC {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Bad file magic"));
+    // Попытаемся streaming-парсинг тела (cursor)
+    let body_vec = body.to_vec();
+    {
+        let cursor = io::Cursor::new(body_vec.clone());
+        if let Ok(mut parser) = StreamingParser::new_with_version(cursor, reader_version) {
+            let mut handler = CollectHandler::new();
+            if parser.parse(&mut handler).is_ok() {
+                return Ok(handler.into_items());
+            }
+        }
     }
 
-    // читаем и валидируем версию
-    let dump_version = FormatVersion::try_from(cursor.read_u8()?)?;
-
-    // проверяем совместимость
-    let _compat = VersionUtils::validate_compatibility(reader_version, dump_version)?;
-
-    // 4) Читаем count
-    let count = cursor.read_u32::<BigEndian>()?;
-
-    // Проверка разумного количества элементов
-    if count > MAX_COLLECTION_SIZE {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "Dump contains too many items: {} (max: {})",
-                count, MAX_COLLECTION_SIZE
-            ),
-        ));
-    }
-
-    let mut items = Vec::with_capacity(count as usize);
-
-    for _ in 0..count {
-        // ключ
-        let klen = cursor.read_u32::<BigEndian>()?;
-
-        // Валидация длины ключа
-        if klen > MAX_STRING_SIZE {
+    // Fallback: legacy parsing (count-based)
+    {
+        let mut cursor = io::Cursor::new(body_vec);
+        // читаем magic
+        let mut magic = [0u8; 3];
+        cursor.read_exact(&mut magic)?;
+        if &magic != FILE_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Key length too large: {} bytes", klen),
+                format!("Invalid ZDB dump: bad magic number ({:?})", magic),
             ));
         }
 
-        let mut kb = vec![0; klen as usize];
-        cursor.read_exact(&mut kb)?;
-        let key = Sds::from_vec(kb);
+        // читаем и валидируем версию
+        let version_byte = cursor.read_u8()?;
+        let dump_version = FormatVersion::try_from(version_byte)?;
+        let _compat = VersionUtils::validate_compatibility(reader_version, dump_version)?;
 
-        // значение
-        let val = read_value_with_version(&mut cursor, dump_version)?;
-        items.push((key, val));
+        // читаем count
+        let count = cursor.read_u32::<BigEndian>()?;
+        if count > MAX_COLLECTION_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Dump contains too many items: {} (max: {})",
+                    count, MAX_COLLECTION_SIZE
+                ),
+            ));
+        }
+
+        let mut items = Vec::with_capacity(count as usize);
+
+        for _ in 0..count {
+            // ключ
+            let klen = cursor.read_u32::<BigEndian>()?;
+            if klen > MAX_STRING_SIZE {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Key length too large: {} bytes", klen),
+                ));
+            }
+
+            let mut kb = vec![0u8; klen as usize];
+            cursor.read_exact(&mut kb)?;
+            let key = Sds::from_vec(kb);
+
+            // значение
+            let val = read_value_with_version(&mut cursor, dump_version)?;
+            items.push((key, val));
+        }
+
+        Ok(items)
     }
-
-    Ok(items)
 }
+
+/// Пропускает значение без десериализации (для фильтров и счётчиков).
+///
+/// Не аллоцирует память для значения - просто пропускает байты.
+///
+/// Примечание: для [`TAG_COMPRESSED`] мы пропускаем compressed blob (не
+/// распаковываем).
+pub fn skip_value<R: Read>(
+    r: &mut R,
+    version: FormatVersion,
+) -> io::Result<()> {
+    let tag = r.read_u8()?;
+
+    match tag {
+        TAG_NULL => Ok(()),
+        TAG_BOOL => {
+            r.read_u8()?;
+            Ok(())
+        }
+        TAG_INT => {
+            r.read_i64::<BigEndian>()?;
+            Ok(())
+        }
+        TAG_FLOAT => {
+            r.read_f64::<BigEndian>()?;
+            Ok(())
+        }
+        TAG_STR => {
+            let len = r.read_u32::<BigEndian>()? as u64;
+            skip_bytes(r, len)?;
+            Ok(())
+        }
+        TAG_COMPRESSED => {
+            let len = r.read_u32::<BigEndian>()? as u64;
+            // Пропускаем compressed blob без распаковки (быстро и low-memory).
+            skip_bytes(r, len)?;
+            Ok(())
+        }
+        TAG_ARRAY => {
+            let count = r.read_u32::<BigEndian>()?;
+            for _ in 0..count {
+                skip_value(r, version)?;
+            }
+            Ok(())
+        }
+        TAG_HASH => {
+            let count = r.read_u32::<BigEndian>()?;
+            for _ in 0..count {
+                let key_len = r.read_u32::<BigEndian>()? as u64;
+                skip_bytes(r, key_len)?;
+                skip_value(r, version)?;
+            }
+            Ok(())
+        }
+        TAG_SET => {
+            let count = r.read_u32::<BigEndian>()?;
+            for _ in 0..count {
+                let elem_len = r.read_u32::<BigEndian>()? as u64;
+                skip_bytes(r, elem_len)?;
+            }
+            Ok(())
+        }
+        TAG_ZSET => {
+            let count = r.read_u32::<BigEndian>()?;
+            for _ in 0..count {
+                let key_len = r.read_u32::<BigEndian>()? as u64;
+                skip_bytes(r, key_len)?;
+                match version {
+                    FormatVersion::Legacy => {
+                        r.read_f32::<BigEndian>()?;
+                    }
+                    FormatVersion::V1 | FormatVersion::V2 => {
+                        r.read_f64::<BigEndian>()?;
+                    }
+                }
+            }
+            Ok(())
+        }
+        TAG_HLL => {
+            let len = r.read_u32::<BigEndian>()? as u64;
+            skip_bytes(r, len)?;
+            Ok(())
+        }
+        TAG_BITMAP => {
+            let len = r.read_u32::<BigEndian>()? as u64;
+            skip_bytes(r, len)?;
+            Ok(())
+        }
+        other => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Unknown tag {other} while skipping value"),
+        )),
+    }
+}
+
+// ============================================================================
+// Функции чтения отдельных типов значений (для read_value_with_version)
+// ============================================================================
 
 fn read_string_value<R: Read>(
     r: &mut R,
@@ -213,14 +423,10 @@ fn read_string_value<R: Read>(
 ) -> io::Result<Value> {
     let len = r.read_u32::<BigEndian>()?;
 
-    // Валидация размера строки
     if len > MAX_STRING_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "String length too large: {} bytes (max: {})",
-                len, MAX_STRING_SIZE
-            ),
+            format!("String length too large: {len} bytes (max: {MAX_STRING_SIZE})"),
         ));
     }
 
@@ -257,16 +463,13 @@ fn read_compressed_value<R: Read>(
     r: &mut R,
     version: FormatVersion,
 ) -> io::Result<Value> {
+    // read len (already done above)
     let len = r.read_u32::<BigEndian>()?;
 
-    // ИСПРАВЛЕНИЕ: Валидация размера сжатых данных
     if len > MAX_COMPRESSED_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "Compressed data too large: {} bytes (max: {})",
-                len, MAX_COMPRESSED_SIZE
-            ),
+            format!("Compressed data too large: {len} bytes (max: {MAX_COMPRESSED_SIZE})"),
         ));
     }
 
@@ -277,22 +480,36 @@ fn read_compressed_value<R: Read>(
         ));
     }
 
-    let mut compressed = vec![0; len as usize];
-    r.read_exact(&mut compressed)?;
+    // Limit the inner reader to exactly `len` bytes:
+    let limited = r.take(len as u64);
 
-    let decompressed = match version {
-        FormatVersion::Legacy => {
+    // Create a zstd decoder that reads from `limited`.
+    // IMPORTANT: we immediately hide the concrete Decoder type by boxing
+    // it as `Box<dyn Read>` so the compiler does not need to reason about
+    // huge nested generic types.
+    let decoder = match zstd::stream::Decoder::new(limited) {
+        Ok(d) => d,
+        Err(e) => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Compressed blocks not supported in legacy format",
-            ));
+                format!("zstd decoder error: {e}"),
+            ))
         }
-        FormatVersion::V1 => decompress_block(&compressed)?,
-        FormatVersion::V2 => decompress_block(&compressed)?,
     };
 
-    let mut slice = decompressed.as_slice();
-    read_value_with_version(&mut slice, version)
+    // Wrap decoder in a BufReader for efficiency, then box the reader.
+    let mut boxed_reader: Box<dyn Read> = Box::new(std::io::BufReader::new(decoder));
+
+    // Deserialize the inner value from the boxed reader via a &mut dyn Read.
+    // read_value_with_version is generic, but passing &mut dyn Read is fine —
+    // the compiler will use a pointer-sized type instead of expanding a giant type.
+    let val = read_value_with_version(&mut boxed_reader.as_mut(), version)?;
+
+    // Drain any remaining bytes from the decoder (to ensure the outer stream
+    // position is correct). boxed_reader currently owns the decoder BufReader.
+    std::io::copy(&mut boxed_reader.as_mut(), &mut std::io::sink())?;
+
+    Ok(val)
 }
 
 fn read_hash_value<R: Read>(
@@ -305,10 +522,7 @@ fn read_hash_value<R: Read>(
     if n > MAX_COLLECTION_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "Hash too large: {} entries (max: {})",
-                n, MAX_COLLECTION_SIZE
-            ),
+            format!("Hash too large: {n} entries (max: {MAX_COLLECTION_SIZE})"),
         ));
     }
 
@@ -321,7 +535,7 @@ fn read_hash_value<R: Read>(
         if klen > MAX_STRING_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Hash key too large: {} bytes", klen),
+                format!("Hash key too large: {klen} bytes"),
             ));
         }
 
@@ -329,7 +543,6 @@ fn read_hash_value<R: Read>(
         r.read_exact(&mut kb)?;
         let key = Sds::from_vec(kb);
 
-        // читаем значение как Value
         let raw = read_value_with_version(r, version)?;
 
         // проверяем, что Value::Str
@@ -355,14 +568,10 @@ fn read_zset_value<R: Read>(
 ) -> io::Result<Value> {
     let n = r.read_u32::<BigEndian>()?;
 
-    // Валидация количества элементов
     if n > MAX_COLLECTION_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "ZSet too large: {} entries (max: {})",
-                n, MAX_COLLECTION_SIZE
-            ),
+            format!("ZSet too large: {n} entries (max: {MAX_COLLECTION_SIZE})"),
         ));
     }
 
@@ -375,7 +584,7 @@ fn read_zset_value<R: Read>(
         if klen > MAX_STRING_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("ZSet key too large: {} bytes", klen),
+                format!("ZSet key too large: {klen} bytes"),
             ));
         }
 
@@ -401,14 +610,10 @@ fn read_set_value<R: Read>(
 ) -> io::Result<Value> {
     let n = r.read_u32::<BigEndian>()?;
 
-    // Валидация количества элементов
     if n > MAX_COLLECTION_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "Set too large: {} entries (max: {})",
-                n, MAX_COLLECTION_SIZE
-            ),
+            format!("Set too large: {n} entries (max: {MAX_COLLECTION_SIZE})"),
         ));
     }
 
@@ -420,7 +625,7 @@ fn read_set_value<R: Read>(
         if klen > MAX_STRING_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Set element too large: {} bytes", klen),
+                format!("Set element too large: {klen} bytes"),
             ));
         }
 
@@ -438,25 +643,20 @@ fn read_hll_value<R: Read>(
 ) -> io::Result<Value> {
     let n = r.read_u32::<BigEndian>()?;
 
-    // Проверяем корректность размера в зависимости от версии
     match version {
         FormatVersion::Legacy => {
             if n > DENSE_SIZE as u32 {
                 return Err(io::Error::new(
                     ErrorKind::InvalidData,
-                    format!(
-                        "HLL size {} exceeds maximum {} in legacy format",
-                        n, DENSE_SIZE
-                    ),
+                    format!("HLL size {n} exceeds maximum {DENSE_SIZE} in legacy format"),
                 ));
             }
         }
         FormatVersion::V1 | FormatVersion::V2 => {
-            // Ограничение для безопасности
             if n > DENSE_SIZE as u32 * 2 {
                 return Err(io::Error::new(
                     ErrorKind::InvalidData,
-                    format!("HLL size {} is unreasonably large", n),
+                    format!("HLL size {n} is unreasonably large"),
                 ));
             }
         }
@@ -478,14 +678,10 @@ fn read_array_value<R: Read>(
 ) -> io::Result<Value> {
     let len = r.read_u32::<BigEndian>()?;
 
-    // Валидация количества элементов
     if len > MAX_COLLECTION_SIZE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "Array too large: {} elements (max: {})",
-                len, MAX_COLLECTION_SIZE
-            ),
+            format!("Array too large: {len} elements (max: {MAX_COLLECTION_SIZE})"),
         ));
     }
 
@@ -504,7 +700,6 @@ fn read_bitmap_value<R: Read>(
 ) -> io::Result<Value> {
     let byte_len = r.read_u32::<BigEndian>()?;
 
-    // Проверяем ограничения в зависимости от версии
     match version {
         FormatVersion::Legacy => {
             if byte_len > 1024 * 1024 {
@@ -518,10 +713,7 @@ fn read_bitmap_value<R: Read>(
             if byte_len > MAX_BITMAP_SIZE {
                 return Err(io::Error::new(
                     ErrorKind::InvalidData,
-                    format!(
-                        "Bitmap too large: {} bytes (max: {})",
-                        byte_len, MAX_BITMAP_SIZE
-                    ),
+                    format!("Bitmap too large: {byte_len} bytes (max: {MAX_BITMAP_SIZE})"),
                 ));
             }
         }
@@ -536,55 +728,18 @@ fn read_bitmap_value<R: Read>(
     Ok(Value::Bitmap(bmp))
 }
 
-impl<R: Read> Iterator for StreamReader<R> {
-    type Item = io::Result<(Sds, Value)>;
+// ============================================================================
+// Skip utilities - пропуск значений без десериализации
+// ============================================================================
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
-
-        // проверяем EOF
-        let mut peek = [0u8; 1];
-        if let Err(e) = self.inner.read_exact(&mut peek) {
-            return Some(Err(e));
-        }
-
-        if peek[0] == TAG_EOF {
-            self.done = true;
-            return None;
-        }
-
-        // это первая байта длины ключа
-        let mut len_buf = [0u8; 4];
-        len_buf[0] = peek[0];
-        if let Err(e) = self.inner.read_exact(&mut len_buf[1..]) {
-            return Some(Err(e));
-        }
-
-        let klen = u32::from_be_bytes(len_buf);
-
-        // Валидация длины ключа
-        if klen > MAX_STRING_SIZE {
-            return Some(Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Key length too large: {} bytes", klen),
-            )));
-        }
-
-        let mut kb = vec![0; klen as usize];
-        if let Err(e) = self.inner.read_exact(&mut kb) {
-            return Some(Err(e));
-        }
-
-        let key = Sds::from_vec(kb);
-
-        // читаем значение с учётом версии
-        match read_value_with_version(&mut self.inner, self.version) {
-            Ok(v) => Some(Ok((key, v))),
-            Err(e) => Some(Err(e)),
-        }
-    }
+/// Пропускает N байт без аллокаций без десериализации (прочитай и выкинь).
+/// Максимально дёшево и эффективно по памяти.
+fn skip_bytes<R: Read>(
+    r: &mut R,
+    n: u64,
+) -> io::Result<()> {
+    io::copy(&mut r.take(n), &mut io::sink())?;
+    Ok(())
 }
 
 #[cfg(test)]

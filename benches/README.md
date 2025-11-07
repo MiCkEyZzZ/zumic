@@ -1,13 +1,13 @@
-# Коллекция бенчмарков производительности для `zumic`
+# Performance Benchmark Collection for `zumic`
 
-Эти бенчмарки разработаны как первая линия защиты от снижения производительности и, как правило, дают приблизительную оценку производительности для пользователей.
+These benchmarks are designed as a first line of defense against performance regressions and generally provide an approximate estimate of performance for users.
 
-## Использование
+## Usage
 
 ```zsh
-# Запуск всех бенчмарков
+# Run all benchmarks
 cargo bench -p zumic-benchmark
 
-# Запустить определенный бенчмарк, содержащий в своем названии слово «filter»
+# Run a specific benchmark containing the word "filter" in its name
 cargo bench -p zumic-benchmark -- "filter"
 ```
