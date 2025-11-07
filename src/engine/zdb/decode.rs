@@ -733,12 +733,28 @@ fn read_bitmap_value<R: Read>(
 // ============================================================================
 
 /// Пропускает N байт без аллокаций без десериализации (прочитай и выкинь).
-/// Максимально дёшево и эффективно по памяти.
+///
+/// Возвращает ошибку [`UnexpectedEof`], если в потоке недостаточно байт.
 fn skip_bytes<R: Read>(
     r: &mut R,
-    n: u64,
+    mut n: u64,
 ) -> io::Result<()> {
-    io::copy(&mut r.take(n), &mut io::sink())?;
+    // Буфер среднего размера — не аллоцируем n одновременно
+    let mut buf = [0u8; 8 * 1024];
+
+    while n > 0 {
+        let to_read = std::cmp::min(n, buf.len() as u64) as usize;
+        let read = r.read(&mut buf[..to_read])?;
+        if read == 0 {
+            // EOF раньше времени — это ошибка (файл усечён)
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected EOF while skipping bytes (file may be truncated)",
+            ));
+        }
+        n -= read as u64;
+    }
+
     Ok(())
 }
 
@@ -1330,5 +1346,27 @@ mod tests {
         if let Err(e) = result {
             assert!(e.to_string().contains("too large"));
         }
+    }
+
+    /// Тест проверяет, что при усечённом (truncated) значении парсинг падает с
+    /// ошибкой `UnexpectedEof`.
+    #[test]
+    fn test_truncated_value_fails() {
+        // Запишем ключ + строковое значение
+        let mut buf = Vec::new();
+        // TAG_STR + len + data
+        buf.push(TAG_STR);
+        let s = b"abc";
+        buf.extend(&(s.len() as u32).to_be_bytes());
+        buf.extend(s);
+
+        // теперь усечём последний байт
+        let mut trunc = buf.clone();
+        trunc.pop();
+
+        let mut cursor = std::io::Cursor::new(trunc);
+        let res = read_value_with_version(&mut cursor, FormatVersion::current());
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
 }

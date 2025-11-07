@@ -71,9 +71,9 @@ pub use database::{
 };
 /// Реэкспорт движков хранения.
 pub use engine::{
-    load_from_reader, load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InMemoryStore,
-    InPersistentStore, Shard, ShardId, ShardMetrics, ShardMetricsSnapshot, ShardedIndex,
-    ShardingConfig, SlotId, SlotManager, SlotState, Storage, StorageEngine, SyncPolicy,
+    load_from_zdb, save_to_zdb, AofLog, GlobalShardStats, InMemoryStore, InPersistentStore, Shard,
+    ShardId, ShardMetrics, ShardMetricsSnapshot, ShardedIndex, ShardingConfig, SlotId, SlotManager,
+    SlotState, Storage, StorageEngine, SyncPolicy,
 };
 /// Реэкспорт основных типов ошибок.
 pub use error::{

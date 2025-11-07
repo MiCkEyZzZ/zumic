@@ -1,13 +1,9 @@
 use std::{
     fs::File,
-    io::{self, BufReader, BufWriter, Read},
+    io::{self, BufWriter},
 };
 
-use super::{
-    zdb::{read_value, write_value},
-    InMemoryStore, Storage,
-};
-use crate::{engine::read_value_with_version, Value};
+use super::{write_stream, CallbackHandler, InMemoryStore, Storage, StreamingParser};
 
 /// Сохраняет все ключи и значения из хранилища в файл ZDB.
 /// Ключи и значения записываются попарно: сначала ключ, затем значение.
@@ -15,15 +11,10 @@ pub fn save_to_zdb(
     store: &InMemoryStore,
     path: &str,
 ) -> std::io::Result<()> {
-    let mut file = BufWriter::new(File::create(path)?);
-    for (k, v) in store.iter() {
-        // Сначала сохраняем ключ как Value::Str
-        write_value(&mut file, &Value::Str(k.clone()))?;
-        // Затем сохраняем соответствующее значение
-        write_value(&mut file, &v)?;
-    }
-
-    Ok(())
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    let items = store.iter().map(|(k, v)| (k.clone(), v.clone()));
+    write_stream(&mut writer, items)
 }
 
 /// Загружает ключи и значения из файла ZDB в указанное хранилище.
@@ -32,63 +23,14 @@ pub fn load_from_zdb(
     store: &mut InMemoryStore,
     path: &str,
 ) -> io::Result<()> {
-    let mut file = BufReader::new(File::open(path)?);
-    // По умолчанию используем текущую версию reader-а (read_value)
-    load_from_reader(store, &mut file)
-}
-
-/// Новая функция — читает пары <key, value> из произвольного `Read`.
-/// Удобна для unit-тестов и для fuzzing (можно подавать Cursor).
-///
-/// Использует `read_value_with_version` если он доступен (чтобы фаззить разные
-/// версии), но по умолчанию вызывает `read_value` (текущее поведение).
-pub fn load_from_reader<R: Read>(
-    store: &mut InMemoryStore,
-    r: &mut R,
-) -> io::Result<()> {
-    loop {
-        // Читаем ключ или выходим при EOF
-        // Сначала пробуем версионный reader (если экспортирован), иначе fallback на
-        // read_value.
-        let key_val = match read_value_with_version(r, crate::engine::zdb::file::FormatVersion::V1)
-            .or_else(|_| read_value(r))
-        {
-            Ok(v) => v,
-            Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(e),
-        };
-
-        // Проверяем, что ключ — это строка
-        let k = if let Value::Str(k) = key_val {
-            k
-        } else {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Expected Str variant for key",
-            ));
-        };
-
-        // Читаем связанное значение
-        let v = match read_value_with_version(r, crate::engine::zdb::file::FormatVersion::V1)
-            .or_else(|_| read_value(r))
-        {
-            Ok(val) => val,
-            Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Unexpected EOF while reading value for key",
-                ));
-            }
-            Err(e) => return Err(e),
-        };
-
-        // Сохраняем пару ключ-значение в хранилище
+    let file = File::open(path)?;
+    let mut parser = StreamingParser::new(file)?;
+    let mut handler = CallbackHandler::new(|key, value| {
         store
-            .set(&k, v)
-            .map_err(|e| io::Error::other(format!("{e:?}")))?
-    }
-
-    Ok(())
+            .set(&key, value)
+            .map_err(|e| io::Error::other(format!("{e:?}")))
+    });
+    parser.parse(&mut handler)
 }
 
 #[cfg(test)]
@@ -99,7 +41,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::Sds;
+    use crate::{Sds, Value};
 
     #[test]
     fn test_zdb_save_and_load_roundtrip() {
@@ -108,7 +50,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let test_path = format!("test_zdb_roundtrip_{}.zdb", ts);
+        let test_path = format!("test_zdb_roundtrip_{ts}.zdb");
 
         // 1. Создаём тестовое хранилище и наполняем его
         let store = InMemoryStore::default();
@@ -148,5 +90,127 @@ mod tests {
 
         // cleanup
         let _ = fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_empty_store_roundtrip() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let test_path = format!("test_zdb_empty_{ts}.zdb");
+
+        let store = InMemoryStore::default();
+        save_to_zdb(&store, &test_path).unwrap();
+
+        let mut loaded = InMemoryStore::default();
+        load_from_zdb(&mut loaded, &test_path).unwrap();
+
+        assert_eq!(store.iter().count(), 0);
+        assert_eq!(loaded.iter().count(), 0);
+
+        let _ = std::fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_large_value_roundtrip() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let test_path = format!("test_zdb_large_{ts}.zdb");
+
+        let store = InMemoryStore::default();
+        let big = "x".repeat(200_000); // 200 KB, можно увеличить
+        store
+            .set(
+                &crate::Sds::from_str("big"),
+                crate::Value::Str(crate::Sds::from_str(&big)),
+            )
+            .unwrap();
+
+        save_to_zdb(&store, &test_path).unwrap();
+
+        let mut loaded = InMemoryStore::default();
+        load_from_zdb(&mut loaded, &test_path).unwrap();
+
+        assert_eq!(store.iter().count(), loaded.iter().count());
+        assert_eq!(
+            loaded.get(&crate::Sds::from_str("big")).unwrap(),
+            Some(crate::Value::Str(crate::Sds::from_str(&big)))
+        );
+
+        let _ = std::fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_many_items_roundtrip() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let test_path = format!("test_zdb_many_{ts}.zdb");
+
+        let store = InMemoryStore::default();
+        let n = 1_000; // подними до 10_000 для интеграционного теста
+        for i in 0..n {
+            let key = format!("k{i}");
+            store
+                .set(&crate::Sds::from_str(&key), crate::Value::Int(i as i64))
+                .unwrap();
+        }
+
+        save_to_zdb(&store, &test_path).unwrap();
+
+        let mut loaded = InMemoryStore::default();
+        load_from_zdb(&mut loaded, &test_path).unwrap();
+
+        assert_eq!(store.iter().count(), loaded.iter().count());
+        for i in 0..n {
+            let key = crate::Sds::from_str(&format!("k{i}"));
+            let v = loaded.get(&key).unwrap();
+            assert_eq!(v, Some(crate::Value::Int(i as i64)));
+        }
+
+        let _ = std::fs::remove_file(&test_path);
+    }
+
+    #[test]
+    fn test_truncated_file_fails() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let test_path = format!("test_zdb_trunc_{ts}.zdb");
+
+        // prepare a normal file
+        let store = InMemoryStore::default();
+        store
+            .set(&crate::Sds::from_str("k"), crate::Value::Int(1))
+            .unwrap();
+        save_to_zdb(&store, &test_path).unwrap();
+
+        // truncate last byte(s)
+        let meta = std::fs::metadata(&test_path).unwrap();
+        let len = meta.len();
+        assert!(len > 0);
+        let f = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&test_path)
+            .unwrap();
+        // отрезаем последний байт (если файл маленький, отрезаем 1)
+        let new_len = len.saturating_sub(1);
+        f.set_len(new_len).unwrap();
+        drop(f);
+
+        // load should return Err (Unexpected EOF / InvalidData)
+        let mut loaded = InMemoryStore::default();
+        let res = load_from_zdb(&mut loaded, &test_path);
+        assert!(
+            res.is_err(),
+            "Expected error when loading truncated file, got Ok"
+        );
+
+        let _ = std::fs::remove_file(&test_path);
     }
 }
