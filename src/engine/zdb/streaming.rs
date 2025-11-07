@@ -326,10 +326,22 @@ impl<R: Read> StreamingParser<R> {
         // Пытаемся прочитать первый байт
         let mut peek = [0u8; 1];
         match self.reader.read_exact(&mut peek) {
-            Ok(_) => {}
+            Ok(_) => {
+                // успешно прочли байт - продолжаем
+                self.stats.bytes_read += 1;
+            }
             Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                // Нормальный EOF
-                return Ok(None);
+                // Если до этого не было разобрано ни одной записи — считаем это
+                // корректным "честным" EOF (например, пустой дамп).
+                // Но если мы уже успешно разобрали хотя бы одну запись,
+                // то внезапный EOF — признак усечения файла => ошибка.
+                if self.stats.records_parsed == 0 {
+                    return Ok(None);
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "unexpected EOF while expecting next entry (file may be truncated)",
+                ));
             }
             Err(e) => return Err(e),
         }

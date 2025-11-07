@@ -150,6 +150,7 @@
 - Изменено название файлов в модуле error: с `version` на `zdb_version`;
 - В `engine/zdb/file.rs` изменил название ошибки: с `VersionError` на `ZdbVersionError`;
 - В `pubsub/zsp_integration.rs` изменил название ошибок: c `DecodeError`, `EncodeError` на `ZspDecodeError`, `ZspEncodeError`;
+
 - **database/bitmap**
   - Оптимизирован bitcount: теперь высокая скорость подсчёта установленных битов даже на больших bitmap (1GB+) благодаря SIMD и popcnt.
   - Улучшена стабильность и корректность подсчёта битов для любых offset'ов.
@@ -157,12 +158,14 @@
 - Файловый sink: вынесены точки создания guard'ов в `src/logging/sinks/file.rs`, теперь init возвращает guard, который хранится в `LoggingHandle`.
 - main.rs: добавлена интеграция logging-handle в цепочку graceful shutdown (сбор метрик логирования перед остановкой, вызов async shutdown с таймаутом).
 - Логирование стартапа теперь включает дополнительные custom fields (`instance_id`, `environment`, версия).
+
 - **logging**
   - File sink обновлён: интеграция ротации, сжатия и автоматической очистки.
   - Инициализация file sink теперь возвращает guard, который хранится в `LoggingHandle` для корректного shutdown.
   - Конфигурация расширена: параметры ротации, компрессии, retention и naming добавлены в `LoggingConfig` и `config/default.toml`.
   - При старте выполняется проверка старых логов и фоновая очистка; операция логируется.
   - Изменил команды запуска в `README.md`
+
 - **.github/actions**
   - Обновлён workflow `dependency-check.yml` для проверки зависимостей Rust:
     - Переписан шаг извлечения зависимостей: теперь используется `cargo tree --prefix none > dependencies.txt` с последующей фильтрацией имён через `awk`.
@@ -172,20 +175,47 @@
     - Опционально запускается `cargo-audit` для проверки CVE, но не на каждом PR.
     - Workflow теперь триггерится не только на PR, но и по расписанию (`cron`) и вручную (`workflow_dispatch`).
     - Повышена стабильность и читаемость скрипта, улучшено логирование результатов проверки зависимостей.
+
 - **Makefile**
   - Добавлены новые CI/CD команды: `make ci-local`, `make simulate-ci`, `make test-ci`
   - Добавлены улучшенные fuzz команды: `make fuzz`, `make fuzz-quick`, `make fuzz-long`, `make fuzz-build`, `make fuzz-clean`, `make fuzz-target TARGET=decode_value MINUTES=10`
   - Добавлен улучшенный процесс релиза: `make prepare-release VERSION=v0.5.0`, `make release-all `, `make git-release VERSION=v0.5.0`
   - Добавлена мультиплатформенная сборка: `make build-all-platforms`
+
 - **scripts**
   - Добавлены улучшения для `run_fuzz.sh`: `красивый вывод с рамками и иконками`,
   `автоустановка cargo-fuzz если отсутствует`, `подсчёт артефактов и крашей`, `показывает последние 10 строк лога`, `правильные коды выхода`, `работает из директории fuzz (избегает путаницы с путями)`
+
 - **github/workflows**
   - Добавлены улучшения сборки для релиза: `мультиплатформенная сборка`, `использование composite actions`, `автоматические SHA256 чексуммы`, `извлечение changelog`
+
 - **ZDB**
   - Добавлены константы безопасности: `MAX_COMPRESSED_SIZE`, `MAX_STRING_SIZE`, `MAX_COLLECTION_SIZE`, `MAX_BITMAP_SIZE`,
   - Исправлена `read_compressed_value`
   - Добавлены проверки во все функции чтения: `read_string_value`, `read_hash_value`, `read_zset_value`, `read_set_value`, `read_array_value`, `read_bitmap_value`, `read_dump_with_version`, `StreamReader::next`
+
+- **ZDB / Streaming Parser**
+  - Усилена обработка конца файла в `StreamingParser::read_next_entry`:
+  - Теперь `UnexpectedEof` при попытке читать следующий байт трактуется как корректный EOF **только если** до этого не было разобрано ни одной записи (пустой дамп). Если EOF наступает **после** успешной разбора хотя бы одной записи — парсер возвращает ошибку `UnexpectedEof` (фикс регрессии: корректное обнаружение усечённых дампов).
+  - Это исправляет `test_truncated_file_fails` и предотвращает молчаливое игнорирование усечённых файлов.
+  - Файл: `src/engine/zdb/streaming.rs` (функция `read_next_entry`).
+  - Обновлены и добавлены unit-тесты на случаи усечения файла (truncated), проверяющие, что парсер возвращает ошибку при частично обрезанном дампе.
+  - Небольшие улучшения статистики парсера: теперь `stats.records_parsed` и `bytes_read` корректно учитываются при ошибках EOF.
+
+- **ZDB / decode (read_value_with_version)**
+  - Исправлена небезопасная утилита пропуска байт `skip_bytes`:
+  - `skip_bytes` теперь строго читает ровно N байт и возвращает `Err(io::ErrorKind::UnexpectedEof)`, если поток закончился раньше — ранее использовавшийся паттерн `io::copy(... take(n) ...)` мог не заметить усечение и продолжить парсинг.
+  - Это закрывает класс ошибок, когда усечённые блоки (bitmap, compressed blob и т.д.) не вызывали ошибки и приводили к silent corruption при загрузке.
+  - Файл: `src/engine/zdb/decode.rs` (функция `skip_bytes`).
+  - Добавлен тест `test_truncated_value_fails`:
+  - Тест формирует значение `TAG_STR + len + data`, отрезает последний байт и проверяет, что `read_value_with_version` возвращает `Err` с `kind() == io::ErrorKind::UnexpectedEof`.
+  - Тест оформлен с док-комментарием в стиле остальных unit-тестов.
+  - Рефакторинг: все места, где ранее использовался `io::copy(... take(n) ...)` для обязательного чтения ровно N байт, пересмотрены — там, где это критично, теперь используется `skip_bytes` (строгое чтение) или дополнительно проверяется число прочитанных байт.
+  - Юнит- и regression-тесты для `read_value_with_version` обновлены/дополнены для проверки поведения при усечённых сжатых и некорректных блоках.
+
+- **Тесты / CI**
+  - Добавлены regression-тесты, покрывающие случаи truncated AOF/dump и truncated value blocks (decode), чтобы предотвратить регрессии в будущем.
+  - Обновлён набор тестов `decode` и `streaming` — CI теперь ловит случаи некорректной обработки EOF.
 
 ### Исправлено
 

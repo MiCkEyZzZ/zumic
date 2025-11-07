@@ -30,7 +30,6 @@ doc**/*
 # Файлы окружения и секреты
 .env
 zumic.conf
-zumic.aof
 
 # Рабочее пространство VSCode
 *.code-workspace
@@ -39,7 +38,8 @@ zumic.aof
 *.wasm
 
 # Артефакты тестов
-test_zdb_roundtrip.**
+*.zdb
+*.aof
 
 # Разное
 debug/
