@@ -6,8 +6,8 @@ pub mod network;
 pub mod persistent;
 pub mod pubsub;
 pub mod storage;
-pub mod zdb_protocol;
-pub mod zsp_protocol;
+pub mod zdb_error;
+pub mod zsp_error;
 
 pub use auth::*;
 pub use client::*;
@@ -17,8 +17,8 @@ pub use network::*;
 pub use persistent::*;
 pub use pubsub::*;
 pub use storage::*;
-pub use zdb_protocol::*;
-pub use zsp_protocol::*;
+pub use zdb_error::*;
+pub use zsp_error::*;
 
 use crate::{ErrorExt, StatusCode};
 
