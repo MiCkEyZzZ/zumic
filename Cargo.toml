@@ -25,6 +25,7 @@ strum = "0.27"
 strum_macros = "0.27"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["full", "test-util"] }
+zstd = "0.13.3"
 zumic-error = { path = "zumic-error" }
 
 [workspace.lints.rust]
