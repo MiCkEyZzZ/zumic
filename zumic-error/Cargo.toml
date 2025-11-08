@@ -33,3 +33,4 @@ num_enum = { workspace = true }
 serde = { workspace = true, optional = true }
 # Сериализация enum по числовому коду
 serde_repr = { workspace = true, optional = true }
+zstd = { workspace = true, optional = true }
