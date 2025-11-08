@@ -8,7 +8,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/zdb-benchmark/codec_benchmarks.rs"
+path = "benches/zdb-benchmark/zdb_error_bench.rs"
 harness = false
 
 [lints]
@@ -17,3 +17,4 @@ workspace = true
 [dependencies]
 criterion = { workspace = true }
 zumic = { path = "../" }
+zumic-error = { workspace = true }
