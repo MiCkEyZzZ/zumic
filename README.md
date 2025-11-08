@@ -147,7 +147,7 @@ cargo run --bin zumic-cli -- --output json   GET mykey
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Follow tests and linting rules before submitting PRs.
+See. [CONTRIBUTING.md](CONTRIBUTING.md). Follow tests and linting rules before submitting PRs.
 
 ## License
 
