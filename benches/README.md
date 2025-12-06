@@ -1,4 +1,4 @@
-# Performance Benchmark Collection for `zumic`
+# # Collection of CPU benchmarks for `zumic`.
 
 These benchmarks are designed as a first line of defense against performance regressions and generally provide an approximate estimate of performance for users.
 

@@ -169,6 +169,12 @@ impl<E: ErrorExt> From<E> for StackError {
     }
 }
 
+impl From<StackError> for std::io::Error {
+    fn from(e: StackError) -> Self {
+        std::io::Error::other(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

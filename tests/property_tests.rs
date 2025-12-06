@@ -111,7 +111,7 @@ proptest! {
             .map_err(|e| TestCaseError::fail(format!("Failed to encode: {e}")))?;
 
         let mut cursor = Cursor::new(&buffer);
-        let decoded = read_value_with_version(&mut cursor, FormatVersion::V2)
+        let decoded = read_value_with_version(&mut cursor, FormatVersion::V2, None, 0)
             .map_err(|e| TestCaseError::fail(format!("Failed to decode with V2: {e}")))?;
 
         prop_assert!(

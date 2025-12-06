@@ -613,8 +613,8 @@ impl Storage for InPersistentStore {
         let result: StoreResult<(Vec<u8>, bool)> = shard.write(|data| {
             // Восстанавливаем существующий GeoSet из байтов, если есть
             let mut gs = if let Some(raw) = data.get(key_b) {
-                let mut rdr =
-                    StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+                let mut rdr = StreamReader::new(Cursor::new(raw.as_slice()))
+                    .map_err(|e| StoreError::Io(e.into()))?;
                 let mut tmp = GeoSet::new();
                 while let Some(Ok((m_sds, val))) = rdr.next() {
                     if let Value::Array(arr) = val {
@@ -648,7 +648,7 @@ impl Storage for InPersistentStore {
 
             let mut buf = Vec::new();
             let entries_iter = entries_vec.into_iter().map(|(m, v)| (Sds::from_str(&m), v));
-            write_stream(&mut buf, entries_iter).map_err(StoreError::Io)?;
+            write_stream(&mut buf, entries_iter).map_err(|e| StoreError::Io(e.into()))?;
 
             // Сохраняем в shard
             let was_new_key = !data.contains_key(key_b);
@@ -694,7 +694,8 @@ impl Storage for InPersistentStore {
             };
 
             let mut gs = GeoSet::new();
-            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice()))
+                .map_err(|e| StoreError::Io(e.into()))?;
             while let Some(Ok((m_sds, val))) = rdr.next() {
                 if let Value::Array(arr) = val {
                     if let [Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
@@ -733,7 +734,8 @@ impl Storage for InPersistentStore {
                 None => return Ok(None),
             };
 
-            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice()))
+                .map_err(|e| StoreError::Io(e.into()))?;
             while let Some(Ok((m_sds, val))) = rdr.next() {
                 if m_sds.as_str()? == member.as_str()? {
                     if let Value::Array(arr) = val {
@@ -770,7 +772,8 @@ impl Storage for InPersistentStore {
             };
 
             let mut gs = GeoSet::new();
-            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice())).map_err(StoreError::Io)?;
+            let mut rdr = StreamReader::new(Cursor::new(raw.as_slice()))
+                .map_err(|e| StoreError::Io(e.into()))?;
             while let Some(Ok((m_sds, val))) = rdr.next() {
                 if let Value::Array(arr) = val {
                     if let [Value::Float(lon0), Value::Float(lat0)] = &arr[..] {
