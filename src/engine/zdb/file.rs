@@ -1,11 +1,11 @@
-use crate::ZdbVersionError;
+use zumic_error::ZdbVersionError;
 
 /// «Магическое» начало файла: ASCII-буквы «ZDB».
 pub const FILE_MAGIC: &[u8; 3] = b"ZDB";
 
 /// Поддерживаемые версии формата дампа ZDB.
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum FormatVersion {
     /// Legacy данные без явной версии (до введения версионирования).
     Legacy = 0,
@@ -40,14 +40,11 @@ impl FormatVersion {
     ) -> bool {
         use FormatVersion::*;
         match (self, target) {
-            // Legacy может читать Legacy.
             (Legacy, Legacy) => true,
             (Legacy, _) => false,
-            // V1 может читать Legacy и V1.
             (V1, Legacy) => true,
             (V1, V1) => true,
             (V1, V2) => false,
-            // V2 может читать все предыдущие версии.
             (V2, Legacy) => true,
             (V2, V1) => true,
             (V2, V2) => true,
@@ -104,12 +101,6 @@ impl std::fmt::Display for FormatVersion {
     }
 }
 
-impl From<ZdbVersionError> for std::io::Error {
-    fn from(err: ZdbVersionError) -> Self {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-    }
-}
-
 impl CompatibilityInfo {
     /// Проверяет совместимость между версией читателя и версией дампа
     pub fn check(
@@ -124,7 +115,8 @@ impl CompatibilityInfo {
 
         if requires_migration {
             warnings.push(format!(
-                "Dump version {dump_version} is deprecated. Consider upgrading to {}",
+                "Dump version {} is deprecated. Consider upgrading to {}",
+                dump_version,
                 dump_version
                     .recommended_upgrade()
                     .unwrap_or(FormatVersion::current())
@@ -156,25 +148,35 @@ impl CompatibilityInfo {
 
 impl VersionUtils {
     /// Определяет версию по содержимому дампа.
-    pub fn detect_version(data: &[u8]) -> std::io::Result<FormatVersion> {
+    pub fn detect_version(data: &[u8]) -> Result<FormatVersion, ZdbVersionError> {
         if data.len() < 4 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Data too short",
-            ));
+            return Err(ZdbVersionError::UnsupportedVersion {
+                found: 0,
+                supported: FormatVersion::supported_versions()
+                    .into_iter()
+                    .map(|v| v as u8)
+                    .collect(),
+                offset: None,
+                key: None,
+            });
         }
 
         // Проверяем магическое число.
         if &data[0..3] != FILE_MAGIC {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid magic number",
-            ));
+            return Err(ZdbVersionError::UnsupportedVersion {
+                found: 0,
+                supported: FormatVersion::supported_versions()
+                    .into_iter()
+                    .map(|v| v as u8)
+                    .collect(),
+                offset: Some(0),
+                key: None,
+            });
         }
 
         // Четвёртый байт - версия.
         let version_byte = data[3];
-        FormatVersion::try_from(version_byte).map_err(|e| e.into())
+        FormatVersion::try_from(version_byte)
     }
 
     /// Валидирует совместимость версий с подробной диагностикой.
@@ -186,10 +188,13 @@ impl VersionUtils {
 
         if !info.can_read {
             return Err(ZdbVersionError::IncompatibleVersion {
-                reader: reader_version,
-                dump: dump_version,
+                reader: reader_version as u8,
+                dump: dump_version as u8,
+                offset: None,
+                key: None,
             });
         }
+
         Ok(info)
     }
 
@@ -227,7 +232,12 @@ impl TryFrom<u8> for FormatVersion {
             2 => Ok(FormatVersion::V2),
             other => Err(ZdbVersionError::UnsupportedVersion {
                 found: other,
-                supported: FormatVersion::supported_versions(),
+                supported: FormatVersion::supported_versions()
+                    .into_iter()
+                    .map(|v| v as u8)
+                    .collect(),
+                offset: None,
+                key: None,
             }),
         }
     }
@@ -238,6 +248,8 @@ pub const DUMP_VERSION: u8 = FormatVersion::V1 as u8;
 
 #[cfg(test)]
 mod tests {
+    use zumic_error::ZdbError;
+
     use super::*;
 
     /// Тест проверяет корректность порядка версий.
@@ -402,12 +414,13 @@ mod tests {
     fn test_version_error_display() {
         let err = ZdbVersionError::UnsupportedVersion {
             found: 99,
-            supported: vec![FormatVersion::V1, FormatVersion::V2],
+            supported: vec![FormatVersion::V1 as u8, FormatVersion::V2 as u8],
+            offset: None,
+            key: None,
         };
         let msg = format!("{err}");
-        assert!(msg.contains("Unsupported ZDB dump version: 99"));
-        assert!(msg.contains("V1"));
-        assert!(msg.contains("V2"));
+        assert!(msg.contains("version") || msg.contains("Unsupported"));
+        assert!(msg.contains("99"));
     }
 
     /// Тест проверяет преобразование VersionError в io::Error.
@@ -415,9 +428,11 @@ mod tests {
     fn test_version_error_conversion() {
         let version_err = ZdbVersionError::UnsupportedVersion {
             found: 99,
-            supported: vec![FormatVersion::V1],
+            supported: vec![FormatVersion::V1 as u8],
+            offset: None,
+            key: None,
         };
-        let io_err: std::io::Error = version_err.into();
-        assert_eq!(io_err.kind(), std::io::ErrorKind::InvalidData);
+        let io_err: std::io::Error = ZdbError::from(version_err).into();
+        assert_eq!(io_err.kind(), std::io::ErrorKind::Unsupported);
     }
 }

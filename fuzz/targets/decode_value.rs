@@ -1,5 +1,4 @@
 #![no_main]
-
 use std::io::Cursor;
 
 use libfuzzer_sys::fuzz_target;
@@ -10,7 +9,8 @@ fuzz_target!(|data: &[u8]| {
     for &version in &[FormatVersion::V1, FormatVersion::V2] {
         let _ = std::panic::catch_unwind(|| {
             let mut cursor = Cursor::new(data);
-            let _ = read_value_with_version(&mut cursor, version);
+            // Добавляем недостающие аргументы: key=None, offset=0
+            let _ = read_value_with_version(&mut cursor, version, None, 0);
         });
     }
 
@@ -19,7 +19,6 @@ fuzz_target!(|data: &[u8]| {
     if !data.is_empty() && data[0] == TAG_COMPRESSED {
         // Создаём копию и МУТИРУЕМ её полностью
         let mut corrupted = data.to_vec();
-
         if corrupted.len() > 5 {
             corrupted[5] ^= 0xFF;
             let mid = corrupted.len() / 2;
@@ -34,11 +33,12 @@ fuzz_target!(|data: &[u8]| {
         for &version in &[FormatVersion::V1, FormatVersion::V2] {
             let _ = std::panic::catch_unwind(|| {
                 let mut cursor = Cursor::new(corrupted_slice);
-                let _ = read_value_with_version(&mut cursor, version);
+                // Добавляем недостающие аргументы
+                let _ = read_value_with_version(&mut cursor, version, None, 0);
             });
         }
 
-        // 3) Попробуем пересажать "сырые" данные (после тега) и прочитать результат
+        // 3) Попробуем пересжать "сырые" данные (после тега) и прочитать результат
         let raw_data: &[u8] = if data.len() > 1 { &data[1..] } else { &[] };
         if let Ok(recompressed) = compress_block(raw_data) {
             let mut buf = Vec::with_capacity(1 + 4 + recompressed.len());
@@ -50,7 +50,8 @@ fuzz_target!(|data: &[u8]| {
             for &version in &[FormatVersion::V1, FormatVersion::V2] {
                 let _ = std::panic::catch_unwind(|| {
                     let mut cursor = Cursor::new(buf_slice);
-                    let _ = read_value_with_version(&mut cursor, version);
+                    // Добавляем недостающие аргументы
+                    let _ = read_value_with_version(&mut cursor, version, None, 0);
                 });
             }
         }

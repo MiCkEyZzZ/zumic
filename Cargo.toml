@@ -76,6 +76,7 @@ ordered-float = { version = "5.0.0", features = ["serde"] }
 owo-colors = "4.2.2"
 phf = { version = "0.11", features = ["macros"] }
 proptest = "1.4"
+
 # Дополнительно для лучшей интеграции с proptest
 clap = { version = "4.5", features = ["derive", "env", "cargo"] }
 hostname = "0.4"
@@ -84,6 +85,8 @@ parking_lot = "0.12.5"
 proptest-derive = "0.4"
 rand = "0.8"
 rmp-serde = "1.3.0"
+rstest = "0.26.1"
+rust_decimal = "1.39.0"
 rustyline = "17.0.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde-big-array = "0.5.1"

@@ -1,7 +1,6 @@
-use std::{
-    fs::File,
-    io::{self, BufWriter},
-};
+use std::{fs::File, io::BufWriter};
+
+use zumic_error::{ResultExt, StatusCode, ZumicResult};
 
 use super::{write_stream, CallbackHandler, InMemoryStore, Storage, StreamingParser};
 
@@ -10,8 +9,8 @@ use super::{write_stream, CallbackHandler, InMemoryStore, Storage, StreamingPars
 pub fn save_to_zdb(
     store: &InMemoryStore,
     path: &str,
-) -> std::io::Result<()> {
-    let file = File::create(path)?;
+) -> ZumicResult<()> {
+    let file = File::create(path).context("Failed to create ZDB file")?;
     let mut writer = BufWriter::new(file);
     let items = store.iter().map(|(k, v)| (k.clone(), v.clone()));
     write_stream(&mut writer, items)
@@ -22,15 +21,53 @@ pub fn save_to_zdb(
 pub fn load_from_zdb(
     store: &mut InMemoryStore,
     path: &str,
-) -> io::Result<()> {
-    let file = File::open(path)?;
+) -> ZumicResult<()> {
+    let file = File::open(path).context("Failed to open ZDB file")?;
     let mut parser = StreamingParser::new(file)?;
+
     let mut handler = CallbackHandler::new(|key, value| {
-        store
-            .set(&key, value)
-            .map_err(|e| io::Error::other(format!("{e:?}")))
+        store.set(&key, value).map_err(|e| {
+            // временная конверсия старой ошибки -> StackError
+            zumic_error::StackError::new(SimpleError(format!("store.set failed: {e}")))
+        })
     });
+
     parser.parse(&mut handler)
+}
+
+// ВРЕМЕННАЯ локальная обёртка — можно жить с ней до полной миграции ошибок
+#[derive(Debug)]
+struct SimpleError(String);
+
+impl std::fmt::Display for SimpleError {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl std::error::Error for SimpleError {}
+
+impl zumic_error::ErrorExt for SimpleError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::Internal
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn client_message(&self) -> String {
+        "Internal server error".to_string()
+    }
+    fn log_message(&self) -> String {
+        self.0.clone()
+    }
+    fn metrics_tags(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("error_type", "simple".to_string()),
+            ("status_code", self.status_code().to_string()),
+        ]
+    }
 }
 
 #[cfg(test)]

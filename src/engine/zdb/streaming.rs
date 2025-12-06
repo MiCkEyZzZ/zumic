@@ -14,6 +14,7 @@
 use std::io::{self, BufReader, Read, Write};
 
 use byteorder::{BigEndian, WriteBytesExt};
+use zumic_error::{ensure, ResultExt, StackError, ZdbError, ZumicResult};
 
 use super::{write_value, CompatibilityInfo, FormatVersion, VersionUtils, FILE_MAGIC, TAG_EOF};
 use crate::{engine::read_value_with_version, Sds, Value};
@@ -24,7 +25,7 @@ pub trait ParseHandler {
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()>;
+    ) -> ZumicResult<()>;
 
     /// Должен ли парсер продолжать работу после recoverable ошибки?
     fn should_continue_on_error(&self) -> bool {
@@ -32,7 +33,7 @@ pub trait ParseHandler {
     }
 
     /// Вызывается в конце парсинга для финализации.
-    fn finalize(&mut self) -> io::Result<()> {
+    fn finalize(&mut self) -> ZumicResult<()> {
         Ok(())
     }
 }
@@ -60,8 +61,9 @@ pub enum ParseEvent {
     End,
     /// Ошибка парсинга (может быть recoverable)
     Error {
-        key: Option<Sds>,
         error: String,
+        key: Option<Sds>,
+        offset: Option<u64>,
         recoverable: bool,
     },
 }
@@ -126,14 +128,12 @@ where
 /// Позволяет обрабатывать записи без создания custom handler.
 pub struct CallbackHandler<F>
 where
-    F: FnMut(Sds, Value) -> io::Result<()>,
+    F: FnMut(Sds, Value) -> ZumicResult<()>,
 {
     callback: F,
 }
 
 /// Handler для записи в другой дамп с трансформацией.
-///
-/// Позволяет конвертировать дампы на лету.
 pub struct TransformHandler<W, F>
 where
     W: Write,
@@ -189,7 +189,7 @@ impl CountHandler {
 
 impl<R: Read> StreamingParser<R> {
     /// Создаёт новый парсер из Reader.
-    pub fn new(reader: R) -> io::Result<Self> {
+    pub fn new(reader: R) -> ZumicResult<Self> {
         Self::new_with_version(reader, FormatVersion::current())
     }
 
@@ -197,7 +197,7 @@ impl<R: Read> StreamingParser<R> {
     pub fn new_with_version(
         reader: R,
         reader_version: FormatVersion,
-    ) -> io::Result<Self> {
+    ) -> ZumicResult<Self> {
         Ok(Self {
             reader: BufReader::with_capacity(64 * 1024, reader),
             version: None,
@@ -210,14 +210,15 @@ impl<R: Read> StreamingParser<R> {
     pub fn parse<H: ParseHandler>(
         &mut self,
         handler: &mut H,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         // Читаем и валидируем заголовок
         let version = self.read_and_validate_header()?;
         self.version = Some(version);
         self.stats.version = Some(version);
 
         // Проверяем совметсимость
-        let compatibility = VersionUtils::validate_compatibility(self.reader_version, version)?;
+        let compatibility = VersionUtils::validate_compatibility(self.reader_version, version)
+            .map_err(ZdbError::from)?;
 
         // Отправляем событие Header
         handler.handle_event(ParseEvent::Header {
@@ -227,7 +228,9 @@ impl<R: Read> StreamingParser<R> {
 
         // Читаем записи до EOF
         loop {
-            match self.read_next_entry(version) {
+            let offset = self.stats.bytes_read;
+
+            match self.read_next_entry(version, offset) {
                 Ok(Some((key, value))) => {
                     self.stats.records_parsed += 1;
 
@@ -238,8 +241,9 @@ impl<R: Read> StreamingParser<R> {
                     }) {
                         // Handler вернул ошибку
                         let error_event = ParseEvent::Error {
-                            key: Some(key),
                             error: e.to_string(),
+                            key: Some(key),
+                            offset: Some(offset),
                             recoverable: false,
                         };
 
@@ -254,11 +258,18 @@ impl<R: Read> StreamingParser<R> {
                 Err(e) => {
                     self.stats.errors_count += 1;
 
+                    // Проверяем, является ли ошибка recoverable
+                    let recoverable = e
+                        .downcast_ref::<ZdbError>()
+                        .map(|z| z.is_recoverable())
+                        .unwrap_or(false);
+
                     // Создаём событие ошибки
                     let error_event = ParseEvent::Error {
-                        key: None,
                         error: e.to_string(),
-                        recoverable: true,
+                        key: None,
+                        offset: Some(offset),
+                        recoverable,
                     };
 
                     handler.handle_event(error_event.clone())?;
@@ -296,25 +307,44 @@ impl<R: Read> StreamingParser<R> {
         self.reader
     }
 
-    fn read_and_validate_header(&mut self) -> io::Result<FormatVersion> {
+    fn read_and_validate_header(&mut self) -> ZumicResult<FormatVersion> {
+        let start_offset = self.stats.bytes_read;
+
         // Читаем magic number
         let mut magic = [0u8; 3];
-        self.reader.read_exact(&mut magic)?;
+        self.reader
+            .read_exact(&mut magic)
+            .map_err(|_| ZdbError::UnexpectedEof {
+                context: "reading magic number".to_string(),
+                offset: Some(start_offset),
+                key: None,
+                expected_bytes: Some(3),
+                got_bytes: Some(0),
+            })?;
         self.stats.bytes_read += 3;
 
-        if &magic != FILE_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid magic number: expected {FILE_MAGIC:?}, got {magic:?}"),
-            ));
-        }
+        ensure!(
+            &magic == FILE_MAGIC,
+            ZdbError::InvalidMagic {
+                expected: *FILE_MAGIC,
+                got: magic
+            }
+        );
 
         // Читаем версию
         let mut version_bytes = [0u8; 1];
-        self.reader.read_exact(&mut version_bytes)?;
+        self.reader
+            .read_exact(&mut version_bytes)
+            .map_err(|_| ZdbError::UnexpectedEof {
+                context: "reading version byte".to_string(),
+                offset: Some(start_offset),
+                key: None,
+                expected_bytes: Some(1),
+                got_bytes: Some(0),
+            })?;
         self.stats.bytes_read += 1;
 
-        let version = FormatVersion::try_from(version_bytes[0])?;
+        let version = FormatVersion::try_from(version_bytes[0]).map_err(ZdbError::from)?;
 
         Ok(version)
     }
@@ -322,7 +352,8 @@ impl<R: Read> StreamingParser<R> {
     fn read_next_entry(
         &mut self,
         version: FormatVersion,
-    ) -> io::Result<Option<(Sds, Value)>> {
+        offset: u64,
+    ) -> ZumicResult<Option<(Sds, Value)>> {
         // Пытаемся прочитать первый байт
         let mut peek = [0u8; 1];
         match self.reader.read_exact(&mut peek) {
@@ -338,12 +369,16 @@ impl<R: Read> StreamingParser<R> {
                 if self.stats.records_parsed == 0 {
                     return Ok(None);
                 }
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "unexpected EOF while expecting next entry (file may be truncated)",
-                ));
+                return Err(ZdbError::UnexpectedEof {
+                    context: "expecting next entry".to_string(),
+                    offset: Some(offset),
+                    key: None,
+                    expected_bytes: Some(1),
+                    got_bytes: Some(0),
+                }
+                .into());
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(StackError::from(e)),
         }
         self.stats.bytes_read += 1;
 
@@ -355,32 +390,50 @@ impl<R: Read> StreamingParser<R> {
         // Это первый байт длины ключа
         let mut len_buf = [0u8; 4];
         len_buf[0] = peek[0];
-        self.reader.read_exact(&mut len_buf[1..])?;
+        self.reader
+            .read_exact(&mut len_buf[1..])
+            .map_err(|_| ZdbError::UnexpectedEof {
+                context: "reading key length".to_string(),
+                offset: Some(offset),
+                key: None,
+                expected_bytes: Some(4),
+                got_bytes: Some(1),
+            })?;
         self.stats.bytes_read += 3;
 
         let key_len = u32::from_be_bytes(len_buf) as usize;
 
-        // Валидация размера ключа
         const MAX_KEY_SIZE: usize = 512 * 1024 * 1024; // 512МБ
-        if key_len > MAX_KEY_SIZE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Key length too large: {key_len} bytes"),
-            ));
-        }
+        ensure!(
+            key_len <= MAX_KEY_SIZE,
+            ZdbError::SizeLimit {
+                what: "key".to_string(),
+                size: key_len as u64,
+                limit: MAX_KEY_SIZE as u64,
+                offset: Some(offset),
+                key: None
+            }
+        );
 
         // Читаем ключ
         let mut key_bytes = vec![0u8; key_len];
-        self.reader.read_exact(&mut key_bytes)?;
+        self.reader
+            .read_exact(&mut key_bytes)
+            .map_err(|_| ZdbError::UnexpectedEof {
+                context: "reading key bytes".to_string(),
+                offset: Some(offset + 4),
+                key: None,
+                expected_bytes: Some(key_len as u64),
+                got_bytes: Some(0),
+            })?;
         self.stats.bytes_read += key_len as u64;
 
         let key = Sds::from_vec(key_bytes);
+        let key_str = String::from_utf8_lossy(key.as_bytes()).to_string();
 
-        // Читаем значение (используем существующую ф-ю)
-        let value = read_value_with_version(&mut self.reader, version)?;
-
-        // Обновляем статистику (приблизительно)
-        self.stats.bytes_read += 0; // точная оценка сложна
+        let value_offset = offset + 4 + key_len as u64;
+        let value =
+            read_value_with_version(&mut self.reader, version, Some(&key_str), value_offset)?;
 
         Ok(Some((key, value)))
     }
@@ -417,7 +470,7 @@ impl ParseHandler for CollectHandler {
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         if let ParseEvent::Entry { key, value } = event {
             self.items.push((key, value));
         }
@@ -455,7 +508,7 @@ where
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         if let ParseEvent::Entry { key, value } = event {
             if (self.predicate)(&key) {
                 self.items.push((key, value));
@@ -469,7 +522,7 @@ impl ParseHandler for CountHandler {
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         match event {
             ParseEvent::Header { version, .. } => {
                 self.version = Some(version);
@@ -486,7 +539,7 @@ impl ParseHandler for CountHandler {
 
 impl<F> CallbackHandler<F>
 where
-    F: FnMut(Sds, Value) -> io::Result<()>,
+    F: FnMut(Sds, Value) -> ZumicResult<()>,
 {
     /// Создаёт handler с callback ф-ей.
     pub fn new(callback: F) -> Self {
@@ -496,12 +549,12 @@ where
 
 impl<F> ParseHandler for CallbackHandler<F>
 where
-    F: FnMut(Sds, Value) -> io::Result<()>,
+    F: FnMut(Sds, Value) -> ZumicResult<()>,
 {
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         if let ParseEvent::Entry { key, value } = event {
             (self.callback)(key, value)?;
         }
@@ -540,20 +593,26 @@ where
     fn handle_event(
         &mut self,
         event: ParseEvent,
-    ) -> io::Result<()> {
+    ) -> ZumicResult<()> {
         match event {
             ParseEvent::Header { version, .. } => {
                 // Записываем заголовок
-                self.writer.write_all(FILE_MAGIC)?;
-                self.writer.write_all(&[version as u8])?;
+                self.writer
+                    .write_all(FILE_MAGIC)
+                    .context("Failed to write magic")?;
+                self.writer
+                    .write_all(&[version as u8])
+                    .context("Failed to write version")?;
             }
             ParseEvent::Entry { key, value } => {
                 // Применяем трансформацию
                 if let Some((new_key, new_value)) = (self.transform)(&key, &value) {
                     let kb = new_key.as_bytes();
-                    self.writer.write_u32::<BigEndian>(kb.len() as u32)?;
-                    self.writer.write_all(kb)?;
-                    write_value(&mut self.writer, &new_value)?;
+                    self.writer
+                        .write_u32::<BigEndian>(kb.len() as u32)
+                        .context("Failed to write key length")?;
+                    self.writer.write_all(kb).context("Failed to write key")?;
+                    write_value(&mut self.writer, &new_value).context("Failed to write value")?;
                     self.count += 1;
                 }
             }
