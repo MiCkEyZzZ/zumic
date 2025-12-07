@@ -139,6 +139,56 @@ cargo run --bin zumic-cli -- --output raw    GET mykey
 cargo run --bin zumic-cli -- --output json   GET mykey
 ```
 
+## Zumic Architecture Idea
+
+```
+                  ┌─────────────────────────┐
+                  │        CLIENTS          │
+                  │ CLI • SDK • Tools       │
+                  │ REST • Pub/Sub          │
+                  └────────────┬────────────┘
+                               │  ZSP frames
+                               ▼
+                  ┌─────────────────────────┐
+                  │        ZSP LAYER        │
+                  │ RESP-like protocol      │
+                  │ parser / serializer     │
+                  └─────────────┬───────────┘
+                                │ commands
+                                ▼
+                  ┌─────────────────────────────────────────┐
+                  │                ENGINE                   │
+                  │  In-Memory Data Structures:             │
+                  │  hash • list • set • zset • bitmap      │
+                  │  geo • smart types                      │
+                  └─────────┬──────────────────────┬────────┘
+                            │                      │
+                            │                      │
+                            │                      │
+                            ▼                      ▼
+                    ┌────────────────┐   ┌─────────────────────────┐
+                    │   SNAPSHOT     │   │     AOF LOG             │
+                    │   ZDB format   │   │  append-only operations │
+                    │  streaming I/O │   │  fsync policy           │
+                    │   CRC checks   │   │  replay on restore      │
+                    └───────┬────────┘   └──────────┬──────────────┘
+                            │                       │
+        restore(path):      │     load snapshot     │   replay ops
+                            └───────────┬───────────┘
+                                        ▼
+                             ┌──────────────────────┐
+                             │      RESTORE         │
+                             │  ZDB → AOF → Engine  │
+                             └──────────┬───────────┘
+                                        │
+                                        ▼
+                        ┌───────────────────────────────────┐
+                        │              CLUSTER              │
+                        │ Replication • Sharding • Failover │
+                        │ Replica stream from Engine        │
+                        └───────────────────────────────────┘
+```
+
 ## Troubleshooting
 
 * If `nc` output differs from `zumic-cli` output, that is expected: `nc` shows protocol frames; `zumic-cli` prints parsed values.
