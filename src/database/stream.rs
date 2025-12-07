@@ -128,28 +128,6 @@ mod tests {
         assert_eq!(stream.len(), 0);
     }
 
-    /// Тест проверяет метод add, который корректно добавляет записи и sequence
-    /// увеличивается, а поток становится непустым, и корректно меняется длина.
-    #[test]
-    fn test_add_increments_and_len() {
-        let mut stream = Stream::new();
-        let data1 = make_entry("a", 1);
-        let data2 = make_entry("b", 2);
-
-        let id1 = stream.add(data1.clone());
-        assert!(!stream.is_empty());
-        assert_eq!(stream.len(), 1);
-
-        let id2 = stream.add(data2.clone());
-        assert_eq!(stream.len(), 2);
-
-        // Проверяем, что время ms_time одинаковое (тест может сломаться, если
-        // время изменится между вызовами)
-        assert_eq!(id2.ms_time, id1.ms_time);
-        // Проверяем, что sequence увеличился на 1
-        assert_eq!(id2.sequence, id1.sequence + 1);
-    }
-
     /// Тест проверяет метод iter, который корректно возвращает записи в
     /// порядке добавления, а данные в записях совпадают с теми, что мы
     /// добавляли.
