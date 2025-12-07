@@ -139,23 +139,23 @@ cargo run --bin zumic-cli -- --output raw    GET mykey
 cargo run --bin zumic-cli -- --output json   GET mykey
 ```
 
-## Zumic Architecture Idea
+## Architecture Idea
 
 ```
-                  ┌─────────────────────────┐
-                  │        CLIENTS          │
-                  │ CLI • SDK • Tools       │
-                  │ REST • Pub/Sub          │
-                  └────────────┬────────────┘
-                               │  ZSP frames
-                               ▼
-                  ┌─────────────────────────┐
-                  │        ZSP LAYER        │
-                  │ RESP-like protocol      │
-                  │ parser / serializer     │
-                  └─────────────┬───────────┘
-                                │ commands
-                                ▼
+                        ┌─────────────────────────┐
+                        │        CLIENTS          │
+                        │ CLI • SDK • Tools       │
+                        │ REST • Pub/Sub          │
+                        └───────────┬─────────────┘
+                                    │  ZSP frames
+                                    ▼
+                        ┌─────────────────────────┐
+                        │        ZSP LAYER        │
+                        │ RESP-like protocol      │
+                        │ parser / serializer     │
+                        └─────────────┬───────────┘
+                                      │ commands
+                                      ▼
                   ┌─────────────────────────────────────────┐
                   │                ENGINE                   │
                   │  In-Memory Data Structures:             │
