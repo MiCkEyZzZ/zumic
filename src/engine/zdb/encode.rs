@@ -18,16 +18,14 @@ use super::{
 };
 use crate::{Sds, Value};
 
-/// Сериализует значение [`Value`] в поток `Write` с автоматическим сжатием.
+/// Сериализует значение с авто-сжатием (как в оригинальном коде).
 pub fn write_value<W: Write>(
     w: &mut W,
     v: &Value,
 ) -> ZumicResult<()> {
-    // Сначала сериализуем значение во внутренний буфер
     let mut buf = Vec::new();
     write_value_inner(&mut buf, v)?;
 
-    // Если буфер большой — сжимаем его
     if should_compress(buf.len()) {
         let compressed = compress_block(&buf).map_err(|e| ZdbError::CompressionError {
             operation: zumic_error::CompressionOp::Compress,
@@ -46,12 +44,21 @@ pub fn write_value<W: Write>(
         return Ok(());
     }
 
-    // Иначе пишем как есть
     w.write_all(&buf).context("Failed to write value data")?;
     Ok(())
 }
 
-/// Внутренняя сериализация значения без упаковки в сжатый блок
+/// Обёртка: то же самое, но без авто-сжатия (пишет напрямую через
+/// write_value_inner). Полезно для streaming/writer-ориентированных путей.
+pub fn write_value_no_compress<W: Write>(
+    w: &mut W,
+    v: &Value,
+) -> ZumicResult<()> {
+    write_value_inner(w, v)
+}
+
+/// Внутренняя сериализация (пишет напрямую в переданный Writer).
+/// Не делает авто-сжатия, рекурсивно использует себя для вложенных значений.
 pub fn write_value_inner<W: Write>(
     w: &mut W,
     v: &Value,
@@ -85,6 +92,7 @@ pub fn write_value_inner<W: Write>(
             w.write_u32::<BigEndian>(list.len() as u32)
                 .context("Failed to write list length")?;
             for item in list.iter() {
+                // List хранит Sds-строки — пишем как Str
                 write_value_inner(w, &Value::Str(item.clone()))?;
             }
             Ok(())
@@ -102,14 +110,13 @@ pub fn write_value_inner<W: Write>(
             w.write_u8(TAG_HASH).context("Failed to write HASH tag")?;
             w.write_u32::<BigEndian>(hmap.len() as u32)
                 .context("Failed to write hash size")?;
-            // entries() возвращает Vec<(Sds, Sds)>, не требует &mut
             for (field, val) in hmap.entries() {
-                // ключ
                 let fb = field.as_bytes();
                 w.write_u32::<BigEndian>(fb.len() as u32)
                     .context("Failed to write hash key length")?;
                 w.write_all(fb).context("Failed to write hash key")?;
-                // значение — строка (Sds)
+
+                // Значение для hash — Sds (строка). Пишем как STR (без рекурсии).
                 w.write_u8(TAG_STR)
                     .context("Failed to write hash value STR tag")?;
                 let vb = val.as_bytes();
@@ -121,6 +128,7 @@ pub fn write_value_inner<W: Write>(
         }
         Value::ZSet { dict, sorted } => {
             w.write_u8(TAG_ZSET).context("Failed to write ZSET tag")?;
+            // Используем dict.len() — чтобы не держать неиспользуемых переменных
             w.write_u32::<BigEndian>(dict.len() as u32)
                 .context("Failed to write zset size")?;
             for (score_wrapper, key) in sorted.iter() {
@@ -170,7 +178,8 @@ pub fn write_value_inner<W: Write>(
                     w.write_u32::<BigEndian>(fb.len() as u32)
                         .context("Failed to write stream field length")?;
                     w.write_all(fb).context("Failed to write stream field")?;
-                    write_value(w, val)?;
+                    // рекурсивная сериализация значения (без дополнительной аллокации)
+                    write_value_inner(w, val)?;
                 }
             }
             Ok(())
@@ -187,23 +196,19 @@ pub fn write_value_inner<W: Write>(
     }
 }
 
-/// Записывает дамп с проверкой целостности: магия, версия, записи и CRC32 в
-/// конце.
-///
-/// Формат:
-///   [magic][ver][count]
-///   ... пары <key, value> ...
-///   [crc32: u32 BE]
+/// Оригинальный write_dump (собирает всё в память) — оставлен для
+/// совместимости.
 pub fn write_dump<W: Write>(
     w: &mut W,
     kvs: impl Iterator<Item = (Sds, Value)>,
 ) -> ZumicResult<()> {
-    // 1) Собираем «тело» дампа в буфер
     let mut buf = Vec::new();
     buf.extend_from_slice(FILE_MAGIC);
     buf.push(FormatVersion::V1 as u8);
 
     let items: Vec<_> = kvs.collect();
+    buf.reserve(items.len().saturating_mul(64));
+
     buf.write_u32::<BigEndian>(items.len() as u32)
         .context("Failed to write item count")?;
 
@@ -212,25 +217,71 @@ pub fn write_dump<W: Write>(
         buf.write_u32::<BigEndian>(kb.len() as u32)
             .context("Failed to write key length")?;
         buf.write_all(kb).context("Failed to write key")?;
-        write_value(&mut buf, &val)?;
+        write_value_inner(&mut buf, &val)?;
     }
 
-    // 2) Вычисляем CRC32 от всего буфера
     let mut hasher = Hasher::new();
     hasher.update(&buf);
     let crc = hasher.finalize();
 
-    // 3) Пишем буфер и CRC32
     w.write_all(&buf).context("Failed to write dump body")?;
     w.write_u32::<BigEndian>(crc)
         .context("Failed to write CRC32")?;
     Ok(())
 }
 
-/// Пишет в `w` потоковую сериализацию дампа:
-/// - магия + версия;
-/// - затем N записей <ключ,значение>;
-/// - в конце — `TAG_EOF`.
+/// Streaming-версия записи дампа: не собирает все элементы в память.
+/// Требует `ExactSizeIterator` (чтобы знать count заранее).
+pub fn write_dump_streaming<W: Write, I>(
+    w: &mut W,
+    kvs: I,
+) -> ZumicResult<()>
+where
+    I: ExactSizeIterator<Item = (Sds, Value)>,
+{
+    let mut hasher = Hasher::new();
+
+    // helper: write bytes to w и update crc
+    let mut write_and_hash = |bytes: &[u8]| -> ZumicResult<()> {
+        w.write_all(bytes).context("Failed to write")?;
+        hasher.update(bytes);
+        Ok(())
+    };
+
+    // header: magic + version
+    write_and_hash(FILE_MAGIC).context("Failed to write magic")?;
+    let ver_byte = [FormatVersion::V1 as u8];
+    write_and_hash(&ver_byte).context("Failed to write version")?;
+
+    // count
+    let count = kvs.len() as u32;
+    let cnt_buf = count.to_be_bytes();
+    write_and_hash(&cnt_buf).context("Failed to write item count")?;
+
+    // entries: для каждого ключа пишем (keylen + key + serialized value)
+    for (key, val) in kvs {
+        let kb = key.as_bytes();
+
+        // временный буфер для одной записи
+        let mut tmp = Vec::with_capacity(8 + kb.len());
+        tmp.write_u32::<BigEndian>(kb.len() as u32)
+            .expect("writing to vec cannot fail");
+        tmp.extend_from_slice(kb);
+        write_value_inner(&mut tmp, &val)?;
+
+        // записываем и хешируем
+        write_and_hash(&tmp).context("Failed to write record")?;
+    }
+
+    // финальный CRC (над всем телом)
+    let crc = hasher.finalize();
+    w.write_u32::<BigEndian>(crc)
+        .context("Failed to write CRC32")?;
+
+    Ok(())
+}
+
+/// Запись стрима (header + записи в виде [keylen,key,value] + EOF tag).
 pub fn write_stream<W: Write>(
     w: &mut W,
     kvs: impl Iterator<Item = (Sds, Value)>,
@@ -330,7 +381,6 @@ mod tests {
         let mut cursor = Cursor::new(buf);
         let decoded =
             read_value_with_version(&mut cursor, FormatVersion::current(), None, 0).unwrap();
-
         assert_eq!(decoded, original);
     }
 

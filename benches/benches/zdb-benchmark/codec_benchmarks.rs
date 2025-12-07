@@ -1,231 +1,508 @@
-use std::{collections::HashSet, hint::black_box, io::Cursor};
+use std::{collections::HashSet, hint::black_box};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{
+    criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration, Throughput,
+};
+use ordered_float::OrderedFloat;
 use zumic::{
-    engine::{read_dump, read_value_with_version, write_dump, write_value, FormatVersion},
-    Sds, SmartHash, Value,
+    database::Bitmap,
+    engine::{read_dump, read_value, write_dump, write_value, TAG_STR},
+    Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE,
 };
 
-// Генераторы тестовых данных
-fn generate_string(size: usize) -> Value {
-    let data: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
-    Value::Str(Sds::from_vec(data))
+// ============================================================================
+// Helper functions для создания тестовых данных
+// ============================================================================
+
+fn create_string_value(size: usize) -> Value {
+    Value::Str(Sds::from_vec(vec![b'a'; size]))
 }
 
-fn generate_hash(entries: usize) -> Value {
+fn create_int_value() -> Value {
+    Value::Int(42)
+}
+
+fn create_float_value() -> Value {
+    Value::Float(std::f64::consts::PI)
+}
+
+fn create_bool_value() -> Value {
+    Value::Bool(true)
+}
+
+fn create_null_value() -> Value {
+    Value::Null
+}
+
+fn create_hash_value(entries: usize) -> Value {
     let mut map = SmartHash::new();
     for i in 0..entries {
-        map.insert(
-            Sds::from_str(&format!("field_{}", i)),
-            Sds::from_str(&format!("value_{}", i)),
-        );
+        let key = Sds::from_vec(format!("key_{i}").into_bytes());
+        let val = Sds::from_vec(format!("value_{i}").into_bytes());
+        map.insert(key, val);
     }
     Value::Hash(map)
 }
 
-fn generate_set(entries: usize) -> Value {
+fn create_zset_value(entries: usize) -> Value {
+    let mut dict = Dict::new();
+    let mut sorted = SkipList::new();
+
+    for i in 0..entries {
+        let key = Sds::from_vec(format!("member_{i}").into_bytes());
+        let score = i as f64;
+        dict.insert(key.clone(), score);
+        sorted.insert(OrderedFloat(score), key);
+    }
+
+    Value::ZSet { dict, sorted }
+}
+
+fn create_set_value(entries: usize) -> Value {
     let mut set = HashSet::new();
     for i in 0..entries {
-        set.insert(Sds::from_str(&format!("member_{}", i)));
+        let member = Sds::from_vec(format!("member_{i}").into_bytes());
+        set.insert(member);
     }
     Value::Set(set)
 }
 
-fn generate_array(size: usize) -> Value {
-    let items: Vec<Value> = (0..size).map(|i| Value::Int(i as i64)).collect();
+fn create_hll_value() -> Value {
+    let mut data = [0u8; DENSE_SIZE];
+    for (i, byte) in data.iter_mut().enumerate() {
+        *byte = (i % 256) as u8;
+    }
+    Value::HyperLogLog(Box::new(Hll { data }))
+}
+
+fn create_array_value(size: usize) -> Value {
+    let mut items = Vec::with_capacity(size);
+    for i in 0..size {
+        items.push(Value::Int(i as i64));
+    }
     Value::Array(items)
 }
 
-// Benchmark encode/decode для разных типов
-fn bench_value_roundtrip(c: &mut Criterion) {
-    let mut group = c.benchmark_group("value_roundtrip");
+fn create_bitmap_value(size: usize) -> Value {
+    let mut bm = Bitmap::new();
+    bm.bytes = vec![0xFF; size];
+    Value::Bitmap(bm)
+}
 
-    // String - разные размеры
-    for size in [64, 1024, 1024 * 16, 1024 * 64].iter() {
+// ============================================================================
+// Benchmarks: Encode/Decode для каждого типа Value
+// ============================================================================
+
+fn bench_encode_decode_primitives(c: &mut Criterion) {
+    let mut group = c.benchmark_group("encode_decode/primitives");
+
+    // String (разные размеры)
+    for size in [10, 100, 1000, 10_000].iter() {
+        let value = create_string_value(*size);
         group.throughput(Throughput::Bytes(*size as u64));
-        group.bench_with_input(BenchmarkId::new("string", size), size, |b, &size| {
-            let value = generate_string(size);
+
+        group.bench_with_input(BenchmarkId::new("string/encode", size), &value, |b, v| {
             b.iter(|| {
                 let mut buf = Vec::new();
-                write_value(&mut buf, black_box(&value)).unwrap();
-                let mut cursor = Cursor::new(buf);
-                let _decoded =
-                    read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
+            });
+        });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("string/decode", size),
+            &encoded,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_value(&mut cursor).unwrap());
+                });
+            },
+        );
+    }
+
+    // Int
+    let int_value = create_int_value();
+    group.bench_function("int/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&int_value)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    let mut int_encoded = Vec::new();
+    write_value(&mut int_encoded, &int_value).unwrap();
+    group.bench_function("int/decode", |b| {
+        b.iter(|| {
+            let mut cursor = std::io::Cursor::new(black_box(&int_encoded));
+            black_box(read_value(&mut cursor).unwrap());
+        });
+    });
+
+    // Float
+    let float_value = create_float_value();
+    group.bench_function("float/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&float_value)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    // Bool
+    let bool_value = create_bool_value();
+    group.bench_function("bool/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&bool_value)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    // Null
+    let null_value = create_null_value();
+    group.bench_function("null/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&null_value)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    group.finish();
+}
+
+fn bench_encode_decode_collections(c: &mut Criterion) {
+    let mut group = c.benchmark_group("encode_decode/collections");
+    group.sample_size(50); // Уменьшаем для больших структур
+
+    // Hash (разные размеры)
+    for size in [10, 100, 1000, 10_000].iter() {
+        let value = create_hash_value(*size);
+        group.throughput(Throughput::Elements(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("hash/encode", size), &value, |b, v| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
+            });
+        });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("hash/decode", size),
+            &encoded,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_value(&mut cursor).unwrap());
+                });
+            },
+        );
+    }
+
+    // ZSet
+    for size in [10, 100, 1000, 10_000].iter() {
+        let value = create_zset_value(*size);
+        group.throughput(Throughput::Elements(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("zset/encode", size), &value, |b, v| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
+            });
+        });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("zset/decode", size),
+            &encoded,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_value(&mut cursor).unwrap());
+                });
+            },
+        );
+    }
+
+    // Set
+    for size in [10, 100, 1000, 10_000].iter() {
+        let value = create_set_value(*size);
+        group.throughput(Throughput::Elements(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("set/encode", size), &value, |b, v| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
+            });
+        });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(BenchmarkId::new("set/decode", size), &encoded, |b, data| {
+            b.iter(|| {
+                let mut cursor = std::io::Cursor::new(black_box(data));
+                black_box(read_value(&mut cursor).unwrap());
             });
         });
     }
 
-    // Hash - разные размеры
-    for entries in [10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::new("hash", entries), entries, |b, &entries| {
-            let value = generate_hash(entries);
-            b.iter(|| {
-                let mut buf = Vec::new();
-                write_value(&mut buf, black_box(&value)).unwrap();
-                let mut cursor = Cursor::new(buf);
-                let _decoded =
-                    read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
-            });
-        });
-    }
+    group.finish();
+}
 
-    // Set - разные размеры
-    for entries in [10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::new("set", entries), entries, |b, &entries| {
-            let value = generate_set(entries);
-            b.iter(|| {
-                let mut buf = Vec::new();
-                write_value(&mut buf, black_box(&value)).unwrap();
-                let mut cursor = Cursor::new(buf);
-                let _decoded =
-                    read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
-            });
-        });
-    }
+fn bench_encode_decode_complex(c: &mut Criterion) {
+    let mut group = c.benchmark_group("encode_decode/complex");
+    group.sample_size(20);
 
-    // Array - разные размеры
+    // HyperLogLog
+    let hll_value = create_hll_value();
+    group.bench_function("hll/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&hll_value)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    let mut hll_encoded = Vec::new();
+    write_value(&mut hll_encoded, &hll_value).unwrap();
+    group.bench_function("hll/decode", |b| {
+        b.iter(|| {
+            let mut cursor = std::io::Cursor::new(black_box(&hll_encoded));
+            black_box(read_value(&mut cursor).unwrap());
+        });
+    });
+
+    // Array
     for size in [10, 100, 1000].iter() {
-        group.bench_with_input(BenchmarkId::new("array", size), size, |b, &size| {
-            let value = generate_array(size);
+        let value = create_array_value(*size);
+        group.throughput(Throughput::Elements(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("array/encode", size), &value, |b, v| {
             b.iter(|| {
                 let mut buf = Vec::new();
-                write_value(&mut buf, black_box(&value)).unwrap();
-                let mut cursor = Cursor::new(buf);
-                let _decoded =
-                    read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
             });
         });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("array/decode", size),
+            &encoded,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_value(&mut cursor).unwrap());
+                });
+            },
+        );
+    }
+
+    // Bitmap
+    for size in [100, 1000, 10_000].iter() {
+        let value = create_bitmap_value(*size);
+        group.throughput(Throughput::Bytes(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("bitmap/encode", size), &value, |b, v| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                write_value(&mut buf, black_box(v)).unwrap();
+                black_box(buf);
+            });
+        });
+
+        let mut encoded = Vec::new();
+        write_value(&mut encoded, &value).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("bitmap/decode", size),
+            &encoded,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_value(&mut cursor).unwrap());
+                });
+            },
+        );
     }
 
     group.finish();
 }
 
-// Benchmark только encode
-fn bench_encode_only(c: &mut Criterion) {
-    let mut group = c.benchmark_group("encode_only");
+// ============================================================================
+// Benchmarks: Compression levels
+// ============================================================================
 
-    let string_64k = generate_string(64 * 1024);
-    let hash_1000 = generate_hash(1000);
-    let array_1000 = generate_array(1000);
-
-    group.bench_function("string_64k", |b| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            write_value(&mut buf, black_box(&string_64k)).unwrap();
-        });
-    });
-
-    group.bench_function("hash_1000", |b| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            write_value(&mut buf, black_box(&hash_1000)).unwrap();
-        });
-    });
-
-    group.bench_function("array_1000", |b| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            write_value(&mut buf, black_box(&array_1000)).unwrap();
-        });
-    });
-
-    group.finish();
-}
-
-// Benchmark только decode
-fn bench_decode_only(c: &mut Criterion) {
-    let mut group = c.benchmark_group("decode_only");
-
-    // Подготовка данных
-    let mut string_buf = Vec::new();
-    write_value(&mut string_buf, &generate_string(64 * 1024)).unwrap();
-
-    let mut hash_buf = Vec::new();
-    write_value(&mut hash_buf, &generate_hash(1000)).unwrap();
-
-    let mut array_buf = Vec::new();
-    write_value(&mut array_buf, &generate_array(1000)).unwrap();
-
-    group.bench_function("string_64k", |b| {
-        b.iter(|| {
-            let mut cursor = Cursor::new(black_box(&string_buf));
-            let _decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
-        });
-    });
-
-    group.bench_function("hash_1000", |b| {
-        b.iter(|| {
-            let mut cursor = Cursor::new(black_box(&hash_buf));
-            let _decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
-        });
-    });
-
-    group.bench_function("array_1000", |b| {
-        b.iter(|| {
-            let mut cursor = Cursor::new(black_box(&array_buf));
-            let _decoded = read_value_with_version(&mut cursor, FormatVersion::current()).unwrap();
-        });
-    });
-
-    group.finish();
-}
-
-// Benchmark compression - с сжатием и без
-fn bench_compression(c: &mut Criterion) {
+fn bench_compression_levels(c: &mut Criterion) {
     let mut group = c.benchmark_group("compression");
+    group.sample_size(20);
+    group.plot_config(PlotConfiguration::default());
 
-    // Большая строка которая хорошо сжимается
-    let large_compressible = generate_string(128 * 1024);
+    // Создаём большой повторяющийся контент (хорошо сжимается)
+    let compressible_data = create_string_value(100_000);
 
-    group.throughput(Throughput::Bytes(128 * 1024));
-    group.bench_function("with_compression", |b| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            write_value(&mut buf, black_box(&large_compressible)).unwrap();
-        });
-    });
+    // Создаём случайный контент (плохо сжимается)
+    let random_data = {
+        let data: Vec<u8> = (0..100_000).map(|i| (i % 256) as u8).collect();
+        Value::Str(Sds::from_vec(data))
+    };
+
+    for data_type in ["compressible", "random"].iter() {
+        let value = if *data_type == "compressible" {
+            &compressible_data
+        } else {
+            &random_data
+        };
+
+        group.throughput(Throughput::Bytes(100_000));
+
+        // Без сжатия (baseline)
+        group.bench_with_input(
+            BenchmarkId::new("no_compression", data_type),
+            value,
+            |b, v| {
+                b.iter(|| {
+                    let mut buf = Vec::new();
+                    // Используем внутреннюю функцию без автосжатия
+                    buf.push(TAG_STR);
+                    let bytes = match v {
+                        Value::Str(s) => s.as_bytes(),
+                        _ => unreachable!(),
+                    };
+                    buf.extend(&(bytes.len() as u32).to_be_bytes());
+                    buf.extend(bytes);
+                    black_box(buf);
+                });
+            },
+        );
+
+        // Со сжатием (автоматическое, level по умолчанию)
+        group.bench_with_input(
+            BenchmarkId::new("with_compression", data_type),
+            value,
+            |b, v| {
+                b.iter(|| {
+                    let mut buf = Vec::new();
+                    write_value(&mut buf, black_box(v)).unwrap();
+                    black_box(buf);
+                });
+            },
+        );
+    }
 
     group.finish();
 }
 
-// Benchmark dump операций
+// ============================================================================
+// Benchmarks: Full dump operations
+// ============================================================================
+
 fn bench_dump_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("dump_operations");
+    group.sample_size(20);
 
-    // Генерируем дамп с разным количеством записей
-    for count in [100, 1000, 10000].iter() {
-        let items: Vec<(Sds, Value)> = (0..*count)
-            .map(|i| (Sds::from_str(&format!("key_{}", i)), Value::Int(i as i64)))
-            .collect();
+    for num_entries in [100, 1000, 10_000].iter() {
+        // Создаём тестовый дамп
+        let mut items = Vec::new();
+        for i in 0..*num_entries {
+            let key = Sds::from_vec(format!("key_{}", i).into_bytes());
+            let value = create_hash_value(10); // Небольшие хеши
+            items.push((key, value));
+        }
 
-        group.bench_with_input(BenchmarkId::new("write_dump", count), count, |b, _| {
-            b.iter(|| {
-                let mut buf = Vec::new();
-                write_dump(&mut buf, black_box(items.clone()).into_iter()).unwrap();
-            });
-        });
+        group.throughput(Throughput::Elements(*num_entries as u64));
 
-        // Подготовка для read
-        let mut dump_buf = Vec::new();
-        write_dump(&mut dump_buf, items.into_iter()).unwrap();
+        // Write dump
+        group.bench_with_input(
+            BenchmarkId::new("write_dump", num_entries),
+            &items,
+            |b, data| {
+                b.iter(|| {
+                    let mut buf = Vec::new();
+                    write_dump(&mut buf, black_box(data.clone()).into_iter()).unwrap();
+                    black_box(buf);
+                });
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("read_dump", count), count, |b, _| {
-            b.iter(|| {
-                let mut cursor = Cursor::new(black_box(&dump_buf));
-                let _items = read_dump(&mut cursor).unwrap();
-            });
-        });
+        // Read dump
+        let mut dump_data = Vec::new();
+        write_dump(&mut dump_data, items.clone().into_iter()).unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("read_dump", num_entries),
+            &dump_data,
+            |b, data| {
+                b.iter(|| {
+                    let mut cursor = std::io::Cursor::new(black_box(data));
+                    black_box(read_dump(&mut cursor).unwrap());
+                });
+            },
+        );
     }
 
     group.finish();
 }
+
+// ============================================================================
+// Benchmarks: Memory usage (измеряем косвенно через throughput)
+// ============================================================================
+
+fn bench_memory_intensive(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_intensive");
+    group.sample_size(10); // Ещё меньше для больших структур
+
+    // Очень большой Hash
+    let huge_hash = create_hash_value(100_000);
+    group.bench_function("huge_hash/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&huge_hash)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    // Очень большой ZSet
+    let huge_zset = create_zset_value(100_000);
+    group.bench_function("huge_zset/encode", |b| {
+        b.iter(|| {
+            let mut buf = Vec::new();
+            write_value(&mut buf, black_box(&huge_zset)).unwrap();
+            black_box(buf);
+        });
+    });
+
+    group.finish();
+}
+
+// ============================================================================
+// Criterion configuration
+// ============================================================================
 
 criterion_group!(
     benches,
-    bench_value_roundtrip,
-    bench_encode_only,
-    bench_decode_only,
-    bench_compression,
-    bench_dump_operations
+    bench_encode_decode_primitives,
+    bench_encode_decode_collections,
+    bench_encode_decode_complex,
+    bench_compression_levels,
+    bench_dump_operations,
+    bench_memory_intensive,
 );
+
 criterion_main!(benches);
