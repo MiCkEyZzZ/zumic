@@ -380,7 +380,6 @@ impl<R: Read> StreamingParser<R> {
             }
             Err(e) => return Err(StackError::from(e)),
         }
-        self.stats.bytes_read += 1;
 
         // Проверяем на TAG_EOF
         if peek[0] == TAG_EOF {

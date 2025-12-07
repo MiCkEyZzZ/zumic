@@ -40,6 +40,7 @@ zumic.conf
 # Артефакты тестов
 *.zdb
 *.aof
+*.rdb
 
 # Разное
 debug/

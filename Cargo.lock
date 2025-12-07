@@ -1544,6 +1544,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzf"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c034ef7ca69017088f8522e6f74301232f13ba43b5640941abc4dce26f530521"
+
+[[package]]
 name = "mach2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1764,9 +1770,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "5.0.0"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2c1f9f56e534ac6a9b8a4600bdf0f530fb393b5f393e7b4d03489c3cf0c3f01"
+checksum = "7f4779c6901a562440c3786d08192c6fbda7c1c2060edd10006b05ee35d10f2d"
 dependencies = [
  "num-traits",
  "rand 0.8.5",
@@ -2230,6 +2236,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdb"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2997f226d1082eec1e8cdc147630636548a84e1acaa190e4209b4c8db0a1dcf"
+dependencies = [
+ "byteorder",
+ "clap",
+ "indexmap",
+ "lzf",
+ "regex",
+ "rustc-serialize",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2452,6 +2473,12 @@ name = "rustc-hash"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+
+[[package]]
+name = "rustc-serialize"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe834bc780604f4674073badbad26d7219cadfb4a2275802db12cbae17498401"
 
 [[package]]
 name = "rustc_version"
@@ -4220,7 +4247,7 @@ dependencies = [
  "num-integer",
  "num_cpus",
  "once_cell",
- "ordered-float 5.0.0",
+ "ordered-float 5.1.0",
  "owo-colors",
  "parking_lot",
  "phf",
@@ -4255,6 +4282,9 @@ name = "zumic-benchmark"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "ordered-float 5.1.0",
+ "rdb",
+ "zstd",
  "zumic",
  "zumic-error",
 ]
