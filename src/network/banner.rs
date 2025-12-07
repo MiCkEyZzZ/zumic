@@ -49,6 +49,10 @@ pub fn print_banner(
 
     // Получение метаданных
     let version = env!("CARGO_PKG_VERSION");
+    // добавляем разрядность (32/64-bit) к версии
+    let bits = std::mem::size_of::<usize>() * 8;
+    let version_with_bits = format!("{version} ({bits}-bit)");
+
     let mode = if cfg!(debug_assertions) {
         "debug"
     } else {
@@ -93,7 +97,7 @@ pub fn print_banner(
         // Подстановка значений в шаблон
         let mut s = ASCII_FULL.to_string();
         s = s
-            .replace("{version}", version)
+            .replace("{version}", &version_with_bits)
             .replace("{mode}", mode)
             .replace("{listen}", listen)
             .replace("{port}", &port.to_string())
@@ -113,7 +117,7 @@ pub fn print_banner(
                 if i == 1 {
                     // заголовок "Зумик БД..."
                     println!("{}", line.bold().bright_blue());
-                } else if line.trim_start().starts_with("Режим:") {
+                } else if line.trim_start().starts_with("Mode:") {
                     println!("{}", line.replace(mode, &mode.cyan().to_string()));
                 } else if line.trim_start().starts_with("Port:")
                     || line.trim_start().starts_with("PID:")
@@ -137,7 +141,7 @@ pub fn print_banner(
     } else {
         let mut s = ASCII_COMPACT.to_string();
         s = s
-            .replace("{version}", version)
+            .replace("{version}", &version_with_bits)
             .replace("{mode}", mode)
             .replace("{listen}", listen)
             .replace("{port}", &port.to_string())

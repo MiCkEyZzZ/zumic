@@ -61,7 +61,7 @@ RUST_ENV=memory cargo run --bin zumic
 **Output:**
 
 ```zsh
-    Zumic 0.4.0
+    Zumic 0.5.0 (64-bit)
     ----------------------------------------------
     Mode:             debug
     Listening:        127.0.0.1:6174
