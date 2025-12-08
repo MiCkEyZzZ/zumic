@@ -147,7 +147,7 @@ fn make_redis_rdb_dump(dataset: &[(Sds, Value)]) -> Option<Vec<u8>> {
         "/var/lib/redis"
     };
 
-    let dump_path = format!("{}/dump.rdb", redis_dir);
+    let dump_path = format!("{redis_dir}/dump.rdb");
 
     let mut file = File::open(&dump_path).ok()?;
     let mut buf = Vec::new();

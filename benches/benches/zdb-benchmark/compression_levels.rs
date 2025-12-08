@@ -70,7 +70,7 @@ fn bench_zstd_compression_levels(c: &mut Criterion) {
             for level in [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 22] {
                 // Compression
                 group.bench_with_input(
-                    BenchmarkId::new(format!("{}/compress/level_{}", data_type, level), data_size),
+                    BenchmarkId::new(format!("{data_type}/compress/level_{level}"), data_size),
                     data,
                     |b, d| {
                         b.iter(|| {
@@ -83,10 +83,7 @@ fn bench_zstd_compression_levels(c: &mut Criterion) {
                 // Decompression (сжимаем заранее)
                 let compressed = compress_with_level(data, level);
                 group.bench_with_input(
-                    BenchmarkId::new(
-                        format!("{}/decompress/level_{}", data_type, level),
-                        data_size,
-                    ),
+                    BenchmarkId::new(format!("{data_type}/decompress/level_{level}"), data_size),
                     &compressed,
                     |b, d| {
                         b.iter(|| {
@@ -111,7 +108,7 @@ fn bench_compression_ratio(c: &mut Criterion) {
     let random = create_random_data(data_size);
 
     println!("\n=== Compression Ratio Analysis ===");
-    println!("Original size: {} bytes", data_size);
+    println!("Original size: {data_size} bytes");
     println!(
         "\n{:<6} {:<20} {:<20} {:<15} {:<15}",
         "Level", "Compressible (bytes)", "Random (bytes)", "Comp. Ratio", "Rand. Ratio"
@@ -148,8 +145,8 @@ fn bench_zumic_value_compression(c: &mut Criterion) {
     let mut large_hash = SmartHash::new();
     for i in 0..1000 {
         large_hash.insert(
-            Sds::from_vec(format!("field_{}", i).into_bytes()),
-            Sds::from_vec(format!("value_{}", i).into_bytes()),
+            Sds::from_vec(format!("field_{i}").into_bytes()),
+            Sds::from_vec(format!("value_{i}").into_bytes()),
         );
     }
     let hash_value = Value::Hash(large_hash);

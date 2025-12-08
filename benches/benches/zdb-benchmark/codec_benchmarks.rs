@@ -421,7 +421,7 @@ fn bench_dump_operations(c: &mut Criterion) {
         // Создаём тестовый дамп
         let mut items = Vec::new();
         for i in 0..*num_entries {
-            let key = Sds::from_vec(format!("key_{}", i).into_bytes());
+            let key = Sds::from_vec(format!("key_{i}").into_bytes());
             let value = create_hash_value(10); // Небольшие хеши
             items.push((key, value));
         }
