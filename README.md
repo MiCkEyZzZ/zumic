@@ -75,7 +75,7 @@ RUST_ENV=memory cargo run --bin zumic
     Git:              961da97
     Build:            961da97 (07.10.2025 08:25:17)
 
-[184167] 07 Oct 2025 08:25:34.626 # Server started, Zumic version 0.4.0
+[184167] 07 Oct 2025 08:25:34.626 # Server started, Zumic version 0.5.0
 [184167] 07 Oct 2025 08:25:34.626 * Ready to accept connections
 ```
 
