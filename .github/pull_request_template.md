@@ -9,3 +9,5 @@ Please include:
   - [ ] `cargo fmt --check`
   - [ ] `cargo clippy -- -D warnings`
   - [ ] New tests added / existing tests updated
+  - [ ] Added the necessary rustdoc comments.
+  - [ ] Changelog updated if applicable
