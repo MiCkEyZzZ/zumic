@@ -5,8 +5,9 @@ use libfuzzer_sys::fuzz_target;
 use zumic::engine::{compress_block, read_value_with_version, FormatVersion, TAG_COMPRESSED};
 
 fuzz_target!(|data: &[u8]| {
-    // 1) Простейший проход: пытаемся декодировать содержимое как есть (V1 и V2).
-    for &version in &[FormatVersion::V1, FormatVersion::V2] {
+    // 1) Простейший проход: пытаемся декодировать содержимое как есть (V1, V2 и
+    //    V3).
+    for &version in &[FormatVersion::V1, FormatVersion::V2, FormatVersion::V3] {
         let _ = std::panic::catch_unwind(|| {
             let mut cursor = Cursor::new(data);
             // Добавляем недостающие аргументы: key=None, offset=0
@@ -30,7 +31,7 @@ fuzz_target!(|data: &[u8]| {
 
         // Используем только immutable срезы внутри catch_unwind
         let corrupted_slice: &[u8] = &corrupted;
-        for &version in &[FormatVersion::V1, FormatVersion::V2] {
+        for &version in &[FormatVersion::V1, FormatVersion::V2, FormatVersion::V3] {
             let _ = std::panic::catch_unwind(|| {
                 let mut cursor = Cursor::new(corrupted_slice);
                 // Добавляем недостающие аргументы

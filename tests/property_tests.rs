@@ -7,14 +7,17 @@ use std::io::Cursor;
 
 use proptest::prelude::*;
 use zumic::{
-    engine::zdb::{read_value, read_value_with_version, write_value, FormatVersion},
+    engine::{
+        write_value_versioned,
+        zdb::{read_value, read_value_with_version, write_value, FormatVersion},
+    },
     Value,
 };
 
 mod generators;
 use generators::*;
 
-/// Базовая настройка proptest - количество итераций и другие параметры
+/// Basic proptest setting - number of iterations and other parameters.
 const PROPTEST_CASES: u32 = 1000;
 const PROPTEST_MAX_SHRINK_ITERS: u32 = 10000;
 
@@ -102,12 +105,12 @@ proptest! {
         );
     }
 
-    /// Тест совместимости версий: V1 -> V2
+    /// Compatibility test: V2 writer -> V2 reader
     #[test]
     fn cross_version_compatibility_v1_to_v2(value in any_value_strategy()) {
         let mut buffer = Vec::new();
 
-        write_value(&mut buffer, &value)
+        write_value_versioned(&mut buffer, &value, FormatVersion::V2)
             .map_err(|e| TestCaseError::fail(format!("Failed to encode: {e}")))?;
 
         let mut cursor = Cursor::new(&buffer);

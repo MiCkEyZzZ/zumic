@@ -17,7 +17,10 @@ use byteorder::{BigEndian, WriteBytesExt};
 use zumic_error::{ensure, ResultExt, StackError, ZdbError, ZumicResult};
 
 use super::{write_value, CompatibilityInfo, FormatVersion, VersionUtils, FILE_MAGIC, TAG_EOF};
-use crate::{engine::read_value_with_version, Sds, Value};
+use crate::{
+    engine::{read_value_with_version, varint},
+    Sds, Value,
+};
 
 /// Трейт для обработки событий парсинга.
 pub trait ParseHandler {
@@ -358,14 +361,11 @@ impl<R: Read> StreamingParser<R> {
         let mut peek = [0u8; 1];
         match self.reader.read_exact(&mut peek) {
             Ok(_) => {
-                // успешно прочли байт - продолжаем
+                // успешно прочли байт - учитываем
                 self.stats.bytes_read += 1;
             }
             Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                // Если до этого не было разобрано ни одной записи — считаем это
-                // корректным "честным" EOF (например, пустой дамп).
-                // Но если мы уже успешно разобрали хотя бы одну запись,
-                // то внезапный EOF — признак усечения файла => ошибка.
+                // Если до этого не было разобрано ни одной записи — считаем это корректным EOF.
                 if self.stats.records_parsed == 0 {
                     return Ok(None);
                 }
@@ -386,21 +386,83 @@ impl<R: Read> StreamingParser<R> {
             return Ok(None);
         }
 
-        // Это первый байт длины ключа
-        let mut len_buf = [0u8; 4];
-        len_buf[0] = peek[0];
-        self.reader
-            .read_exact(&mut len_buf[1..])
-            .map_err(|_| ZdbError::UnexpectedEof {
-                context: "reading key length".to_string(),
-                offset: Some(offset),
-                key: None,
-                expected_bytes: Some(4),
-                got_bytes: Some(1),
-            })?;
-        self.stats.bytes_read += 3;
+        // Переменная для количества байт, занятых полем длины (включая прочитанный
+        // peek[0])
+        let mut length_field_bytes: usize;
 
-        let key_len = u32::from_be_bytes(len_buf) as usize;
+        // Читаем длину ключа: для V3 — varint (первый байт уже в peek[0]), для V1/V2 —
+        // 4-байтовый big-endian (первый байт уже в peek[0]).
+        let key_len = if version.uses_varint() {
+            // V3: обработка varint, первый байт в peek[0]
+            length_field_bytes = 1; // уже прочитанный байт
+            let mut value: u32 = (peek[0] & 0x7F) as u32;
+
+            if (peek[0] & 0x80) == 0 {
+                // одно-байтовый varint
+                value as usize
+            } else {
+                let mut shift = 7;
+                let mut consumed = 1usize; // уже прочитанный байт
+                loop {
+                    let mut b = [0u8; 1];
+                    self.reader
+                        .read_exact(&mut b)
+                        .map_err(|_| ZdbError::UnexpectedEof {
+                            context: "reading varint key length continuation".to_string(),
+                            offset: Some(offset),
+                            key: None,
+                            expected_bytes: Some(1),
+                            got_bytes: Some(0),
+                        })?;
+                    // учёт прочитанного continuation-байта
+                    self.stats.bytes_read += 1;
+                    consumed += 1;
+                    length_field_bytes += 1;
+
+                    let byte = b[0];
+                    value |= ((byte & 0x7F) as u32) << shift;
+
+                    if (byte & 0x80) == 0 {
+                        break;
+                    }
+
+                    shift += 7;
+
+                    // защита: varint для u32 не должен быть длиннее MAX_VARINT_LEN
+                    if consumed >= varint::MAX_VARINT_LEN {
+                        return Err(ZdbError::ParseError {
+                            structure: "varint".to_string(),
+                            reason: format!(
+                                "Varint too long (>{} bytes), possible corruption",
+                                varint::MAX_VARINT_LEN
+                            ),
+                            offset: Some(offset),
+                            key: None,
+                        }
+                        .into());
+                    }
+                }
+
+                value as usize
+            }
+        } else {
+            // V1/V2: фиксированный 4-байтовый big-endian length
+            let mut len_buf = [0u8; 4];
+            len_buf[0] = peek[0];
+            self.reader
+                .read_exact(&mut len_buf[1..])
+                .map_err(|_| ZdbError::UnexpectedEof {
+                    context: "reading key length".to_string(),
+                    offset: Some(offset),
+                    key: None,
+                    expected_bytes: Some(4),
+                    got_bytes: Some(1),
+                })?;
+            // учли дополнительные 3 байта
+            self.stats.bytes_read += 3;
+            length_field_bytes = 4;
+            u32::from_be_bytes(len_buf) as usize
+        };
 
         const MAX_KEY_SIZE: usize = 512 * 1024 * 1024; // 512МБ
         ensure!(
@@ -420,7 +482,7 @@ impl<R: Read> StreamingParser<R> {
             .read_exact(&mut key_bytes)
             .map_err(|_| ZdbError::UnexpectedEof {
                 context: "reading key bytes".to_string(),
-                offset: Some(offset + 4),
+                offset: Some(offset + length_field_bytes as u64),
                 key: None,
                 expected_bytes: Some(key_len as u64),
                 got_bytes: Some(0),
@@ -430,7 +492,9 @@ impl<R: Read> StreamingParser<R> {
         let key = Sds::from_vec(key_bytes);
         let key_str = String::from_utf8_lossy(key.as_bytes()).to_string();
 
-        let value_offset = offset + 4 + key_len as u64;
+        // Вычисляем offset значения: исходный offset + длина поля длины + длина ключа
+        let value_offset = offset + length_field_bytes as u64 + key_len as u64;
+
         let value =
             read_value_with_version(&mut self.reader, version, Some(&key_str), value_offset)?;
 

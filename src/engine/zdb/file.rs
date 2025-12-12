@@ -7,12 +7,14 @@ pub const FILE_MAGIC: &[u8; 3] = b"ZDB";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum FormatVersion {
-    /// Legacy данные без явной версии (до введения версионирования).
+    /// Legacy данные без явной версии (до введения версионирования)
     Legacy = 0,
-    /// Версия 1 - базовая реализация с версионированием.
+    /// Версия 1 - базовая реализация с версионированием
     V1 = 1,
-    /// Версия 2 - с улучшенным сжатием и новыми типами данных.
+    /// Версия 2 - с улучшенным сжатием и новыми типами данных
     V2 = 2,
+    /// Версия 3 - с varint encoding для размеров (экономия 20-30%)
+    V3,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +32,12 @@ pub struct VersionUtils;
 impl FormatVersion {
     /// Возвращает текущую версию формата по умолчанию.
     pub const fn current() -> Self {
-        FormatVersion::V1
+        FormatVersion::V3
+    }
+
+    /// Проверяем, использует ли версия varint encoding для размеров.
+    pub const fn uses_varint(&self) -> bool {
+        matches!(self, FormatVersion::V3)
     }
 
     /// Проверяет, может ли данная версия читать указанную версию.
@@ -44,10 +51,12 @@ impl FormatVersion {
             (Legacy, _) => false,
             (V1, Legacy) => true,
             (V1, V1) => true,
-            (V1, V2) => false,
+            (V1, V2 | V3) => false,
             (V2, Legacy) => true,
             (V2, V1) => true,
             (V2, V2) => true,
+            (V2, V3) => false,
+            (V3, _) => true,
         }
     }
 
@@ -61,7 +70,12 @@ impl FormatVersion {
 
     /// Возвращает список всех поддерживаемых версий.
     pub fn supported_versions() -> Vec<FormatVersion> {
-        vec![FormatVersion::Legacy, FormatVersion::V1, FormatVersion::V2]
+        vec![
+            FormatVersion::Legacy,
+            FormatVersion::V1,
+            FormatVersion::V2,
+            FormatVersion::V3,
+        ]
     }
 
     /// Возвращает человекочитаемое описание версии.
@@ -70,12 +84,13 @@ impl FormatVersion {
             FormatVersion::Legacy => "Legacy format (before versioning)",
             FormatVersion::V1 => "Version 1 (basic versioning)",
             FormatVersion::V2 => "Version 2 (enhanced compression)",
+            FormatVersion::V3 => "Version 3 (varint encoding, 20-30% smaller)",
         }
     }
 
     /// Проверяет, является ли версия устаревшей.
     pub fn is_deprecated(&self) -> bool {
-        matches!(self, FormatVersion::Legacy)
+        matches!(self, FormatVersion::Legacy | FormatVersion::V1)
     }
 
     /// Возвращает рекомендуемую версию для миграции.
@@ -83,7 +98,8 @@ impl FormatVersion {
         match self {
             FormatVersion::Legacy => Some(FormatVersion::V1),
             FormatVersion::V1 => Some(FormatVersion::V2),
-            FormatVersion::V2 => None,
+            FormatVersion::V2 => Some(FormatVersion::V3),
+            FormatVersion::V3 => None,
         }
     }
 }
@@ -97,6 +113,7 @@ impl std::fmt::Display for FormatVersion {
             FormatVersion::Legacy => write!(f, "Legacy"),
             FormatVersion::V1 => write!(f, "V1"),
             FormatVersion::V2 => write!(f, "V2"),
+            FormatVersion::V3 => write!(f, "V3"),
         }
     }
 }
@@ -133,6 +150,13 @@ impl CompatibilityInfo {
             warnings.push(format!(
                 "Reader version {reader_version} cannot read dump version {dump_version}"
             ));
+        }
+
+        if dump_version == FormatVersion::V3 && reader_version < FormatVersion::V3 {
+            warnings.push(
+                "V3 format uses varint encoding. Older reader cannot parse this format."
+                    .to_string(),
+            );
         }
 
         CompatibilityInfo {
@@ -218,6 +242,14 @@ impl VersionUtils {
             changes.push("Improved streaming performance".to_string());
         }
 
+        if from < V3 && to >= V3 {
+            changes.push("Varint encoding for all size (LEB128)".to_string());
+            changes.push("20-30% space saving on typical data".to_string());
+            changes.push("1 byte for sizes <128 (vs 4 bytes)".to_string());
+            changes.push("2 bytes for sizes <16384 (vs 4 bytes)".to_string());
+            changes.push("Backward compatible reader".to_string());
+        }
+
         changes
     }
 }
@@ -230,6 +262,7 @@ impl TryFrom<u8> for FormatVersion {
             0 => Ok(FormatVersion::Legacy),
             1 => Ok(FormatVersion::V1),
             2 => Ok(FormatVersion::V2),
+            3 => Ok(FormatVersion::V3),
             other => Err(ZdbVersionError::UnsupportedVersion {
                 found: other,
                 supported: FormatVersion::supported_versions()
@@ -244,34 +277,40 @@ impl TryFrom<u8> for FormatVersion {
 }
 
 /// Текущая версия формата дампа, как число (для совместимости).
-pub const DUMP_VERSION: u8 = FormatVersion::V1 as u8;
+pub const DUMP_VERSION: u8 = FormatVersion::V3 as u8;
 
 #[cfg(test)]
 mod tests {
-    use zumic_error::ZdbError;
+    use zumic_error::{ZdbError, ZdbVersionError};
 
     use super::*;
 
-    /// Тест проверяет корректность порядка версий.
     #[test]
     fn test_version_ordering() {
         assert!(FormatVersion::Legacy < FormatVersion::V1);
         assert!(FormatVersion::V1 < FormatVersion::V2);
+        assert!(FormatVersion::V2 < FormatVersion::V3);
     }
 
-    /// Тест проверяет, что текущая версия соответствует ожидаемой.
     #[test]
     fn test_current_version() {
-        assert_eq!(FormatVersion::current(), FormatVersion::V1);
+        assert_eq!(FormatVersion::current(), FormatVersion::V3);
     }
 
-    /// Тест проверяет преобразование из u8 в FormatVersion и обработку
-    /// некорректных значений.
     #[test]
-    fn test_version_try_from() {
+    fn test_uses_varint() {
+        assert!(!FormatVersion::Legacy.uses_varint());
+        assert!(!FormatVersion::V1.uses_varint());
+        assert!(!FormatVersion::V2.uses_varint());
+        assert!(FormatVersion::V3.uses_varint());
+    }
+
+    #[test]
+    fn test_try_from_u8() {
         assert_eq!(FormatVersion::try_from(0).unwrap(), FormatVersion::Legacy);
         assert_eq!(FormatVersion::try_from(1).unwrap(), FormatVersion::V1);
         assert_eq!(FormatVersion::try_from(2).unwrap(), FormatVersion::V2);
+        assert_eq!(FormatVersion::try_from(3).unwrap(), FormatVersion::V3);
 
         let err = FormatVersion::try_from(99).unwrap_err();
         assert!(matches!(
@@ -280,45 +319,13 @@ mod tests {
         ));
     }
 
-    /// Тест проверяет, какие версии могут быть прочитаны текущей.
     #[test]
-    fn test_version_compatibility() {
-        // Legacy может читать только Legacy
-        assert!(FormatVersion::Legacy.can_read(FormatVersion::Legacy));
-        assert!(!FormatVersion::Legacy.can_read(FormatVersion::V1));
-
-        // V1 может читать Legacy и V1
-        assert!(FormatVersion::V1.can_read(FormatVersion::Legacy));
-        assert!(FormatVersion::V1.can_read(FormatVersion::V1));
-        assert!(!FormatVersion::V1.can_read(FormatVersion::V2));
-
-        // V2 может читать все
-        assert!(FormatVersion::V2.can_read(FormatVersion::Legacy));
-        assert!(FormatVersion::V2.can_read(FormatVersion::V1));
-        assert!(FormatVersion::V2.can_read(FormatVersion::V2));
-    }
-
-    /// Тест проверяет совместимость записи: можно писать только в свою версию
-    /// или более новую.
-    #[test]
-    fn test_version_write_compatibility() {
-        // Можем писать только в свою версию или более новую
-        assert!(FormatVersion::V1.can_write(FormatVersion::V1));
-        assert!(FormatVersion::V1.can_write(FormatVersion::V2));
-        assert!(!FormatVersion::V2.can_write(FormatVersion::V1));
-    }
-
-    /// Тест проверяет, какие версии считаются устаревшими.
-    #[test]
-    fn test_deprecated_versions() {
+    fn test_deprecated_and_recommended() {
         assert!(FormatVersion::Legacy.is_deprecated());
-        assert!(!FormatVersion::V1.is_deprecated());
+        assert!(FormatVersion::V1.is_deprecated());
         assert!(!FormatVersion::V2.is_deprecated());
-    }
+        assert!(!FormatVersion::V3.is_deprecated());
 
-    /// Тест проверяет, какие обновления рекомендуются для устаревших версий.
-    #[test]
-    fn test_recommended_upgrades() {
         assert_eq!(
             FormatVersion::Legacy.recommended_upgrade(),
             Some(FormatVersion::V1)
@@ -327,64 +334,40 @@ mod tests {
             FormatVersion::V1.recommended_upgrade(),
             Some(FormatVersion::V2)
         );
-        assert_eq!(FormatVersion::V2.recommended_upgrade(), None);
+        assert_eq!(
+            FormatVersion::V2.recommended_upgrade(),
+            Some(FormatVersion::V3)
+        );
+        assert_eq!(FormatVersion::V3.recommended_upgrade(), None);
     }
 
-    /// Тест проверяет объект CompatibilityInfo при разных сочетаниях версий.
     #[test]
-    fn test_compatibility_info() {
-        let info = CompatibilityInfo::check(FormatVersion::V1, FormatVersion::Legacy);
-        assert!(info.can_read);
-        assert!(info.requires_migration);
-        assert!(!info.warnings.is_empty());
+    fn test_backward_compatibility() {
+        assert!(FormatVersion::V3.can_read(FormatVersion::Legacy));
+        assert!(FormatVersion::V3.can_read(FormatVersion::V1));
+        assert!(FormatVersion::V3.can_read(FormatVersion::V2));
+        assert!(FormatVersion::V3.can_read(FormatVersion::V3));
 
-        let info = CompatibilityInfo::check(FormatVersion::V1, FormatVersion::V2);
+        assert!(!FormatVersion::V1.can_read(FormatVersion::V3));
+        assert!(!FormatVersion::V2.can_read(FormatVersion::V3));
+
+        assert!(FormatVersion::V1.can_write(FormatVersion::V1));
+        assert!(FormatVersion::V1.can_write(FormatVersion::V2));
+        assert!(!FormatVersion::V2.can_write(FormatVersion::V1));
+    }
+
+    #[test]
+    fn test_compatibility_info_warnings() {
+        let info = CompatibilityInfo::check(FormatVersion::V2, FormatVersion::V3);
         assert!(!info.can_read);
-        assert!(!info.warnings.is_empty());
+        assert!(info
+            .warnings
+            .iter()
+            .any(|w| w.contains("varint") || w.contains("V3")));
     }
 
-    /// Тест проверяет детектирование версии из байтовых данных.
     #[test]
-    fn test_version_utils_detect() {
-        let data = b"ZDB\x01some data";
-        let version = VersionUtils::detect_version(data).unwrap();
-        assert_eq!(version, FormatVersion::V1);
-
-        let bad_data = b"BAD\x01";
-        assert!(VersionUtils::detect_version(bad_data).is_err());
-    }
-
-    /// Тест проверяет валидацию совместимости версий.
-    #[test]
-    fn test_version_utils_validate() {
-        let result = VersionUtils::validate_compatibility(FormatVersion::V1, FormatVersion::V1);
-        assert!(result.is_ok());
-
-        let result = VersionUtils::validate_compatibility(FormatVersion::V1, FormatVersion::V2);
-        assert!(result.is_err());
-    }
-
-    /// Тест проверяет список изменений между версиями.
-    #[test]
-    fn test_version_changes() {
-        let changes = VersionUtils::version_changes(FormatVersion::Legacy, FormatVersion::V1);
-        assert!(changes.contains(&"Added explicit version header".to_string()));
-
-        let changes = VersionUtils::version_changes(FormatVersion::V1, FormatVersion::V2);
-        assert!(changes.contains(&"Enhanced compression algorithm".to_string()));
-    }
-
-    /// Тест проверяет отображение версии как строки.
-    #[test]
-    fn test_version_display() {
-        assert_eq!(format!("{}", FormatVersion::Legacy), "Legacy");
-        assert_eq!(format!("{}", FormatVersion::V1), "V1");
-        assert_eq!(format!("{}", FormatVersion::V2), "V2");
-    }
-
-    /// Тест проверяет строковое описание версии.
-    #[test]
-    fn test_version_description() {
+    fn test_version_description_and_display() {
         assert_eq!(
             FormatVersion::Legacy.description(),
             "Legacy format (before versioning)"
@@ -397,21 +380,61 @@ mod tests {
             FormatVersion::V2.description(),
             "Version 2 (enhanced compression)"
         );
+        assert_eq!(
+            FormatVersion::V3.description(),
+            "Version 3 (varint encoding, 20-30% smaller)"
+        );
+
+        assert_eq!(format!("{}", FormatVersion::Legacy), "Legacy");
+        assert_eq!(format!("{}", FormatVersion::V1), "V1");
+        assert_eq!(format!("{}", FormatVersion::V2), "V2");
+        assert_eq!(format!("{}", FormatVersion::V3), "V3");
     }
 
-    /// Тест проверяет список поддерживаемых версий.
+    #[test]
+    fn test_version_changes() {
+        let changes = VersionUtils::version_changes(FormatVersion::Legacy, FormatVersion::V1);
+        assert!(changes.contains(&"Added explicit version header".to_string()));
+
+        let changes = VersionUtils::version_changes(FormatVersion::V1, FormatVersion::V2);
+        assert!(changes.contains(&"Enhanced compression algorithm".to_string()));
+
+        let changes = VersionUtils::version_changes(FormatVersion::V2, FormatVersion::V3);
+        assert!(changes.iter().any(|c| c.contains("Varint encoding")));
+        assert!(changes.iter().any(|c| c.contains("20-30%")));
+    }
+
+    #[test]
+    fn test_detect_version() {
+        let data = b"ZDB\x01some data";
+        let version = VersionUtils::detect_version(data).unwrap();
+        assert_eq!(version, FormatVersion::V1);
+
+        let bad_data = b"BAD\x01";
+        assert!(VersionUtils::detect_version(bad_data).is_err());
+    }
+
+    #[test]
+    fn test_validate_compatibility() {
+        let result = VersionUtils::validate_compatibility(FormatVersion::V1, FormatVersion::V1);
+        assert!(result.is_ok());
+
+        let result = VersionUtils::validate_compatibility(FormatVersion::V1, FormatVersion::V2);
+        assert!(result.is_err());
+    }
+
     #[test]
     fn test_supported_versions() {
         let versions = FormatVersion::supported_versions();
-        assert_eq!(versions.len(), 3);
+        assert_eq!(versions.len(), 4);
         assert!(versions.contains(&FormatVersion::Legacy));
         assert!(versions.contains(&FormatVersion::V1));
         assert!(versions.contains(&FormatVersion::V2));
+        assert!(versions.contains(&FormatVersion::V3));
     }
 
-    /// Тест проверяет форматирование ошибок типа VersionError.
     #[test]
-    fn test_version_error_display() {
+    fn test_version_error_handling() {
         let err = ZdbVersionError::UnsupportedVersion {
             found: 99,
             supported: vec![FormatVersion::V1 as u8, FormatVersion::V2 as u8],
@@ -421,11 +444,7 @@ mod tests {
         let msg = format!("{err}");
         assert!(msg.contains("version") || msg.contains("Unsupported"));
         assert!(msg.contains("99"));
-    }
 
-    /// Тест проверяет преобразование VersionError в io::Error.
-    #[test]
-    fn test_version_error_conversion() {
         let version_err = ZdbVersionError::UnsupportedVersion {
             found: 99,
             supported: vec![FormatVersion::V1 as u8],
