@@ -7,8 +7,13 @@
 ### Добавлено
 
 - **zdb**
-  - Добавил `varint.rs`
+  - Добавлен `varint` (модуль `varint.rs`) и поддержка varint-encoding для формата V3.
   - Добавил fazz тесты `encode_roundtrip.rs`
+- **ZDB / Streaming Parser**
+  - Добавлен SAX-style потоковый парсер `StreamingParser<R: Read>` — парсинг дампов без загрузки всего файла в память.
+  - Введён trait `ParseHandler` (event-driven): события `Header`, `Entry`, `End`, `Error`.
+  - Реализованы стандартные handler'ы: `CollectHandler`, `FilterHandler`, `CountHandler`, `CallbackHandler`, `TransformHandler`.
+  - Добавлен `Crc32Read` — reader-обёртка для вычисления CRC32 «на лету».
 - **Инфраструктура проекта**
   - Создан файл `.github/CODEOWNERS` для автоматического назначения ревьюеров:
     - Основной код (`src/`, `engine/`, `database/`, `network/`, `auth/`, `logging/`, `modules/`) под контролем @MiCkEyZzZ.
@@ -23,14 +28,38 @@
 ### Изменено
 
 - **zdb**
-  - Интегрировал `varint` в `decode`, `encode` и `file`
+  - Интегрирован `varint` в кодеки: `decode`, `encode` и файловые утилиты (включая streaming-путь).
+  - Все места записи/чтения длин (ключи, строки, коллекции, compressed blobs и т.д.) теперь используют единую версионно-чувствительную логику `read_length` / `write_length`.
+- **encode / write**
+  - Добавлена функция `write_value_with_version` (version-aware); `write_value` вызывает её с `FormatVersion::current()`. Это приводит к однозначному формату сериализации в зависимости от целевой версии.
+- **streaming**
+  - `StreamingParser::read_next_entry` исправлен: чтение длины ключа — version-aware (поддержка varint для V3).
+  - Логика EOF/UnexpectedEof улучшена: внезапный EOF трактуется как корректный только для пустого дампа; если EOF встречён после хотя бы одной успешно разобранной записи — возвращается `UnexpectedEof`.
 
-- `tests`
-  - Изменил `property_tests.rs` в тесте `cross_version_compatibility_v1_to_v2` изменил вызов ф-ии с `read_value` на `read_value_with_version` для правльного декодирования.
+- **tests**
+  - Обновлены property tests: `property_tests.rs` — тест `cross_version_compatibility_v1_to_v2` теперь корректно использует `read_value_with_version` / `write_value_with_version` там, где необходима проверка cross-version.
+  -Обновлены и добавлены regression-тесты на усечённые (truncated) дампы/блоки и для поведения при несоответствии CRC.
+  - Fuzz targets обновлены/расширены для проверки `TAG_COMPRESSED` и corrupted zstd-блоков.
+
+- **errors**
+  - Интеграция с отдельным крейтом ошибок `zumic-error`.
+  - `read_*` / `streaming` функции теперь возвращают семантичный `ZdbError` с подробным контекстом (`offset`, `key`, `tag`, `hint`).
+
+- **fuzz**
+  - Изменил фаз тест `decode_value.rs`, добавил версию V3
 
 ### Исправлено
 
+- Исправлена рассинхронизация форматов (варинт vs fixed-length) — теперь чтение/запись длин согласованы по версии.
+- Исправлена проблема, из-за которой `StreamingParser` пытался читать 4-байтовую длину в файлах, записанных varint (V3) — приводило к неверным больших length и последующим `UnexpectedEof`.
+- `skip_bytes` переписан: теперь строго читает ровно N байт и возвращает `UnexpectedEof`, если поток усечён (устранена silent corruption при пропуске усечённых блоков).
+- Исправлена логика проверки CRC в `read_dump` / `read_dump_streaming_file` — вычисляемый CRC сверяется с записанным, тесты на CRC теперь стабильны.
+- Исправлены тесты streaming/proptest, которые падали из-за рассинхронизации версии сериализации.
+- Исправлены мелкие опечатки и консистентно приведены error-hints.
+
 ### Удалено
+
+- Удалены устаревшие временные костыли и дублирующие реализации чтения/записи длин — теперь единственная source-of-truth: `read_length` / `write_length`.
 
 ## [v0.5.0] - 2025-12-07
 
