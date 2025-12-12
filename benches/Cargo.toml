@@ -8,7 +8,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/zdb-benchmark/compression_levels.rs"
+path = "benches/zdb-benchmark/varint_benchmarks.rs"
 harness = false
 
 [lints]
@@ -20,5 +20,6 @@ zumic = { path = "../" }
 zumic-error = { workspace = true }
 
 ordered-float = "5.1.0"
+rand = { version = "0.8", features = ["small_rng"] }
 rdb = "0.3.0"
 zstd = "0.13.3"

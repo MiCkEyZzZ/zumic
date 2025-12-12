@@ -55,6 +55,7 @@ pub mod encode;
 pub mod file;
 pub mod streaming;
 pub mod tags;
+pub mod varint;
 
 // Публичный экспорт всех типов ошибок и функций из вложенных модулей,
 // чтобы упростить доступ к ним из внешнего кода.
@@ -64,3 +65,4 @@ pub use encode::*;
 pub use file::*;
 pub use streaming::*;
 pub use tags::*;
+pub use varint::*;
