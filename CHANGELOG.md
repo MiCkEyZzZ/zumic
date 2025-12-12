@@ -6,7 +6,16 @@
 
 ### Добавлено
 
+- **zdb**
+  - Добавил `varint.rs`
+
 ### Изменено
+
+- **zdb**
+  - Интегрировал `varint` в `decode`, `encode` и `file`
+
+- `tests`
+  - Изменил `property_tests.rs` в тесте `cross_version_compatibility_v1_to_v2` изменил вызов ф-ии с `read_value` на `read_value_with_version` для правльного декодирования.
 
 ### Исправлено
 

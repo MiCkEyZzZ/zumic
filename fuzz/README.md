@@ -15,15 +15,11 @@
 
 1. Установка [fuzz](https://rust-fuzz.github.io/book/cargo-fuzz/setup.html)
 интерфейс командной строки.
-
 ```zsh
 cargo install cargo-fuzz
 ```
-
 2. Запустите Зумик;
-
-3. Скопируйте файл .env.example из корневого каталога проекта
-в .env и измените значения по мере необходимости;
+3. Скопируйте файл .env.example из корневого каталога проекта в .env и измените значения по мере необходимости;
 
 Для получения более подробной информации посетите сайт [cargo fuzz](https://rust-fuzz.github.io/book/cargo-fuzz/tutorial.html)
 или выполните команду cargo `fuzz --help`.
