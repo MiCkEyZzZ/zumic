@@ -1,7 +1,55 @@
 # Zumic CODEOWNERS
 
-# These owners will be the default owners for everything in the repo.
+# Назначение владельца (ответственного) для разных частей проекта.
 
+# ================================
+# Основной код
+# ================================
 /src/ @MiCkEyZzZ
+/src/engine/ @MiCkEyZzZ
+/src/database/ @MiCkEyZzZ
+/src/network/ @MiCkEyZzZ
 /src/auth/ @MiCkEyZzZ
+/src/logging/ @MiCkEyZzZ
+/src/modules/ @MiCkEyZzZ
+/src/client/ @MiCkEyZzZ
+/src/pubsub/ @MiCkEyZzZ
+/src/observability/ @MiCkEyZzZ
+/src/command_registry.rs @MiCkEyZzZ
+/src/db_context.rs @MiCkEyZzZ
+/src/lib.rs @MiCkEyZzZ
+/src/main.rs @MiCkEyZzZ
+
+# ================================
+# Ошибки и вспомогательные креёты
+# ================================
+/zumic-error/ @MiCkEyZzZ
+
+# ================================
+# Fuzzing и тесты
+# ================================
+/fuzz/ @MiCkEyZzZ
+/tests/ @MiCkEyZzZ
+/benches/ @MiCkEyZzZ
+
+# ================================
+# CI/CD и GitHub
+# ================================
 /.github/workflows/ @MiCkEyZzZ
+/.github/actions/ @MiCkEyZzZ
+/.github/ISSUE_TEMPLATE/ @MiCkEyZzZ
+/.github/pull_request_template.md @MiCkEyZzZ
+/.github/cargo-blacklist.txt @MiCkEyZzZ
+
+# ================================
+# Документация
+# ================================
+/docs/ @MiCkEyZzZ
+/book/ @MiCkEyZzZ
+
+# ================================
+# Скрипты и утилиты
+# ================================
+/scripts/ @MiCkEyZzZ
+/Makefile @MiCkEyZzZ
+/build.rs @MiCkEyZzZ
