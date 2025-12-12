@@ -45,3 +45,4 @@ zumic.conf
 # Разное
 debug/
 results
+*.proptest-regressions

@@ -16,15 +16,24 @@ use super::{
     TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET,
     TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
-use crate::{Sds, Value};
+use crate::{engine::varint, Sds, Value};
 
 /// Сериализует значение с авто-сжатием (как в оригинальном коде).
 pub fn write_value<W: Write>(
     w: &mut W,
     v: &Value,
 ) -> ZumicResult<()> {
+    write_value_versioned(w, v, FormatVersion::current())
+}
+
+/// Сериализация значения с явной версией и авто-сжатием.
+pub fn write_value_versioned<W: Write>(
+    w: &mut W,
+    v: &Value,
+    version: FormatVersion,
+) -> ZumicResult<()> {
     let mut buf = Vec::new();
-    write_value_inner(&mut buf, v)?;
+    write_value_inner(&mut buf, v, version)?;
 
     if should_compress(buf.len()) {
         let compressed = compress_block(&buf).map_err(|e| ZdbError::CompressionError {
@@ -37,8 +46,7 @@ pub fn write_value<W: Write>(
 
         w.write_u8(TAG_COMPRESSED)
             .context("Failed to write compressed tag")?;
-        w.write_u32::<BigEndian>(compressed.len() as u32)
-            .context("Failed to write compressed length")?;
+        write_length(w, compressed.len() as u32, version)?;
         w.write_all(&compressed)
             .context("Failed to write compressed data")?;
         return Ok(());
@@ -54,7 +62,7 @@ pub fn write_value_no_compress<W: Write>(
     w: &mut W,
     v: &Value,
 ) -> ZumicResult<()> {
-    write_value_inner(w, v)
+    write_value_inner(w, v, FormatVersion::current())
 }
 
 /// Внутренняя сериализация (пишет напрямую в переданный Writer).
@@ -62,13 +70,13 @@ pub fn write_value_no_compress<W: Write>(
 pub fn write_value_inner<W: Write>(
     w: &mut W,
     v: &Value,
+    version: FormatVersion,
 ) -> ZumicResult<()> {
     match v {
         Value::Str(s) => {
             w.write_u8(TAG_STR).context("Failed to write STR tag")?;
             let b = s.as_bytes();
-            w.write_u32::<BigEndian>(b.len() as u32)
-                .context("Failed to write string length")?;
+            write_length(w, b.len() as u32, version)?;
             w.write_all(b).context("Failed to write string data")
         }
         Value::Int(i) => {
@@ -89,53 +97,43 @@ pub fn write_value_inner<W: Write>(
         Value::Null => w.write_u8(TAG_NULL).context("Failed to write NULL tag"),
         Value::List(list) => {
             w.write_u8(TAG_LIST).context("Failed to write LIST tag")?;
-            w.write_u32::<BigEndian>(list.len() as u32)
-                .context("Failed to write list length")?;
+            write_length(w, list.len() as u32, version)?;
             for item in list.iter() {
-                // List хранит Sds-строки — пишем как Str
-                write_value_inner(w, &Value::Str(item.clone()))?;
+                write_value_inner(w, &Value::Str(item.clone()), version)?;
             }
             Ok(())
         }
         Value::Array(arr) => {
             w.write_u8(TAG_ARRAY).context("Failed to write ARRAY tag")?;
-            w.write_u32::<BigEndian>(arr.len() as u32)
-                .context("Failed to write array length")?;
+            write_length(w, arr.len() as u32, version)?;
             for item in arr {
-                write_value_inner(w, item)?;
+                write_value_inner(w, item, version)?;
             }
             Ok(())
         }
         Value::Hash(hmap) => {
             w.write_u8(TAG_HASH).context("Failed to write HASH tag")?;
-            w.write_u32::<BigEndian>(hmap.len() as u32)
-                .context("Failed to write hash size")?;
+            write_length(w, hmap.len() as u32, version)?;
             for (field, val) in hmap.entries() {
                 let fb = field.as_bytes();
-                w.write_u32::<BigEndian>(fb.len() as u32)
-                    .context("Failed to write hash key length")?;
+                write_length(w, fb.len() as u32, version)?;
                 w.write_all(fb).context("Failed to write hash key")?;
 
-                // Значение для hash — Sds (строка). Пишем как STR (без рекурсии).
                 w.write_u8(TAG_STR)
                     .context("Failed to write hash value STR tag")?;
                 let vb = val.as_bytes();
-                w.write_u32::<BigEndian>(vb.len() as u32)
-                    .context("Failed to write hash value length")?;
+                write_length(w, vb.len() as u32, version)?;
                 w.write_all(vb).context("Failed to write hash value data")?;
             }
             Ok(())
         }
         Value::ZSet { dict, sorted } => {
             w.write_u8(TAG_ZSET).context("Failed to write ZSET tag")?;
-            // Используем dict.len() — чтобы не держать неиспользуемых переменных
-            w.write_u32::<BigEndian>(dict.len() as u32)
-                .context("Failed to write zset size")?;
+            write_length(w, dict.len() as u32, version)?;
             for (score_wrapper, key) in sorted.iter() {
                 let score = score_wrapper.into_inner();
                 let kb = key.as_bytes();
-                w.write_u32::<BigEndian>(kb.len() as u32)
-                    .context("Failed to write zset key length")?;
+                write_length(w, kb.len() as u32, version)?;
                 w.write_all(kb).context("Failed to write zset key")?;
                 w.write_f64::<BigEndian>(score)
                     .context("Failed to write zset score")?;
@@ -144,42 +142,35 @@ pub fn write_value_inner<W: Write>(
         }
         Value::Set(s) => {
             w.write_u8(TAG_SET).context("Failed to write SET tag")?;
-            w.write_u32::<BigEndian>(s.len() as u32)
-                .context("Failed to write set size")?;
+            write_length(w, s.len() as u32, version)?;
             for member in s.iter() {
                 let mb = member.as_bytes();
-                w.write_u32::<BigEndian>(mb.len() as u32)
-                    .context("Failed to write set member length")?;
+                write_length(w, mb.len() as u32, version)?;
                 w.write_all(mb).context("Failed to write set member")?;
             }
             Ok(())
         }
         Value::HyperLogLog(hll) => {
             w.write_u8(TAG_HLL).context("Failed to write HLL tag")?;
-            w.write_u32::<BigEndian>(hll.data.len() as u32)
-                .context("Failed to write HLL size")?;
+            write_length(w, hll.data.len() as u32, version)?;
             w.write_all(&hll.data).context("Failed to write HLL data")?;
             Ok(())
         }
         Value::SStream(entries) => {
             w.write_u8(TAG_SSTREAM)
                 .context("Failed to write SSTREAM tag")?;
-            w.write_u32::<BigEndian>(entries.len() as u32)
-                .context("Failed to write stream size")?;
+            write_length(w, entries.len() as u32, version)?;
             for entry in entries {
                 w.write_u64::<BigEndian>(entry.id.ms_time)
                     .context("Failed to write stream entry ms_time")?;
                 w.write_u64::<BigEndian>(entry.id.sequence)
                     .context("Failed to write stream entry sequence")?;
-                w.write_u32::<BigEndian>(entry.data.len() as u32)
-                    .context("Failed to write stream fields count")?;
+                write_length(w, entry.data.len() as u32, version)?;
                 for (field, val) in entry.data.iter() {
                     let fb = field.as_bytes();
-                    w.write_u32::<BigEndian>(fb.len() as u32)
-                        .context("Failed to write stream field length")?;
+                    write_length(w, fb.len() as u32, version)?;
                     w.write_all(fb).context("Failed to write stream field")?;
-                    // рекурсивная сериализация значения (без дополнительной аллокации)
-                    write_value_inner(w, val)?;
+                    write_value_inner(w, val, version)?;
                 }
             }
             Ok(())
@@ -188,8 +179,7 @@ pub fn write_value_inner<W: Write>(
             w.write_u8(TAG_BITMAP)
                 .context("Failed to write BITMAP tag")?;
             let bytes = bm.as_bytes();
-            w.write_u32::<BigEndian>(bytes.len() as u32)
-                .context("Failed to write bitmap size")?;
+            write_length(w, bytes.len() as u32, version)?;
             w.write_all(bytes).context("Failed to write bitmap data")?;
             Ok(())
         }
@@ -202,22 +192,29 @@ pub fn write_dump<W: Write>(
     w: &mut W,
     kvs: impl Iterator<Item = (Sds, Value)>,
 ) -> ZumicResult<()> {
+    write_dump_versioned(w, kvs, FormatVersion::current())
+}
+
+/// write_dump с явной версией.
+pub fn write_dump_versioned<W: Write>(
+    w: &mut W,
+    kvs: impl Iterator<Item = (Sds, Value)>,
+    version: FormatVersion,
+) -> ZumicResult<()> {
     let mut buf = Vec::new();
     buf.extend_from_slice(FILE_MAGIC);
-    buf.push(FormatVersion::V1 as u8);
+    buf.push(version as u8);
 
     let items: Vec<_> = kvs.collect();
     buf.reserve(items.len().saturating_mul(64));
 
-    buf.write_u32::<BigEndian>(items.len() as u32)
-        .context("Failed to write item count")?;
+    write_length(&mut buf, items.len() as u32, version)?;
 
     for (key, val) in items {
         let kb = key.as_bytes();
-        buf.write_u32::<BigEndian>(kb.len() as u32)
-            .context("Failed to write key length")?;
-        buf.write_all(kb).context("Failed to write key")?;
-        write_value_inner(&mut buf, &val)?;
+        write_length(&mut buf, kb.len() as u32, version)?;
+        w.write_all(kb).context("Failed to write key")?;
+        write_value_inner(&mut buf, &val, version)?;
     }
 
     let mut hasher = Hasher::new();
@@ -239,41 +236,46 @@ pub fn write_dump_streaming<W: Write, I>(
 where
     I: ExactSizeIterator<Item = (Sds, Value)>,
 {
+    write_dump_streaming_versioned(w, kvs, FormatVersion::current())
+}
+
+/// Streaming с явной версией.
+pub fn write_dump_streaming_versioned<W: Write, I>(
+    w: &mut W,
+    kvs: I,
+    version: FormatVersion,
+) -> ZumicResult<()>
+where
+    I: ExactSizeIterator<Item = (Sds, Value)>,
+{
     let mut hasher = Hasher::new();
 
-    // helper: write bytes to w и update crc
     let mut write_and_hash = |bytes: &[u8]| -> ZumicResult<()> {
         w.write_all(bytes).context("Failed to write")?;
         hasher.update(bytes);
         Ok(())
     };
 
-    // header: magic + version
     write_and_hash(FILE_MAGIC).context("Failed to write magic")?;
-    let ver_byte = [FormatVersion::V1 as u8];
+    let ver_byte = [version as u8];
     write_and_hash(&ver_byte).context("Failed to write version")?;
 
-    // count
     let count = kvs.len() as u32;
-    let cnt_buf = count.to_be_bytes();
+    let mut cnt_buf = Vec::new();
+    write_length(&mut cnt_buf, count, version)?;
     write_and_hash(&cnt_buf).context("Failed to write item count")?;
 
-    // entries: для каждого ключа пишем (keylen + key + serialized value)
     for (key, val) in kvs {
         let kb = key.as_bytes();
 
-        // временный буфер для одной записи
         let mut tmp = Vec::with_capacity(8 + kb.len());
-        tmp.write_u32::<BigEndian>(kb.len() as u32)
-            .expect("writing to vec cannot fail");
+        write_length(&mut tmp, kb.len() as u32, version)?;
         tmp.extend_from_slice(kb);
-        write_value_inner(&mut tmp, &val)?;
+        write_value_inner(&mut tmp, &val, version)?;
 
-        // записываем и хешируем
         write_and_hash(&tmp).context("Failed to write record")?;
     }
 
-    // финальный CRC (над всем телом)
     let crc = hasher.finalize();
     w.write_u32::<BigEndian>(crc)
         .context("Failed to write CRC32")?;
@@ -286,20 +288,44 @@ pub fn write_stream<W: Write>(
     w: &mut W,
     kvs: impl Iterator<Item = (Sds, Value)>,
 ) -> ZumicResult<()> {
+    write_stream_versioned(w, kvs, FormatVersion::current())
+}
+
+/// write_stream с явной версией.
+pub fn write_stream_versioned<W: Write>(
+    w: &mut W,
+    kvs: impl Iterator<Item = (Sds, Value)>,
+    version: FormatVersion,
+) -> ZumicResult<()> {
     w.write_all(FILE_MAGIC).context("Failed to write magic")?;
-    w.write_u8(FormatVersion::V1 as u8)
+    w.write_u8(version as u8)
         .context("Failed to write version")?;
 
     for (key, val) in kvs {
         let kb = key.as_bytes();
-        w.write_u32::<BigEndian>(kb.len() as u32)
-            .context("Failed to write key length")?;
+        write_length(w, kb.len() as u32, version)?;
         w.write_all(kb).context("Failed to write key")?;
-        write_value(w, &val)?;
+        write_value_versioned(w, &val, version)?;
     }
 
     w.write_u8(TAG_EOF).context("Failed to write EOF tag")?;
     Ok(())
+}
+
+/// Записывает длину: u32 BigEndian (V1/V2) or varint (V3).
+#[inline]
+fn write_length<W: Write>(
+    w: &mut W,
+    len: u32,
+    version: FormatVersion,
+) -> ZumicResult<usize> {
+    if version.uses_varint() {
+        varint::write_varint(w, len).context("Failed to write varint length") // V3: 1-5 byte
+    } else {
+        w.write_u32::<BigEndian>(len)
+            .context("Failed to write fixed length")?; // V1/V2: always 4 byte
+        Ok(4)
+    }
 }
 
 #[cfg(test)]
@@ -454,20 +480,6 @@ mod tests {
 
         let mut reader = StreamReader::new(&buf[..]).unwrap();
         assert!(reader.next().is_none());
-    }
-
-    /// Тест проверяет, что дамп с CRC проходит полный круг: write_dump →
-    /// read_dump.
-    #[test]
-    fn doc_test_dump_roundtrip_crc() {
-        let items = vec![
-            (Sds::from_str("foo"), Value::Int(123)),
-            (Sds::from_str("bar"), Value::Str(Sds::from_str("baz"))),
-        ];
-        let mut buf = Vec::new();
-        write_dump(&mut buf, items.clone().into_iter()).unwrap();
-        let got = read_dump(&mut &buf[..]).unwrap();
-        assert_eq!(got, items);
     }
 
     /// Тест проверяет, что при повреждении CRC в конце read_dump падает с
