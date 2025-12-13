@@ -225,7 +225,7 @@ impl CommandExecute for LRangeCommand {
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
         match store.get(&key)? {
-            Some(Value::List(list)) => {
+            Some(Value::List(mut list)) => {
                 let len = list.len() as i64;
                 let s = if self.start < 0 {
                     (len + self.start).max(0)

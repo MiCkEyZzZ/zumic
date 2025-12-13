@@ -2,24 +2,29 @@
 name = "zumic-benchmark"
 version = "0.1.0"
 edition = "2021"
-description = "zumic benchmarking suite"
+description = "Criterion-based benchmarking suite for Zumic: microbenchmarks for data-structures and engine primitives (QuickList, SkipList, Dict, Stream, etc.)."
+readme = "README.md"
 license = "Apache-2.0"
+keywords = ["zumic", "benchmark", "performance", "criterion", "listpack", "skiplist"]
+categories = ["benchmarking", "performance"]
 publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/zdb-benchmark/varint_benchmarks.rs"
+path = "benches/quicklist_benchmark/quicklist_bench.rs"
 harness = false
 
 [lints]
 workspace = true
 
 [dependencies]
-criterion = { workspace = true }
 zumic = { path = "../" }
 zumic-error = { workspace = true }
 
-ordered-float = "5.1.0"
-rand = { version = "0.8", features = ["small_rng"] }
+ordered-float = { workspace = true }
 rdb = "0.3.0"
-zstd = "0.13.3"
+zstd = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
