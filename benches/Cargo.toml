@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/quicklist_benchmark/quicklist_bench.rs"
+path = "benches/listpack_benchmark/listpack_bench.rs"
 harness = false
 
 [lints]

@@ -26,6 +26,10 @@
   - Теперь PR без обновлённого Changelog нельзя считать полностью завершённым.
 - **benchmarks**
   - Обновлённый набор bench'ей для QuickList: добавлены сценарии index lookup vs previous approach и измерения random/sequential access, push/pop и flatten/into_vecdeque.
+- **listpack**
+  - Добавил док-комментарии для тестовых ф-й в `listpack`.
+- **benches/listpack**
+  - Добавил бенчмарки для проверки производительности `listpack`.
 
 ### Изменено
 
