@@ -3,16 +3,39 @@
 //! закодированной в формате переменной длины (varint), а весь список
 //! завершается специальным байтом 0xFF.
 
+/// Динамический список элементов переменной длины в бинарном формате.
+///
+/// `ListPack` хранит элементы в виде последовательности байт с кодированием
+/// длины каждого элемента в формате varint и терминатором `0xFF`.
+/// Поддерживаются вставки и удаление элементов с обеих сторон списка.
+#[derive(Clone)]
 pub struct ListPack {
+    /// Внутренний буфер с элементами и терминатором
     data: Vec<u8>,
+    /// Индекс начала первого элемента (или позиции для вставки в начало)
     head: usize,
+    /// Индекс конца последнего элемента + терминатор (или позиции для вставки в
+    /// конец)
     tail: usize,
+    /// Количество элементов в списке
     num_entries: usize,
 }
 
 impl ListPack {
-    /// Создаёт новый пустой `ListPack` с заранее выделенной ёмкостью и
-    /// размещённым по центру байтом-завершителем.
+    /// Создаёт новый пустой `ListPack`.
+    ///
+    /// Внутренний буфер инийиализируется с заранее выделенно ёмкостью, а
+    /// байт-завершитель (`0xFF`) размещается по центру буфера для обеспечения
+    /// эффективных вставок как в начало, так и в конец списка.
+    ///
+    /// # Инициализация
+    /// - Буфер создаётся с начальной ёмкостью по умолчанию;
+    /// - `head` и `tail` устанавливаются таким образом, что список изначально
+    ///   пуст и корректно терминрован.
+    ///
+    /// # Гарантии
+    /// - После создания `len() == 0`;
+    /// - Внутренние инварианты структуры соблюдены.
     pub fn new() -> Self {
         let cap = 1024;
         let mut data = vec![0; cap];
@@ -27,6 +50,10 @@ impl ListPack {
     }
 
     /// Вставляет значение в начало списка.
+    ///
+    /// Значение добавляется перед всеми существующими элементами.
+    /// Длина элемента предварительно кодируется в формате varint и сохраняется
+    /// вместе с данными во внутреннем буфере.
     pub fn push_front(
         &mut self,
         value: &[u8],
@@ -53,6 +80,11 @@ impl ListPack {
     }
 
     /// Вставляет значение в конец списка.
+    ///
+    /// Значение добавляется после всех существующих элементов.
+    /// Перед записью данные кодируются во внутреннем бинарном формате: длина
+    /// элемента сохраняется в формате varint, за которой следуют сами данные и
+    /// терминатор списка.
     pub fn push_back(
         &mut self,
         value: &[u8],
@@ -85,6 +117,10 @@ impl ListPack {
     }
 
     /// Удаляет и возвращает элемент из начала списка.
+    ///
+    /// # Возвращает
+    /// - `Some(Vec<u8>)` - данные удалённого элемента
+    /// - `None` - если список пуст
     pub fn pop_front(&mut self) -> Option<Vec<u8>> {
         if self.num_entries == 0 {
             return None;
@@ -118,6 +154,10 @@ impl ListPack {
     }
 
     /// Удаляет и возвращает элемент из конца списка.
+    ///
+    /// # Возвращает
+    /// - `Some(Vec<u8>)` - данные удалённого элемента
+    /// - `None` - если список пуст
     pub fn pop_back(&mut self) -> Option<Vec<u8>> {
         if self.num_entries == 0 {
             return None;
@@ -172,16 +212,22 @@ impl ListPack {
     }
 
     /// Возвращает количество элементов в списке.
+    #[inline]
     pub fn len(&self) -> usize {
         self.num_entries
     }
 
     /// Возвращает `true`, если список пуст.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.num_entries == 0
     }
 
     /// Возвращает ссылку на элемент по указанному индексу, если он существует.
+    ///
+    /// # Возвращает
+    /// - `Some(&[u8])` - срез данных элемента по указанному индексу
+    /// - `None` - если индекс выходит за границу списка
     pub fn get(
         &self,
         index: usize,
@@ -200,7 +246,6 @@ impl ListPack {
 
             let (len, consumed) = Self::decode_varint(&self.data[i..])?;
             if curr == index {
-                // возвращаем срез с данными элемента
                 return Some(&self.data[i + consumed..i + consumed + len]);
             }
             i += consumed + len;
@@ -210,7 +255,11 @@ impl ListPack {
         None
     }
 
-    /// Возвращает итератор по всем элементам списка.
+    /// Возвращает итератор по всем элементам списка в порядке хранения.
+    ///
+    /// # Возвращает
+    /// - итератор с элементами типа `&[u8]`, где каждый элемент является
+    ///   представлением соответствующего значения списка
     pub fn iter(&self) -> impl Iterator<Item = &[u8]> {
         let data = &self.data;
         let mut pos = self.head;
@@ -229,8 +278,11 @@ impl ListPack {
         })
     }
 
-    /// Удаляет элемент по указанному индексу. Возвращает `true`, если удаление
-    /// прошло успешно.
+    /// Удаляет элемент по указанному индексу.
+    ///
+    /// # Возвращает:
+    /// - `true` - если элемент был успешно удалён
+    /// - `false` - если индекс выходит за границы списка
     pub fn remove(
         &mut self,
         index: usize,
@@ -239,44 +291,57 @@ impl ListPack {
             return false;
         }
 
-        let mut i = self.head;
-        let mut curr = 0;
-
-        while i < self.tail {
-            if self.data[i] == 0xFF {
-                break;
-            }
-
-            if let Some((len, consumed)) = Self::decode_varint(&self.data[i..]) {
-                if curr == index {
-                    let start = i;
-                    let end = i + consumed + len;
-
-                    // Сдвигаем всё после `end` влево на позицию `start`
-                    let _to_move = self.tail - end;
-                    self.data.copy_within(end..self.tail, start);
-                    self.tail -= end - start;
-
-                    // Обновляем терминатор
-                    if self.tail > 0 {
-                        self.data[self.tail - 1] = 0xFF;
-                    }
-
-                    self.num_entries -= 1;
-                    return true;
-                }
-
-                i += consumed + len;
-                curr += 1;
-            } else {
-                break;
-            }
+        // Оптимизация для первого элемента - О(1) без поиска
+        if index == 0 {
+            self.pop_front();
+            return true;
         }
 
-        false
+        // Для остальных случаев нужно найти позицию элемента
+        let (elem_start, elem_len, consumed) = match self.find_element_pos(index) {
+            Some(pos) => pos,
+            None => return false,
+        };
+
+        let elem_end = elem_start + consumed + elem_len;
+
+        // Оптимизация для последнего элемента
+        if index == self.num_entries - 1 {
+            self.tail = elem_start;
+            self.data[self.tail] = 0xFF;
+            self.tail += 1;
+            self.num_entries -= 1;
+            return true;
+        }
+
+        // Удаление из середины: выбираем направдение копирования
+        let left_bytes = elem_start - self.head;
+        let right_bytes = self.tail - elem_end;
+
+        if left_bytes < right_bytes {
+            // Копируем левую часть вправо (меньше данных)
+            // [head ... elem_start] -> [elem_end ...]
+            self.data.copy_within(self.head..elem_start, elem_end);
+            self.head += elem_end - elem_start;
+        } else {
+            // Копируем правую часть влево (меньше данных)
+            // [elem_end ... tail] -> [elem_start ...]
+            self.data.copy_within(elem_end..self.tail, elem_start);
+            self.tail -= elem_end - elem_start;
+        }
+
+        self.num_entries -= 1;
+        true
     }
 
     /// Кодирует значение `usize` в формате переменной длины (varint).
+    ///
+    /// Возвращает вектор байт, содержащий varint-представление значения.
+    ///
+    /// # Гарантии
+    /// - Для значений `0..=127` результат содержит ровно один байт;
+    /// - Размер результата не превышает `ceil(size_of::<usize>() * 8 / 7)`
+    ///   байт.
     pub fn encode_varint(mut value: usize) -> Vec<u8> {
         let mut buf = Vec::new();
         loop {
@@ -292,8 +357,12 @@ impl ListPack {
         buf
     }
 
-    /// Декодирует целое число в формате переменной длины (varint) из заданного
-    /// среза. Возвращает пару (значение, количество прочитанных байт).
+    /// Декодирует целое число в формате переменной длины (varint) из начала
+    /// переданного среза байт.
+    ///
+    /// # Возвращает:
+    /// - `value` - декодированное целое число
+    /// - `consumed` - кол-во байт, прочитанных из среза
     pub fn decode_varint(data: &[u8]) -> Option<(usize, usize)> {
         let mut result = 0usize;
         let mut shift = 0;
@@ -307,6 +376,41 @@ impl ListPack {
                 return None;
             }
         }
+        None
+    }
+
+    /// Находит позицию элемента по индексу.
+    ///
+    /// # Возвращает:
+    /// - `start` - позиция начала length varint в буфере
+    /// - `len` - длина данных элемента
+    /// - `consumed` - кол-во байт занятое length varint
+    fn find_element_pos(
+        &self,
+        index: usize,
+    ) -> Option<(usize, usize, usize)> {
+        if index >= self.num_entries {
+            return None;
+        }
+
+        let mut pos = self.head;
+        let mut curr = 0;
+
+        while pos < self.tail {
+            if self.data[pos] == 0xFF {
+                break;
+            }
+
+            let (len, consumed) = Self::decode_varint(&self.data[pos..])?;
+
+            if curr == index {
+                return Some((pos, len, consumed));
+            }
+
+            pos += consumed + len;
+            curr += 1;
+        }
+
         None
     }
 
@@ -349,7 +453,6 @@ impl ListPack {
     fn recenter(&mut self) {
         let used = self.tail - self.head;
         if used == 0 {
-            // Пустой список — просто reset
             self.head = self.data.len() / 2;
             self.tail = self.head + 1;
             self.data[self.head] = 0xFF;
