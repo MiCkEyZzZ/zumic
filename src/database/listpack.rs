@@ -60,10 +60,8 @@ impl ListPack {
     ) {
         // Кодируем длину значения в формате varint
         let len_bytes = Self::encode_varint(value.len());
-
         let extra = len_bytes.len() + value.len();
 
-        // ВАЖНО: grow_and_center должен гарантировать достаточно места ДО записи
         self.grow_and_center(extra);
 
         // Сдвигаем head назад и записываем длину + данные
@@ -91,10 +89,8 @@ impl ListPack {
     ) {
         // Кодируем длину значения в формате varint
         let len_bytes = Self::encode_varint(value.len());
-
         let extra = len_bytes.len() + value.len();
 
-        // ВАЖНО: grow_and_center нужно вызвать ДО любых манипуляций с буфером
         self.grow_and_center(extra);
 
         // Перезаписываем текущий терминатор (0xFF) на позиции tail-1,
@@ -209,6 +205,53 @@ impl ListPack {
         }
 
         Some(element)
+    }
+
+    /// Удаляет все элементы из списка.
+    pub fn clear(&mut self) {
+        let cap = self.data.len();
+        self.head = cap / 2;
+        self.tail = self.head + 1;
+        self.data[self.head] = 0xFF;
+        self.num_entries = 0;
+    }
+
+    /// Обрезает список до указанной длины.
+    pub fn truncate(
+        &mut self,
+        len: usize,
+    ) {
+        if len >= self.num_entries {
+            return;
+        }
+
+        while self.num_entries > len {
+            self.pop_back();
+        }
+    }
+
+    /// Изменяет размер списка до указанной длины.
+    pub fn resize(
+        &mut self,
+        new_len: usize,
+        fill: &[u8],
+    ) {
+        match new_len.cmp(&self.num_entries) {
+            std::cmp::Ordering::Greater => {
+                // Добавляем недостающие элементы
+                let to_add = new_len - self.num_entries;
+                for _ in 0..to_add {
+                    self.push_back(fill);
+                }
+            }
+            std::cmp::Ordering::Less => {
+                // Удаляем лишние элементы
+                self.truncate(new_len);
+            }
+            std::cmp::Ordering::Equal => {
+                // Ничего не делаем
+            }
+        }
     }
 
     /// Возвращает количество элементов в списке.
@@ -736,5 +779,199 @@ mod tests {
 
         assert_eq!(lp.len(), 0);
         assert_eq!(lp.pop_back(), None);
+    }
+
+    /// Тест проверяет корректную очистку пустого списка через `clear`
+    /// и сохранение инвариантов буфера.
+    #[test]
+    fn test_clear_empty_list() {
+        let mut lp = ListPack::new();
+        let cap = lp.data.len();
+        lp.clear();
+        assert_eq!(lp.len(), 0);
+        assert_eq!(lp.pop_front(), None);
+        assert_eq!(lp.pop_back(), None);
+        assert_eq!(lp.data.len(), cap);
+        assert_eq!(lp.head, cap / 2);
+        assert_eq!(lp.data[lp.head], 0xFF);
+    }
+
+    /// Тест проверяет, что `clear` полностью очищает непустой список
+    /// и корректно сбрасывает состояние.
+    #[test]
+    fn test_clear_non_empty_list() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        assert_eq!(lp.len(), 2);
+        lp.clear();
+        assert_eq!(lp.len(), 0);
+        assert_eq!(lp.get(0), None);
+        assert_eq!(lp.pop_front(), None);
+        assert_eq!(lp.pop_back(), None);
+        assert_eq!(lp.data[lp.head], 0xFF);
+    }
+
+    /// Тест проверяет возможность повторного использования списка
+    /// после вызова `clear`.
+    #[test]
+    fn test_clear_then_reuse() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"x");
+        lp.clear();
+        lp.push_back(b"y");
+        assert_eq!(lp.len(), 1);
+        assert_eq!(lp.pop_front(), Some(b"y".to_vec()));
+    }
+
+    /// Тест проверяет, что `clear` не изменяет ёмкость буфера
+    /// и корректно восстанавливает `head`, `tail` и `num_entries`.
+    #[test]
+    fn test_clear_reuses_buffer() {
+        let mut lp = ListPack::new();
+        let original_cap = lp.data.len();
+        for i in 0..10 {
+            lp.push_back(&[i]);
+        }
+        lp.clear();
+        assert_eq!(lp.data.len(), original_cap);
+        assert_eq!(lp.head, original_cap / 2);
+        assert_eq!(lp.tail, lp.head + 1);
+        assert_eq!(lp.num_entries, 0);
+    }
+
+    /// Тест проверяет, что `truncate` с длиной больше текущей
+    /// не изменяет содержимое списка.
+    #[test]
+    fn test_truncate_no_op_when_len_greater() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        lp.push_back(b"c");
+        let before = lp.len();
+        lp.truncate(10);
+        assert_eq!(lp.len(), before);
+        assert_eq!(lp.get(0), Some(b"a".as_ref()));
+        assert_eq!(lp.get(2), Some(b"c".as_ref()));
+    }
+
+    /// Тест проверяет, что `truncate` с длиной, равной текущей,
+    /// является no-op.
+    #[test]
+    fn test_truncate_no_op_when_len_equal() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"1");
+        lp.push_back(b"2");
+        let before = lp.len();
+        lp.truncate(before);
+        assert_eq!(lp.len(), before);
+        assert_eq!(lp.get(0), Some(b"1".as_ref()));
+        assert_eq!(lp.get(1), Some(b"2".as_ref()));
+    }
+
+    /// Тест проверяет корректное удаление хвостовых элементов
+    /// при уменьшении длины через `truncate`.
+    #[test]
+    fn test_truncate_to_smaller_length() {
+        let mut lp = ListPack::new();
+        for ch in b'0'..=b'4' {
+            lp.push_back(&[ch]);
+        }
+        assert_eq!(lp.len(), 5);
+        lp.truncate(2);
+        assert_eq!(lp.len(), 2);
+        assert_eq!(lp.get(0), Some(&[b'0'][..]));
+        assert_eq!(lp.get(1), Some(&[b'1'][..]));
+        assert_eq!(lp.get(2), None);
+    }
+
+    /// Тест проверяет, что `truncate(0)` полностью очищает список
+    /// и корректно сбрасывает внутреннее состояние.
+    #[test]
+    fn test_truncate_to_zero() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        lp.truncate(0);
+        assert_eq!(lp.len(), 0);
+        assert_eq!(lp.pop_front(), None);
+        assert_eq!(lp.pop_back(), None);
+        // head/tail восстановлены
+        let cap = lp.data.len();
+        assert_eq!(lp.head, cap / 2);
+        assert_eq!(lp.tail, lp.head + 1);
+    }
+
+    /// Тест проверяет расширение списка через `resize`
+    /// с заполнением значением `fill`.
+    #[test]
+    fn test_resize_grow() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"one");
+        lp.push_back(b"two");
+        lp.resize(5, b"x");
+        assert_eq!(lp.len(), 5);
+        assert_eq!(lp.get(0), Some(b"one".as_ref()));
+        assert_eq!(lp.get(1), Some(b"two".as_ref()));
+        assert_eq!(lp.get(2), Some(b"x".as_ref()));
+        assert_eq!(lp.get(4), Some(b"x".as_ref()));
+    }
+
+    /// Тест проверяет корректное сокращение списка
+    /// при `resize` в меньшую сторону.
+    #[test]
+    fn test_resize_shrink() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        lp.push_back(b"c");
+        lp.resize(1, b"x");
+        assert_eq!(lp.len(), 1);
+        assert_eq!(lp.get(0), Some(b"a".as_ref()));
+        assert_eq!(lp.get(1), None);
+    }
+
+    /// Тест проверяет, что `resize` с той же длиной
+    /// не изменяет список.
+    #[test]
+    fn test_resize_no_change() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"alpha");
+        let before = lp.len();
+        lp.resize(before, b"fill");
+        assert_eq!(lp.len(), before);
+        assert_eq!(lp.get(0), Some(b"alpha".as_ref()));
+    }
+
+    /// Тест проверяет, что `resize(0)` полностью очищает список.
+    #[test]
+    fn test_resize_to_zero() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"z");
+        lp.resize(0, b"fill");
+        assert_eq!(lp.len(), 0);
+        assert_eq!(lp.pop_front(), None);
+    }
+
+    /// Тест проверяет корректное расширение пустого списка
+    /// через `resize`.
+    #[test]
+    fn test_resize_from_empty() {
+        let mut lp = ListPack::new();
+        lp.resize(3, b"F");
+        assert_eq!(lp.len(), 3);
+        assert_eq!(lp.get(0), Some(b"F".as_ref()));
+        assert_eq!(lp.get(2), Some(b"F".as_ref()));
+    }
+
+    /// Тест проверяет работу `resize` с большими элементами данных.
+    #[test]
+    fn test_resize_with_large_fill() {
+        let mut lp = ListPack::new();
+        let big_fill = vec![7u8; 300];
+        lp.resize(2, &big_fill);
+        assert_eq!(lp.len(), 2);
+        assert_eq!(lp.get(0), Some(&big_fill[..]));
+        assert_eq!(lp.get(1), Some(&big_fill[..]));
     }
 }

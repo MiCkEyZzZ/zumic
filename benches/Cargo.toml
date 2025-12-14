@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/listpack_benchmark/remove_bench.rs"
+path = "benches/listpack_benchmark/listpack_clear_truncate_resize.rs"
 harness = false
 
 [lints]
