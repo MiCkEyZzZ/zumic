@@ -388,18 +388,22 @@ impl Default for ListPack {
 mod tests {
     use super::*;
 
+    /// Тест проверяет, что `pop_front` на пустом списке возвращает `None`.
     #[test]
     fn test_pop_front_empty() {
         let mut lp = ListPack::new();
         assert_eq!(lp.pop_front(), None);
     }
 
+    /// Тест проверяет, что `pop_back` на пустом списке возвращает `None`.
     #[test]
     fn test_pop_back_empty() {
         let mut lp = ListPack::new();
         assert_eq!(lp.pop_back(), None);
     }
 
+    /// Тест проверяет корректное извлечение единственного элемента через
+    /// `pop_front` и сброс состояния списка после опустошения.
     #[test]
     fn test_pop_front_single_element() {
         let mut lp = ListPack::new();
@@ -411,6 +415,8 @@ mod tests {
         assert_eq!(lp.pop_front(), None);
     }
 
+    /// Тест проверяет последовательное удаление элементов из начала списка
+    /// и сохранение корректного порядка.
     #[test]
     fn test_pop_front_multiple_elements() {
         let mut lp = ListPack::new();
@@ -428,6 +434,8 @@ mod tests {
         assert_eq!(lp.pop_front(), None);
     }
 
+    /// Тест проверяет последовательное удаление элементов с конца списка
+    /// и корректный LIFO-порядок.
     #[test]
     fn test_pop_back_multiple_elements() {
         let mut lp = ListPack::new();
@@ -445,6 +453,8 @@ mod tests {
         assert_eq!(lp.pop_back(), None);
     }
 
+    /// Тест проверяет корректную работу смешанных операций `push_front`,
+    /// `push_back`, `pop_front` и `pop_back`.
     #[test]
     fn test_push_pop_mixed() {
         let mut lp = ListPack::new();
@@ -459,6 +469,8 @@ mod tests {
         assert_eq!(lp.pop_front(), None);
     }
 
+    /// Тест проверяет, что после `pop_front` оставшиеся элементы
+    /// доступны по корректным индексам.
     #[test]
     fn test_pop_front_maintains_remaining_elements() {
         let mut lp = ListPack::new();
@@ -472,6 +484,8 @@ mod tests {
         assert_eq!(lp.get(1), Some(b"c".as_ref()));
     }
 
+    /// Тест проверяет, что после `pop_back` оставшиеся элементы
+    /// сохраняют корректный порядок.
     #[test]
     fn test_pop_back_maintains_remaining_elements() {
         let mut lp = ListPack::new();
@@ -485,6 +499,8 @@ mod tests {
         assert_eq!(lp.get(1), Some(b"b".as_ref()));
     }
 
+    /// Тест проверяет, что при массовом `pop_front` происходит корректное
+    /// рецентрирование буфера без потери данных.
     #[test]
     fn test_pop_front_recentering() {
         let mut lp = ListPack::new();
@@ -510,6 +526,8 @@ mod tests {
         assert!(lp.head < lp.data.len() * 3 / 4);
     }
 
+    /// Тест проверяет корректную работу `pop_front` и `pop_back`
+    /// с большими элементами данных.
     #[test]
     fn test_pop_operations_with_large_elements() {
         let mut lp = ListPack::new();
@@ -525,6 +543,7 @@ mod tests {
         assert_eq!(lp.len(), 0);
     }
 
+    /// Тест проверяет корректность вставки после `pop_front`.
     #[test]
     fn test_pop_front_then_push_back() {
         let mut lp = ListPack::new();
@@ -539,6 +558,7 @@ mod tests {
         assert_eq!(lp.get(1), Some(b"3".as_ref()));
     }
 
+    /// Тест проверяет корректность вставки в начало после `pop_back`.
     #[test]
     fn test_pop_back_then_push_front() {
         let mut lp = ListPack::new();
@@ -553,6 +573,8 @@ mod tests {
         assert_eq!(lp.get(1), Some(b"1".as_ref()));
     }
 
+    /// Тест проверяет корректность работы итератора
+    /// после последовательных операций удаления.
     #[test]
     fn test_iterator_after_pop_operations() {
         let mut lp = ListPack::new();
@@ -571,6 +593,8 @@ mod tests {
         assert_eq!(collected[6], vec![8]);
     }
 
+    /// Тест проверяет устойчивость `pop_front` при большом количестве элементов
+    /// и сохранение строгого FIFO-порядка.
     #[test]
     fn test_stress_pop_front() {
         let mut lp = ListPack::new();
@@ -590,6 +614,8 @@ mod tests {
         assert_eq!(lp.pop_front(), None);
     }
 
+    /// Тест проверяет устойчивость `pop_back` при большом количестве элементов
+    /// и сохранение строгого LIFO-порядка.
     #[test]
     fn test_stress_pop_back() {
         let mut lp = ListPack::new();
