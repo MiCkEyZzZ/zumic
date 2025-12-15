@@ -46,6 +46,10 @@ pub struct DictIter<'a, K, V> {
     current_entry: Option<&'a Entry<K, V>>,
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
 impl<K, V> Entry<K, V> {
     /// Создаёт новый элемент цепочки.
     fn new(
@@ -77,16 +81,6 @@ impl<K, V> HashTable<K, V> {
         self.buckets.clear();
         self.size_mask = 0;
         self.used = 0;
-    }
-}
-
-impl<K, V> Default for Dict<K, V>
-where
-    K: Hash + Eq,
-{
-    /// Создаёт словарь по умолчанию.
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -302,6 +296,10 @@ where
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для Dict, DictIter
+////////////////////////////////////////////////////////////////////////////////
+
 impl<'a, K, V> Iterator for DictIter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
@@ -337,6 +335,16 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+impl<K, V> Default for Dict<K, V>
+where
+    K: Hash + Eq,
+{
+    /// Создаёт словарь по умолчанию.
+    fn default() -> Self {
+        Self::new()
     }
 }
 
