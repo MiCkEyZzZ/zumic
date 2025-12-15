@@ -21,6 +21,10 @@ pub struct ListPack {
     num_entries: usize,
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
 impl ListPack {
     /// Создаёт новый пустой `ListPack`.
     ///
@@ -207,7 +211,18 @@ impl ListPack {
         Some(element)
     }
 
-    /// Удаляет все элементы из списка.
+    /// Очищает список, удаляя все элементы.
+    ///
+    /// После вызова этого метода список становится пустым.
+    ///
+    /// Обратите внимание, что этот метод **не освобождает и не уменьшает**
+    /// выделенный буфер — внутренняя ёмкость `ListPack` остаётся прежней,
+    /// что позволяет повторно использовать память без дополнительных
+    /// аллокаций.
+    ///
+    /// Внутренние указатели начала и конца сбрасываются в исходное состояние,
+    /// а в буфер записывается терминатор `0xFF`.
+    #[inline]
     pub fn clear(&mut self) {
         let cap = self.data.len();
         self.head = cap / 2;
@@ -216,7 +231,13 @@ impl ListPack {
         self.num_entries = 0;
     }
 
-    /// Обрезает список до указанной длины.
+    /// Укорачивает список, оставляя первые `len` элементов и удаляя остальные.
+    ///
+    /// Если `len` больше либо равно текущему кол-ву элементов, метод не
+    /// оказывает никакого эффекта.
+    ///
+    /// Порядок оставшихся элементов сохраняется.
+    /// Ёмкость внутреннего буфера при этом **не изменяется**.
     pub fn truncate(
         &mut self,
         len: usize,
@@ -255,15 +276,38 @@ impl ListPack {
     }
 
     /// Возвращает количество элементов в списке.
+    ///
+    /// Это значение также может рассматриваться как *длина* списка.
     #[inline]
     pub fn len(&self) -> usize {
         self.num_entries
     }
 
-    /// Возвращает `true`, если список пуст.
+    /// Возвращает `true`, если список не содержит элементов.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.num_entries == 0
+    }
+
+    /// Возвращает ёмкость внетреннуго буфера в байтах.
+    ///
+    /// Это значение соответствует `data.len()` и показывает, сколько байт
+    /// памяти выделено под `ListPack`, а не максимальное кол-во элементов.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Кол-во байт, занятых элементами и терминатором.
+    #[inline]
+    pub fn used_bytes(&self) -> usize {
+        self.tail - self.head
+    }
+
+    /// Кол-во неиспользуемых байт в буфере.
+    #[inline]
+    pub fn free_bytes(&self) -> usize {
+        self.len() - self.used_bytes()
     }
 
     /// Возвращает ссылку на элемент по указанному индексу, если он существует.
@@ -318,6 +362,16 @@ impl ListPack {
             let slice = &data[start..start + len];
             pos = start + len;
             Some(slice)
+        })
+    }
+
+    /// Возвращает reverse iterator по всем элементам списка.
+    pub fn iter_rev(&self) -> impl DoubleEndedIterator<Item = &[u8]> {
+        let positions = self.collect_element_positions();
+        let data_ptr = self.data.as_ptr();
+
+        positions.into_iter().rev().map(move |(start, len)| unsafe {
+            std::slice::from_raw_parts(data_ptr.add(start), len)
         })
     }
 
@@ -521,7 +575,34 @@ impl ListPack {
         self.head = new_head;
         self.tail = new_head + used;
     }
+
+    /// Собирает позиции всех элементов списка.
+    ///
+    /// # Возвращает
+    /// - `Vec<(usize, usize)>` — вектор пар `(start, len)`, где:
+    ///   - `start` — индекс начала данных элемента в буфере `data`
+    ///   - `len` — длина элемента в байтах
+    fn collect_element_positions(&self) -> Vec<(usize, usize)> {
+        let mut positions = Vec::with_capacity(self.num_entries);
+        let mut pos = self.head;
+
+        while pos < self.tail && self.data[pos] != 0xFF {
+            if let Some((len, consumed)) = Self::decode_varint(&self.data[pos..]) {
+                let start = pos + consumed;
+                positions.push((start, len));
+                pos = start + len;
+            } else {
+                break;
+            }
+        }
+
+        positions
+    }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для ListPack
+////////////////////////////////////////////////////////////////////////////////
 
 impl Default for ListPack {
     /// Реализация `Default`, создающая новый пустой `ListPack`.
@@ -559,6 +640,17 @@ mod tests {
         assert_eq!(lp.pop_front(), Some(b"hello".to_vec()));
         assert_eq!(lp.len(), 0);
         assert_eq!(lp.pop_front(), None);
+    }
+
+    #[test]
+    fn test_pop_back_single_element() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"world");
+
+        assert_eq!(lp.len(), 1);
+        assert_eq!(lp.pop_back(), Some(b"world".to_vec()));
+        assert_eq!(lp.len(), 0);
+        assert_eq!(lp.pop_back(), None);
     }
 
     /// Тест проверяет последовательное удаление элементов из начала списка
@@ -752,7 +844,8 @@ mod tests {
 
         for i in 0..n {
             let popped = lp.pop_front().expect("should have element");
-            let value = usize::from_le_bytes(popped.try_into().unwrap());
+            let arr: [u8; std::mem::size_of::<usize>()] = popped.try_into().unwrap();
+            let value = usize::from_le_bytes(arr);
             assert_eq!(value, i);
         }
 
@@ -779,6 +872,235 @@ mod tests {
 
         assert_eq!(lp.len(), 0);
         assert_eq!(lp.pop_back(), None);
+    }
+
+    #[test]
+    fn test_iter_rev_empty() {
+        let lp = ListPack::new();
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 0);
+    }
+
+    #[test]
+    fn test_iter_rev_single_element() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"only");
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 1);
+        assert_eq!(collected[0], b"only");
+    }
+
+    #[test]
+    fn test_iter_rev_multiple_elements() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"first");
+        lp.push_back(b"second");
+        lp.push_back(b"third");
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 3);
+        assert_eq!(collected[0], b"third");
+        assert_eq!(collected[1], b"second");
+        assert_eq!(collected[2], b"first");
+    }
+
+    #[test]
+    fn test_iter_rev_count_matches_forwatd() {
+        let mut lp = ListPack::new();
+        for i in 0..10 {
+            lp.push_back(&[i]);
+        }
+
+        let forward_count = lp.iter().count();
+        let reverse_count = lp.iter_rev().count();
+
+        assert_eq!(forward_count, reverse_count);
+        assert_eq!(forward_count, 10);
+    }
+
+    #[test]
+    fn test_iter_rev_reverse_of_forward() {
+        let mut lp = ListPack::new();
+        for i in 0u8..5 {
+            lp.push_back(&[i]);
+        }
+
+        let forward: Vec<Vec<u8>> = lp.iter().map(|x| x.to_vec()).collect();
+        let reverse: Vec<Vec<u8>> = lp.iter_rev().map(|x| x.to_vec()).collect();
+
+        assert_eq!(forward.len(), reverse.len());
+        for (i, fwd_item) in forward.iter().enumerate() {
+            let rev_item = &reverse[reverse.len() - 1 - i];
+            assert_eq!(fwd_item, rev_item);
+        }
+    }
+
+    #[test]
+    fn test_iter_rev_after_removals() {
+        let mut lp = ListPack::new();
+        for i in 0..10 {
+            lp.push_back(&[i]);
+        }
+
+        lp.pop_front();
+        lp.pop_back();
+
+        let collected: Vec<Vec<u8>> = lp.iter_rev().map(|x| x.to_vec()).collect();
+        assert_eq!(collected.len(), 8);
+        assert_eq!(collected[0], vec![8]);
+        assert_eq!(collected[7], vec![1]);
+    }
+
+    #[test]
+    fn test_iter_rev_with_large_elements() {
+        let mut lp = ListPack::new();
+        let large1 = vec![1u8; 500];
+        let large2 = vec![2u8; 500];
+        let large3 = vec![3u8; 500];
+
+        lp.push_back(&large1);
+        lp.push_back(&large2);
+        lp.push_back(&large3);
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 3);
+        assert_eq!(collected[0], &large3[..]);
+        assert_eq!(collected[1], &large2[..]);
+        assert_eq!(collected[2], &large1[..]);
+    }
+
+    #[test]
+    fn test_iter_rev_double_ended() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        lp.push_back(b"c");
+        lp.push_back(b"d");
+
+        let mut rev_iter = lp.iter_rev();
+
+        assert_eq!(rev_iter.next(), Some(b"d".as_ref()));
+        assert_eq!(rev_iter.next_back(), Some(b"a".as_ref()));
+        assert_eq!(rev_iter.next(), Some(b"c".as_ref()));
+        assert_eq!(rev_iter.next_back(), Some(b"b".as_ref()));
+        assert_eq!(rev_iter.next(), None);
+    }
+
+    #[test]
+    fn test_iter_rev_after_clear_and_refill() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"old1");
+        lp.push_back(b"old2");
+        lp.clear();
+
+        lp.push_back(b"new1");
+        lp.push_back(b"new2");
+        lp.push_back(b"new3");
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 3);
+        assert_eq!(collected[0], b"new3");
+        assert_eq!(collected[2], b"new1");
+    }
+
+    #[test]
+    fn test_iter_rev_after_truncate() {
+        let mut lp = ListPack::new();
+        for i in 0..10 {
+            lp.push_back(&[i]);
+        }
+
+        lp.truncate(5);
+
+        let collected: Vec<Vec<u8>> = lp.iter_rev().map(|x| x.to_vec()).collect();
+        assert_eq!(collected.len(), 5);
+        assert_eq!(collected[0], vec![4]);
+        assert_eq!(collected[4], vec![0]);
+    }
+
+    #[test]
+    fn test_iter_rev_after_resize_grow() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"b");
+        lp.resize(5, b"x");
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 5);
+        assert_eq!(collected[0], b"x");
+        assert_eq!(collected[1], b"x");
+        assert_eq!(collected[2], b"x");
+        assert_eq!(collected[3], b"b");
+        assert_eq!(collected[4], b"a");
+    }
+
+    #[test]
+    fn test_multiple_iter_rev() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"1");
+        lp.push_back(b"2");
+        lp.push_back(b"3");
+
+        let iter1 = lp.iter_rev();
+        let iter2 = lp.iter_rev();
+
+        let collected1: Vec<&[u8]> = iter1.collect();
+        let collected2: Vec<&[u8]> = iter2.collect();
+
+        assert_eq!(collected1, collected2);
+    }
+
+    #[test]
+    fn test_forward_and_reverse_iteration_combined() {
+        let mut lp = ListPack::new();
+        for i in 0..5 {
+            lp.push_back(&[i]);
+        }
+
+        let forward: Vec<Vec<u8>> = lp.iter().map(|x| x.to_vec()).collect();
+        let reverse: Vec<Vec<u8>> = lp.iter_rev().map(|x| x.to_vec()).collect();
+
+        assert_eq!(forward[0], reverse[4]);
+        assert_eq!(forward[1], reverse[3]);
+        assert_eq!(forward[2], reverse[2]);
+        assert_eq!(forward[3], reverse[1]);
+        assert_eq!(forward[4], reverse[0]);
+    }
+
+    #[test]
+    fn test_stress_iter_rev() {
+        let mut lp = ListPack::new();
+        let n = 1000;
+
+        for i in 0usize..n {
+            lp.push_back(&i.to_le_bytes());
+        }
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), n);
+
+        for (i, elem) in collected.iter().enumerate() {
+            let expected = n - 1 - i;
+            let value = usize::from_le_bytes((*elem).try_into().unwrap());
+            assert_eq!(value, expected);
+        }
+    }
+
+    #[test]
+    fn test_iter_rev_variable_length_elements() {
+        let mut lp = ListPack::new();
+        lp.push_back(b"a");
+        lp.push_back(b"bb");
+        lp.push_back(b"ccc");
+        lp.push_back(b"dddd");
+
+        let collected: Vec<&[u8]> = lp.iter_rev().collect();
+        assert_eq!(collected.len(), 4);
+        assert_eq!(collected[0], b"dddd");
+        assert_eq!(collected[1], b"ccc");
+        assert_eq!(collected[2], b"bb");
+        assert_eq!(collected[3], b"a");
     }
 
     /// Тест проверяет корректную очистку пустого списка через `clear`
