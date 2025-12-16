@@ -72,7 +72,11 @@ impl Crc32 {
     /// IEEE 802.3 полином для CRC32.
     const POLYNOMIAL: u32 = 0xEDB88320;
 
-    /// Создаёт новый экземпляр CRC32 с предвычесленной таблицей.
+    /// Создаёт новый экземпляр CRC32 с предвычесленной таблицей для быстрого
+    /// вычисления CRC32 по стандартному полиному IEEE 802.3.
+    ///
+    /// # Возвращает:
+    /// - `Crc32` - объект CRC32 с заполненной таблицей
     pub fn new() -> Self {
         let mut table = [0u32; 256];
 
@@ -91,7 +95,10 @@ impl Crc32 {
         Self { table }
     }
 
-    /// Вычисляет CRC32 для данных.
+    /// Вычисляет CRC32 для переданных данных.
+    ///
+    /// # Возвращает:
+    /// - `u32` - вычисленное значение CRC32
     pub fn checksum(
         &self,
         data: &[u8],
@@ -106,7 +113,11 @@ impl Crc32 {
         crc ^ 0xFFFFFFFF
     }
 
-    /// Верифицирует checksum для данных.
+    /// Проверяет CRC32 для переданных данных.
+    ///
+    /// # Возвращает:
+    /// - `bool` - `true`, если вычисленное значение совпадает с ожидаемым,
+    ///   иначе `false`
     pub fn verify(
         &self,
         data: &[u8],
@@ -117,7 +128,7 @@ impl Crc32 {
 }
 
 impl IntegrityStats {
-    /// Обновляет статистику на основе результата валидации.
+    /// Обновляет статистику на основе результата валидации AOF записи.
     pub fn update(
         &mut self,
         result: &ValidationResult,
@@ -141,7 +152,10 @@ impl IntegrityStats {
         self.records_skipped += 1;
     }
 
-    /// Возвращает процент успешных записей.
+    /// Возвращает процент успешно проверенных записей.
+    ///
+    /// # Возвращает:
+    /// - `f64` - процент валидных записей (0..100)
     pub fn success_rate(&self) -> f64 {
         if self.records_checked == 0 {
             return 100.0;
@@ -149,7 +163,13 @@ impl IntegrityStats {
         (self.records_valid as f64 / self.records_checked as f64) * 100.0
     }
 
-    /// Проверяет, есть ли критические проблемы.
+    /// Проверяет, есть ли критические проблемы с целостностью.
+    ///
+    /// Критическая проблема считается, если более 5% записей повреждены.
+    ///
+    /// # Возвращает:
+    /// - `true`, если есть критические проблемы
+    /// - `false`, если нет критической проблемы
     pub fn has_critical_issues(&self) -> bool {
         if self.records_checked == 0 {
             return false;
@@ -160,7 +180,11 @@ impl IntegrityStats {
 }
 
 impl AofValidator {
-    /// Создаёт новый валидатор.
+    /// Создаёт новый валидатор для проверки AOF записей.
+    ///
+    /// # Возвращает:
+    /// - `AofValidator` - объект валидатора с предвычесленным CRC32 и пустой
+    ///   статистикой
     pub fn new() -> Self {
         Self {
             crc32: Crc32::new(),
@@ -168,15 +192,20 @@ impl AofValidator {
         }
     }
 
-    /// Пометить запись как пропущенную (для replay режимов skip/log)
-    /// Это увеличит счётчик records_skipped в states.
+    /// Помечает текущую запись как пропущенную.
+    ///
+    /// Используется для режимов replay `skip` или `log`.
+    /// Увеличивает счётчик `records_skipped`.
     pub fn mark_skipped(&mut self) {
         self.stats.skip_record();
     }
 
-    /// Валидирует одну AOF запись с checksum
+    /// Валидирует одну AOF запись с CRC32.
     ///
-    /// Ожидаемый формат: [op][checksum][key_len][key][val_len?][val?]
+    /// Ожидаемый формат записи: `[op][checksum][key_len][key][val_len?][val?]`
+    ///
+    /// # Возвращает:
+    /// - `ValidationResult` - результат проверки записи
     pub fn validate_record(
         &mut self,
         data: &[u8],
@@ -186,17 +215,23 @@ impl AofValidator {
         result
     }
 
-    /// Возвращает текущую статистику.
+    /// Возвращает текущую статистику валидатора.
+    ///
+    /// # Возвращает:
+    /// - `&IntegrityStats` - ссылка на внутреннюю статистику
     pub fn stats(&self) -> &IntegrityStats {
         &self.stats
     }
 
-    /// Сбрасывает статистику.
+    /// Сбрасывает текущую статистику.
     pub fn reset_stats(&mut self) {
         self.stats = IntegrityStats::default();
     }
 
-    /// Вычисляет checksum для нового payload.
+    /// Вычисляет CRC32 для переданного payload.
+    ///
+    /// # Возвращает:
+    /// - `u32` - вычисленное значение CRC32
     pub fn compute_checksum(
         &self,
         payload: &[u8],
@@ -204,6 +239,9 @@ impl AofValidator {
         self.crc32.checksum(payload)
     }
 
+    /// Внутренняя проверка одной AOF записи.
+    ///
+    /// Используется для реализации `validate_record`.
     fn validate_record_internal(
         &self,
         data: &[u8],

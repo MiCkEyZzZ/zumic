@@ -4,6 +4,15 @@ use zumic_error::{ResultExt, StatusCode, ZumicResult};
 
 use super::{write_stream, CallbackHandler, InMemoryStore, Storage, StreamingParser};
 
+// NOTE: ВРЕМЕННАЯ локальная обёртка — можно жить с ней до полной миграции
+// NOTE: ошибок
+#[derive(Debug)]
+struct SimpleError(String);
+
+////////////////////////////////////////////////////////////////////////////////
+// Внутренние методы и функции
+////////////////////////////////////////////////////////////////////////////////
+
 /// Сохраняет все ключи и значения из хранилища в файл ZDB.
 /// Ключи и значения записываются попарно: сначала ключ, затем значение.
 pub fn save_to_zdb(
@@ -35,9 +44,9 @@ pub fn load_from_zdb(
     parser.parse(&mut handler)
 }
 
-// ВРЕМЕННАЯ локальная обёртка — можно жить с ней до полной миграции ошибок
-#[derive(Debug)]
-struct SimpleError(String);
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для SimpleError,
+////////////////////////////////////////////////////////////////////////////////
 
 impl std::fmt::Display for SimpleError {
     fn fmt(
@@ -47,6 +56,7 @@ impl std::fmt::Display for SimpleError {
         write!(f, "{}", self.0)
     }
 }
+
 impl std::error::Error for SimpleError {}
 
 impl zumic_error::ErrorExt for SimpleError {
@@ -69,6 +79,10 @@ impl zumic_error::ErrorExt for SimpleError {
         ]
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

@@ -50,11 +50,11 @@ pub struct OperationMetrics {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl InClusterStore {
-    /// Создаёт новый кластер из списка shard'ов.
+    /// Создаёт новый кластер из переданного списка shard'ов.
     ///
-    /// - каждый shard обязан реализовывать `Storage`,
-    /// - создаётся `SlotManager` по количеству shard'ов,
-    /// - запускается фоновый тред ребалансировки.
+    /// # Возвращает:
+    /// - `Cluster` - новый объект кластера с настроенной балансировкой и
+    ///   метриками операций
     pub fn new(shards: Vec<Arc<dyn Storage>>) -> Self {
         let shard_count = shards.len();
         let slot_manager = Arc::new(SlotManager::new(shard_count));
@@ -76,7 +76,11 @@ impl InClusterStore {
 
     /// Создаёт кластер с кастомным `SlotManager`.
     ///
-    /// Полезно в тестах или при явном контроле распределения ключей.
+    /// Полезно для тестов или при явном контроле распределения ключей.
+    ///
+    /// # Возвращает:
+    /// - `Cluster` - новый объект кластера с указанным `SlotManager`,
+    ///   настроенной балансировкой и метриками операций
     pub fn new_with_slot_manager(
         shards: Vec<Arc<dyn Storage>>,
         slot_manager: Arc<SlotManager>,
@@ -96,8 +100,15 @@ impl InClusterStore {
         }
     }
 
-    /// Фоновый процесс, периодически проверяющий необходимость
-    /// ребалансировки и инициирующий миграции слотов.
+    /// Запускает фоновый поток, который периодически проверяет необходимость
+    /// ребалансировки слотов и инициирует миграцию.
+    ///
+    /// Поток проверяет состояние каждые 10 секунд и выполняет миграции,
+    /// если `SlotManager` сигнализирует о необходимости ребалансировки.
+    ///
+    /// # Возвращает:
+    /// - `thread::JoinHandle<()>` - хэндл на запущенный поток, который можно
+    ///   `join` для ожидания завершения
     fn start_rebalancer(
         slot_manager: Arc<SlotManager>,
         shutdown_flag: Arc<Mutex<bool>>,
@@ -139,9 +150,12 @@ impl InClusterStore {
         })
     }
 
-    /// Получить shard по его идентификатору.
+    /// Получает shard по его идентификатору.
     ///
-    /// Возвращает ошибку `WrongShard`, если индекс некорректный.
+    /// # Возвращает:
+    /// - `Ok(Arc<dyn Storage>)` - если shard с указанным идентификатором найден
+    /// - `Err(StoreError::WrongShard)` - если индекс shard'а некорректный; при
+    ///   этом увеличивается счётчик неудачных операций
     fn shard_by_id(
         &self,
         shard_id: ShardId,
@@ -155,12 +169,19 @@ impl InClusterStore {
         }
     }
 
-    /// Утилита: преобразовать `Sds` в `&str` (lossy).
+    /// Преобразует `Sds` в строку `&str` с потерей некорректных UTF-8 байт.
+    ///
+    /// # Возвращает:
+    /// - `Cow<str>` - строковое представление данных; некорректные UTF-8 байты
+    ///   заменяются символом `�`
     fn sds_to_str<'a>(s: &'a Sds) -> std::borrow::Cow<'a, str> {
         std::string::String::from_utf8_lossy(s.as_bytes())
     }
 
-    /// Учёт обычной операции (увеличение счётчика + запись в slot_manager).
+    /// Регистрирует обычную операцию в кластере.
+    ///
+    /// Увеличивает общий счётчик операций и передаёт информацию в
+    /// `SlotManager`.
     fn record_operation(
         &self,
         key: &Sds,
@@ -171,19 +192,28 @@ impl InClusterStore {
         m.total_operations += 1;
     }
 
-    /// Учёт cross-shard операции.
+    /// Регистрирует cross-shard операцию.
+    ///
+    /// Увеличивает счётчик операций, затрагивающих несколько shard'ов.
     fn record_cross_shard_operation(&self) {
         let mut m = self.operation_metrics.write().unwrap();
         m.cross_shard_operations += 1;
     }
 
-    /// Учёт неудачной операции.
+    /// Регистрирует неудачную операцию.
+    ///
+    /// Увеличивает счётчик неудачных операций в метриках.
     fn record_failed_operation(&self) {
         let mut m = self.operation_metrics.write().unwrap();
         m.failed_operations += 1;
     }
 
-    /// Доступ к `SlotManager` (например, для тестов или мониторинга).
+    /// Возвращает доступ к `SlotManager`.
+    ///
+    /// Полезно для тестов, мониторинга или анализа распределения слотов.
+    ///
+    /// # Возвращает:
+    /// - `&Arc<SlotManager>` - ссылка на текущий `SlotManager` кластера
     pub fn get_slot_manager(&self) -> &Arc<SlotManager> {
         &self.slot_manager
     }
