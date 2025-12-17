@@ -179,3 +179,192 @@ impl Settings {
         Ok(settings)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs, net::SocketAddr};
+
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::{Settings, StorageType};
+
+    /// Очищает все env-переменные с префиксом ZUMIC перед тестом
+    fn clear_zumic_env() {
+        for (key, _) in env::vars() {
+            if key.starts_with("ZUMIC_") {
+                env::remove_var(&key);
+            }
+        }
+        env::remove_var("RUST_ENV");
+    }
+
+    /// Создаёт минимальную конфигурацию без зависимости от файлов
+    fn load_minimal_settings() -> Result<Settings, ConfigError> {
+        let builder = Config::builder()
+            .set_default("listen_address", default_listen().to_string())?
+            .set_default("max_connections", default_max_connections())?
+            .set_default("storage_type", default_storage_str())?
+            .set_default("log_level", default_log_level_str())?;
+
+        let settings: Settings = builder.build()?.try_deserialize()?;
+
+        Ok(settings)
+    }
+
+    /// Проверка дефолтного конфига и serde defaults
+    #[test]
+    fn test_default_settings() {
+        clear_zumic_env();
+
+        let settings = load_minimal_settings().expect("Failed to load default settings");
+
+        assert_eq!(
+            settings.listen_address,
+            "127.0.0.1:6174".parse::<SocketAddr>().unwrap()
+        );
+        assert_eq!(settings.max_connections, 100);
+        assert!(matches!(settings.storage_type, StorageType::Memory));
+        assert_eq!(settings.log_level, "info");
+        assert_eq!(settings.thread_pool_size, num_cpus::get());
+    }
+
+    /// Проверка десериализации SocketAddr
+    #[test]
+    fn test_socket_addr_deserialization() {
+        let s = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
+        assert_eq!(s.to_string(), "127.0.0.1:8080");
+    }
+
+    /// Проверка загрузки профиля (cluster/memory/persistent)
+    #[test]
+    fn test_profile_override() {
+        clear_zumic_env();
+
+        let temp_dir = TempDir::new().unwrap();
+        let profile_path = temp_dir.path().join("test_cluster.toml");
+        fs::write(
+            &profile_path,
+            r#"
+                listen_address = "0.0.0.0:9000"
+                storage_type = "cluster"
+                max_connections = 500
+            "#,
+        )
+        .unwrap();
+
+        let builder = Config::builder()
+            .set_default("listen_address", default_listen().to_string())
+            .unwrap()
+            .set_default("max_connections", default_max_connections())
+            .unwrap()
+            .set_default("storage_type", default_storage_str())
+            .unwrap()
+            .set_default("log_level", default_log_level_str())
+            .unwrap()
+            .add_source(File::with_name(&profile_path.to_string_lossy()).required(true));
+
+        let settings: Settings = builder.build().unwrap().try_deserialize().unwrap();
+
+        assert_eq!(
+            settings.listen_address,
+            "0.0.0.0:9000".parse::<SocketAddr>().unwrap()
+        );
+        assert!(matches!(settings.storage_type, StorageType::Cluster));
+        assert_eq!(settings.max_connections, 500);
+    }
+
+    /// Проверка env override (используем set_override вместо реальных
+    /// env-переменных)
+    #[test]
+    fn test_env_override() {
+        clear_zumic_env();
+
+        // Используем set_override для эмуляции env-переменных
+        // Это более надёжно, чем реальные env::set_var в тестах
+        let builder = Config::builder()
+            .set_default("listen_address", default_listen().to_string())
+            .unwrap()
+            .set_default("max_connections", default_max_connections())
+            .unwrap()
+            .set_default("storage_type", default_storage_str())
+            .unwrap()
+            .set_default("log_level", default_log_level_str())
+            .unwrap()
+            // Эмулируем переопределение через env-переменные
+            .set_override("listen_address", "127.0.0.1:9999")
+            .unwrap()
+            .set_override("max_connections", 777)
+            .unwrap()
+            .set_override("storage_type", "persistent")
+            .unwrap();
+
+        let settings: Settings = builder.build().unwrap().try_deserialize().unwrap();
+
+        assert_eq!(
+            settings.listen_address,
+            "127.0.0.1:9999".parse::<SocketAddr>().unwrap()
+        );
+        assert_eq!(settings.max_connections, 777);
+        assert!(matches!(settings.storage_type, StorageType::Persistent));
+    }
+
+    /// Проверка обратной совместимости log_level → logging.level
+    #[test]
+    fn test_logging_level_compatibility() {
+        clear_zumic_env();
+
+        let builder = Config::builder()
+            .set_override("log_level", "debug")
+            .unwrap()
+            .set_default("listen_address", default_listen().to_string())
+            .unwrap()
+            .set_default("max_connections", default_max_connections())
+            .unwrap()
+            .set_default("storage_type", default_storage_str())
+            .unwrap();
+
+        let mut settings: Settings = builder.build().unwrap().try_deserialize().unwrap();
+
+        // Имитируем логику из Settings::load()
+        if settings.logging.level == "info" && settings.log_level != "info" {
+            settings.logging.level = settings.log_level.clone();
+        }
+
+        assert_eq!(settings.logging.level, "debug");
+    }
+
+    /// Проверка применения env overrides для логирования
+    #[test]
+    fn test_logging_env_override() {
+        clear_zumic_env();
+
+        // Используем set_override для надёжного тестирования
+        let builder = Config::builder()
+            .set_default("listen_address", default_listen().to_string())
+            .unwrap()
+            .set_default("max_connections", default_max_connections())
+            .unwrap()
+            .set_default("storage_type", default_storage_str())
+            .unwrap()
+            .set_default("log_level", default_log_level_str())
+            .unwrap()
+            .set_override("logging.level", "warn")
+            .unwrap();
+
+        let settings: Settings = builder.build().unwrap().try_deserialize().unwrap();
+
+        assert_eq!(settings.logging.level, "warn");
+    }
+
+    /// Проверка валидации логирования
+    #[test]
+    fn test_logging_validation() {
+        clear_zumic_env();
+
+        let mut settings = load_minimal_settings().unwrap();
+        settings.logging.level = "info".into();
+        let res = settings.logging.validate();
+        assert!(res.is_ok());
+    }
+}

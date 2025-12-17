@@ -125,7 +125,7 @@ so_reuseaddr = true  # Разрешить reuse адреса
 # ========================================
 [logging]
 # Глобальный уровень: "trace" | "debug" | "info" | "warn" | "error"
-lavel = "info"
+level = "info"
 
 # Формат вывода: "json" | "pretty" | "compact"
 format = "pretty"

@@ -102,6 +102,7 @@ ordered-float = { version = "5.0.0", features = ["serde"] }
 owo-colors = "4.2.2"
 phf = { version = "0.11", features = ["macros"] }
 proptest = "1.4"
+tempfile = "3.0"
 
 # Дополнительно для лучшей интеграции с proptest
 clap = { version = "4.5", features = ["derive", "env", "cargo"] }
@@ -120,7 +121,6 @@ serde_cbor = "0.11.2"
 serde_json = "1.0.140"
 siphasher = "0.3"
 sysinfo = "0.30"
-tempfile = "3.20.0"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["full", "test-util"] }
 tracing = "0.1"
@@ -142,10 +142,10 @@ version = "34.0.1"
 chrono = "0.4.41"
 wasmtime-wit-bindgen = "31.0.0"
 
-
 [dev-dependencies]
 criterion = { version = "0.6.0", features = ["async"] }
 filetime = "0.2"
+serial_test = "3.2.0"
 tempfile = "3.0"
 tokio = { version = "1.45.1", features = [
     "macros",
