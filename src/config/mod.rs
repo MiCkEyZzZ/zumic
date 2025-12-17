@@ -39,7 +39,7 @@
 //!
 //! ## Пример использования
 //! ```rust
-//! use crate::config::settings::Settings;
+//! use zumic::Settings;
 //!
 //! let settings = Settings::load().expect("failed to load configuration");
 //! println!("listen on: {}", settings.listen_address);
