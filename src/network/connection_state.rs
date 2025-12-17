@@ -439,7 +439,8 @@ impl ConnectionInfo {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Общие реализации трейтов для ConnectionState, ConnectionStats
+// Общие реализации трейтов для ConnectionState, ConnectionStats,
+// ConnectionSnapshot
 ////////////////////////////////////////////////////////////////////////////////
 
 impl std::fmt::Display for ConnectionState {

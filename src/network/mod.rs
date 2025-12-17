@@ -16,8 +16,10 @@
 //!
 //! Импортируя `network`, вы получаете полный набор для работы с сетью.
 
+pub mod admin_commands;
 pub mod banner;
 pub mod connection;
+pub mod connection_registry;
 pub mod connection_state;
 pub mod server;
 pub mod zsp;

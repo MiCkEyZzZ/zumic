@@ -27,6 +27,10 @@ pub enum PubSubCommand {
     Publish(String, MessagePayload),
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Собственные ф-ии
+////////////////////////////////////////////////////////////////////////////////
+
 /// Кодирует Message в байты, используя ваш ZspEncoder
 pub fn encode_message(msg: &Message) -> Result<Bytes, RecvError> {
     let zsp_frame = message_to_zsp_frame(msg);
@@ -277,33 +281,9 @@ pub fn decode_command(data: &mut Bytes) -> Result<Option<PubSubCommand>, RecvErr
     Ok(None)
 }
 
-impl From<crate::ZspDecodeError> for RecvError {
-    fn from(err: crate::ZspDecodeError) -> Self {
-        RecvError::from(ZspIntegrationError::Decode(err))
-    }
-}
-
-impl From<crate::ZspEncodeError> for RecvError {
-    fn from(err: crate::ZspEncodeError) -> Self {
-        RecvError::from(ZspIntegrationError::Encode(err))
-    }
-}
-
-impl From<ZspIntegrationError> for RecvError {
-    fn from(err: ZspIntegrationError) -> Self {
-        match err {
-            ZspIntegrationError::Encode(e) => {
-                RecvError::SerializationError(format!("Encode: {e:?}"))
-            }
-            ZspIntegrationError::Decode(e) => {
-                RecvError::SerializationError(format!("Decode: {e:?}"))
-            }
-            ZspIntegrationError::Serialization(s) => RecvError::SerializationError(s),
-        }
-    }
-}
-
-// Вспомогательные небуличные ф-ии
+////////////////////////////////////////////////////////////////////////////////
+// Внутренние методы и функции
+////////////////////////////////////////////////////////////////////////////////
 
 /// Преобразует Message в ZspFrame для кодирования
 fn message_to_zsp_frame(msg: &Message) -> ZspFrame<'_> {
@@ -497,6 +477,40 @@ fn extract_binary_string(frame: &ZspFrame) -> Result<Vec<u8>, ZspIntegrationErro
         )),
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для RecvError
+////////////////////////////////////////////////////////////////////////////////
+
+impl From<crate::ZspDecodeError> for RecvError {
+    fn from(err: crate::ZspDecodeError) -> Self {
+        RecvError::from(ZspIntegrationError::Decode(err))
+    }
+}
+
+impl From<crate::ZspEncodeError> for RecvError {
+    fn from(err: crate::ZspEncodeError) -> Self {
+        RecvError::from(ZspIntegrationError::Encode(err))
+    }
+}
+
+impl From<ZspIntegrationError> for RecvError {
+    fn from(err: ZspIntegrationError) -> Self {
+        match err {
+            ZspIntegrationError::Encode(e) => {
+                RecvError::SerializationError(format!("Encode: {e:?}"))
+            }
+            ZspIntegrationError::Decode(e) => {
+                RecvError::SerializationError(format!("Decode: {e:?}"))
+            }
+            ZspIntegrationError::Serialization(s) => RecvError::SerializationError(s),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
