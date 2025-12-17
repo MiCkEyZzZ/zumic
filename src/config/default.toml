@@ -165,8 +165,8 @@ module_levels = []
 # Environment (auto from ZUMIC_ENV or RUST_ENV)
 # environment = "production"
 
-# Hostname (auto detected)
 # hostname = "server-01"
+# Hostname (auto detected)
 
 # ===== TIMESTAMP CONFIG (NEW) =====
 [logging.timestamp]
