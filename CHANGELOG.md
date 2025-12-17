@@ -42,6 +42,27 @@
     - 20+ unit-тестов покрывают edge cases: empty set, single element, encoding upgrades, range boundaries.
     - Comprehensive benchmarks с Criterion: iterator latency, full scan, range queries, comparisons.
     - Все тесты проходят, регрессий не обнаружено.
+    Отлично, тогда добавим **короткий и аккуратный блок** в стиле твоего Changelog, **без переписывания всего**, только то, что реально сделали в `network`.
+
+  - **network**
+    - Вынесено состояние соединения в отдельный модуль `connection_state`:
+      - Добавлен enum `ConnectionState`, описывающий жизненный цикл TCP-соединения (`New`, `Authenticated`, `Processing`, `Idle`, `Closing`).
+      - Реализован `Display` для `ConnectionState` с человекочитаемым строковым представлением.
+    - Добавлены структуры для управления и наблюдения за соединениями:
+      - `ConnectionMetadata` — метаданные соединения (ID, адрес клиента, состояние, uptime, idle time, счётчики команд и трафика).
+      - `ConnectionStats` — потокобезопасная статистика соединения на базе `Atomic*`.
+      - `ConnectionSnapshot` — read-only snapshot состояния соединения для отдачи клиентам (`INFO`, мониторинг и т.п.).
+      - `ConnectionInfo` — объединение `metadata` + `stats` под `Arc` для безопасного совместного доступа.
+    - Добавлены вспомогательные методы:
+      - `uptime()` — время жизни соединения с момента подключения.
+      - `idle_time()` — время простоя с момента последней активности.
+    - Обновлён `network/mod.rs`:
+      - Добавлен публичный модуль `connection_state`.
+      - Документация модуля расширена описанием управления состояниями соединений.
+
+    * отдельно выделить это как **подготовку к команде `INFO CLIENTS` / `CLIENT LIST`** (Redis-style),
+    * или добавить в Changelog пометку **API stability / internal refactor**.
+
 
 - **benches/intset_bench.rs**
   - Добавлен полный набор Criterion benchmarks для `IntSet` итераторов:
