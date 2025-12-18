@@ -4,8 +4,8 @@ pub mod stack;
 pub mod status_code;
 pub mod types;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных
-// модулей, чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use ext::*;
 pub use macros::*;
 pub use stack::*;

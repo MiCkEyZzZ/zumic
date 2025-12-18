@@ -1,20 +1,20 @@
 # The Zumic Makefile
 #
-# Набор удобных команд для разработки Zumic.
-# Основные возможности:
-#  - Сборка debug/release:   make build / make build-release
-#  - Запуск:                 make run / make run-release
-#  - Тесты и property тесты: make test / make proptest / make stress-test
-#  - Форматирование/линты:   make fmt / make clippy / make check-all
+# A set of convenient commands for Zumic development.
+# Main features:
+#  - Build debug/release:    make build / make build-release
+#  - Run:                    make run / make run-release
+#  - Tests и property tests: make test / make proptest / make stress-test
+#  - Formating/lints:        make fmt / make clippy / make check-all
 #  - Fuzz и benchmark:       make fuzz / make bench
-#  - Управление git/релизом: make git-tag / make git-release
+#  - Gir/release managment:  make git-tag / make git-release
 #
-# Переменные:
-#  BUILD_TARGET  - читается из .cargo/config.toml (target triple)
-#  TARGET_ARG    - автоматически формируется для cargo (--target ...)
-#  TARGET_DIR    - путь в target/ для выбранного target'а
-#  VERSION       - автоматически берётся из Cargo.toml (используется в release-auto)
-#  ZUMIC_BANNER  - контролирует баннер при запуске
+# Variables:
+#  BUILD_TARGET  - reading from .cargo/config.toml (target triple)
+#  TARGET_ARG    - automatically generated for cargo (--target ...)
+#  TARGET_DIR    - path in target/ for the selected target'а
+#  VERSION       - automatically taken from Cargo.toml (used in release-auto)
+#  ZUMIC_BANNER  - control the banner when running
 
 BUILD_TARGET := $(shell test -f .cargo/config.toml && grep -E '^\s*target\s*=' .cargo/config.toml | head -1 | cut -d'"' -f2)
 TARGET_ARG   := $(if $(BUILD_TARGET),--target $(BUILD_TARGET),)
@@ -24,13 +24,13 @@ VERSION      := v$(shell awk -F\" '/^version/ {print $$2}' Cargo.toml)
 ##@ Build
 .PHONY: build build-release build-all-platforms
 
-build: ## Сборка debug
+build: ## Build debug version
 	cargo build $(TARGET_ARG)
 
-build-release: ## Сборка релизной версии
+build-release: ## Build release version
 	cargo build --release $(TARGET_ARG)
 
-build-all-platforms: ## Сборка для всех платформ (как в CI)
+build-all-platforms: ## Build for all platforms (as in CI)
 	@echo "Building for multiple platforms..."
 	cargo build --release --target x86_64-unknown-linux-gnu
 	cargo build --release --target aarch64-unknown-linux-gnu
@@ -40,30 +40,30 @@ build-all-platforms: ## Сборка для всех платформ (как в
 ##@ Test
 .PHONY: check clippy clippy-ci nextest test miri miri-test test-ci
 
-check: ## Cargo проверка
+check: ## Cargo check
 	cargo check
 
-clippy: ## Clippy (рассматривать предупреждения как ошибки)
+clippy: ## Clippy (treat warning as errors)
 	cargo clippy -- -D warnings
 
-clippy-ci: ## Clippy как в CI: все таргеты и все фичи, warnings -> error
+clippy-ci: ## Clippy as in CI: all targets and all features, warnings -> error
 	cargo clippy --all-targets --all-features -- -D warnings
 
 nextest: ## Nextest
 	cargo nextest run
 
-test: ## Cargo test (обычные тесты)
+test: ## Cargo test (regular tests)
 	cargo test
 
-test-ci: ## Полный набор тестов как в CI
+test-ci: ## Full test suite as in CI
 	cargo fmt -- --check
 	$(MAKE) clippy-ci
 	$(MAKE) test-all
 
-miri: ## Запустите все тесты в Miri
+miri: ## Run all tests in Miri
 	cargo miri test
 
-miri-test: ## Запустите определенный тест в Miri. Использование: make miri-test TEST="модуль::имя_теста"
+miri-test: ## Run a specific test in Miri. Usage: make miri-test TEST="module::test_name"
 	cargo miri test $(TEST)
 
 ##@ Format & Lints
@@ -75,14 +75,14 @@ fmt: ## Rust fmt
 fmt-toml: ## TOML fmt
 	taplo format
 
-fmt-all: ## Форматирование всего
+fmt-all: ## Formating everithing
 	$(MAKE) fmt
 	$(MAKE) fmt-toml
 
-check-toml: ## Проверка TOML-формата
+check-toml: ## Check TOML format
 	taplo format --check
 
-check-all: ## Полная проверка (check + clippy + формат + toml)
+check-all: ## Full check (check + clippy + format + toml)
 	$(MAKE) check
 	$(MAKE) clippy
 	$(MAKE) fmt
@@ -91,31 +91,31 @@ check-all: ## Полная проверка (check + clippy + формат + tom
 ##@ Bench & Fuzz
 .PHONY: bench fuzz fuzz-target fuzz-long fuzz-quick fuzz-decode
 
-bench: ## Бенчмарки
+bench: ## Benchmarks
 	cargo bench
 
-fuzz: ## Fuzz tests (2 минуты, decode_value)
+fuzz: ## Fuzz tests (2 minutes, decode_value)
 	./scripts/run_fuzz.sh decode_value 2
 
-fuzz-target: ## Запуск конкретного fuzz target. Использование: make fuzz-target TARGET=decode_value MINUTES=10
+fuzz-target: ## Run specific fuzz target. Usage: make fuzz-target TARGET=decode_value MINUTES=10
 ifndef TARGET
 	$(error TARGET is not set. Use make fuzz-target TARGET=decode_value MINUTES=10)
 endif
 	./scripts/run_fuzz.sh $(TARGET) $(MINUTES)
 
-fuzz-long: ## Длительный фаззинг (60 минут)
+fuzz-long: ## Long fuzzing (60 minutes)
 	./scripts/run_fuzz.sh decode_value 60
 
-fuzz-quick: ## Быстрый фаззинг (1 минута)
+fuzz-quick: ## Quick fuzzing (1 minute)
 	./scripts/run_fuzz.sh decode_value 1
 
-fuzz-decode: ## Фаззинг decode_value (10 минут)
+fuzz-decode: ## Fuzzing decode_value (10 minutes)
 	./scripts/run_fuzz.sh decode_value 10
 
-fuzz-build: ## Сборка fuzz target без запуска
+fuzz-build: ## Build fuzz target without running
 	cd fuzz && cargo +nightly fuzz build decode_value
 
-fuzz-clean: ## Очистка fuzz артефактов
+fuzz-clean: ## Clean fuzz artifacts
 	rm -rf fuzz/artifacts/*
 	rm -rf fuzz/corpus/*
 	rm -rf results/*
@@ -123,47 +123,47 @@ fuzz-clean: ## Очистка fuzz артефактов
 ##@ Misc
 .PHONY: clean clean-all
 
-clean: ## Очистка артефактов
+clean: ## Clean build artifacts
 	cargo clean
 
-clean-all: ## Полная очистка (включая fuzz)
+clean-all: ## Full clean (including fuzz)
 	cargo clean
 	$(MAKE) fuzz-clean
 
 ##@ Git
 .PHONY: git-add git-commit git-push git-status
 
-git-add: ## Добавить все изменения в индекс
+git-add: ## Add all changes to index
 	git add .
 
-git-commit: ## Закоммитить изменения. Использование: make git-commit MSG="Your message"
+git-commit: ## Commit changes. Usage: make git-commit MSG="Your message"
 ifndef MSG
 	$(error MSG is not set. Use make git-commit MSG="your message")
 endif
 	git commit -m "$(MSG)"
 
-git-push: ## Отправить коммиты на удалённый репозиторий
+git-push: ## Push commits to remote repository
 	git push
 
-git-status: ## Показать статус репозитория
+git-status: ## Show repository status
 	git status
 
 ##@ Git Release
 .PHONY: git-tag git-push-tag git-release release-auto bump-version release-all prepare-release
 
-git-tag: ## Создание git-тега. Пример: make git-tag VERSION=v0.2.0
+git-tag: ## Create a git tag. Example: make git-tag VERSION=v0.2.0
 ifndef VERSION
 	$(error VERSION is not set. Use make git-tag VERSION=v0.2.0)
 endif
 	git tag -a $(VERSION) -m "Release $(VERSION)"
 
-git-push-tag: ## Отправить тег в origin. Пример: make git-push-tag VERSION=v0.2.0
+git-push-tag: ## Push tag to origin. Example: make git-push-tag VERSION=v0.2.0
 ifndef VERSION
 	$(error VERSION is not set. Use make git-push-tag VERSION=v0.2.0)
 endif
 	git push origin $(VERSION)
 
-prepare-release: ## Подготовка релиза (обновить версию, changelog). Использование: make prepare-release VERSION=v0.5.0
+prepare-release: ## Prepare release (update version, changelog). Usage: make prepare-release VERSION=v0.5.0
 ifndef VERSION
 	$(error VERSION is not set. Use make prepare-release VERSION=v0.5.0)
 endif
@@ -174,7 +174,7 @@ endif
 		exit 1; \
 	fi
 
-git-release: ## Полный релиз: tag + push. Пример: make git-release VERSION=v0.2.0
+git-release: ## Full release: tag + push. Example: make git-release VERSION=v0.2.0
 ifndef VERSION
 	$(error VERSION is not set. Use make git-release VERSION=v0.2.0)
 endif
@@ -183,15 +183,15 @@ endif
 	@echo "✅ Tag $(VERSION) pushed. GitHub Actions will create the release automatically."
 	@echo "Monitor: https://github.com/MiCkEyZzZ/zumic/actions"
 
-release-auto: ## Автоматический релиз по версии из Cargo.toml
+release-auto: ## Automatic release based on Cargo.toml version
 	$(MAKE) git-release VERSION=$(VERSION)
 
-bump-version: ## Бампит патч-версию в Cargo.toml (cargo-edit)
+bump-version: ## Bump patch version in Cargo.toml (cargo-edit)
 	cargo set-version --bump patch
 	git add Cargo.toml Cargo.lock
 	git commit -m "chore: bump version to $(shell awk -F\" '/^version/ {print $$2}' Cargo.toml)"
 
-release-all: ## Полный цикл релиза: prepare-release + tests + push
+release-all: ## Full release cycle: prepare-release + tests + push
 	@read -p "Version (e.g., v0.5.0): " ver; \
 	$(MAKE) prepare-release VERSION=$$ver && \
 	$(MAKE) test-ci && \
@@ -203,50 +203,50 @@ release-all: ## Полный цикл релиза: prepare-release + tests + pu
 		$(MAKE) git-release VERSION=$$ver; \
 	fi
 
-##@ Property testing команды
+##@ Property testing commands
 .PHONY: proptest proptest-quick proptest-long proptest-verbose proptest-coverage proptest-continuous proptest-timing \
         stress-test stress-test-quick endurance-test test-all find-bugs-fast
 
-proptest-quick: ## Быстрые property tests (100 случаев)
+proptest-quick: ## Quick property tests (100 cases)
 	PROPTEST_CASES=100 cargo test --test property_tests
 
-proptest: ## Обычные property tests (по умолчанию)
+proptest: ## Regular property tests (default)
 	cargo test --test property_tests
 
-proptest-long: ## Длительное property testing
+proptest-long: ## Long property testing
 	PROPTEST_CASES=10000 cargo test --test property_tests
 
-proptest-verbose: ## Подробный вывод для property tests
+proptest-verbose: ## Verbose output for property tests
 	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test property_tests -- --nocapture
 
-proptest-coverage: ## Генерация покрытия для property tests (tarpaulin, HTML)
+proptest-coverage: ## Property test coverage generation (tarpaulin, HTML)
 	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests
 
-proptest-continuous: ## Бесконечный цикл property tests (оставлять с осторожностью)
+proptest-continuous: ## Continuous property testing loop (use with caution)
 	while true; do \
 		echo "Running property tests iteration $$(date)"; \
 		PROPTEST_CASES=1000 cargo test --test property_tests || break; \
 		sleep 60; \
 	done
 
-proptest-timing: ## Измерение времени выполнения property tests
+proptest-timing: ## Measure execution time of property tests
 	time PROPTEST_CASES=1000 cargo test --test property_tests
 
-stress-test: ## Запуск стресс-тестов (медленные, много итераций)
+stress-test: ## Run stress tests (slow, many iterations)
 	PROPTEST_CASES=10000 cargo test --test stress_tests
 
-stress-test-quick: ## Быстрые стресс-тесты (короткие, для CI)
+stress-test-quick: ## Quick stress tests (short, for CI)
 	PROPTEST_CASES=1000 cargo test --test stress_tests
 
-endurance-test: ## Эндуранс тест для поиска утечек памяти (медленный)
+endurance-test: ## Endurance test for memory leaks (slow)
 	cargo test --test stress_tests test_endurance_many_iterations --release -- --ignored --nocapture
 
-test-all: ## Полный набор тестов (unit + property + stress)
+test-all: ## Complete test suite (unit + property + stress)
 	cargo test
 	$(MAKE) proptest
 	$(MAKE) stress-test-quick
 
-find-bugs-fast: ## Минимальный набор тестов, чтобы быстро найти баги
+find-bugs-fast: ## Minimal test suite to quickly find bugs
 	PROPTEST_CASES=500 cargo test --test property_tests roundtrip_all_values
 	PROPTEST_CASES=500 cargo test --test property_tests numeric_edge_cases
 	cargo test --test stress_tests test_compression_pathological_cases
@@ -254,31 +254,31 @@ find-bugs-fast: ## Минимальный набор тестов, чтобы б
 ##@ Run
 .PHONY: run run-full run-compact run-release
 
-run: ## Запуск Зумик в режиме по умолчанию (debug → full)
+run: ## Run Zumic in default mode (debug → full)
 	cargo run
 
-run-full: ## Запуск Зумик с полным баннером (force)
+run-full: ## Run Zumic with full banner (force)
 	ZUMIC_BANNER=full cargo run
 
-run-compact: ## Запуск Зумик с коротким баннером (force)
+run-compact: ## Run Zumic with compact banner (force)
 	ZUMIC_BANNER=compact cargo run
 
-run-release: ## Запуск Зумик в релизной версии
+run-release: ## Run Zumic release build
 	cargo build --release $(TARGET_ARG) && ./$(TARGET_DIR)release/zumic
 
-run-m: ## Запуск Зумик в режиме memory
+run-m: ## Run Zumic in memory mode
 	RUST_ENV=memory cargo run --bin zumic
 
-run-p: ## Запуск Зумик в режиме persistent
+run-p: ## Run Zumic in persistent mode
 	RUST_ENV=persistent cargo run --bin zumic
 
-run-c: ## Запуск Зумик в режиме cluster
+run-c: ## Run Zumic in cluster mode
 	RUST_ENV=cluster cargo run --bin zumic
 
 ##@ CI/CD
 .PHONY: ci-local simulate-ci
 
-ci-local: ## Запустить проверки как в CI локально
+ci-local: ## Run CI checks locally
 	@echo "==> Running CI checks locally..."
 	@echo "==> 1. Format check"
 	cargo fmt -- --check
@@ -290,7 +290,7 @@ ci-local: ## Запустить проверки как в CI локально
 	$(MAKE) proptest-quick
 	@echo "✅ All CI checks passed!"
 
-simulate-ci: ## Симуляция полного CI pipeline (медленно)
+simulate-ci: ## Simulate full CI pipeline (slow)
 	@echo "==> Simulating full CI pipeline..."
 	$(MAKE) ci-local
 	@echo "==> Building release"
@@ -300,7 +300,7 @@ simulate-ci: ## Симуляция полного CI pipeline (медленно)
 	@echo "✅ CI simulation complete!"
 
 ##@ Help
-help: ## Показать это сообщение
+help: ## Show this help message
 	@echo
 	@echo "Zumic Makefile (version $(shell awk -F\" '/^version/ {print $$2}' Cargo.toml))"
 	@echo "Usage: make [target]"

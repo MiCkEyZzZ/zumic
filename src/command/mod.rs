@@ -35,8 +35,8 @@ pub mod set;
 pub mod string;
 pub mod zset;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных
-// модулей, чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use auth::*;
 pub use bitmap::*;
 pub use execute::*;

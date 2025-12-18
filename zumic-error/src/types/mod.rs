@@ -9,8 +9,8 @@ pub mod storage;
 pub mod zdb_error;
 pub mod zsp_error;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных
-// модулей, чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use auth::*;
 pub use client::*;
 pub use cluster::*;

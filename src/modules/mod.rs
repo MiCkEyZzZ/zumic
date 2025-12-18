@@ -21,8 +21,8 @@ pub mod loader;
 pub mod plugin_manager;
 pub mod wasm;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных модулей,
-// чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use api::*;
 pub use loader::*;
 pub use plugin_manager::*;

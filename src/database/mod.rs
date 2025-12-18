@@ -39,8 +39,8 @@ pub mod smarthash;
 pub mod stream;
 pub mod types;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных
-// модулей, чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use bitmap::*;
 pub use dict::*;
 pub use expire::*;
