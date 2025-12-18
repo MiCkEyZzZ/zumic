@@ -24,6 +24,6 @@ pub mod connection_state;
 pub mod server;
 pub mod zsp;
 
-// Публичный экспорт всех типов ошибок и функций из вложенных
-// модулей, чтобы упростить доступ к ним из внешнего кода.
+// Publicly re-export all error types and functions from the submodules to
+// simplify access from external code.
 pub use zsp::*;
