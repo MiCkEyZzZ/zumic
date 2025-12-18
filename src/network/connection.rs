@@ -21,11 +21,18 @@ use tokio::{
 use tracing::{debug, error, info, trace, warn};
 
 use crate::{
+    network::{
+        connection_registry::ConnectionRegistry,
+        connection_state::{ConnectionInfo, ConnectionState},
+    },
     zsp::{ZspDecoder, ZspEncoder, ZspFrame},
     Sds, StorageEngine, Value,
 };
 
-/// Конфигурация для обработки соединений
+/// Конфигурация для обработки соединений.
+///
+/// Используется `ConnectionManager` и `ConnectionHandler` для настройки
+/// лимитов, таймаутов и размеров буферов.
 #[derive(Debug, Clone)]
 pub struct ConnectionConfig {
     /// Максимальное кол-во одновременных соединений
@@ -42,7 +49,10 @@ pub struct ConnectionConfig {
     pub read_buffer_size: usize,
 }
 
-/// Менеджер соединений с защитой от DoS и graceful shutdown
+/// Менеджер соединений.
+///
+/// Обеспечивает безопасную работу с TCP-соединениями, защиту от DoS
+/// и поддержку graceful shutdown.
 #[derive(Debug)]
 pub struct ConnectionManager {
     config: ConnectionConfig,
@@ -54,22 +64,54 @@ pub struct ConnectionManager {
     active_connections: Arc<AtomicUsize>,
     /// Флаг для graceful shutdown
     shutdown_signal: Arc<tokio::sync::Notify>,
-    /// Счётчик для генерации ID соединений
-    connection_counter: Arc<AtomicU32>,
+    /// Реестр активных соединений (NEW)
+    registry: Arc<ConnectionRegistry>,
 }
 
-/// Обработчик отдельного соединения
+/// Обработчик отдельного соединения.
+///
+/// Инкапсулирует логику чтения и записи, таймаутов, протоколов
+/// (текстовый и ZSP) и обновления статистики.
 pub struct ConnectionHandler {
+    /// Уникальный идентификатор соединения.
     connection_id: u32,
+    /// Буфер для чтения данных.
     reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
+    /// Половина сокета для записи.
     writer: OwnedWriteHalf,
+    /// Адрес клиента.
     addr: SocketAddr,
+    /// Ссылка на движок хранения
     engine: Arc<StorageEngine>,
+    /// Конфигурация соединения
     config: ConnectionConfig,
+    /// Сигнал для gracefull shutdown
     shutdown_signal: Arc<tokio::sync::Notify>,
+    /// Время последней активности
     last_activity: Instant,
+    /// Декодер ZSP протокола
     decoder: ZspDecoder<'static>,
+    /// Буфер принятых данных
     recv_buf: Vec<u8>,
+    /// Информация о соединении
+    connection_info: Arc<ConnectionInfo>,
+}
+
+/// Контекст обработки соединения.
+///
+/// Используется внутри `ConnectionHandler` для передачи движка, конфига
+/// и информации о соединении.
+struct ProcessContext<'a> {
+    /// Движок хранения данных.
+    engine: &'a Arc<StorageEngine>,
+    /// Конфигурация соединения.
+    config: &'a ConnectionConfig,
+    /// Информация о соединении.
+    connection_info: &'a Arc<ConnectionInfo>,
+    /// Идентификатор соединения.
+    connection_id: u32,
+    /// Адрес клиента.
+    addr: SocketAddr,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,6 +119,10 @@ pub struct ConnectionHandler {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl ConnectionManager {
+    /// Создаёт новый менеджер соединений с заданной конфигурацией.
+    ///
+    /// # Возвращает
+    /// - `Self` - инициализированный `ConnectionManager`
     pub fn new(config: ConnectionConfig) -> Self {
         Self {
             connection_semaphore: Arc::new(Semaphore::new(config.max_connections)),
@@ -84,22 +130,39 @@ impl ConnectionManager {
             ip_connections: Arc::new(RwLock::new(HashMap::new())),
             active_connections: Arc::new(AtomicUsize::new(0)),
             shutdown_signal: Arc::new(tokio::sync::Notify::new()),
-            connection_counter: Arc::new(AtomicU32::new(0)),
+            registry: Arc::new(ConnectionRegistry::new()),
         }
     }
 
-    /// Получение текущее кол-во активных соединений
+    /// Возвращает текущее количество активных соединений.
+    ///
+    /// # Возвращает
+    /// - `usize` - количество активных соединений
     pub fn active_connections(&self) -> usize {
         self.active_connections.load(Ordering::Relaxed)
     }
 
-    /// Инициализация graceful shutdown
+    /// Получить реестр активных соединений.
+    ///
+    /// # Возвращает
+    /// - `&Arc<ConnectionRegistry>` - ссылка на реестр соединений
+    pub fn registry(&self) -> &Arc<ConnectionRegistry> {
+        &self.registry
+    }
+
+    /// Инициализация graceful shutdown для всех соединений.
+    ///
+    /// Уведомляет все обработчики соединений о необходимости завершить работу.
     pub fn shutdown(&self) {
         info!("Initiating graceful shutdown for connection manager");
         self.shutdown_signal.notify_waiters();
     }
 
-    /// Ждать завершения всех активных соединений
+    /// Ожидает завершения всех активных соединений.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если все соединения закрыты корректно
+    /// - `Err(anyhow::Error)` если таймаут превышен
     pub async fn wait_for_shutdown(
         &self,
         timeout_duration: Duration,
@@ -118,11 +181,15 @@ impl ConnectionManager {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        info!("All connection closed gracefully");
+        info!("All connections closed gracefully");
         Ok(())
     }
 
-    /// Обрабатывает новое соединение
+    /// Обрабатывает новое входящее соединение.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если соединение закрыто корректно
+    /// - `Err(anyhow::Error)` в случае ошибок во время обработки
     pub async fn handle_connection(
         &self,
         socket: TcpStream,
@@ -140,11 +207,12 @@ impl ConnectionManager {
             .await
             .context("Failed to acquire connection semaphore")?;
 
+        // Регистрируем соединение в реестре (NEW)
+        let (connection_id, connection_info) = self.registry.register(addr);
+
         // Увеличиваем счетчики
         self.increment_ip_connections(addr);
         let connection_count = self.active_connections.fetch_add(1, Ordering::Relaxed) + 1;
-
-        let connection_id = self.connection_counter.fetch_add(1, Ordering::Relaxed) + 1;
 
         info!(
             "Connection {} established from {} (active: {})",
@@ -159,9 +227,13 @@ impl ConnectionManager {
             engine,
             self.config.clone(),
             self.shutdown_signal.clone(),
+            connection_info,
         );
 
         let result = handler.run().await;
+
+        // Удаляем из реестра (NEW)
+        self.registry.unregister(connection_id);
 
         // Уменьшаем счетчики при завершении
         self.decrement_ip_connections(addr);
@@ -181,7 +253,12 @@ impl ConnectionManager {
         result
     }
 
-    /// Проверить, можно ли принять новое соединение с данного IP
+    /// Проверяет, можно ли принять новое соединение с данного IP.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` — если соединение можно принять.
+    /// - `Err(anyhow::Error)` — если превышен общий лимит соединений или лимит
+    ///   по IP.
     fn can_accept_connection(
         &self,
         addr: SocketAddr,
@@ -205,7 +282,16 @@ impl ConnectionManager {
         Ok(())
     }
 
-    /// Увеличить счётчик соединений для IP
+    /// Увеличивает счётчик активных соединений для указанного IP.
+    ///
+    /// Если для IP ещё нет записи, создаётся новая с начальным значением 0,
+    /// затем увеличивается на 1.
+    ///
+    /// # Примечания
+    /// - Используется `RwLock` для потокобезопасного доступа к мапе
+    ///   `ip_connections`.
+    /// - `AtomicU32` обеспечивает безопасное увеличение счётчика без блокировок
+    ///   на уровне каждого IP.
     fn increment_ip_connections(
         &self,
         addr: SocketAddr,
@@ -219,7 +305,18 @@ impl ConnectionManager {
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Уменьшить счётчик соединений для IP
+    /// Уменьшает счётчик активных соединений для указанного IP.
+    ///
+    /// Если после уменьшения счётчик достигает нуля, запись для IP удаляется из
+    /// мапы.
+    ///
+    /// # Примечания
+    /// - Используется `RwLock` для потокобезопасного доступа к мапе
+    ///   `ip_connections`.
+    /// - `AtomicU32` обеспечивает безопасное уменьшение счётчика без блокировок
+    ///   на уровне каждого IP.
+    /// - Метод корректно обрабатывает случай, когда соединений для IP больше
+    ///   нет.
     fn decrement_ip_connections(
         &self,
         addr: SocketAddr,
@@ -239,6 +336,10 @@ impl ConnectionManager {
 }
 
 impl ConnectionHandler {
+    /// Создаёт новый обработчик соединения.
+    ///
+    /// # Возвращает
+    /// - `Self` - инициализированный обработчик соединения
     fn new(
         connection_id: u32,
         socket: TcpStream,
@@ -246,10 +347,14 @@ impl ConnectionHandler {
         engine: Arc<StorageEngine>,
         config: ConnectionConfig,
         shutdown_signal: Arc<tokio::sync::Notify>,
+        connection_info: Arc<ConnectionInfo>,
     ) -> Self {
         // Разделяем socket на части для чтения и записи
         let (read_half, write_half) = socket.into_split();
         let reader = BufReader::with_capacity(config.read_buffer_size, read_half);
+
+        // Устанавливаем начальное состояние (NEW)
+        connection_info.set_state(ConnectionState::Idle);
 
         Self {
             connection_id,
@@ -262,133 +367,79 @@ impl ConnectionHandler {
             last_activity: Instant::now(),
             decoder: ZspDecoder::new(),
             recv_buf: Vec::new(),
+            connection_info,
         }
     }
 
     /// Основной цикл обработки соединения.
-    /// Основной цикл обработки соединения.
+    ///
+    /// Выполняет чтение, обработку команд (текстовых и ZSP),
+    /// управление таймаутами и graceful shutdown.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если соединение завершено корректно
+    /// - `Err(anyhow::Error)` в случае ошибки при чтении или обработке команд
     async fn run(mut self) -> Result<()> {
         let connection_id = self.connection_id;
-        let mut writer = self.writer;
         let addr = self.addr;
-        let engine = self.engine.clone();
-        let config = self.config.clone();
         let shutdown = self.shutdown_signal.clone();
         let mut last_activity = self.last_activity;
 
+        let ctx = ProcessContext {
+            engine: &self.engine,
+            config: &self.config,
+            connection_info: &self.connection_info,
+            connection_id,
+            addr,
+        };
+
         // Временный буфер для чтения
-        let mut tmp = vec![0u8; config.read_buffer_size];
+        let mut tmp = vec![0u8; self.config.read_buffer_size];
 
         loop {
             select! {
                 _ = shutdown.notified() => {
                     info!("Connection {} ({}): Received shutdown signal", connection_id, addr);
-                    Self::send_response_to_writer(&mut writer, "-ERR Server shutting down\r\n", config.write_timeout).await?;
+                    ctx.connection_info.set_state(ConnectionState::Closing);
+                    Self::send_response_to_writer(&mut self.writer, "-ERR Server shutting down\r\n", ctx.config.write_timeout).await?;
                     break;
                 }
 
-                _ = sleep(config.idle_timeout) => {
-                    if last_activity.elapsed() >= config.idle_timeout {
+                _ = sleep(ctx.config.idle_timeout) => {
+                    if last_activity.elapsed() >= ctx.config.idle_timeout {
                         warn!("Connection {} ({}): Idle timeout", connection_id, addr);
-                        Self::send_response_to_writer(&mut writer, "-ERR Connection idle timeout\r\n", config.write_timeout).await?;
+                        ctx.connection_info.set_state(ConnectionState::Closing);
+                        Self::send_response_to_writer(&mut self.writer, "-ERR Connection idle timeout\r\n", ctx.config.write_timeout).await?;
                         break;
                     }
                 }
 
-                read_res = timeout(config.read_timeout, self.reader.read(&mut tmp)) => {
+                read_res = timeout(ctx.config.read_timeout, self.reader.read(&mut tmp)) => {
                     match read_res {
                         Ok(Ok(0)) => {
                             debug!("Connection {} ({}): Client closed connection", connection_id, addr);
+                            ctx.connection_info.set_state(ConnectionState::Closing);
                             break;
                         }
                         Ok(Ok(n)) => {
                             last_activity = Instant::now();
+                            ctx.connection_info.update_activity();
 
-                            // добавляем прочитанные байты в накопительный буфер
+                            // добавляем прочитанные байты
                             self.recv_buf.extend_from_slice(&tmp[..n]);
 
-                            // Если первый байт явно не ZSP-тип — fallback на текстовую обработку.
-                            // Типы ZSP начинаются с одного из: + - : , # $ _ * % ~ > ^
-                            if self.recv_buf.is_empty() {
-                                continue;
-                            }
-
-                            let first = self.recv_buf[0];
-                            let is_zsp = matches!(first,
-                                b'+' | b'-' | b':' | b',' | b'#' | b'$' | b'_' | b'*' | b'%' | b'~' | b'>' | b'^'
-                            );
-
-                            if !is_zsp {
-                                // Текстовый inline-protocol: читаем строку до CRLF или используем весь буфер
-                                // (у нас тут простой реализм: split по '\n')
-                                if let Some(pos) = self.recv_buf.iter().position(|&b| b == b'\n') {
-                                    // берем до pos (включая возможный '\r')
-                                    let line_bytes = self.recv_buf.drain(..=pos).collect::<Vec<u8>>();
-                                    let line = String::from_utf8_lossy(&line_bytes).to_string();
-                                    trace!("Connection {} ({}): Received text command: {}", connection_id, addr, line.trim());
-
-                                    match Self::process_command(&engine, &line) {
-                                        Ok(response) => {
-                                            if let Err(e) = Self::send_response_to_writer(&mut writer, &response, config.write_timeout).await {
-                                                error!("Connection {} ({}): Failed to send response: {}", connection_id, addr, e);
-                                                break;
-                                            }
-                                            if response == "+OK\r\n" && line.trim().to_uppercase() == "QUIT" {
-                                                info!("Connection {} ({}): Client sent QUIT, closing", connection_id, addr);
-                                                break;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!("Connection {} ({}): Command processing error: {}", connection_id, addr, e);
-                                            if let Err(e) = Self::send_response_to_writer(&mut writer, "-ERR Internal server error\r\n", config.write_timeout).await {
-                                                error!("Connection {} ({}): Failed to send error response: {}", connection_id, addr, e);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // ещё нет конца линии — ждём следующего чтения (продолжаем loop)
-                                    continue;
-                                }
-                            } else {
-                                // Пытаемся декодировать ZSP. Для этого создаём 'static срез из накопленного буфера.
-                                // (временный leak — как у client.receive_response; если нужно, улучшим позже)
-                                let boxed = self.recv_buf.clone().into_boxed_slice();
-                                let total = boxed.len();
-                                let leaked: &'static mut [u8] = Box::leak(boxed);
-                                let mut slice: &'static [u8] = &leaked[..];
-
-                                match self.decoder.decode(&mut slice) {
-                                    Ok(Some(frame)) => {
-                                        // сколько байт было потреблено?
-                                        let remaining = slice.len();
-                                        let consumed = total - remaining;
-                                        // удаляем потреблённые байты из recv_buf
-                                        self.recv_buf.drain(..consumed);
-
-                                        // Обрабатываем фрейм
-                                        if let Err(e) = Self::handle_zsp_frame(&engine, frame, &mut writer, &config).await {
-                                            error!("Connection {} ({}): ZSP handling error: {}", connection_id, addr, e);
-                                            // отправим ZSP-ошибку назад
-                                            let err_frame = ZspFrame::FrameError(format!("ERR {}", e));
-                                            let enc = ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
-                                            timeout(config.write_timeout, writer.write_all(&enc)).await.context("Write timeout")??
-                                        }
-
-                                        // Возможно в recv_buf остались дополнительные фреймы — обработаем их в цикле (loop будет итеративно читать)
-                                    }
-                                    Ok(None) => {
-                                        // частичный фрейм — ждём доп. байтов
-                                        continue;
-                                    }
-                                    Err(e) => {
-                                        // ошибка декодирования — логируем и отправляем ZSP-ошибку
-                                        error!("Connection {} ({}): ZSP decode error: {}", connection_id, addr, e);
-                                        let err_frame = ZspFrame::FrameError(format!("ERR zsp decode: {}", e));
-                                        let enc = ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
-                                        timeout(config.write_timeout, writer.write_all(&enc)).await.context("Write timeout")??
-                                    }
-                                }
+                            // Обработка команд (текстовый или ZSP протокол)
+                            if let Err(e) = Self::process_buffer(
+                                &mut self.recv_buf,
+                                &mut self.decoder,
+                                &mut self.writer,
+                                &ctx,
+                                n as u64,
+                            ).await {
+                                error!("Connection {} ({}): Processing error: {}", connection_id, addr, e);
+                                ctx.connection_info.record_error();
+                                ctx.connection_info.set_state(ConnectionState::Closing);
+                                break;
                             }
                         }
                         Ok(Err(e)) => {
@@ -398,28 +449,189 @@ impl ConnectionHandler {
                             }
                             if Self::is_recoverable_error(&e) {
                                 debug!("Connection {} ({}): Recoverable error: {}", connection_id, addr, e);
+                                ctx.connection_info.set_state(ConnectionState::Closing);
                                 break;
                             } else {
                                 error!("Connection {} ({}): Fatal read error: {}", connection_id, addr, e);
+                                ctx.connection_info.record_error();
+                                ctx.connection_info.set_state(ConnectionState::Closing);
                                 return Err(e.into());
                             }
                         }
                         Err(_) => {
                             warn!("Connection {} ({}): Read timeout", connection_id, addr);
-                            if let Err(e) = Self::send_response_to_writer(&mut writer, "-ERR Read timeout\r\n", config.write_timeout).await {
+                            ctx.connection_info.record_error();
+                            if let Err(e) = Self::send_response_to_writer(&mut self.writer, "-ERR Read timeout\r\n", ctx.config.write_timeout).await {
                                 error!("Connection {} ({}): Failed to send timeout response: {}", connection_id, addr, e);
                             }
+                            ctx.connection_info.set_state(ConnectionState::Closing);
                             break;
                         }
-                    } // match read_res
-                } // read branch
-            } // select
-        } // loop
+                    }
+                }
+            }
+        }
 
-        Self::graceful_close_writer(connection_id, writer).await
-    } // run
+        // Перемещаем writer единожды при завершении (self больше не используется)
+        Self::graceful_close_writer(connection_id, self.writer).await
+    }
 
-    /// Обрабатывает команду (статический метод)
+    /// Обрабатывает буфер с данными от клиента.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если данные обработаны успешно
+    /// - `Err(anyhow::Error)` если произошла ошибка обработки
+    async fn process_buffer(
+        recv_buf: &mut Vec<u8>,
+        decoder: &mut ZspDecoder<'static>,
+        writer: &mut OwnedWriteHalf,
+        ctx: &ProcessContext<'_>,
+        bytes_received: u64,
+    ) -> Result<()> {
+        if recv_buf.is_empty() {
+            return Ok(());
+        }
+
+        let first = recv_buf[0];
+        let is_zsp = matches!(
+            first,
+            b'+' | b'-' | b':' | b',' | b'#' | b'$' | b'_' | b'*' | b'%' | b'~' | b'>' | b'^'
+        );
+
+        if !is_zsp {
+            // Текстовый протокол
+            if let Some(pos) = recv_buf.iter().position(|&b| b == b'\n') {
+                let line_bytes = recv_buf.drain(..=pos).collect::<Vec<u8>>();
+                let line = String::from_utf8_lossy(&line_bytes).to_string();
+                trace!(
+                    "Connection {} ({}): Received text command: {}",
+                    ctx.connection_id,
+                    ctx.addr,
+                    line.trim()
+                );
+
+                ctx.connection_info.set_state(ConnectionState::Processing);
+
+                match Self::process_command(ctx.engine, &line) {
+                    Ok(response) => {
+                        let response_bytes = response.len() as u64;
+                        if let Err(e) = Self::send_response_to_writer(
+                            writer,
+                            &response,
+                            ctx.config.write_timeout,
+                        )
+                        .await
+                        {
+                            error!(
+                                "Connection {} ({}): Failed to send response: {}",
+                                ctx.connection_id, ctx.addr, e
+                            );
+                            return Err(e);
+                        }
+
+                        // Записываем статистику
+                        ctx.connection_info
+                            .record_command(bytes_received, response_bytes);
+                        ctx.connection_info.set_state(ConnectionState::Idle);
+
+                        if response == "+OK\r\n" && line.trim().to_uppercase() == "QUIT" {
+                            info!(
+                                "Connection {} ({}): Client sent QUIT, closing",
+                                ctx.connection_id, ctx.addr
+                            );
+                            ctx.connection_info.set_state(ConnectionState::Closing);
+                            return Err(anyhow!("Client quit"));
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Connection {} ({}): Command processing error: {}",
+                            ctx.connection_id, ctx.addr, e
+                        );
+                        ctx.connection_info.record_error();
+                        if let Err(e) = Self::send_response_to_writer(
+                            writer,
+                            "-ERR Internal server error\r\n",
+                            ctx.config.write_timeout,
+                        )
+                        .await
+                        {
+                            error!(
+                                "Connection {} ({}): Failed to send error response: {}",
+                                ctx.connection_id, ctx.addr, e
+                            );
+                            return Err(e);
+                        }
+                        ctx.connection_info.set_state(ConnectionState::Idle);
+                    }
+                }
+            }
+        } else {
+            // ZSP протокол
+            let boxed = recv_buf.clone().into_boxed_slice();
+            let total = boxed.len();
+            let leaked: &'static mut [u8] = Box::leak(boxed);
+            let mut slice: &'static [u8] = &leaked[..];
+
+            match decoder.decode(&mut slice) {
+                Ok(Some(frame)) => {
+                    let remaining = slice.len();
+                    let consumed = total - remaining;
+                    recv_buf.drain(..consumed);
+
+                    ctx.connection_info.set_state(ConnectionState::Processing);
+
+                    if let Err(e) = Self::handle_zsp_frame(
+                        ctx.engine,
+                        frame,
+                        writer,
+                        ctx.config,
+                        ctx.connection_info,
+                    )
+                    .await
+                    {
+                        error!(
+                            "Connection {} ({}): ZSP handling error: {}",
+                            ctx.connection_id, ctx.addr, e
+                        );
+                        ctx.connection_info.record_error();
+                    }
+
+                    ctx.connection_info.set_state(ConnectionState::Idle);
+                }
+                Ok(None) => {
+                    // Частичный фрейм, ждём больше данных
+                }
+                Err(e) => {
+                    error!(
+                        "Connection {} ({}): ZSP decode error: {}",
+                        ctx.connection_id, ctx.addr, e
+                    );
+                    ctx.connection_info.record_error();
+                    let err_frame = ZspFrame::FrameError(format!("ERR zsp decode: {}", e));
+                    let enc = ZspEncoder::encode(&err_frame)
+                        .map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
+                    timeout(ctx.config.write_timeout, writer.write_all(&enc))
+                        .await
+                        .context("Write timeout")??;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Обрабатывает команду клиента (статический метод).
+    ///
+    /// Парсит строку `line`, определяет команду и её аргументы, выполняет
+    /// соответствующее действие через `StorageEngine` и формирует ответ в
+    /// формате протокола Redis.
+    ///
+    /// # Возвращает
+    /// - `Ok(String)` — ответ на команду в формате протокола Redis (например,
+    ///   `+OK\r\n`, `$-1\r\n` и т.д.).
+    /// - `Err(anyhow::Error)` — если произошла внутренняя ошибка обработки
+    ///   команды.
     fn process_command(
         engine: &Arc<StorageEngine>,
         line: &str,
@@ -754,7 +966,11 @@ impl ConnectionHandler {
         Ok(response)
     }
 
-    /// Отправляет ответ с таймаутом (статический метод)
+    /// Отправляет ответ клиенту с учётом таймаута записи.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если запись успешна
+    /// - `Err(anyhow::Error)` при ошибке записи или таймауте
     async fn send_response_to_writer(
         writer: &mut OwnedWriteHalf,
         response: &str,
@@ -768,7 +984,12 @@ impl ConnectionHandler {
         Ok(())
     }
 
-    /// Проверяет, является ли ошибка восстанавливаемой
+    /// Проверяет, является ли ошибка ввода/вывода восстанавливаемой.
+    ///
+    /// # Возвращает
+    /// - `true` — если ошибка считается временной и соединение/операцию можно
+    ///   повторить.
+    /// - `false` — если ошибка критическая и восстановление маловероятно.
     fn is_recoverable_error(error: &std::io::Error) -> bool {
         matches!(
             error.kind(),
@@ -781,13 +1002,16 @@ impl ConnectionHandler {
         )
     }
 
-    /// Graceful закрытие соединения
+    /// Graceful закрытие writer при завершении соединения.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` если writer закрыт корректно
+    /// - `Err(anyhow::Error)` при ошибке закрытия
     async fn graceful_close_writer(
         connection_id: u32,
         mut writer: OwnedWriteHalf,
     ) -> Result<()> {
         if let Err(e) = writer.shutdown().await {
-            // Игнорируем ошибки при закрытии уже закрытого соединения
             if e.kind() != ErrorKind::NotConnected {
                 debug!("Connection {}: Error during shutdown: {}", connection_id, e);
             }
@@ -796,34 +1020,50 @@ impl ConnectionHandler {
         Ok(())
     }
 
+    /// Обрабатывает один ZSP-фрейм от клиента.
+    ///
+    /// Функция:
+    /// 1. Парсит команду из `frame`.
+    /// 2. Выполняет команду через `StorageEngine`.
+    /// 3. Кодирует и отправляет ответ обратно клиенту через `writer`.
+    /// 4. Обновляет статистику и ошибки соединения в `connection_info`.
+    ///
+    /// # Возвращает
+    /// - `Ok(())` — если фрейм обработан успешно (ответ отправлен клиенту).
+    /// - `Err(anyhow::Error)` — если произошла критическая ошибка при обработке
+    ///   или кодировании фрейма.
     async fn handle_zsp_frame(
         engine: &Arc<StorageEngine>,
         frame: ZspFrame<'static>,
         writer: &mut OwnedWriteHalf,
         config: &ConnectionConfig,
+        connection_info: &Arc<ConnectionInfo>,
     ) -> Result<(), anyhow::Error> {
-        // используем твой парсер: parse_command -> StoreCommand
-        // путь к parse_command зависит от реэкспортов; если у тебя другой путь,
-        // поправь.
         use crate::network::zsp::protocol::parser::parse_command;
 
         match parse_command(frame) {
             Ok(store_cmd) => {
-                // Выполнение команды и получение ZspFrame ответа
                 let resp = execute_store_command(engine, store_cmd);
                 match resp {
                     Ok(frame) => {
                         let encoded = ZspEncoder::encode(&frame)
                             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                        let bytes_sent = encoded.len() as u64;
+
                         timeout(config.write_timeout, writer.write_all(&encoded))
                             .await
                             .context("Write timeout")??;
                         timeout(config.write_timeout, writer.flush())
                             .await
                             .context("Write timeout")??;
+
+                        // Записываем статистику
+                        connection_info.record_command(0, bytes_sent);
+
                         Ok(())
                     }
                     Err(e) => {
+                        connection_info.record_error();
                         let err_frame = ZspFrame::FrameError(format!("ERR exec: {}", e));
                         let enc = ZspEncoder::encode(&err_frame)
                             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -835,7 +1075,7 @@ impl ConnectionHandler {
                 }
             }
             Err(e) => {
-                // ошибки парсинга возвращаем клиенту как ZSP error
+                connection_info.record_error();
                 let err_frame = ZspFrame::FrameError(format!("ERR parse: {}", e));
                 let enc =
                     ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -849,12 +1089,40 @@ impl ConnectionHandler {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для ConnectionConfig
+////////////////////////////////////////////////////////////////////////////////
+
+impl Default for ConnectionConfig {
+    fn default() -> Self {
+        Self {
+            max_connections: 10000,
+            max_connections_per_ip: 100,
+            idle_timeout: Duration::from_secs(300),
+            read_timeout: Duration::from_secs(30),
+            write_timeout: Duration::from_secs(10),
+            read_buffer_size: 8192,
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Внутренние методы и функции
 ////////////////////////////////////////////////////////////////////////////////
 
-// Вспомогательная функция: исполняет StoreCommand на engine и возвращает
-// ZspFrame результат. Подправь варианты/пути StoreCommand в соответствии с
-// твоим кодом, если нужно.
+/// Выполняет команду хранилища и возвращает соответствующий ZSP-фрейм.
+///
+/// Функция преобразует `StoreCommand` в действие на `StorageEngine` и формирует
+/// ответ в формате ZSP.
+///
+/// # Возвращает
+/// - `Ok(ZspFrame<'static>)` — фрейм с результатом выполнения команды:
+///     - `InlineString("OK")` для успешных команд типа SET/MSET
+///     - `BinaryString(Some(...))` для GET с найденными значениями
+///     - `BinaryString(None)` для GET с отсутствующими ключами
+///     - `Integer(1|0)` для DEL в зависимости от того, был ли удалён ключ
+///     - `Array([...])` для MGET с результатами по каждому ключу
+///     - `FrameError` для неподдерживаемых типов или ошибок
+/// - `Err(String)` — строковое представление ошибки при выполнении команды.
 fn execute_store_command(
     engine: &Arc<StorageEngine>,
     cmd: crate::StoreCommand,
@@ -902,25 +1170,7 @@ fn execute_store_command(
                 Ok(ZspFrame::Array(arr))
             }
         }
-        // Добавь другие варианты по необходимости (SetNx, Rename, Auth...) или верни ошибку.
         _ => Ok(ZspFrame::FrameError("ERR unsupported command".into())),
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Общие реализации трейтов для ConnectionConfig
-////////////////////////////////////////////////////////////////////////////////
-
-impl Default for ConnectionConfig {
-    fn default() -> Self {
-        Self {
-            max_connections: 10000,
-            max_connections_per_ip: 100,
-            idle_timeout: Duration::from_secs(300),
-            read_timeout: Duration::from_secs(30),
-            write_timeout: Duration::from_secs(10),
-            read_buffer_size: 8192,
-        }
     }
 }
 
@@ -930,8 +1180,6 @@ impl Default for ConnectionConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
@@ -941,8 +1189,6 @@ mod tests {
     use super::*;
     use crate::InMemoryStore;
 
-    /// Тест проверяет, что обработчик соединения корректно отвечает на команду
-    /// `PING` и завершает соединение после получения команды `QUIT`.
     #[tokio::test(flavor = "current_thread")]
     #[allow(clippy::arc_with_non_send_sync)]
     async fn handler_run_ping_and_quit() -> anyhow::Result<()> {
@@ -956,27 +1202,34 @@ mod tests {
         let engine = Arc::new(StorageEngine::Memory(InMemoryStore::new()));
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
-        let local_addr = listener.local_addr()?; // адрес для клиента
+        let local_addr = listener.local_addr()?;
 
-        // Серверная логика как future
         let engine_server = engine.clone();
         let cfg_server = cfg.clone();
         let server_fut = async move {
-            // accept ждёт клиента
             let (socket, addr) = listener.accept().await?;
             let shutdown_notify = Arc::new(tokio::sync::Notify::new());
-            let handler =
-                ConnectionHandler::new(1, socket, addr, engine_server, cfg_server, shutdown_notify);
-            handler.run().await?; // выполняем обработчик в этом же потоке
+            let registry = Arc::new(ConnectionRegistry::new());
+            let (_, conn_info) = registry.register(addr);
+
+            let handler = ConnectionHandler::new(
+                1,
+                socket,
+                addr,
+                engine_server,
+                cfg_server,
+                shutdown_notify,
+                conn_info,
+            );
+            handler.run().await?;
             Ok::<(), anyhow::Error>(())
         };
 
-        // Клиентская логика как future
         let client_fut = async move {
             let mut client = TcpStream::connect(local_addr).await?;
-            client.write_all(b"PING\r\n").await?; // requires AsyncWriteExt
+            client.write_all(b"PING\r\n").await?;
             let mut buf = vec![0u8; 128];
-            let n = client.read(&mut buf).await?; // requires AsyncReadExt
+            let n = client.read(&mut buf).await?;
             let got = String::from_utf8_lossy(&buf[..n]);
             assert!(got.contains("+PONG"));
 
@@ -988,8 +1241,6 @@ mod tests {
             Ok::<(), anyhow::Error>(())
         };
 
-        // Запускаем оба future параллельно на одном (current_thread) рантайме — не
-        // требуется Send.
         tokio::try_join!(server_fut, client_fut)?;
         Ok(())
     }
