@@ -24,6 +24,14 @@ pub struct ConnectionRegistry {
 }
 
 /// Глобальная статистика по всем соединениям.
+///
+///
+/// # Поля
+/// * `active_connections` - кол-во активных соединений.
+/// * `total_commands` - общее число обработанных команд.
+/// * `total_bytes_sent` - общее число отправленных байт.
+/// * `total_bytes_received` - общее число полученных байт.
+/// * `total_errors` - общее число ошибок, зарегистрированных на соединениях.
 #[derive(Debug, Clone, Copy)]
 pub struct GlobalConnectionStats {
     pub active_connections: usize,
@@ -39,6 +47,10 @@ pub struct GlobalConnectionStats {
 
 impl ConnectionRegistry {
     /// Создаёт новый пустой реестр.
+    ///
+    /// # Возвращает
+    /// - Новый `ConnectionRegistry` с пустым набором соединений и счётчиком ID,
+    ///   инициализированным нулём.
     pub fn new() -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -46,7 +58,11 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Регестрирует новое соединение и возвращает его ID и ConnectionInfo.
+    /// Регистрирует новое соединение и возвращает его ID и `ConnectionInfo`.
+    ///
+    /// # Возвращает
+    /// - `(connection_id, Arc<ConnectionInfo>)` — сгенерированный ID и ссылку
+    ///   на структуру с информацией о соединении.
     pub fn register(
         &self,
         client_addr: SocketAddr,
@@ -60,6 +76,9 @@ impl ConnectionRegistry {
     }
 
     /// Удаляет соединение из реестра.
+    ///
+    /// # Примечание
+    /// Если `connection_id` отсутствует — метод спокойно ничего не делает.
     pub fn unregister(
         &self,
         connection_id: u32,
@@ -67,7 +86,11 @@ impl ConnectionRegistry {
         self.connections.write().remove(&connection_id);
     }
 
-    /// Возвращает информацию о соединении по ID.
+    /// Возвращает `Arc<ConnectionInfo>` по ID.
+    ///
+    /// # Возвращает
+    /// - `Some(Arc<ConnectionInfo>)`, если соединение найдено
+    /// - `None`, если соединение не найдено
     pub fn get(
         &self,
         connection_id: u32,
@@ -75,17 +98,27 @@ impl ConnectionRegistry {
         self.connections.read().get(&connection_id).cloned()
     }
 
-    /// Возвращает кол-во активных соединений.
+    /// Возвращает количество активных соединений.
+    ///
+    /// # Возвращает
+    /// - Текущее количество записей в реестре.
     pub fn active_count(&self) -> usize {
         self.connections.read().len()
     }
 
     /// Возвращает список всех активных connection IDs.
+    ///
+    /// # Возвращает
+    /// - `Vec<u32>` с текущими ID соединений.
     pub fn active_ids(&self) -> Vec<u32> {
         self.connections.read().keys().copied().collect()
     }
 
     /// Возвращает snapshots всех активных соединений.
+    ///
+    /// # Возвращает
+    /// - Вектор `ConnectionSnapshot`, сформированных по актуальным
+    ///   `ConnectionInfo`.
     pub fn all_snapshots(&self) -> Vec<ConnectionSnapshot> {
         self.connections
             .read()
@@ -95,6 +128,10 @@ impl ConnectionRegistry {
     }
 
     /// Возвращает snapshots соединений, отфильтрованных по предикату.
+    ///
+    /// # Возвращает
+    /// - Вектор `ConnectionSnapshot`, для которых `predicate` возвратило
+    ///   `true`.
     pub fn filter_snapshots<F>(
         &self,
         predicate: F,
@@ -110,7 +147,11 @@ impl ConnectionRegistry {
             .collect()
     }
 
-    /// Возвращает snapshot соединение по ID
+    /// Возвращает snapshot конкретного соединения по ID.
+    ///
+    /// # Возвращает
+    /// - `Some(ConnectionSnapshot)`, если соединение найдено
+    /// - `None`, если соединение не найдено
     pub fn get_snapshot(
         &self,
         connection_id: u32,
@@ -118,7 +159,10 @@ impl ConnectionRegistry {
         self.get(connection_id).map(|info| info.snapshot())
     }
 
-    /// Возвращает snapshots соединений с определнного IP
+    /// Возвращает snapshots соединений с указанного IP (строка-совпадение).
+    ///
+    /// # Возвращает
+    /// - Вектор `ConnectionSnapshot` у которых `client_addr` начинается с `ip`.
     pub fn snapshots_by_ip(
         &self,
         ip: &str,
@@ -126,7 +170,10 @@ impl ConnectionRegistry {
         self.filter_snapshots(|snapshot| snapshot.client_addr.starts_with(ip))
     }
 
-    /// Возвращает статистику по всем соединениям.
+    /// Возвращает агрегированную статистику по всем соединениям.
+    ///
+    /// # Возвращает
+    /// - `GlobalConnectionStats` с суммарными значениями.
     pub fn global_stats(&self) -> GlobalConnectionStats {
         let connections = self.connections.read();
         let count = connections.len();
@@ -152,7 +199,10 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Очищает все соединения (для тестирования или gracefull shutdown).
+    /// Очищает все соединения (только для тестов или при graceful shutdown).
+    ///
+    /// # Примечание
+    /// Метод помечен `#[cfg(test)]` — используется в unit-тестах.
     #[cfg(test)]
     pub fn clear(&self) {
         self.connections.write().clear();
