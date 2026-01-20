@@ -321,18 +321,17 @@ impl Subscriber {
         mut self,
         allowed_types: Vec<PayloadType>,
     ) -> Self {
-        if self.filters.content_filter.is_none() {
-            self.filters.content_filter = Some(ContentFilter {
-                allowed_payload_types: allowed_types,
-                string_patterns: None,
-                json_key_filter: None,
-            })
-        } else {
-            self.filters
-                .content_filter
-                .as_mut()
-                .unwrap()
-                .allowed_payload_types = allowed_types;
+        match &mut self.filters.content_filter {
+            Some(filter) => {
+                filter.allowed_payload_types = allowed_types;
+            }
+            None => {
+                self.filters.content_filter = Some(ContentFilter {
+                    allowed_payload_types: allowed_types,
+                    string_patterns: None,
+                    json_key_filter: None,
+                });
+            }
         }
         self
     }
@@ -349,18 +348,17 @@ impl Subscriber {
         }
         let glob_set = builder.build()?;
 
-        if self.filters.content_filter.is_none() {
-            self.filters.content_filter = Some(ContentFilter {
-                allowed_payload_types: vec![],
-                string_patterns: Some(glob_set),
-                json_key_filter: None,
-            });
-        } else {
-            self.filters
-                .content_filter
-                .as_mut()
-                .unwrap()
-                .string_patterns = Some(glob_set);
+        match &mut self.filters.content_filter {
+            Some(filter) => {
+                filter.string_patterns = Some(glob_set);
+            }
+            None => {
+                self.filters.content_filter = Some(ContentFilter {
+                    allowed_payload_types: vec![],
+                    string_patterns: Some(glob_set),
+                    json_key_filter: None,
+                });
+            }
         }
 
         Ok(self)

@@ -27,24 +27,6 @@ bitflags::bitflags! {
     }
 }
 
-/// Парсим строки категории один раз, сразу в битовую маску.
-pub fn parse_category(cat: &str) -> CmdCategory {
-    match cat {
-        "read" => CmdCategory::READ,
-        "write" => CmdCategory::WRITE,
-        "admin" => CmdCategory::ADMIN,
-        _ => CmdCategory::empty(),
-    }
-}
-
-/// Парсим имя команды один раз в индекс.
-/// Возвращает `None` для незнакомых команд.
-pub fn lookup_cmd_idx(cmd: &str) -> Option<usize> {
-    // один раз приводим к to_ascii_lowercase, а в горящем пути уже usize
-    let lower = cmd.to_ascii_lowercase();
-    COMMAND_INDEX.get(lower.as_str()).copied()
-}
-
 /// Список всех команд и их индексы для битовой маски.
 static COMMAND_INDEX: phf::Map<&'static str, usize> = phf_map! {
     "get" => 0,
@@ -124,6 +106,10 @@ pub struct AclUser {
 pub struct Acl {
     users: DashMap<String, Arc<RwLock<AclUser>>>,
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
 
 impl AclUser {
     /// Создает нового пользователя ACL с заданным именем.
@@ -381,6 +367,32 @@ impl Acl {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Внешние методы и функции
+////////////////////////////////////////////////////////////////////////////////
+
+/// Парсим строки категории один раз, сразу в битовую маску.
+pub fn parse_category(cat: &str) -> CmdCategory {
+    match cat {
+        "read" => CmdCategory::READ,
+        "write" => CmdCategory::WRITE,
+        "admin" => CmdCategory::ADMIN,
+        _ => CmdCategory::empty(),
+    }
+}
+
+/// Парсим имя команды один раз в индекс.
+/// Возвращает `None` для незнакомых команд.
+pub fn lookup_cmd_idx(cmd: &str) -> Option<usize> {
+    // один раз приводим к to_ascii_lowercase, а в горящем пути уже usize
+    let lower = cmd.to_ascii_lowercase();
+    COMMAND_INDEX.get(lower.as_str()).copied()
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для AclRule
+////////////////////////////////////////////////////////////////////////////////
+
 impl FromStr for AclRule {
     type Err = AclError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -422,6 +434,10 @@ impl FromStr for AclRule {
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

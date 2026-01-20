@@ -6,6 +6,8 @@
 
 ### Добавлено
 
+- **pubsub**
+  - Исправил в `subsciber.rs` две ф-ии `with_payload_type_filter` и `with_string_pattern_filter`. Clippy онаружил неэффективный код.
 - **database/intset**
   - Реализован zero-copy итератор для `IntSet` с оптимальной производительностью (Issue **#INTSET-1**):
     - `IntSetIter<'a>` — zero-copy итератор по всем элементам без аллокации памяти.

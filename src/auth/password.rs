@@ -22,6 +22,10 @@ static ARGON2: Lazy<Argon2> = Lazy::new(|| {
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
 
+////////////////////////////////////////////////////////////////////////////////
+// Внешние методы и функции
+////////////////////////////////////////////////////////////////////////////////
+
 /// Хэширует `password`, опционально добавляя `pepper` (секрет
 /// из конфига).
 pub fn hash_password(
@@ -59,6 +63,10 @@ pub fn verify_password(
     let parsed = PasswordHash::new(hash).map_err(|_| PasswordError::Verify)?;
     Ok(ARGON2.verify_password(pwd.as_bytes(), &parsed).is_ok())
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
