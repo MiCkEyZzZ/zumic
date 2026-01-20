@@ -17,6 +17,8 @@ pub enum AuthError {
     TokenExpired { token_id: String },
     /// Невалидный токен
     InvalidToken { reason: String },
+    /// Невалидный ключ
+    InvalidKey { reason: String },
     /// Сессия истекла
     SessionExpired { session_id: String },
     /// Невалидная сессия
@@ -31,6 +33,10 @@ pub enum AuthError {
     InvalidAclRule { rule: String, reason: String },
     /// Ошибка сериализации ACL
     AclSerializationFailed { reason: String },
+    /// Ошибка авторизации
+    SigningFailed { reason: String },
+    /// Токен отозван
+    Revoked { reason: String },
 }
 
 impl std::fmt::Display for AuthError {
@@ -48,6 +54,7 @@ impl std::fmt::Display for AuthError {
             Self::PasswordVerifyFailed => write!(f, "Password verification failed"),
             Self::TokenExpired { token_id } => write!(f, "Token expired: {token_id}"),
             Self::InvalidToken { reason } => write!(f, "Invalid token: {reason}"),
+            Self::InvalidKey { reason } => write!(f, "Invalid key: {reason}"),
             Self::SessionExpired { session_id } => write!(f, "Session expired: {session_id}"),
             Self::InvalidSession { session_id } => write!(f, "Invalid session: {session_id}"),
             Self::PermissionDenied { resource, action } => {
@@ -71,6 +78,12 @@ impl std::fmt::Display for AuthError {
             Self::AclSerializationFailed { reason } => {
                 write!(f, "ACL serialization failed: {reason}")
             }
+            Self::SigningFailed { reason } => {
+                write!(f, "ACL serialization failed: {reason}")
+            }
+            Self::Revoked { reason } => {
+                write!(f, "ACL serialization failed: {reason}")
+            }
         }
     }
 }
@@ -88,12 +101,15 @@ impl ErrorExt for AuthError {
             Self::PasswordHashFailed { .. } => StatusCode::PasswordHashFailed,
             Self::TokenExpired { .. } | Self::SessionExpired { .. } => StatusCode::SessionExpired,
             Self::InvalidToken { .. } | Self::InvalidSession { .. } => StatusCode::InvalidToken,
+            Self::InvalidKey { .. } => StatusCode::InvalidKey,
             Self::PermissionDenied { .. } | Self::ChannelAccessDenied { .. } => {
                 StatusCode::PermissionDenied
             }
             Self::TooManyAttempts { .. } => StatusCode::TooManyAttempts,
             Self::InvalidAclRule { .. } => StatusCode::InvalidArgs,
             Self::AclSerializationFailed { .. } => StatusCode::SerializationFailed,
+            Self::SigningFailed { .. } => StatusCode::InvalidArgs,
+            Self::Revoked { .. } => StatusCode::InvalidArgs,
         }
     }
 
@@ -112,6 +128,7 @@ impl ErrorExt for AuthError {
             Self::PasswordVerifyFailed => "Authentication failed".to_string(),
             Self::TokenExpired { .. } => "Token has expired".to_string(),
             Self::InvalidToken { .. } => "Invalid authentication token".to_string(),
+            Self::InvalidKey { .. } => "Invalid authentication key".to_string(),
             Self::SessionExpired { .. } => "Session has expired".to_string(),
             Self::InvalidSession { .. } => "Invalid session".to_string(),
             Self::PermissionDenied { resource, action } => {
@@ -127,6 +144,8 @@ impl ErrorExt for AuthError {
             }
             Self::InvalidAclRule { reason, .. } => format!("Invalid ACL rule: {reason}"),
             Self::UserExists { .. } => "User already exists".to_string(),
+            Self::SigningFailed { .. } => "User already exists".to_string(),
+            Self::Revoked { .. } => "User already exists".to_string(),
         }
     }
 

@@ -13,6 +13,7 @@ pub mod acl;
 pub mod config;
 pub mod manager;
 pub mod password;
+pub mod tokens;
 
 // Publicly re-export all error types and functions from the submodules to
 // simplify access from external code.
@@ -20,3 +21,4 @@ pub use acl::*;
 pub use config::*;
 pub use manager::*;
 pub use password::*;
+pub use tokens::*;
