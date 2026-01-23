@@ -105,8 +105,11 @@ proptest = "1.4"
 tempfile = "3.0"
 
 # Дополнительно для лучшей интеграции с proptest
+base64 = "0.2"
 clap = { version = "4.5", features = ["derive", "env", "cargo"] }
+hmac = "0.12.1"
 hostname = "0.4"
+jwt = "0.16.0"
 lazy_static = "1.4"
 parking_lot = "0.12.5"
 proptest-derive = "0.4"
@@ -119,6 +122,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde-big-array = "0.5.1"
 serde_cbor = "0.11.2"
 serde_json = "1.0.140"
+sha2 = "0.10.9"
 siphasher = "0.3"
 sysinfo = "0.30"
 thiserror = "2.0.12"
@@ -134,10 +138,6 @@ tracing-subscriber = { version = "0.3", features = [
 uuid = { version = "1", features = ["serde", "v4"] }
 zstd = "0.13.3"
 zumic-error = { workspace = true }
-base64 = "0.2"
-hmac = "0.12.1"
-sha2 = "0.10.9"
-jwt = "0.16.0"
 
 [dependencies.wasmtime]
 version = "34.0.1"

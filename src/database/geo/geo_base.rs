@@ -348,6 +348,8 @@ pub fn haversine_distance(
 mod tests {
     use super::*;
 
+    /// Тест проверяет корректность работы ф-ии refine_bit: правильный выбор
+    /// бита и корректность обновление границ диапазона.
     #[test]
     fn test_refine_bit() {
         let mut min = 0.0;
@@ -357,6 +359,8 @@ mod tests {
         assert!((min - 50.0).abs() < 1e-9 && (max - 100.0).abs() < 1e-9);
     }
 
+    /// Тест проверяет, что кодирование в geohash и обратное декодирование
+    /// сохраняет координаты с допустимой погрешностью.
     #[test]
     fn test_encode_decode_roundtrip() {
         let lon = 13.361389;
@@ -367,6 +371,8 @@ mod tests {
         assert!((lat - lat2).abs() < 1e-3);
     }
 
+    /// Тест проверяет корректность вычисления расстояния между двумя
+    /// географическими точками по формуле Гаверсина.
     #[test]
     fn test_haversine_distance() {
         let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
@@ -375,6 +381,8 @@ mod tests {
         assert!((d - 111_195.0).abs() < 100.0);
     }
 
+    /// Тест проверяет добавление точек в GeoSet и корректность их извлечения по
+    /// имени с использованием R-tree индекса.
     #[test]
     fn test_add_get_with_rtree() {
         let mut gs = GeoSet::new();
@@ -397,6 +405,8 @@ mod tests {
         assert!(gs.get("C").is_none());
     }
 
+    /// Тест проверяет вычисление расстояния между двумя точками, добавленыыми в
+    /// GeoSet, а также корректную обработку отсутствующих членов.
     #[test]
     fn test_dist_method() {
         let mut gs = GeoSet::new();
@@ -407,6 +417,8 @@ mod tests {
         assert!(gs.dist("X", "Z").is_none());
     }
 
+    /// Тест проверяет поиск точек в заданном радиусе и корректную фильтрацию
+    /// кандидатов с использованием R-tree.
     #[test]
     fn test_radius_with_rtree() {
         let mut gs = GeoSet::new();
@@ -417,6 +429,8 @@ mod tests {
         assert_eq!(res[0].0, "near");
     }
 
+    /// Тест проверяет поиск `к` ближайших соседей к заданной точке и
+    /// корректность порядка результатов по расстоянию.
     #[test]
     fn test_nearest_neighbors() {
         let mut gs = GeoSet::new();
@@ -431,6 +445,8 @@ mod tests {
         assert_eq!(results[1].0, "B");
     }
 
+    /// Тест проверяет корректность bulk-загрузки большого количества элементов
+    /// и адекватную глубину R-tree индекса.
     #[test]
     fn test_bulk_load_performance() {
         let entries: Vec<GeoEntry> = (0..1000)
@@ -438,7 +454,7 @@ mod tests {
                 let lon = (i % 100) as f64 * 0.1;
                 let lat = (i / 100) as f64 * 0.1;
                 GeoEntry {
-                    member: format!("P{}", i),
+                    member: format!("P{i}"),
                     point: GeoPoint { lon, lat },
                     score: encode_geohash_bits(lon, lat),
                 }
@@ -452,6 +468,8 @@ mod tests {
         assert!(stats.depth < 10);
     }
 
+    /// Тест проверяет валидацию координат и то, что некорректные координаты не
+    /// добавляются в GeoSet.
     #[test]
     fn test_coordinate_validation() {
         let mut gs = GeoSet::new();
@@ -464,6 +482,8 @@ mod tests {
         assert_eq!(gs.len(), initial_len);
     }
 
+    /// Тест проверяет необходимость пересборки R-tree при обновлении
+    /// существующей точки и корректную работу rebuild_index.
     #[test]
     fn test_index_rebuild() {
         let mut gs = GeoSet::new();

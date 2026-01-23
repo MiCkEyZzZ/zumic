@@ -6,6 +6,16 @@
 
 ### Добавлено
 
+- **auth/session**
+  - В `cleanup` добавлена функция `spawn_cleanup_task`, отвечающая за фоновую очистку сессий. Добавлены базовые тесты для проверки её работы.
+  - Добавлен `config` для управления настройками сессий.
+  - Добавлен `manager`, который управляет созданием, валидацией, истечением и очисткой сессий.
+- **engine**
+  - Добавлена интеграция с `memory`. Реализованы методы для работы с сессиями и дополнительные тесты для проверки работы методов `SessionStorage` на `InMemoryStore`.
+  - Добавлен трейт `SessionStorage` в `storage`:
+    - `insert_session`, `get_session`, `remove_session`, `get_user_sessions`, `remove_user_sessions`, `cleanup_expired`, `len_session`, `is_empty`.
+- **zumic-error**
+  - Дополнен тип ошиьки для auth. Добавлена обраотка ошибок для сессией `SessionError` и реализованы доп. тесты для проверки обработки ошибок сессии.
 - **pubsub**
   - Исправил в `subsciber.rs` две ф-ии `with_payload_type_filter` и `with_string_pattern_filter`. Clippy онаружил неэффективный код.
 - **database/intset**

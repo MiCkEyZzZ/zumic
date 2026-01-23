@@ -454,7 +454,7 @@ impl RTree {
                 Some(Box::new(new_node))
             }
 
-            // ---- INTERNAL ----
+            // ---- ВНУТРЕННИЙ ----
             RTreeNode::Internal { children, .. } => {
                 // Сначала вычисляем лучший ребёнок по текущим children (пока они ещё доступны)
                 let best_idx = Self::choose_subtree(children, &entry);
@@ -1001,6 +1001,8 @@ mod tests {
         }
     }
 
+    /// Тест проверяет корректность базовых операций BoundingBox: вычисление
+    /// площади и расширение границ bbox.
     #[test]
     fn test_bbox_operations() {
         let mut bbox = BoundingBox::from_point(GeoPoint { lon: 0.0, lat: 0.0 });
@@ -1012,6 +1014,8 @@ mod tests {
         assert_eq!(bbox.area(), 4.0);
     }
 
+    /// Тест проверяет корректность вставки элементов в R-tree и работу range
+    /// query с использованием bounding box.
     #[test]
     fn test_insert_and_range_query() {
         let mut tree = RTree::new();
@@ -1023,6 +1027,8 @@ mod tests {
         assert_eq!(results.len(), 2);
     }
 
+    /// Тест проверяет корректность bulk loading R-tree и адекватную глубину
+    /// дерева после построения.
     #[test]
     fn test_bulk_load() {
         let entries = vec![
@@ -1038,6 +1044,8 @@ mod tests {
         assert!(stats.depth <= 3);
     }
 
+    /// Тест проверяет поиск k ближайших соседей (k-NN) и корректный порядок
+    /// результатов по расстоянию.
     #[test]
     fn test_knn() {
         let mut tree = RTree::new();
@@ -1052,6 +1060,8 @@ mod tests {
         assert_eq!(results[1].0.member, "B");
     }
 
+    /// Тест проверяет корректность работы R-tree на большом количестве данных и
+    /// ограниченную глубину дерева.
     #[test]
     fn test_large_dataset() {
         let mut tree = RTree::new();
