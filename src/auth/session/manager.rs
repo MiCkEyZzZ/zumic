@@ -4,7 +4,10 @@ use tokio::{sync::RwLock, task::JoinHandle};
 use zumic_error::SessionError;
 
 use crate::{
-    auth::session::{cleanup::spawn_cleanup_task, SessionConfig, SessionData, SessionId},
+    auth::{
+        session::{cleanup::spawn_cleanup_task, SessionConfig, SessionData, SessionId},
+        TokenClaims, TokenManager,
+    },
     engine::SessionStorage,
     InMemoryStore,
 };
@@ -15,11 +18,12 @@ where
 {
     storage: Arc<RwLock<S>>,
     config: SessionConfig,
+    token_manager: Option<Arc<TokenManager>>,
     cleanup_handle: Option<JoinHandle<()>>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Внутренние методы и функции
+// Собственные методы
 ////////////////////////////////////////////////////////////////////////////////
 
 impl SessionManager<InMemoryStore> {
@@ -29,6 +33,21 @@ impl SessionManager<InMemoryStore> {
         Self {
             storage,
             config,
+            token_manager: None,
+            cleanup_handle,
+        }
+    }
+
+    pub fn with_token_manager(
+        config: SessionConfig,
+        token_manager: Arc<TokenManager>,
+    ) -> Self {
+        let storage = Arc::new(RwLock::new(InMemoryStore::new()));
+        let cleanup_handle = Some(spawn_cleanup_task(storage.clone(), config.cleanup_interval));
+        Self {
+            storage,
+            config,
+            token_manager: Some(token_manager),
             cleanup_handle,
         }
     }
@@ -47,6 +66,7 @@ where
         Self {
             storage,
             config,
+            token_manager: None,
             cleanup_handle,
         }
     }
@@ -56,7 +76,17 @@ where
         username: impl Into<String>,
         ip_address: Option<String>,
     ) -> Result<SessionId, SessionError> {
-        let username = username.into();
+        self.create_session_full(username, None, ip_address, None)
+            .await
+    }
+
+    pub async fn create_session_from_token(
+        &self,
+        token_claims: TokenClaims,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<SessionId, SessionError> {
+        let username = token_claims.sub.clone();
 
         // проверяем лимит сессий на пользователя
         if let Some(max) = self.config.max_sessions_per_user {
@@ -64,7 +94,6 @@ where
             let mut user_sessions = storage.get_user_sessions(&username);
 
             if user_sessions.len() >= max {
-                // Сортируем по created_at и удаляем самую старую
                 user_sessions.sort_by_key(|(_, data)| data.created_at);
                 if let Some((oldest_id, _)) = user_sessions.first() {
                     drop(storage);
@@ -74,11 +103,50 @@ where
             }
         }
 
-        // Создаём новую сессию
         let session_id = SessionId::new();
-        let session_data = SessionData::new(username, ip_address, self.config.ttl);
+        let session_data = SessionData::new_with_token(
+            username,
+            token_claims,
+            ip_address,
+            user_agent,
+            self.config.ttl,
+        );
 
         let storage = self.storage.write().await;
+        storage.insert_session(session_id.clone(), session_data)?;
+
+        Ok(session_id)
+    }
+
+    pub async fn create_session_full(
+        &self,
+        username: impl Into<String>,
+        token_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<SessionId, SessionError> {
+        let username = username.into();
+
+        // проверяем лимит сессий
+        if let Some(max) = self.config.max_sessions_per_user {
+            let storage = self.storage.read().await;
+            let mut user_sessions = storage.get_user_sessions(&username);
+
+            if user_sessions.len() >= max {
+                user_sessions.sort_by_key(|(_, data)| data.created_at);
+                if let Some((oldest_id, _)) = user_sessions.first() {
+                    drop(storage);
+                    let storage = self.storage.write().await;
+                    storage.remove_session(oldest_id);
+                }
+            }
+        }
+
+        let session_id = SessionId::new();
+        let session_data =
+            SessionData::new_full(username, token_id, ip_address, user_agent, self.config.ttl);
+        let storage = self.storage.write().await;
+
         storage.insert_session(session_id.clone(), session_data)?;
 
         Ok(session_id)
@@ -90,11 +158,33 @@ where
         ip_address: Option<&str>,
     ) -> Result<(), SessionError> {
         let storage = self.storage.read().await;
+
+        storage.with_session(session_id, |session| {
+            if session.is_expired() {
+                return Err(SessionError::Expired);
+            }
+
+            if self.config.validate_ip && !session.validate_ip(ip_address) {
+                return Err(SessionError::IpMismatch);
+            }
+
+            session.update_activity(self.config.ttl);
+            Ok(())
+        })?
+    }
+
+    pub async fn validate_session_full(
+        &self,
+        session_id: &SessionId,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> Result<(), SessionError> {
+        let storage = self.storage.read().await;
         let mut session = storage
             .get_session(session_id)
             .ok_or(SessionError::NotFound)?;
 
-        // проверям истечение
+        // проверяем истечение сессии
         if session.is_expired() {
             drop(storage);
             let storage = self.storage.write().await;
@@ -102,9 +192,37 @@ where
             return Err(SessionError::Expired);
         }
 
-        // Проверяем IP, если включена валидация
-        if self.config.validate_ip && !session.validate_ip(ip_address) {
-            return Err(SessionError::IpMismatch);
+        // проверяем истечение JWT токена (если привязан)
+        if session.is_token_expired() {
+            drop(storage);
+            let storage = self.storage.write().await;
+            storage.remove_session(session_id);
+            return Err(SessionError::TokenExpired);
+        }
+
+        // проверяем, не отозван ли токен (если есть TokenManager)
+        if let (Some(token_manager), Some(jti)) = (&self.token_manager, session.token_id()) {
+            if token_manager.is_revoked(jti) {
+                drop(storage);
+                let storage = self.storage.write().await;
+                storage.remove_session(session_id);
+                return Err(SessionError::TokenRevoked);
+            }
+        }
+
+        // проверяем fingerprint (IP + User-Agent)
+        if self.config.validate_ip || self.config.validate_user_agent {
+            let ip_valid = !self.config.validate_ip || session.validate_ip(ip_address);
+            let ua_valid =
+                !self.config.validate_user_agent || session.validate_user_agent(user_agent);
+
+            if !ip_valid {
+                return Err(SessionError::IpMismatch);
+            }
+
+            if !ua_valid {
+                return Err(SessionError::UserAgentMismatch);
+            }
         }
 
         // обновляем активность
@@ -136,11 +254,41 @@ where
         Ok(session.username)
     }
 
+    pub async fn get_session_info(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<SessionData, SessionError> {
+        let storage = self.storage.read().await;
+        let session = storage
+            .get_session(session_id)
+            .ok_or(SessionError::NotFound)?;
+
+        if session.is_expired() {
+            drop(storage);
+            let storage = self.storage.write().await;
+            storage.remove_session(session_id);
+            return Err(SessionError::Expired);
+        }
+
+        Ok(session)
+    }
+
     pub async fn revoke_session(
         &self,
         session_id: &SessionId,
     ) -> Result<(), SessionError> {
         let storage = self.storage.write().await;
+
+        // получаем сессию перед удалением, чтобы отозвать токен
+        if let Some(session) = storage.get_session(session_id) {
+            // если есть связанные токен и TokenManager, отзывает токен
+            if let (Some(token_manager), Some(claims)) =
+                (&self.token_manager, &session.token_claims)
+            {
+                token_manager.revoke_token(&claims.jti, claims.exp);
+            }
+        }
+
         storage
             .remove_session(session_id)
             .ok_or(SessionError::NotFound)?;
@@ -152,6 +300,19 @@ where
         username: &str,
     ) -> Result<usize, SessionError> {
         let storage = self.storage.write().await;
+
+        // получаем все сессии пользователя для отзыва токенов
+        let user_sessions = storage.get_user_sessions(username);
+
+        // отзываем все токены, если есть TokenManager
+        if let Some(token_manager) = &self.token_manager {
+            for (_, session) in &user_sessions {
+                if let Some(claims) = &session.token_claims {
+                    token_manager.revoke_token(&claims.jti, claims.exp);
+                }
+            }
+        }
+
         let count = storage.remove_user_sessions(username);
         Ok(count)
     }
@@ -162,6 +323,14 @@ where
     ) -> usize {
         let storage = self.storage.read().await;
         storage.get_user_sessions(username).len()
+    }
+
+    pub async fn list_user_sessions(
+        &self,
+        username: &str,
+    ) -> Vec<(SessionId, SessionData)> {
+        let storage = self.storage.read().await;
+        storage.get_user_sessions(username)
     }
 
     pub async fn cleanup_expired(&self) -> usize {

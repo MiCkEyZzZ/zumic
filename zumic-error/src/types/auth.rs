@@ -46,6 +46,9 @@ pub enum SessionError {
     NotFound,
     Expired,
     IpMismatch,
+    UserAgentMismatch,
+    TokenExpired,
+    TokenRevoked,
     InvalidSessionId,
     Storage(String),
 }
@@ -112,6 +115,9 @@ impl fmt::Display for SessionError {
             SessionError::NotFound => write!(f, "Session not found"),
             SessionError::Expired => write!(f, "Session expired"),
             SessionError::IpMismatch => write!(f, "IP address mismatch"),
+            SessionError::UserAgentMismatch => write!(f, "User-Agent mismatch"),
+            SessionError::TokenExpired => write!(f, "JWT token expired"),
+            SessionError::TokenRevoked => write!(f, "JWT token revoked"),
             SessionError::InvalidSessionId => write!(f, "Invalid session ID"),
             SessionError::Storage(msg) => write!(f, "Storage error: {}", msg),
         }
@@ -213,8 +219,11 @@ impl ErrorExt for SessionError {
     fn status_code(&self) -> StatusCode {
         match self {
             SessionError::NotFound => StatusCode::NotFound,
-            SessionError::Expired => StatusCode::SessionExpired,
-            SessionError::IpMismatch => StatusCode::PermissionDenied,
+            SessionError::Expired | SessionError::TokenExpired => StatusCode::SessionExpired,
+            SessionError::IpMismatch | SessionError::UserAgentMismatch => {
+                StatusCode::PermissionDenied
+            }
+            SessionError::TokenRevoked => StatusCode::Unauthorized,
             SessionError::InvalidSessionId => StatusCode::InvalidToken,
             SessionError::Storage(_) => StatusCode::Internal,
         }
@@ -230,7 +239,10 @@ impl ErrorExt for SessionError {
                 "Invalid session".to_string()
             }
             SessionError::Expired => "Session has expired".to_string(),
+            SessionError::TokenExpired => "Authentication token has expired".to_string(),
+            SessionError::TokenRevoked => "Authentication token has been revoked".to_string(),
             SessionError::IpMismatch => "Session IP mismatch".to_string(),
+            SessionError::UserAgentMismatch => "Session fingerprint mismatch".to_string(),
             SessionError::Storage(_) => "Internal server error".to_string(),
         }
     }
@@ -252,10 +264,20 @@ impl From<SessionError> for AuthError {
             SessionError::Expired => AuthError::SessionExpired {
                 session_id: "<expired>".into(),
             },
-            SessionError::IpMismatch => AuthError::PermissionDenied {
-                resource: "session".into(),
-                action: "use".into(),
+            SessionError::TokenExpired => AuthError::TokenExpired {
+                // ← НОВЫЙ
+                token_id: "<expired>".into(),
             },
+            SessionError::TokenRevoked => AuthError::Revoked {
+                // ← НОВЫЙ
+                reason: "Token has been revoked".into(),
+            },
+            SessionError::IpMismatch | SessionError::UserAgentMismatch => {
+                AuthError::PermissionDenied {
+                    resource: "session".into(),
+                    action: "use".into(),
+                }
+            }
             SessionError::InvalidSessionId => AuthError::InvalidSession {
                 session_id: "<invalid>".into(),
             },
@@ -476,5 +498,34 @@ mod tests {
         let err = SessionError::InvalidSessionId;
         let any = err.as_any();
         assert!(any.downcast_ref::<SessionError>().is_some());
+    }
+
+    #[test]
+    fn test_session_token_expired() {
+        let err = SessionError::TokenExpired;
+        assert_eq!(err.status_code(), StatusCode::SessionExpired);
+        assert!(err.client_message().contains("Authentication token"));
+        assert!(err.to_string().contains("JWT token expired"));
+    }
+
+    #[test]
+    fn test_session_token_revoked() {
+        let err = SessionError::TokenRevoked;
+        assert_eq!(err.status_code(), StatusCode::Unauthorized);
+        assert!(err.client_message().contains("revoked"));
+        assert!(err.to_string().contains("JWT token revoked"));
+    }
+
+    #[test]
+    fn test_session_error_to_auth_error() {
+        // TokenExpired -> AuthError::TokenExpired
+        let session_err = SessionError::TokenExpired;
+        let auth_err: AuthError = session_err.into();
+        assert!(matches!(auth_err, AuthError::TokenExpired { .. }));
+
+        // TokenRevoked -> AuthError::Revoked
+        let session_err = SessionError::TokenRevoked;
+        let auth_err: AuthError = session_err.into();
+        assert!(matches!(auth_err, AuthError::Revoked { .. }));
     }
 }

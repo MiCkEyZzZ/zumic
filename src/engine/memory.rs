@@ -546,6 +546,15 @@ impl SessionStorage for InMemoryStore {
         self.sessions.remove(id).map(|(_, v)| v)
     }
 
+    fn with_session<R>(
+        &self,
+        id: &SessionId,
+        f: impl FnOnce(&mut SessionData) -> R,
+    ) -> Result<R, SessionError> {
+        let mut entry = self.sessions.get_mut(id).ok_or(SessionError::NotFound)?;
+        Ok(f(&mut entry))
+    }
+
     fn get_user_sessions(
         &self,
         username: &str,

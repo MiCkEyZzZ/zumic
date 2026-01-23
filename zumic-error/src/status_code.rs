@@ -64,6 +64,7 @@ pub enum StatusCode {
     InvalidCredentials = 3006,
     PasswordHashFailed = 3007,
     TooManyAttempts = 3008,
+    Unauthorized = 3009,
 
     // === 4xxx: Ограничение скорости ===
     RateLimited = 4000,
@@ -217,7 +218,8 @@ impl StatusCode {
             | Self::InvalidValue
             | Self::InvalidData
             | Self::AuthFailed
-            | Self::PermissionDenied => LogLevel::Info,
+            | Self::PermissionDenied
+            | Self::Unauthorized => LogLevel::Info,
             Self::RateLimited | Self::Timeout | Self::ConnectionClosed => LogLevel::Warn,
             Self::Internal
             | Self::CorruptedData
@@ -246,7 +248,8 @@ impl StatusCode {
             Self::AuthFailed
             | Self::InvalidCredentials
             | Self::SessionExpired
-            | Self::InvalidToken => 401,
+            | Self::InvalidToken
+            | Self::Unauthorized => 401,
             Self::PermissionDenied => 403,
             Self::RateLimited | Self::TooManyAttempts => 429,
             Self::Timeout | Self::ReadTimeout | Self::WriteTimeout => 408,
@@ -316,6 +319,7 @@ mod tests {
     fn test_http_mapping() {
         assert_eq!(StatusCode::NotFound.http_status(), 404);
         assert_eq!(StatusCode::AuthFailed.http_status(), 401);
+        assert_eq!(StatusCode::Unauthorized.http_status(), 401);
         assert_eq!(StatusCode::PermissionDenied.http_status(), 403);
         assert_eq!(StatusCode::RateLimited.http_status(), 429);
         assert_eq!(StatusCode::Internal.http_status(), 500);

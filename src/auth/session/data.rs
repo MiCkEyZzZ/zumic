@@ -1,18 +1,39 @@
-use std::{fmt, str::FromStr, time::Duration};
+use std::{
+    fmt,
+    str::FromStr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
+use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use uuid::Uuid;
 use zumic_error::SessionError;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+use crate::auth::TokenClaims;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SessionId(Uuid);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionData {
     pub username: String,
+    pub token_claims: Option<TokenClaims>,
     pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
     pub created_at: Instant,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
     pub last_activity: Instant,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
     pub expires_at: Instant,
 }
 
@@ -39,10 +60,81 @@ impl SessionData {
         let now = Instant::now();
         Self {
             username: username.into(),
+            token_claims: None,
             ip_address,
+            user_agent: None,
             created_at: now,
             last_activity: now,
             expires_at: now + ttl,
+        }
+    }
+
+    pub fn new_with_token(
+        username: impl Into<String>,
+        token_claims: TokenClaims,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+        ttl: Duration,
+    ) -> Self {
+        let now = Instant::now();
+        Self {
+            username: username.into(),
+            token_claims: Some(token_claims),
+            ip_address,
+            user_agent,
+            created_at: now,
+            last_activity: now,
+            expires_at: now + ttl,
+        }
+    }
+
+    pub fn new_full(
+        username: impl Into<String>,
+        token_id: Option<String>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+        ttl: Duration,
+    ) -> Self {
+        let now = Instant::now();
+        let username = username.into();
+        // Если передан token_id, создаём базовый TokenClaims только с jti
+        let token_claims = token_id.map(|jti| TokenClaims {
+            jti,
+            sub: username.clone(),
+            permissions: String::new(),
+            iat: 0,
+            exp: 0,
+            token_type: "access".to_string(),
+        });
+
+        Self {
+            username,
+            token_claims,
+            ip_address,
+            user_agent,
+            created_at: now,
+            last_activity: now,
+            expires_at: now + ttl,
+        }
+    }
+
+    pub fn token_id(&self) -> Option<&str> {
+        self.token_claims.as_ref().map(|c| c.jti.as_str())
+    }
+
+    pub fn permissions(&self) -> Option<&str> {
+        self.token_claims.as_ref().map(|c| c.permissions.as_str())
+    }
+
+    pub fn is_token_expired(&self) -> bool {
+        if let Some(claims) = &self.token_claims {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            claims.exp < now
+        } else {
+            false
         }
     }
 
@@ -66,6 +158,24 @@ impl SessionData {
             (Some(session_ip), Some(request_ip)) => session_ip == request_ip,
             (None, _) | (_, None) => true, // если IP не записан, пропускаем проверку
         }
+    }
+
+    pub fn validate_user_agent(
+        &self,
+        user_agent: Option<&str>,
+    ) -> bool {
+        match (&self.user_agent, user_agent) {
+            (Some(session_ua), Some(request_ua)) => session_ua == request_ua,
+            (None, _) | (_, None) => true,
+        }
+    }
+
+    pub fn validate_fingerprint(
+        &self,
+        ip: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> bool {
+        self.validate_ip(ip) && self.validate_user_agent(user_agent)
     }
 
     pub fn time_until_expiry(&self) -> Duration {
@@ -104,6 +214,29 @@ impl FromStr for SessionId {
     }
 }
 
+fn serialize_instant<S>(
+    instant: &Instant,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Сохраняем как миллисекунды с момента старта программы
+    // Для production лучше использовать SystemTime + UNIX_EPOCH
+    let millis = instant.elapsed().as_millis();
+    serializer.serialize_u128(millis)
+}
+
+fn deserialize_instant<'de, D>(deserializer: D) -> Result<Instant, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let millis = u128::deserialize(deserializer)?;
+    // Восстанавливаем относительно текущего момента
+    // ВАЖНО: для Redis нужно использовать абсолютное время (SystemTime)
+    Ok(Instant::now() - Duration::from_millis(millis as u64))
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,17 +273,185 @@ mod tests {
     }
 
     #[test]
+    fn test_new_with_token() {
+        let claims = TokenClaims {
+            jti: "token_123".into(),
+            sub: "anton".into(),
+            permissions: "+@read,+get".into(),
+            iat: 1000,
+            exp: 2000,
+            token_type: "access".into(),
+        };
+
+        let session = SessionData::new_with_token(
+            "anton",
+            claims.clone(),
+            Some("127.0.0.1".into()),
+            Some("Chrome/100".into()),
+            Duration::from_secs(3600),
+        );
+
+        assert_eq!(session.username, "anton");
+        assert_eq!(session.token_id().unwrap(), "token_123");
+        assert_eq!(session.permissions().unwrap(), "+@read,+get");
+        assert_eq!(session.ip_address.unwrap(), "127.0.0.1");
+        assert_eq!(session.user_agent.unwrap(), "Chrome/100");
+    }
+
+    #[test]
+    fn test_token_id_helper() {
+        let session = SessionData::new_full(
+            "anton",
+            Some("jti_456".into()),
+            None,
+            None,
+            Duration::from_secs(10),
+        );
+
+        assert_eq!(session.token_id().unwrap(), "jti_456");
+    }
+
+    #[test]
+    fn test_token_expiration_check() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // токен, который истёк 10 секунд назад
+        let expired_claims = TokenClaims {
+            jti: "old_token".into(),
+            sub: "anton".into(),
+            permissions: String::new(),
+            iat: now - 100,
+            exp: now - 10,
+            token_type: "access".into(),
+        };
+
+        let session = SessionData::new_with_token(
+            "anton",
+            expired_claims,
+            None,
+            None,
+            Duration::from_secs(3600),
+        );
+
+        assert!(session.is_token_expired());
+
+        // токен, который ещё валиден
+        let valid_claims = TokenClaims {
+            jti: "new_token".into(),
+            sub: "anton".into(),
+            permissions: String::new(),
+            iat: now,
+            exp: now + 3600,
+            token_type: "access".into(),
+        };
+
+        let session2 = SessionData::new_with_token(
+            "anton",
+            valid_claims,
+            None,
+            None,
+            Duration::from_secs(3600),
+        );
+
+        assert!(!session2.is_token_expired());
+    }
+
+    #[test]
     fn test_ip_validation() {
         let session = SessionData::new("anton", Some("127.0.0.1".into()), Duration::from_secs(10));
 
-        // правильный IP
         assert!(session.validate_ip(Some("127.0.0.1")));
-
-        // неправильный IP
         assert!(!session.validate_ip(Some("192.168.1.1")));
-
-        // если в запросе нет IP, но в сессии есть - все равно true
         assert!(session.validate_ip(None));
+    }
+
+    #[test]
+    fn test_user_agent_validation() {
+        let session = SessionData::new_full(
+            "anton",
+            None,
+            None,
+            Some("Chrome/100".into()),
+            Duration::from_secs(10),
+        );
+
+        assert!(session.validate_user_agent(Some("Chrome/100")));
+        assert!(!session.validate_user_agent(Some("Firefox/90")));
+        assert!(session.validate_user_agent(None));
+    }
+
+    #[test]
+    fn test_fingerprint_validation() {
+        let claims = TokenClaims {
+            jti: "tok1".into(),
+            sub: "anton".into(),
+            permissions: "+@all".into(),
+            iat: 1000,
+            exp: 9999,
+            token_type: "access".into(),
+        };
+
+        let session = SessionData::new_with_token(
+            "anton",
+            claims,
+            Some("127.0.0.1".into()),
+            Some("Chrome/100".into()),
+            Duration::from_secs(10),
+        );
+
+        assert!(session.validate_fingerprint(Some("127.0.0.1"), Some("Chrome/100")));
+        assert!(!session.validate_fingerprint(Some("127.0.0.1"), Some("Firefox/90")));
+        assert!(!session.validate_fingerprint(Some("192.168.1.1"), Some("Chrome/100")));
+    }
+
+    #[test]
+    fn test_permissions_helper() {
+        let claims = TokenClaims {
+            jti: "t1".into(),
+            sub: "anton".into(),
+            permissions: "+@read,+@write,-del".into(),
+            iat: 1000,
+            exp: 2000,
+            token_type: "access".into(),
+        };
+
+        let session =
+            SessionData::new_with_token("anton", claims, None, None, Duration::from_secs(10));
+
+        assert_eq!(session.permissions().unwrap(), "+@read,+@write,-del");
+    }
+
+    #[test]
+    fn test_serde_round_trip() {
+        let claims = TokenClaims {
+            jti: "test_jti".into(),
+            sub: "test_user".into(),
+            permissions: "+@all".into(),
+            iat: 1000,
+            exp: 2000,
+            token_type: "access".into(),
+        };
+
+        let session = SessionData::new_with_token(
+            "test_user",
+            claims,
+            Some("127.0.0.1".into()),
+            Some("TestAgent".into()),
+            Duration::from_secs(3600),
+        );
+
+        // сериализация в JSON
+        let json = serde_json::to_string(&session).unwrap();
+
+        // десериализация в JSON
+        let restored: SessionData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.username, "test_user");
+        assert_eq!(restored.token_id().unwrap(), "test_jti");
+        assert_eq!(restored.ip_address.unwrap(), "127.0.0.1");
     }
 
     #[test]
