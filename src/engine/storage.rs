@@ -309,6 +309,12 @@ pub trait SessionStorage: Send + Sync {
         id: &SessionId,
     ) -> Option<SessionData>;
 
+    fn with_session<R>(
+        &self,
+        id: &SessionId,
+        f: impl FnOnce(&mut SessionData) -> R,
+    ) -> Result<R, SessionError>;
+
     /// Возвращает список всех сессий для заданного пользователя.
     fn get_user_sessions(
         &self,

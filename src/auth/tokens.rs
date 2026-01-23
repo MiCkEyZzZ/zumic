@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 use zumic_error::{AuthError, StackError, ZumicResult};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TokenClaims {
     pub jti: String,
     pub sub: String,

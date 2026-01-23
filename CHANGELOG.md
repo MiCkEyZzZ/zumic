@@ -10,6 +10,7 @@
   - В `cleanup` добавлена функция `spawn_cleanup_task`, отвечающая за фоновую очистку сессий. Добавлены базовые тесты для проверки её работы.
   - Добавлен `config` для управления настройками сессий.
   - Добавлен `manager`, который управляет созданием, валидацией, истечением и очисткой сессий.
+  - добавлена реализация токена в `token.rs`.
 - **engine**
   - Добавлена интеграция с `memory`. Реализованы методы для работы с сессиями и дополнительные тесты для проверки работы методов `SessionStorage` на `InMemoryStore`.
   - Добавлен трейт `SessionStorage` в `storage`:
@@ -158,6 +159,21 @@
   - Тесты подтверждают корректность поведения и отсутствие деградации ёмкости буфера.
 
 ### Изменено
+
+- **zumic-error**
+  - в `types/auth.rs` для SessionError добавлены доп. поля: `UserAgentMismatch`, `TokenExpired`, `TokenRevoked`. И во всех ф-х и методах добавлена обработка этих полей. Добавлены доп. тесты для проверки работы новой логики и исправлены существующие тесты.
+  - в `status_code.rs` для enum `StatusCode` добавлено доп. поле `Unauthorized`.
+  - добавлен `Unauthorized` в `http_status()`
+  - добавлен `Unauthorized` в `log_level()`
+  - дополнен тест `test_http_mapping` для проверки логики с этим полем.
+
+- **auth/session**
+  - в `config.rs` добавлено поле `validate_user_agent` в `SessionConfig` для проверки IP-адреса для защиты от hijacking.
+  - изменена ф-я `validate_user_agent` и доработана ф-я `build`. Добавлены доп. тесты.
+
+- **engine**
+  - в `storage.rs` для трейта `SessionStorage` добавлен доп. метод `with_session`.
+  - в `memory.rs` добавил реализацию метода `with_session`.
 
 - **database/intset**
   - Полностью переработан механизм итерации с устранением heap allocations:

@@ -5,6 +5,7 @@ pub struct SessionConfig {
     pub ttl: Duration,
     pub max_sessions_per_user: Option<usize>,
     pub validate_ip: bool,
+    pub validate_user_agent: bool,
     pub cleanup_interval: Duration,
 }
 
@@ -13,6 +14,7 @@ pub struct SessionConfigBuilder {
     ttl: Option<Duration>,
     max_session_per_user: Option<Option<usize>>,
     validate_ip: Option<bool>,
+    validate_user_agent: Option<bool>,
     cleanup_interval: Option<Duration>,
 }
 
@@ -56,6 +58,14 @@ impl SessionConfigBuilder {
         self
     }
 
+    pub fn validate_user_agent(
+        mut self,
+        validate: bool,
+    ) -> Self {
+        self.validate_user_agent = Some(validate);
+        self
+    }
+
     pub fn cleanup_interval(
         mut self,
         interval: Duration,
@@ -72,6 +82,9 @@ impl SessionConfigBuilder {
                 .max_session_per_user
                 .unwrap_or(default.max_sessions_per_user),
             validate_ip: self.validate_ip.unwrap_or(default.validate_ip),
+            validate_user_agent: self
+                .validate_user_agent
+                .unwrap_or(default.validate_user_agent),
             cleanup_interval: self.cleanup_interval.unwrap_or(default.cleanup_interval),
         }
     }
@@ -87,6 +100,7 @@ impl Default for SessionConfig {
             ttl: Duration::from_secs(3600),             // 1ч
             max_sessions_per_user: Some(5),             // максимум 5 сессий
             validate_ip: true,                          // проверяем IP
+            validate_user_agent: true,                  // проверяем User-Agent
             cleanup_interval: Duration::from_secs(300), // очистка каждые 5 минут
         }
     }
@@ -106,6 +120,7 @@ mod tests {
         assert_eq!(config.ttl, Duration::from_secs(3600));
         assert_eq!(config.max_sessions_per_user, Some(5));
         assert!(config.validate_ip);
+        assert!(config.validate_user_agent);
         assert_eq!(config.cleanup_interval, Duration::from_secs(300));
     }
 
@@ -115,12 +130,14 @@ mod tests {
             .ttl(Duration::from_secs(7200))
             .max_sessions_per_user(10)
             .validate_ip(false)
+            .validate_user_agent(false)
             .cleanup_interval(Duration::from_secs(600))
             .build();
 
         assert_eq!(config.ttl, Duration::from_secs(7200));
         assert_eq!(config.max_sessions_per_user, Some(10));
         assert!(!config.validate_ip);
+        assert!(!config.validate_user_agent);
         assert_eq!(config.cleanup_interval, Duration::from_secs(600));
     }
 
@@ -128,9 +145,11 @@ mod tests {
     fn test_builder_partial() {
         let config = SessionConfig::builder()
             .ttl(Duration::from_secs(1800))
+            .validate_user_agent(false)
             .build();
 
         assert_eq!(config.ttl, Duration::from_secs(1800));
+        assert!(!config.validate_user_agent);
         // Остальные параметры из default
         assert_eq!(config.max_sessions_per_user, Some(5));
         assert!(config.validate_ip);
@@ -141,5 +160,16 @@ mod tests {
         let config = SessionConfig::builder().unlimited_sessions().build();
 
         assert_eq!(config.max_sessions_per_user, None);
+    }
+
+    #[test]
+    fn test_disable_all_validation() {
+        let config = SessionConfig::builder()
+            .validate_ip(false)
+            .validate_user_agent(false)
+            .build();
+
+        assert!(!config.validate_ip);
+        assert!(!config.validate_user_agent);
     }
 }
