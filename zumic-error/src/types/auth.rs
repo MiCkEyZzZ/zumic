@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{ErrorExt, StatusCode};
 
 /// Ошибка аутентификации.
@@ -38,6 +40,19 @@ pub enum AuthError {
     /// Токен отозван
     Revoked { reason: String },
 }
+
+#[derive(Debug, Clone)]
+pub enum SessionError {
+    NotFound,
+    Expired,
+    IpMismatch,
+    InvalidSessionId,
+    Storage(String),
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для AuthError, SessionError
+////////////////////////////////////////////////////////////////////////////////
 
 impl std::fmt::Display for AuthError {
     fn fmt(
@@ -88,7 +103,24 @@ impl std::fmt::Display for AuthError {
     }
 }
 
+impl fmt::Display for SessionError {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            SessionError::NotFound => write!(f, "Session not found"),
+            SessionError::Expired => write!(f, "Session expired"),
+            SessionError::IpMismatch => write!(f, "IP address mismatch"),
+            SessionError::InvalidSessionId => write!(f, "Invalid session ID"),
+            SessionError::Storage(msg) => write!(f, "Storage error: {}", msg),
+        }
+    }
+}
+
 impl std::error::Error for AuthError {}
+
+impl std::error::Error for SessionError {}
 
 impl ErrorExt for AuthError {
     fn status_code(&self) -> StatusCode {
@@ -174,6 +206,63 @@ impl ErrorExt for AuthError {
         }
 
         tags
+    }
+}
+
+impl ErrorExt for SessionError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            SessionError::NotFound => StatusCode::NotFound,
+            SessionError::Expired => StatusCode::SessionExpired,
+            SessionError::IpMismatch => StatusCode::PermissionDenied,
+            SessionError::InvalidSessionId => StatusCode::InvalidToken,
+            SessionError::Storage(_) => StatusCode::Internal,
+        }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn client_message(&self) -> String {
+        match self {
+            SessionError::NotFound | SessionError::InvalidSessionId => {
+                "Invalid session".to_string()
+            }
+            SessionError::Expired => "Session has expired".to_string(),
+            SessionError::IpMismatch => "Session IP mismatch".to_string(),
+            SessionError::Storage(_) => "Internal server error".to_string(),
+        }
+    }
+
+    fn metrics_tags(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("error_type", "session".to_string()),
+            ("status_code", self.status_code().to_string()),
+        ]
+    }
+}
+
+impl From<SessionError> for AuthError {
+    fn from(err: SessionError) -> Self {
+        match err {
+            SessionError::NotFound => AuthError::InvalidSession {
+                session_id: "<unknown>".into(),
+            },
+            SessionError::Expired => AuthError::SessionExpired {
+                session_id: "<expired>".into(),
+            },
+            SessionError::IpMismatch => AuthError::PermissionDenied {
+                resource: "session".into(),
+                action: "use".into(),
+            },
+            SessionError::InvalidSessionId => AuthError::InvalidSession {
+                session_id: "<invalid>".into(),
+            },
+            SessionError::Storage(reason) => AuthError::SigningFailed {
+                reason: format!("session storage error: {reason}"),
+            },
+        }
     }
 }
 
@@ -350,5 +439,42 @@ mod tests {
         let any_ref = err.as_any();
         // Убедимся, что можно сделать downcast_ref к AuthError
         assert!(any_ref.downcast_ref::<AuthError>().is_some());
+    }
+
+    #[test]
+    fn test_session_not_found() {
+        let err = SessionError::NotFound;
+        assert_eq!(err.status_code(), StatusCode::NotFound);
+        assert_eq!(err.client_message(), "Invalid session");
+        assert!(err.to_string().contains("Session not found"));
+    }
+
+    #[test]
+    fn test_session_expired() {
+        let err = SessionError::Expired;
+        assert_eq!(err.status_code(), StatusCode::SessionExpired);
+        assert_eq!(err.client_message(), "Session has expired");
+    }
+
+    #[test]
+    fn test_session_ip_mismatch() {
+        let err = SessionError::IpMismatch;
+        assert_eq!(err.status_code(), StatusCode::PermissionDenied);
+        assert!(err.client_message().contains("IP"));
+    }
+
+    #[test]
+    fn test_session_storage_error_hidden() {
+        let err = SessionError::Storage("db down".into());
+        assert_eq!(err.status_code(), StatusCode::InternalError);
+        assert_eq!(err.client_message(), "Internal server error");
+        assert!(err.to_string().contains("db down"));
+    }
+
+    #[test]
+    fn test_session_as_any() {
+        let err = SessionError::InvalidSessionId;
+        let any = err.as_any();
+        assert!(any.downcast_ref::<SessionError>().is_some());
     }
 }

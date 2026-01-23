@@ -13,6 +13,7 @@ pub mod acl;
 pub mod config;
 pub mod manager;
 pub mod password;
+pub mod session;
 pub mod tokens;
 
 // Publicly re-export all error types and functions from the submodules to

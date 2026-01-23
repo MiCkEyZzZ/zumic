@@ -1,6 +1,10 @@
 use async_trait::async_trait;
+use zumic_error::SessionError;
 
-use crate::{GeoPoint, Sds, StoreResult, Value};
+use crate::{
+    auth::session::{SessionData, SessionId},
+    GeoPoint, Sds, StoreResult, Value,
+};
 
 /// Трейт `Storage` определяет интерфейс для реализаций хранилища
 /// ключ-значение.
@@ -283,4 +287,48 @@ pub trait AsyncStorage: Send + Sync + 'static {
         key: &Sds,
         count: isize,
     ) -> StoreResult<Vec<Sds>>;
+}
+
+pub trait SessionStorage: Send + Sync {
+    /// Сохраняет сессию в хранилище.
+    fn insert_session(
+        &self,
+        id: SessionId,
+        data: SessionData,
+    ) -> Result<(), SessionError>;
+
+    /// Получает сессию по ID.
+    fn get_session(
+        &self,
+        id: &SessionId,
+    ) -> Option<SessionData>;
+
+    /// Удаляет сессию по ID.
+    fn remove_session(
+        &self,
+        id: &SessionId,
+    ) -> Option<SessionData>;
+
+    /// Возвращает список всех сессий для заданного пользователя.
+    fn get_user_sessions(
+        &self,
+        username: &str,
+    ) -> Vec<(SessionId, SessionData)>;
+
+    /// Удаляет все сессии указанного пользователя.
+    fn remove_user_sessions(
+        &self,
+        username: &str,
+    ) -> usize;
+
+    /// Удаляет все истёкшие сессии.
+    fn cleanup_expired(&self) -> usize;
+
+    /// Возвращает общее количество сессий в хранилище.
+    fn len_session(&self) -> usize;
+
+    /// Проверяет, пусто ли хранилище.
+    fn is_empty(&self) -> bool {
+        self.len_session() == 0
+    }
 }

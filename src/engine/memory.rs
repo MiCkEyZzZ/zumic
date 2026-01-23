@@ -2,17 +2,23 @@ use std::{collections::HashSet, sync::Arc};
 
 use dashmap::DashMap;
 use rand::{seq::IteratorRandom, thread_rng};
+use zumic_error::SessionError;
 
-use crate::{GeoPoint, GeoSet, Sds, Storage, StoreError, StoreResult, Value};
+use crate::{
+    auth::session::{SessionData, SessionId},
+    engine::SessionStorage,
+    GeoPoint, GeoSet, Sds, Storage, StoreError, StoreResult, Value,
+};
 
 /// Потокобезопасное in-memory хранилище ключ-значение.
 #[derive(Debug)]
 pub struct InMemoryStore {
-    #[allow(clippy::arc_with_non_send_sync)]
+    #[allow(clippy::arc_with_non_send_sync)] // NOTE: временно
     pub data: Arc<DashMap<Sds, Value>>,
-    // GEO-ключи → GeoSet
-    #[allow(clippy::arc_with_non_send_sync)]
+    #[allow(clippy::arc_with_non_send_sync)] // NOTE: временно
     geo: Arc<DashMap<Sds, GeoSet>>,
+    #[allow(clippy::arc_with_non_send_sync)] // NOTE: временно
+    sessions: Arc<DashMap<SessionId, SessionData>>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,6 +36,8 @@ impl InMemoryStore {
             data: Arc::new(DashMap::new()),
             #[allow(clippy::arc_with_non_send_sync)]
             geo: Arc::new(DashMap::new()),
+            #[allow(clippy::arc_with_non_send_sync)]
+            sessions: Arc::new(DashMap::new()),
         }
     }
 
@@ -514,6 +522,83 @@ impl Storage for InMemoryStore {
     }
 }
 
+impl SessionStorage for InMemoryStore {
+    fn insert_session(
+        &self,
+        id: SessionId,
+        data: SessionData,
+    ) -> Result<(), SessionError> {
+        self.sessions.insert(id, data);
+        Ok(())
+    }
+
+    fn get_session(
+        &self,
+        id: &SessionId,
+    ) -> Option<SessionData> {
+        self.sessions.get(id).map(|r| r.value().clone())
+    }
+
+    fn remove_session(
+        &self,
+        id: &SessionId,
+    ) -> Option<SessionData> {
+        self.sessions.remove(id).map(|(_, v)| v)
+    }
+
+    fn get_user_sessions(
+        &self,
+        username: &str,
+    ) -> Vec<(SessionId, SessionData)> {
+        self.sessions
+            .iter()
+            .filter(|entry| entry.value().username == username)
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect()
+    }
+
+    fn remove_user_sessions(
+        &self,
+        username: &str,
+    ) -> usize {
+        let to_remove: Vec<SessionId> = self
+            .sessions
+            .iter()
+            .filter(|entry| entry.value().username == username)
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        let count = to_remove.len();
+        for id in to_remove {
+            self.sessions.remove(&id);
+        }
+        count
+    }
+
+    fn cleanup_expired(&self) -> usize {
+        let to_remove: Vec<SessionId> = self
+            .sessions
+            .iter()
+            .filter(|entry| entry.value().is_expired())
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        let count = to_remove.len();
+        for id in to_remove {
+            self.sessions.remove(&id);
+        }
+        count
+    }
+
+    fn len_session(&self) -> usize {
+        self.sessions.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.sessions.is_empty()
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Общие реализации трейтов для InMemoryStore
 ////////////////////////////////////////////////////////////////////////////////
@@ -530,6 +615,10 @@ impl Default for InMemoryStore {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use tokio::time::Instant;
+
     use super::*;
 
     fn key(data: &str) -> Sds {
@@ -547,6 +636,121 @@ mod tests {
         store.set(&k, v.clone()).unwrap();
         let got = store.get(&k).unwrap();
         assert_eq!(got, Some(v));
+    }
+
+    #[test]
+    fn test_insert_and_get() {
+        let storage = InMemoryStore::new();
+        let id = SessionId::new();
+        let data = SessionData::new("anton", None, Duration::from_secs(3600));
+
+        storage.sessions.insert(id.clone(), data.clone());
+
+        let retrieved = storage.sessions.get(&id).unwrap();
+        assert_eq!(retrieved.username, data.username);
+    }
+
+    #[test]
+    fn test_remove() {
+        let storage = InMemoryStore::new();
+        let id = SessionId::new();
+        let data = SessionData::new("anton", None, Duration::from_secs(3600));
+
+        storage.sessions.insert(id.clone(), data);
+        assert!(storage.get_session(&id).is_some());
+
+        let removed = storage.remove_session(&id);
+        assert!(removed.is_some());
+        assert!(storage.get_session(&id).is_none());
+    }
+
+    #[test]
+    fn test_get_user_sessions() {
+        let storage = InMemoryStore::new();
+
+        let id1 = SessionId::new();
+        let id2 = SessionId::new();
+        let id3 = SessionId::new();
+
+        storage.sessions.insert(
+            id1.clone(),
+            SessionData::new("anton", None, Duration::from_secs(3600)),
+        );
+        storage.sessions.insert(
+            id2.clone(),
+            SessionData::new("anton", None, Duration::from_secs(3600)),
+        );
+        storage.sessions.insert(
+            id3.clone(),
+            SessionData::new("boris", None, Duration::from_secs(3600)),
+        );
+
+        let anton_session = storage.get_user_sessions("anton");
+        assert_eq!(anton_session.len(), 2);
+
+        let boris_session = storage.get_user_sessions("boris");
+        assert_eq!(boris_session.len(), 1);
+    }
+
+    #[test]
+    fn test_remove_user_sessions() {
+        let storage = InMemoryStore::new();
+
+        storage.sessions.insert(
+            SessionId::new(),
+            SessionData::new("anton", None, Duration::from_secs(3600)),
+        );
+        storage.sessions.insert(
+            SessionId::new(),
+            SessionData::new("anton", None, Duration::from_secs(3600)),
+        );
+        storage.sessions.insert(
+            SessionId::new(),
+            SessionData::new("boris", None, Duration::from_secs(3600)),
+        );
+
+        let removed = storage.remove_user_sessions("anton");
+        assert_eq!(removed, 2);
+        assert_eq!(storage.sessions.len(), 1);
+    }
+
+    #[test]
+    fn test_cleanup_expired() {
+        let storage = InMemoryStore::new();
+
+        let id1 = SessionId::new();
+        let mut data1 = SessionData::new("anton", None, Duration::from_secs(3600));
+        // Искусственно делаем её истёкшей
+        data1.expires_at = Instant::now() - Duration::from_secs(1);
+
+        let id2 = SessionId::new();
+        let data2 = SessionData::new("boris", None, Duration::from_secs(3600));
+
+        storage.sessions.insert(id1, data1);
+        storage.sessions.insert(id2.clone(), data2);
+
+        assert_eq!(storage.sessions.len(), 2);
+
+        let cleaned = storage.cleanup_expired();
+        assert_eq!(cleaned, 1);
+        assert_eq!(storage.sessions.len(), 1);
+
+        // boris всё ещё там
+        assert!(storage.sessions.get(&id2).is_some());
+    }
+
+    #[test]
+    fn test_len_and_is_empty() {
+        let storage = InMemoryStore::new();
+        assert!(storage.sessions.is_empty());
+        assert_eq!(storage.sessions.len(), 0);
+
+        storage.sessions.insert(
+            SessionId::new(),
+            SessionData::new("anton", None, Duration::from_secs(3600)),
+        );
+        assert!(!storage.sessions.is_empty());
+        assert_eq!(storage.sessions.len(), 1);
     }
 
     /// Тест: перезапись значения.
