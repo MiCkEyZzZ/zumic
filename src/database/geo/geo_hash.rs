@@ -144,6 +144,9 @@ impl Geohash {
         Geohash::encode_with_chars(new_point, self.precision)
     }
 
+    // Возвращает 4 основных соседа (север, юг, восток, запад).
+    // Соседи по диагонали пока намеренно исключены.
+    // При необходимости можно расширить до 8-направленной смежности.
     pub fn all_neighbors(&self) -> Vec<Geohash> {
         let n = self.neighbor(Direction::North);
         let s = self.neighbor(Direction::South);
@@ -192,6 +195,60 @@ impl Geohash {
                 }
             })
             .collect()
+    }
+}
+
+pub fn geohash_ranges_for_bbox(
+    bbox: &BoundingBox,
+    precision: GeohashPrecision,
+) -> Vec<String> {
+    let chars = precision as usize;
+
+    // кодируем углы bbox
+    let sw = encode_base32(bbox.min_lon, bbox.min_lat, chars);
+    let ne = encode_base32(bbox.max_lon, bbox.max_lat, chars);
+
+    // если это одна ячейка, возвращаем её
+    if sw == ne {
+        return vec![sw];
+    }
+
+    // находим общий префикс
+    let common_prefix_len = sw
+        .chars()
+        .zip(ne.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    if common_prefix_len == 0 {
+        // нет общего префикса - покрываем весь мир (редкий случай)
+        return vec!["".to_string()];
+    }
+
+    // генерируем все возможные хэши с общим префиксом
+    let mut ranges = Vec::new();
+    generate_ranges_recursive(&sw[..common_prefix_len], chars, &mut ranges);
+    ranges
+}
+
+// NOTE: может генерировать множество диапазонов для больших ограничивающих
+// прямоугольников;
+// ожидается, что вызывающая сторона ограничит точность.
+fn generate_ranges_recursive(
+    prefix: &str,
+    target_len: usize,
+    results: &mut Vec<String>,
+) {
+    if prefix.len() >= target_len {
+        results.push(prefix.to_string());
+        return;
+    }
+
+    // Генерация всех 32-х вариантов следующего символа
+    for &ch in BASE32.iter() {
+        let mut next = prefix.to_string();
+        next.push(ch as char);
+        generate_ranges_recursive(&next, target_len, results);
     }
 }
 
@@ -317,5 +374,103 @@ mod tests {
         // Точность ~153м для 7 символов
         assert!((point.lon - decoded.lon).abs() < 0.01);
         assert!((point.lat - decoded.lat).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_precision_selection() {
+        assert_eq!(GeohashPrecision::from_radius(100.0), GeohashPrecision::High,);
+        assert_eq!(GeohashPrecision::from_radius(5000.0), GeohashPrecision::Low);
+    }
+
+    #[test]
+    fn test_neighbors() {
+        let gh = Geohash::encode(GeoPoint { lon: 0.0, lat: 0.0 }, GeohashPrecision::Medium);
+        let neighbors = gh.all_neighbors();
+        assert_eq!(neighbors.len(), 4);
+
+        // Все соседи должны быть уникальными
+        let unique: std::collections::HashSet<_> = neighbors.iter().map(|n| &n.hash).collect();
+        assert_eq!(unique.len(), 4);
+    }
+
+    #[test]
+    fn test_parent_child() {
+        let gh = Geohash::encode(
+            GeoPoint {
+                lon: 13.4,
+                lat: 52.5,
+            },
+            GeohashPrecision::High,
+        );
+
+        let parent = gh.parent().unwrap();
+        assert_eq!(parent.precision(), gh.precision() - 1);
+        assert!(gh.has_prefix(parent.as_str()));
+
+        let children = parent.children();
+        assert_eq!(children.len(), 32);
+        assert!(children.iter().any(|c| c.hash == gh.hash));
+    }
+
+    #[test]
+    fn test_bbox_ranges() {
+        let bbox = BoundingBox::new(-0.5, 0.5, -0.5, 0.5);
+        let ranges = geohash_ranges_for_bbox(&bbox, GeohashPrecision::Medium);
+        assert!(!ranges.is_empty());
+    }
+
+    #[test]
+    fn test_neighbor_cardinal_directions() {
+        let gh = Geohash::encode(GeoPoint { lon: 0.0, lat: 0.0 }, GeohashPrecision::Medium);
+
+        let north = gh.neighbor(Direction::North);
+        let south = gh.neighbor(Direction::South);
+        let east = gh.neighbor(Direction::East);
+        let west = gh.neighbor(Direction::West);
+
+        // North должен быть севернее
+        assert!(north.decode().lat > gh.decode().lat);
+        // South должен быть южнее
+        assert!(south.decode().lat < gh.decode().lat);
+        // East должен быть восточнее
+        assert!(east.decode().lon > gh.decode().lon);
+        // West должен быть западнее
+        assert!(west.decode().lon < gh.decode().lon);
+    }
+
+    #[test]
+    fn test_prefix_matching() {
+        let gh1 = Geohash::encode(
+            GeoPoint {
+                lon: 13.4,
+                lat: 52.5,
+            },
+            GeohashPrecision::High,
+        );
+        let gh2 = Geohash::encode(
+            GeoPoint {
+                lon: 13.41,
+                lat: 52.51,
+            },
+            GeohashPrecision::High,
+        );
+
+        let prefix = gh1.prefix(5);
+        assert!(gh1.has_prefix(&prefix));
+
+        // Близкие точки должны иметь общий префикс
+        let common_len = gh1
+            .as_str()
+            .chars()
+            .zip(gh2.as_str().chars())
+            .take_while(|(a, b)| a == b)
+            .count();
+        assert!(common_len >= 4);
+    }
+
+    #[test]
+    fn test_cell_size() {
+        assert!(GeohashPrecision::VeryLow.cell_size_meters() > 10_000.0);
+        assert!(GeohashPrecision::UltraPrecise.cell_size_meters() < 0.1);
     }
 }
