@@ -8,9 +8,7 @@ use crate::engine::SessionStorage;
 // Внешние функции
 ////////////////////////////////////////////////////////////////////////////////
 
-/// Запускает фоновую задачу для переодической очистки истёкших сессий.
-///
-/// Вовзращает `JoinHandler`, который можно использовать для отмены задачи.
+/// Фоновая задача очистки сессий.
 pub fn spawn_cleanup_task<S>(
     storage: Arc<RwLock<S>>,
     cleanup_interval: Duration,
@@ -24,7 +22,7 @@ where
         loop {
             ticker.tick().await;
 
-            let storage = storage.read().await;
+            let storage = storage.write().await;
             let cleaned = storage.cleanup_expired();
 
             if cleaned > 0 {
