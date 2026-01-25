@@ -6,6 +6,15 @@
 
 ### Добавлено
 
+- **benches/geo-benchmark**
+  - Бенчмарки производительности GeoSet:
+    - Вставка (sequential vs bulk load)
+    - Поиск точек по имени и вычисление расстояний
+    - Radius queries (R-tree и geohash+R-tree)
+    - k-NN поиск
+    - Geohash кодирование на разных уровнях точности
+    - Проверка ложных срабатываний (false positive rate)
+
 - **tests**
   - Интеграционный тест сценария поиска ресторанов в Кунгуре, Россия (`test_restaurant_search_scenario`).
   - Интеграционный тест покрытия соседних geohash-ячееек с опцией `include_neighbors` (`test_geohash_neighbor_coverage`).
