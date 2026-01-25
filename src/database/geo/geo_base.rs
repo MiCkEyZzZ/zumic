@@ -39,6 +39,7 @@ pub struct GeoSet {
     needs_rebuild: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct GeohashStats {
     pub bucket_count: usize,
     pub total_members: usize,
