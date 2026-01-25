@@ -634,8 +634,6 @@ mod tests {
         Sds::from(data.as_bytes())
     }
 
-    /// Тест: установка и получение значения.
-    /// Проверяет, что после `set` значение можно забрать через `get`.
     #[test]
     fn test_set_and_get() {
         let store = InMemoryStore::new();
@@ -762,8 +760,6 @@ mod tests {
         assert_eq!(storage.sessions.len(), 1);
     }
 
-    /// Тест: перезапись значения.
-    /// Проверяет, что второй `set` по тому же ключу обновляет значение.
     #[test]
     fn test_overwrite_value() {
         let store = InMemoryStore::new();
@@ -776,8 +772,6 @@ mod tests {
         assert_eq!(got, Some(Value::Str(Sds::from_str("two"))));
     }
 
-    /// Тест: удаление ключа.
-    /// Проверяет, что `del` удаляет ключ и `get` возвращает `None`.
     #[test]
     fn test_delete() {
         let store = InMemoryStore::new();
@@ -791,8 +785,6 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Тест: получение несуществующего ключа.
-    /// Проверяет, что `get` на отсутствии возвращает `None`.
     #[test]
     fn test_get_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -800,8 +792,6 @@ mod tests {
         assert_eq!(got, None);
     }
 
-    /// Тест: удаление несуществующего ключа.
-    /// Проверяет, что `del` на отсутствии не падает.
     #[test]
     fn test_delete_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -809,8 +799,6 @@ mod tests {
         assert!(store.del(&key("nope")).is_ok());
     }
 
-    /// Тест: множественная вставка и получение.
-    /// Проверяет `mset` и `mget` для нескольких пар.
     #[test]
     fn test_mset_and_mget() {
         let store = InMemoryStore::new();
@@ -841,8 +829,6 @@ mod tests {
         );
     }
 
-    /// Тест: переименование ключа.
-    /// Проверяет, что `rename` меняет имя ключа.
     #[test]
     fn test_rename() {
         let store = InMemoryStore::new();
@@ -853,8 +839,6 @@ mod tests {
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(123)));
     }
 
-    /// Тест: rename несуществующего ключа.
-    /// Проверяет, что `rename` возвращает ошибку `KeyNotFound`.
     #[test]
     fn test_rename_nonexistent_key() {
         let store = InMemoryStore::new();
@@ -862,9 +846,6 @@ mod tests {
         assert!(matches!(result, Err(StoreError::KeyNotFound)));
     }
 
-    /// Тест: renamenx успешен.
-    /// Проверяет, что `renamenx` переименовывает, если целевой ключ
-    /// отсутствует.
     #[test]
     fn test_renamenx_success() {
         let store = InMemoryStore::new();
@@ -881,8 +862,6 @@ mod tests {
         );
     }
 
-    /// Тест: renamenx при существующем целевом ключе.
-    /// Проверяет, что `renamenx` возвращает `false`.
     #[test]
     fn test_renamenx_existing_target() {
         let store = InMemoryStore::new();
@@ -895,8 +874,6 @@ mod tests {
         assert_eq!(store.get(&key("new")).unwrap(), Some(Value::Int(2)));
     }
 
-    /// Тест: flushdb очищает всё.
-    /// Проверяет, что после `flushdb` база пуста.
     #[test]
     fn test_flushdb() {
         let store = InMemoryStore::new();
@@ -909,8 +886,6 @@ mod tests {
         assert!(store.get(&key("two")).unwrap().is_none());
     }
 
-    /// Тест: пустой ключ.
-    /// Проверяет, что можно использовать пустую строку как ключ.
     #[test]
     fn test_empty_key() {
         let store = InMemoryStore::new();
@@ -919,8 +894,6 @@ mod tests {
         assert_eq!(store.get(&empty).unwrap(), Some(Value::Int(42)));
     }
 
-    /// Тест: длинные ключи и значения.
-    /// Проверяет работу с большими данными.
     #[test]
     fn test_very_long_key_and_value() {
         let store = InMemoryStore::new();
@@ -931,8 +904,6 @@ mod tests {
         assert_eq!(store.get(&long_key).unwrap(), Some(long_value));
     }
 
-    /// Тест: geo_add и geo_pos.
-    /// Проверяет добавление точки и получение её координат.
     #[test]
     fn test_geo_add_and_pos() {
         let store = InMemoryStore::new();
@@ -956,8 +927,6 @@ mod tests {
         assert!((point.lat - 48.8566).abs() < 1e-6);
     }
 
-    /// Тест: geo_dist.
-    /// Проверяет расстояние между Парижем и Берлином.
     #[test]
     fn test_geo_dist() {
         let store = InMemoryStore::new();
@@ -983,8 +952,6 @@ mod tests {
         assert!((dist_m - 878_000.0).abs() < 20_000.0);
     }
 
-    /// Тест: geo_radius вокруг точки.
-    /// Проверяет, что возвращаются точки внутри заданного радиуса.
     #[test]
     fn test_geo_radius() {
         let store = InMemoryStore::new();
