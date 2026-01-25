@@ -87,7 +87,7 @@ glob = "0.3"
 globset = "0.4.16"
 libloading = "0.8.8"
 loom = "0.7.2"
-lru = "0.14.0"
+lru = "0.16.3"
 memchr = "2.7.4"
 mlua = { version = "0.10", features = [
     "lua54",
@@ -140,7 +140,7 @@ zstd = "0.13.3"
 zumic-error = { workspace = true }
 
 [dependencies.wasmtime]
-version = "34.0.1"
+version = "36.0.3"
 
 [build-dependencies]
 chrono = "0.4.41"

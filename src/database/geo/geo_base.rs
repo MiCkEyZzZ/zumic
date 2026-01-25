@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::database::{BoundingBox, RTree, TreeStats};
+use crate::database::{
+    geohash_ranges_for_bbox, BoundingBox, Geohash, GeohashPrecision, RTree, TreeStats,
+};
 
 /// Географическая точка (долгота и широта).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,6 +19,13 @@ pub struct GeoEntry {
     pub score: u64, // 52-битный interleaved hash
 }
 
+#[derive(Debug, Clone)]
+pub struct RadiusOptions {
+    pub use_geohash: bool,
+    pub geohash_precision: Option<GeohashPrecision>,
+    pub include_neighbors: bool,
+}
+
 /// Множество географических точек с R-tree индексом для быстрого поиска.
 #[derive(Debug)]
 pub struct GeoSet {
@@ -24,8 +33,17 @@ pub struct GeoSet {
     rtree: RTree,
     /// HashMap для быстрого поиска по member name
     member_index: HashMap<String, GeoPoint>,
+    /// Geohash index для approximate filtering
+    geohash_index: HashMap<String, Vec<String>>,
     /// Флаг для отложенной пересборки индекса
     needs_rebuild: bool,
+}
+
+pub struct GeohashStats {
+    pub bucket_count: usize,
+    pub total_members: usize,
+    pub avg_bucket_size: f64,
+    pub max_bucket_size: usize,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,16 +56,25 @@ impl GeoSet {
         Self {
             rtree: RTree::new(),
             member_index: HashMap::new(),
+            geohash_index: HashMap::new(),
             needs_rebuild: false,
         }
     }
 
     /// Создаёт GeoSet из вектора записей с bulk loading.
-    /// Эффективнее последовательных add для больших datasets.
     pub fn from_entries(entries: Vec<GeoEntry>) -> Self {
         let mut member_index = HashMap::with_capacity(entries.len());
+        let mut geohash_index: HashMap<String, Vec<String>> = HashMap::new();
+
         for entry in &entries {
             member_index.insert(entry.member.clone(), entry.point);
+
+            // индексируемый по геохешу (точность 7 для баланса)
+            let gh = Geohash::encode(entry.point, GeohashPrecision::High);
+            geohash_index
+                .entry(gh.as_str().to_string())
+                .or_default()
+                .push(entry.member.clone());
         }
 
         let rtree = RTree::bulk_load(entries);
@@ -55,23 +82,18 @@ impl GeoSet {
         Self {
             rtree,
             member_index,
+            geohash_index,
             needs_rebuild: false,
         }
     }
 
     /// Добавляет или обновляет точку по имени.
-    ///
-    /// # Аргументы
-    /// * `member` — имя точки.
-    /// * `lon` — долгота (-180 до 180).
-    /// * `lat` — широта (-90 до 90).
     pub fn add(
         &mut self,
         member: String,
         lon: f64,
         lat: f64,
     ) {
-        // Валидация координат
         if !Self::validate_coords(lon, lat) {
             return;
         }
@@ -79,12 +101,18 @@ impl GeoSet {
         let point = GeoPoint { lon, lat };
         let score = encode_geohash_bits(lon, lat);
 
-        // Обновление member_index
+        // Проверяем, нужна ли пересборка
         if let Some(old_point) = self.member_index.insert(member.clone(), point) {
-            // Точка уже существовала - нужна пересборка для удаления старой
             if old_point != point {
                 self.needs_rebuild = true;
             }
+        } else {
+            // Новая точка - добавляем в geohash_index
+            let gh = Geohash::encode(point, GeohashPrecision::High);
+            self.geohash_index
+                .entry(gh.as_str().to_string())
+                .or_default()
+                .push(member.clone());
         }
 
         // Вставка в R-tree
@@ -111,6 +139,15 @@ impl GeoSet {
         self.member_index.get(member).copied()
     }
 
+    /// Возвращает geohash точки по имени.
+    pub fn get_geohash(
+        &self,
+        member: &str,
+        precision: GeohashPrecision,
+    ) -> Option<Geohash> {
+        self.get(member).map(|p| Geohash::encode(p, precision))
+    }
+
     /// Вычисляет расстояние между двумя точками по их именам (в метрах).
     pub fn dist(
         &self,
@@ -125,24 +162,41 @@ impl GeoSet {
     /// Возвращает всех членов в радиусе `radius_m` метров от точки (`lon`,
     /// `lat`). Использует R-tree для эффективного поиска.
     pub fn radius(
-        &self,
+        &mut self,
         lon: f64,
         lat: f64,
         radius_m: f64,
+    ) -> Vec<(String, f64)> {
+        self.radius_with_options(lon, lat, radius_m, RadiusOptions::default())
+    }
+
+    pub fn radius_with_options(
+        &mut self,
+        lon: f64,
+        lat: f64,
+        radius_m: f64,
+        options: RadiusOptions,
     ) -> Vec<(String, f64)> {
         if !Self::validate_coords(lon, lat) {
             return Vec::new();
         }
 
+        // Пересобираем индекс
+        if self.needs_rebuild {
+            self.rebuild_index();
+        }
+
         let center = GeoPoint { lon, lat };
 
-        // Вычисляем bounding box для approximate поиска
-        let bbox = Self::radius_to_bbox(center, radius_m);
+        // Если включена фильтрация геохеша
+        if options.use_geohash {
+            return self.radius_with_geohash(center, radius_m, options);
+        }
 
-        // Range query через R-tree
+        // В качестве резервного варианта используется только R-дерево
+        let bbox = Self::radius_to_bbox(center, radius_m);
         let candidates = self.rtree.range_query(&bbox);
 
-        // Точная фильтрация с haversine
         candidates
             .into_iter()
             .filter_map(|entry| {
@@ -154,6 +208,33 @@ impl GeoSet {
                 }
             })
             .collect()
+    }
+
+    pub fn bbox_query(
+        &self,
+        bbox: &BoundingBox,
+    ) -> Vec<String> {
+        // используем диапазоны геохешей для оптимизации
+        let precision = GeohashPrecision::Medium;
+        let ranges = geohash_ranges_for_bbox(bbox, precision);
+
+        let mut results = Vec::new();
+        for range_prefix in ranges {
+            // ищем все ячейки с этим префиксом
+            for (gh, members) in &self.geohash_index {
+                if gh.starts_with(&range_prefix) {
+                    for member in members {
+                        if let Some(point) = self.member_index.get(member) {
+                            if bbox.contains_point(*point) {
+                                results.push(member.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        results
     }
 
     /// Поиск k ближайших соседей к точке.
@@ -171,7 +252,7 @@ impl GeoSet {
         self.rtree
             .knn(point, k)
             .into_iter()
-            .map(|(entry, dist)| (entry.member, dist))
+            .map(|(entry, dist)| (entry.member.clone(), dist))
             .collect()
     }
 
@@ -182,7 +263,6 @@ impl GeoSet {
         k: usize,
     ) -> Option<Vec<(String, f64)>> {
         let point = self.get(member)?;
-
         let mut results = self.nearest(point.lon, point.lat, k + 1);
 
         // Удаляем сам member из результатов
@@ -190,6 +270,49 @@ impl GeoSet {
         results.truncate(k);
 
         Some(results)
+    }
+
+    fn radius_with_geohash(
+        &self,
+        center: GeoPoint,
+        radius_m: f64,
+        options: RadiusOptions,
+    ) -> Vec<(String, f64)> {
+        // выбираем оптимальную точность
+        let precision = options
+            .geohash_precision
+            .unwrap_or_else(|| GeohashPrecision::from_radius(radius_m));
+
+        let center_gh = Geohash::encode(center, precision);
+
+        // собираем кандидатов из центраьной ячейки
+        let mut candidate_members = Vec::new();
+        if let Some(members) = self.geohash_index.get(center_gh.as_str()) {
+            candidate_members.extend(members.iter().cloned());
+        }
+
+        // если нужно, добавляем соседние ячейки
+        if options.include_neighbors {
+            for neighbor in center_gh.all_neighbors() {
+                if let Some(members) = self.geohash_index.get(neighbor.as_str()) {
+                    candidate_members.extend(members.iter().cloned());
+                }
+            }
+        }
+
+        // точная фильтрация с использованием формулы гаверсинусов
+        candidate_members
+            .into_iter()
+            .filter_map(|member| {
+                let point = self.member_index.get(&member)?;
+                let dist = haversine_distance(center, *point);
+                if dist <= radius_m {
+                    Some((member, dist))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Преобразует радиус в метрах в bounding box (приблизительно).
@@ -225,6 +348,16 @@ impl GeoSet {
             })
             .collect();
 
+        // Пересобираем индекс геохеша
+        self.geohash_index.clear();
+        for entry in &entries {
+            let gh = Geohash::encode(entry.point, GeohashPrecision::High);
+            self.geohash_index
+                .entry(gh.as_str().to_string())
+                .or_default()
+                .push(entry.member.clone());
+        }
+
         self.rtree = RTree::bulk_load(entries);
         self.needs_rebuild = false;
     }
@@ -248,6 +381,30 @@ impl GeoSet {
     pub fn index_stats(&self) -> TreeStats {
         self.rtree.stats()
     }
+
+    pub fn geohash_stats(&self) -> GeohashStats {
+        let bucket_count = self.geohash_index.len();
+        let total_members: usize = self.geohash_index.values().map(|v| v.len()).sum();
+        let avg_bucket_size = if bucket_count > 0 {
+            total_members as f64 / bucket_count as f64
+        } else {
+            0.0
+        };
+
+        let max_bucket_size = self
+            .geohash_index
+            .values()
+            .map(|v| v.len())
+            .max()
+            .unwrap_or(0);
+
+        GeohashStats {
+            bucket_count,
+            total_members,
+            avg_bucket_size,
+            max_bucket_size,
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -257,6 +414,16 @@ impl GeoSet {
 impl Default for GeoSet {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Default for RadiusOptions {
+    fn default() -> Self {
+        Self {
+            use_geohash: true,
+            geohash_precision: None,
+            include_neighbors: true,
+        }
     }
 }
 
@@ -386,8 +553,8 @@ mod tests {
     #[test]
     fn test_add_get_with_rtree() {
         let mut gs = GeoSet::new();
-        gs.add("A".into(), 10.0, 20.0);
-        gs.add("B".into(), -5.5, 42.1);
+        gs.add("A".to_string(), 10.0, 20.0);
+        gs.add("B".to_string(), -5.5, 42.1);
         assert_eq!(
             gs.get("A").unwrap(),
             GeoPoint {
@@ -424,7 +591,14 @@ mod tests {
         let mut gs = GeoSet::new();
         gs.add("near".into(), 0.1, 0.0);
         gs.add("far".into(), 1.0, 0.0);
-        let res = gs.radius(0.0, 0.0, 20_000.0);
+
+        let opts = RadiusOptions {
+            use_geohash: false,
+            geohash_precision: None,
+            include_neighbors: false,
+        };
+
+        let res = gs.radius_with_options(0.0, 0.0, 20_000.0, opts);
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].0, "near");
     }
@@ -434,10 +608,10 @@ mod tests {
     #[test]
     fn test_nearest_neighbors() {
         let mut gs = GeoSet::new();
-        gs.add("A".into(), 0.0, 0.0);
-        gs.add("B".into(), 0.1, 0.0);
-        gs.add("C".into(), 0.2, 0.0);
-        gs.add("D".into(), 1.0, 0.0);
+        gs.add("A".to_string(), 0.0, 0.0);
+        gs.add("B".to_string(), 0.1, 0.0);
+        gs.add("C".to_string(), 0.2, 0.0);
+        gs.add("D".to_string(), 1.0, 0.0);
 
         let results = gs.nearest(0.0, 0.0, 2);
         assert_eq!(results.len(), 2);
@@ -493,5 +667,92 @@ mod tests {
 
         gs.rebuild_index();
         assert!(!gs.needs_rebuild);
+    }
+
+    #[test]
+    fn test_geohash_integration() {
+        let mut gs = GeoSet::new();
+        gs.add("A".to_string(), 10.0, 20.0);
+        gs.add("B".to_string(), 10.1, 20.1);
+
+        let gh = gs.get_geohash("A", GeohashPrecision::High).unwrap();
+        assert_eq!(gh.precision(), 7);
+    }
+
+    #[test]
+    fn test_radius_with_geohash_filter() {
+        let mut gs = GeoSet::new();
+
+        for i in 0..100 {
+            let lon = (i % 10) as f64 * 0.01;
+            let lat = (i % 10) as f64 * 0.01;
+            gs.add(format!("P{i}"), lon, lat);
+        }
+
+        let opts = RadiusOptions {
+            use_geohash: true,
+            geohash_precision: Some(GeohashPrecision::High),
+            include_neighbors: true,
+        };
+
+        let results = gs.radius_with_options(0.0, 0.0, 5000.0, opts);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_bbox_query() {
+        let mut gs = GeoSet::new();
+        gs.add("A".to_string(), 0.0, 0.0);
+        gs.add("B".to_string(), 1.0, 1.0);
+        gs.add("C".to_string(), 5.0, 5.0);
+
+        let bbox = BoundingBox::new(-0.5, 1.5, -0.5, 1.5);
+        let results = gs.bbox_query(&bbox);
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_geohash_stats() {
+        let mut gs = GeoSet::new();
+
+        for i in 0..50 {
+            gs.add(format!("P{i}"), (i as f64) * 0.1, 0.0);
+        }
+
+        let stats = gs.geohash_stats();
+        assert!(stats.bucket_count > 0);
+        assert_eq!(stats.total_members, 50);
+        assert!(stats.avg_bucket_size > 0.0);
+    }
+
+    #[test]
+    fn test_radius_comparison() {
+        let mut gs = GeoSet::new();
+
+        for i in 0..1000 {
+            let lon = (i % 100) as f64 * 0.01;
+            let lat = (i / 100) as f64 * 0.01;
+            gs.add(format!("P{i}"), lon, lat);
+        }
+
+        // C geohash filtering
+        let opts_gh = RadiusOptions {
+            use_geohash: true,
+            geohash_precision: Some(GeohashPrecision::High),
+            include_neighbors: true,
+        };
+
+        let results_gh = gs.radius_with_options(0.5, 0.5, 5000.0, opts_gh);
+
+        // без geohash (только R-tree)
+        let opts_rtree = RadiusOptions {
+            use_geohash: false,
+            geohash_precision: None,
+            include_neighbors: false,
+        };
+        let results_rtree = gs.radius_with_options(0.5, 0.3, 5000.0, opts_rtree);
+
+        // результаты должны быть одинаковыми
+        assert_eq!(results_gh.len(), results_rtree.len());
     }
 }

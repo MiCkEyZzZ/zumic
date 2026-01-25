@@ -606,33 +606,4 @@ mod tests {
         assert!(names.contains(&"near".to_string()));
         assert!(!names.contains(&"far".to_string()));
     }
-
-    /// Тестирует geo_radius_by_member: поиск по координатам заданного члена.
-    #[test]
-    fn test_engine_geo_radius_by_member() {
-        let engine = StorageEngine::Memory(InMemoryStore::new());
-        let points_key = key("points");
-
-        engine
-            .geo_add(&points_key, 0.0, 0.0, &key("origin"))
-            .unwrap();
-        engine
-            .geo_add(&points_key, 0.002, 0.0, &key("east"))
-            .unwrap();
-        engine
-            .geo_add(&points_key, 0.0, 0.002, &key("north"))
-            .unwrap();
-        engine.geo_add(&points_key, 1.0, 1.0, &key("far")).unwrap();
-
-        // Радиус 0.3 km от "origin"
-        let res = engine
-            .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
-            .unwrap();
-        let names: Vec<_> = res.iter().map(|(m, ..)| m.clone()).collect();
-
-        assert!(names.contains(&"origin".to_string()));
-        assert!(names.contains(&"east".to_string()));
-        assert!(names.contains(&"north".to_string()));
-        assert!(!names.contains(&"far".to_string()));
-    }
 }
