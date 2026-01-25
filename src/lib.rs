@@ -65,9 +65,11 @@ pub use command::{
 pub use config::settings::{Settings, StorageConfig, StorageType};
 /// Реэкспорт встроенных структур данных.
 pub use database::{
-    Bitmap, Dict, DictIter, ExpireMap, GeoEntry, GeoPoint, GeoSet, Hll, IntSet, ListPack, Node,
-    PubSubManager, QuickList, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash,
-    SmartHashIter, Stream, StreamEntry, StreamId, Value, DENSE_SIZE,
+    haversine_distance, Bitmap, BoundingBox, Dict, DictIter, Direction, ExpireMap,
+    FragmentationInfo, GeoEntry, GeoPoint, GeoSet, Geohash, GeohashPrecision, GeohashStats, Hll,
+    IntSet, IntSetIter, IntSetRangeIter, ListPack, Node, PubSubManager, QuickList, RTree,
+    RadiusOptions, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash, SmartHashIter,
+    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE, DENSE_SIZE,
 };
 /// Реэкспорт движков хранения.
 pub use engine::{
