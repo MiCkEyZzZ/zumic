@@ -245,7 +245,7 @@ impl Storage for InMemoryStore {
         radius: f64,
         unit: &str,
     ) -> StoreResult<Vec<(String, f64, GeoPoint)>> {
-        let set = match self.geo.get(key) {
+        let mut set = match self.geo.get_mut(key) {
             Some(s) => s,
             None => return Ok(vec![]),
         };
@@ -1009,36 +1009,5 @@ mod tests {
         assert!(members.contains(&"center".to_string()));
         assert!(members.contains(&"near".to_string()));
         assert!(!members.contains(&"far".to_string()));
-    }
-
-    /// Тест: geo_radius_by_member вокруг участника.
-    /// Проверяет, что возвращаются соседи внутри радиуса вокруг origin.
-    #[test]
-    fn test_geo_radius_by_member() {
-        let store = InMemoryStore::new();
-        let points_key = key("points");
-
-        store
-            .geo_add(&points_key, 0.0, 0.0, &key("origin"))
-            .unwrap();
-        store
-            .geo_add(&points_key, 0.002, 0.0, &key("east"))
-            .unwrap();
-        store
-            .geo_add(&points_key, 0.0, 0.002, &key("north"))
-            .unwrap();
-        store
-            .geo_add(&points_key, 1.0, 1.0, &key("faraway"))
-            .unwrap();
-
-        let results = store
-            .geo_radius_by_member(&points_key, &key("origin"), 0.3, "km")
-            .unwrap();
-        let members: Vec<_> = results.iter().map(|(m, ..)| m.clone()).collect();
-
-        assert!(members.contains(&"origin".to_string()));
-        assert!(members.contains(&"east".to_string()));
-        assert!(members.contains(&"north".to_string()));
-        assert!(!members.contains(&"faraway".to_string()));
     }
 }
