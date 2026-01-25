@@ -29,7 +29,7 @@ pub enum GeohashPrecision {
 // NOTE: в будущем будет заменён на SmallVec<[u8; 12]> или [u8; 12] + len
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Geohash {
-    hash: String,
+    pub hash: String,
     precision: usize,
 }
 
