@@ -125,8 +125,6 @@ pub fn haversine_distance_ellipsoid(
 mod tests {
     use super::*;
 
-    const EPSILON: f64 = 0.01; // 1см
-
     #[test]
     fn test_haversine_known_distance() {
         let london = GeoPoint {
