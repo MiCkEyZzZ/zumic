@@ -125,18 +125,133 @@ pub fn haversine_distance_ellipsoid(
 mod tests {
     use super::*;
 
+    const EPSILON: f64 = 0.01; // 1см
+
     #[test]
     fn test_haversine_known_distance() {
-        let london = GeoPoint {
-            lon: -0.1278,
-            lat: 51.5074,
+        // Кунгур до Перми: ~76 925.28 м по текущей реализации (SPHERE a = 6_371_000 m)
+        let kungur = GeoPoint {
+            lat: 57.4342,
+            lon: 56.9514,
         };
-        let paris = GeoPoint {
-            lon: 2.3522,
-            lat: 48.8566,
+        let perm = GeoPoint {
+            lat: 58.0105,
+            lon: 56.2347,
         };
 
-        let dist = haversine_distance(london, paris);
-        assert!((dist - 343_500.0).abs() < 5000.0); // +- 5км допуск
+        let dist = haversine_distance(kungur, perm);
+        assert!((dist - 76_925.28266576723).abs() < 100.0); // ±100 м допуск
+    }
+
+    #[test]
+    fn test_unit_conversions() {
+        let meters = 1000.0;
+
+        assert!((DistanceUnit::Kilometers.convert_from_meters(meters) - 1.0).abs() < EPSILON);
+        assert!((DistanceUnit::Miles.convert_from_meters(meters) - 0.621_371).abs() < 0.001);
+        assert!((DistanceUnit::Feet.convert_from_meters(meters) - 3280.84).abs() < 0.1);
+
+        // Round-trip
+        let km = DistanceUnit::Kilometers.convert_from_meters(meters);
+        let back = DistanceUnit::Kilometers.convert_to_meters(km);
+        assert!((back - meters).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_cross_median() {
+        // через 180° меридиан
+        let p1 = GeoPoint {
+            lon: 179.0,
+            lat: 0.0,
+        };
+        let p2 = GeoPoint {
+            lon: -179.0,
+            lat: 0.0,
+        };
+
+        let dist = haversine_distance(p1, p2);
+        assert!(dist < 300_000.0); // Короткий путь, не через весь мир
+    }
+
+    #[test]
+    fn test_zero_distance() {
+        let p = GeoPoint {
+            lon: 20.0,
+            lat: 10.0,
+        };
+        let dist = haversine_distance(p, p);
+        assert!(dist.abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_poles() {
+        let north_pole = GeoPoint {
+            lon: 0.0,
+            lat: 90.0,
+        };
+        let south_pole = GeoPoint {
+            lon: 0.0,
+            lat: -90.0,
+        };
+        let equator = GeoPoint { lon: 0.0, lat: 0.0 };
+
+        let dist_np_sp = haversine_distance(north_pole, south_pole);
+        let dist_np_eq = haversine_distance(north_pole, equator);
+
+        assert!((dist_np_sp - 2.0 * 6_371_000.0 * PI / 2.0).abs() < 1000.0);
+        assert!((dist_np_eq - 6_371_000.0 * PI / 2.0).abs() < 1000.0);
+    }
+
+    #[test]
+    fn test_symmetry() {
+        let p1 = GeoPoint {
+            lon: 56.9514,
+            lat: 57.4342,
+        }; // Кунгур
+        let p2 = GeoPoint {
+            lon: 56.2347,
+            lat: 58.0105,
+        }; // Пермь
+
+        let d1 = haversine_distance(p1, p2);
+        let d2 = haversine_distance(p2, p1);
+
+        assert!((d1 - d2).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_ellipsoid_variation() {
+        let kungur = GeoPoint {
+            lat: 57.4342,
+            lon: 56.9514,
+        };
+        let perm = GeoPoint {
+            lat: 58.0105,
+            lon: 56.2347,
+        };
+
+        let d_sphere = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::SPHERE);
+        let d_wgs84 = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::WGS84);
+        let d_grs80 = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::GRS80);
+
+        // Сферическая и WGS84/GRS80 должны быть очень близки
+        assert!((d_sphere - d_wgs84).abs() < 500.0);
+        assert!((d_wgs84 - d_grs80).abs() < 500.0);
+    }
+
+    #[test]
+    fn test_equator_crossing() {
+        let p1 = GeoPoint {
+            lat: 1.0,
+            lon: -45.0,
+        };
+        let p2 = GeoPoint {
+            lat: -1.0,
+            lon: 45.0,
+        };
+
+        let dist = haversine_distance(p1, p2);
+        assert!(dist > 0.0);
+        assert!(dist < 20_000_000.0); // меньше окружности Земли
     }
 }
