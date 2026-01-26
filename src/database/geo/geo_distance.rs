@@ -1,3 +1,7 @@
+use std::f64::consts::PI;
+
+use crate::GeoPoint;
+
 /// Едицинцы измерения расстояния.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DistanceUnit {
@@ -88,4 +92,51 @@ impl Ellipsoid {
         a: 6_371_000.0,
         b: 6_371_000.0,
     };
+}
+
+/// Формула Гаверсина
+pub fn haversine_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> f64 {
+    haversine_distance_ellipsoid(p1, p2, Ellipsoid::SPHERE)
+}
+
+/// Флормула Гаверсина (сферическая)
+pub fn haversine_distance_ellipsoid(
+    p1: GeoPoint,
+    p2: GeoPoint,
+    ellipsoid: Ellipsoid,
+) -> f64 {
+    let r = ellipsoid.a;
+    let to_rad = PI / 180.0;
+    let dlat = (p2.lat - p1.lat) * to_rad;
+    let dlon = (p2.lon - p1.lon) * to_rad;
+    let lat1 = p1.lat * to_rad;
+    let lat2 = p2.lat * to_rad;
+
+    let a = (dlat * 0.5).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon * 0.5).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    r * c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_haversine_known_distance() {
+        let london = GeoPoint {
+            lon: -0.1278,
+            lat: 51.5074,
+        };
+        let paris = GeoPoint {
+            lon: 2.3522,
+            lat: 48.8566,
+        };
+
+        let dist = haversine_distance(london, paris);
+        assert!((dist - 343_500.0).abs() < 5000.0); // +- 5км допуск
+    }
 }
