@@ -1,4 +1,5 @@
 pub mod geo_base;
+pub mod geo_distance;
 pub mod geo_hash;
 pub mod geo_rtree;
 
