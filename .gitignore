@@ -23,10 +23,6 @@ out/
 /logs
 /Flamegraph
 
-# Документация, читаемая генераторами
-/docs/
-doc**/*
-
 # Файлы окружения и секреты
 .env
 zumic.conf
@@ -46,3 +42,4 @@ zumic.conf
 debug/
 results
 *.proptest-regressions
+черновик
