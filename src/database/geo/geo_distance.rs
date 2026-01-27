@@ -12,6 +12,16 @@ pub enum DistanceUnit {
     NauticalMiles,
 }
 
+/// Тип вычисления расстояния.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DistanceMethod {
+    Haversine,
+    Vincenty,
+    GreatCircle,
+    Manhattan,
+    Euclidean,
+}
+
 /// Параметры эллипсойда для расчётов.
 #[derive(Debug, Clone, Copy)]
 pub struct Ellipsoid {
@@ -83,8 +93,8 @@ impl Ellipsoid {
 
     /// Эллипсоид GRS80 (почти идентичен WGS84)
     pub const GRS80: Self = Self {
-        a: 6_371_000.0,
-        b: 6_371_000.0,
+        a: 6_378_137.0,
+        b: 6_356_752.314_140,
     };
 
     /// Сфера со средним радиусом Земли
@@ -94,16 +104,17 @@ impl Ellipsoid {
     };
 }
 
-/// Формула Гаверсина
+/// Формула Гаверсина.
 pub fn haversine_distance(
     p1: GeoPoint,
     p2: GeoPoint,
 ) -> f64 {
-    haversine_distance_ellipsoid(p1, p2, Ellipsoid::SPHERE)
+    haversine_distance_sphere(p1, p2, Ellipsoid::SPHERE)
 }
 
-/// Флормула Гаверсина (сферическая)
-pub fn haversine_distance_ellipsoid(
+/// Флормула Гаверсина (сферическая).
+/// ПРИМЕЧАНИЕ: Эллипсоид аппроксимируется сферой с radius = a
+pub fn haversine_distance_sphere(
     p1: GeoPoint,
     p2: GeoPoint,
     ellipsoid: Ellipsoid,
@@ -121,22 +132,133 @@ pub fn haversine_distance_ellipsoid(
     r * c
 }
 
+/// Формула Винсенти
+pub fn vincenty_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> Option<f64> {
+    vincenty_distance_ellipsoid(p1, p2, Ellipsoid::WGS84)
+}
+
+/// Формула Винсенти (сферическая).
+pub fn vincenty_distance_ellipsoid(
+    p1: GeoPoint,
+    p2: GeoPoint,
+    ellipsoid: Ellipsoid,
+) -> Option<f64> {
+    let a = ellipsoid.a;
+    let b = ellipsoid.b;
+    let f = ellipsoid.f();
+
+    let to_rad = PI / 180.0;
+    let lat1 = p1.lat * to_rad;
+    let lat2 = p2.lat * to_rad;
+    let lon1 = p1.lon * to_rad;
+    let lon2 = p2.lon * to_rad;
+
+    let l = lon2 - lon1;
+
+    let u1 = ((1.0 - f) * lat1.tan()).atan();
+    let u2 = ((1.0 - f) * lat2.tan()).atan();
+
+    let sin_u1 = u1.sin();
+    let cos_u1 = u1.cos();
+    let sin_u2 = u2.sin();
+    let cos_u2 = u2.cos();
+
+    let mut lambda = l;
+    let mut lambda_prev;
+    let mut iter_limit = 100;
+
+    let (
+        mut sin_sigma,
+        mut cos_sigma,
+        mut sigma,
+        mut sin_alpha,
+        mut cos_sq_alpha,
+        mut cos_2sigma_m,
+    );
+
+    loop {
+        let sin_lambda = lambda.sin();
+        let cos_lambda = lambda.cos();
+
+        let sin_sq_sigma = (cos_u2 * sin_lambda).powi(2)
+            + (cos_u1 * sin_u2 - sin_u1 * cos_u2 * cos_lambda).powi(2);
+
+        if sin_sq_sigma.abs() < 1e-24 {
+            return Some(0.0); // Совпадающие точки
+        }
+
+        sin_sigma = sin_sq_sigma.sqrt();
+        cos_sigma = sin_u1 * sin_u2 + cos_u1 * cos_u2 * cos_lambda;
+        sigma = sin_sigma.atan2(cos_sigma);
+
+        sin_alpha = cos_u1 * cos_u2 * sin_lambda / sin_sigma;
+        cos_sq_alpha = 1.0 - sin_alpha * sin_alpha;
+
+        cos_2sigma_m = if cos_sq_alpha != 0.0 {
+            cos_sigma - 2.0 * sin_u1 * sin_u2 / cos_sq_alpha
+        } else {
+            0.0
+        };
+
+        let c = f / 16.0 * cos_sq_alpha * (4.0 + f * (4.0 - 3.0 * cos_sq_alpha));
+
+        lambda_prev = lambda;
+        lambda = l
+            + (1.0 - c)
+                * f
+                * sin_alpha
+                * (sigma
+                    + c * sin_sigma
+                        * (cos_2sigma_m + c * cos_sigma * (-1.0 + 2.0 * cos_2sigma_m.powi(2))));
+
+        if (lambda - lambda_prev).abs() < 1e-12 {
+            break;
+        }
+
+        iter_limit -= 1;
+        if iter_limit == 0 {
+            return None; // Не сошлось (обычно для антиподальных точек)
+        }
+    }
+
+    let u_sq = cos_sq_alpha * (a * a - b * b) / (b * b);
+    let big_a = 1.0 + u_sq / 16384.0 * (4096.0 + u_sq * (-768.0 + u_sq * (320.0 - 175.0 * u_sq)));
+    let big_b = u_sq / 1024.0 * (256.0 + u_sq * (-128.0 + u_sq * (74.0 - 47.0 * u_sq)));
+
+    let delta_sigma = big_b
+        * sin_sigma
+        * (cos_2sigma_m
+            + big_b / 4.0
+                * (cos_sigma * (-1.0 + 2.0 * cos_2sigma_m.powi(2))
+                    - big_b / 6.0
+                        * cos_2sigma_m
+                        * (-3.0 + 4.0 * sin_sigma.powi(2))
+                        * (-3.0 + 4.0 * cos_2sigma_m.powi(2))));
+
+    let s = b * big_a * (sigma - delta_sigma);
+
+    Some(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const EPSILON: f64 = 0.01; // 1см
+    const EPSILON_M: f64 = 0.01; // 1см
 
     #[test]
     fn test_haversine_known_distance() {
         // Кунгур до Перми: ~76 925.28 м по текущей реализации (SPHERE a = 6_371_000 m)
         let kungur = GeoPoint {
-            lat: 57.4342,
             lon: 56.9514,
+            lat: 57.4342,
         };
         let perm = GeoPoint {
-            lat: 58.0105,
             lon: 56.2347,
+            lat: 58.0105,
         };
 
         let dist = haversine_distance(kungur, perm);
@@ -144,21 +266,53 @@ mod tests {
     }
 
     #[test]
+    fn test_vincenty_high_distance() {
+        // Близкие точки для точности
+        let p1 = GeoPoint {
+            lon: 13.4,
+            lat: 52.5,
+        };
+        let p2 = GeoPoint {
+            lon: 13.401,
+            lat: 52.501,
+        };
+
+        let vincenty = vincenty_distance(p1, p2).unwrap();
+        let haversine = haversine_distance(p1, p2);
+
+        // Винсент должен быть точнее
+        assert!((vincenty - haversine).abs() < 1.0); // <1м разница
+    }
+
+    #[test]
+    fn test_vincenty_convergence() {
+        // Почти антиподальные точки
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint {
+            lon: 179.0,
+            lat: 0.0,
+        };
+
+        let resilt = vincenty_distance(p1, p2);
+        assert!(resilt.is_some());
+    }
+
+    #[test]
     fn test_unit_conversions() {
         let meters = 1000.0;
 
-        assert!((DistanceUnit::Kilometers.convert_from_meters(meters) - 1.0).abs() < EPSILON);
+        assert!((DistanceUnit::Kilometers.convert_from_meters(meters) - 1.0).abs() < EPSILON_M);
         assert!((DistanceUnit::Miles.convert_from_meters(meters) - 0.621_371).abs() < 0.001);
         assert!((DistanceUnit::Feet.convert_from_meters(meters) - 3280.84).abs() < 0.1);
 
         // Round-trip
         let km = DistanceUnit::Kilometers.convert_from_meters(meters);
         let back = DistanceUnit::Kilometers.convert_to_meters(km);
-        assert!((back - meters).abs() < EPSILON);
+        assert!((back - meters).abs() < EPSILON_M);
     }
 
     #[test]
-    fn test_cross_median() {
+    fn test_cross_meridian() {
         // через 180° меридиан
         let p1 = GeoPoint {
             lon: 179.0,
@@ -180,7 +334,7 @@ mod tests {
             lat: 10.0,
         };
         let dist = haversine_distance(p, p);
-        assert!(dist.abs() < EPSILON);
+        assert!(dist.abs() < EPSILON_M);
     }
 
     #[test]
@@ -216,7 +370,7 @@ mod tests {
         let d1 = haversine_distance(p1, p2);
         let d2 = haversine_distance(p2, p1);
 
-        assert!((d1 - d2).abs() < EPSILON);
+        assert!((d1 - d2).abs() < EPSILON_M);
     }
 
     #[test]
@@ -230,9 +384,9 @@ mod tests {
             lon: 56.2347,
         };
 
-        let d_sphere = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::SPHERE);
-        let d_wgs84 = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::WGS84);
-        let d_grs80 = haversine_distance_ellipsoid(kungur, perm, Ellipsoid::GRS80);
+        let d_sphere = haversine_distance_sphere(kungur, perm, Ellipsoid::SPHERE);
+        let d_wgs84 = haversine_distance_sphere(kungur, perm, Ellipsoid::WGS84);
+        let d_grs80 = haversine_distance_sphere(kungur, perm, Ellipsoid::GRS80);
 
         // Сферическая и WGS84/GRS80 должны быть очень близки
         assert!((d_sphere - d_wgs84).abs() < 500.0);
@@ -253,5 +407,48 @@ mod tests {
         let dist = haversine_distance(p1, p2);
         assert!(dist > 0.0);
         assert!(dist < 20_000_000.0); // меньше окружности Земли
+    }
+
+    #[test]
+    fn test_vincenty_symmetry() {
+        let p1 = GeoPoint {
+            lat: 57.4342,
+            lon: 56.9514,
+        }; // Кунгур
+        let p2 = GeoPoint {
+            lat: 58.0105,
+            lon: 56.2347,
+        }; // Пермь
+
+        let d1 = vincenty_distance(p1, p2).unwrap();
+        let d2 = vincenty_distance(p2, p1).unwrap();
+
+        assert!((d1 - d2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_vincenty_zero_distance() {
+        let p = GeoPoint {
+            lat: 57.4342,
+            lon: 56.9514,
+        };
+        let dist = vincenty_distance(p, p).unwrap();
+        assert!(dist.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_vincenty_poles() {
+        let kungur = GeoPoint {
+            lat: 57.4342,
+            lon: 56.9514,
+        };
+        let south_pole = GeoPoint {
+            lat: -90.0,
+            lon: 0.0,
+        };
+
+        let dist = vincenty_distance(kungur, south_pole).unwrap();
+        assert!(dist > 0.0);
+        assert!(dist < 20_000_000.0);
     }
 }
