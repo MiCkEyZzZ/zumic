@@ -271,6 +271,18 @@ pub fn manhattan_distance(
     lat_diff + lon_diff
 }
 
+/// Евклидово расстояние — простое 2D расстояние.
+pub fn euclidean_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> f64 {
+    let lat_avg = (p1.lat + p2.lat) * 0.5; // для симметричности берём среднюю широту.
+    let dx = (p2.lon - p1.lon) * 111_000.0 * lat_avg.to_radians().cos();
+    let dy = (p2.lat - p1.lat) * 111_000.0;
+
+    (dx * dx + dy * dy).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,5 +700,63 @@ mod tests {
         let d = manhattan_distance(p1, p2);
 
         assert!((d - 111_000.0).abs() < 1_000.0);
+    }
+
+    #[test]
+    fn test_euclidean_zero_distance() {
+        let p = GeoPoint {
+            lon: 37.0,
+            lat: 55.0,
+        };
+        let d = euclidean_distance(p, p);
+        assert!(d.abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_euclidean_symmetry() {
+        let p1 = GeoPoint {
+            lon: 56.9514,
+            lat: 57.4342,
+        };
+        let p2 = GeoPoint {
+            lon: 56.2347,
+            lat: 58.0105,
+        };
+        let d1 = euclidean_distance(p1, p2);
+        let d2 = euclidean_distance(p2, p1);
+        assert!((d1 - d2).abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_euclidean_lat_only() {
+        let p1 = GeoPoint {
+            lon: 10.0,
+            lat: 50.0,
+        };
+        let p2 = GeoPoint {
+            lon: 10.0,
+            lat: 51.0,
+        };
+        let d = euclidean_distance(p1, p2);
+        assert!((d - 111_000.0).abs() < 1_000.0); // 1 градус широты ~ 111 км
+    }
+
+    #[test]
+    fn test_euclidean_lon_equator() {
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint { lon: 1.0, lat: 0.0 };
+        let d = euclidean_distance(p1, p2);
+        assert!((d - 111_000.0).abs() < 1_000.0); // 1 градус долготы на
+                                                  // экваторе ~
+                                                  // 111 км
+    }
+
+    #[test]
+    fn test_euclidean_combined() {
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint { lon: 1.0, lat: 1.0 };
+        let d = euclidean_distance(p1, p2);
+        let expected = (111_000.0_f64.powi(2) + 111_000.0_f64.powi(2)).sqrt();
+        assert!((d - expected).abs() < 1_000.0);
     }
 }
