@@ -339,6 +339,51 @@ pub fn calculate_distance_in(
     unit.convert_from_meters(result.distance_m)
 }
 
+/// Оценивает максимальную ошибку для данного метода.
+pub fn estimate_max_error(
+    method: DistanceMethod,
+    distance_m: f64,
+) -> f64 {
+    match method {
+        DistanceMethod::Haversine | DistanceMethod::GreatCircle => {
+            // ~0.5% максимальная ошибка
+            distance_m * 0.005
+        }
+        DistanceMethod::Vincenty => {
+            // ~0.5мм постоянная ошибка
+            0.0005
+        }
+        DistanceMethod::Manhattan => {
+            // Может быть очень большая ошибка (зависит от направления)
+            distance_m * 0.3
+        }
+        DistanceMethod::Euclidean => {
+            // Растёт квадратично с расстоянием
+            (distance_m / 1000.0).powi(2) * 100.0
+        }
+    }
+}
+
+/// Выбирает оптимальный метод для заданного расстояния и требуемой точности.
+pub fn recommend_method(
+    distance_m: f64,
+    required_accuracy_m: f64,
+) -> DistanceMethod {
+    if required_accuracy_m < 0.001 {
+        // <1мм - нужен Vincenty
+        DistanceMethod::Vincenty
+    } else if distance_m < 100.0 && required_accuracy_m > 10.0 {
+        // Малые расстояния, низкая точность - можно Euclidean
+        DistanceMethod::Euclidean
+    } else if required_accuracy_m > distance_m * 0.1 {
+        // Очень низкая точность - Manhattan достаточного
+        DistanceMethod::Manhattan
+    } else {
+        // Стандартный случай - Haversine
+        DistanceMethod::Haversine
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -901,5 +946,44 @@ mod tests {
 
         // 1 градус широты ~ 111 км
         assert!((dist_km - 111.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_estimate_max_error() {
+        let dist = 1000.0;
+
+        // Haversine и GreatCircle ~0.5%
+        assert!((estimate_max_error(DistanceMethod::Haversine, dist) - 5.0).abs() < 1e-6);
+        assert!((estimate_max_error(DistanceMethod::GreatCircle, dist) - 5.0).abs() < 1e-6);
+
+        // Vincenty — маленькая постоянная ошибка
+        assert!((estimate_max_error(DistanceMethod::Vincenty, dist) - 0.0005).abs() < 1e-6);
+
+        // Manhattan — 30%
+        assert!((estimate_max_error(DistanceMethod::Manhattan, dist) - 300.0).abs() < 1e-6);
+
+        // Euclidean — квадратичный рост
+        let expected = (dist / 1000.0).powi(2) * 100.0;
+        assert!((estimate_max_error(DistanceMethod::Euclidean, dist) - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_very_high_accuracy() {
+        assert_eq!(recommend_method(1000.0, 0.0001), DistanceMethod::Vincenty);
+    }
+
+    #[test]
+    fn test_short_distance_low_accuracy() {
+        assert_eq!(recommend_method(50.0, 20.0), DistanceMethod::Euclidean);
+    }
+
+    #[test]
+    fn test_low_accuracy_large_distance() {
+        assert_eq!(recommend_method(1000.0, 200.0), DistanceMethod::Manhattan);
+    }
+
+    #[test]
+    fn test_standard_case() {
+        assert_eq!(recommend_method(1000.0, 5.0), DistanceMethod::Haversine);
     }
 }
