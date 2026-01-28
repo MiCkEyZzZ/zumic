@@ -243,8 +243,8 @@ pub fn vincenty_distance_ellipsoid(
     Some(s)
 }
 
-/// Расстояние по большому кругу
-pub fn greate_circle_distance(
+/// Расстояние по большому кругу (сферическая модель Земли).
+pub fn great_circle_distance(
     p1: GeoPoint,
     p2: GeoPoint,
 ) -> f64 {
@@ -257,6 +257,18 @@ pub fn greate_circle_distance(
 
     let central_angle = cos_c.clamp(-1.0, 1.0).acos();
     Ellipsoid::SPHERE.a * central_angle
+}
+
+/// Манхэттенское расстояние (приближённое).
+pub fn manhattan_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> f64 {
+    // Конвертируем градусы в метры (приблизительно)
+    let lat_diff = (p2.lat - p1.lat).abs() * 111_000.0;
+    let lon_diff = (p2.lon - p1.lon).abs() * 111_000.0 * p1.lat.to_radians().cos().abs();
+
+    lat_diff + lon_diff
 }
 
 #[cfg(test)]
@@ -480,7 +492,7 @@ mod tests {
             lat: 58.0105,
         };
 
-        let d_gc = greate_circle_distance(kungur, perm);
+        let d_gc = great_circle_distance(kungur, perm);
         let d_hav = haversine_distance(kungur, perm);
 
         // Great-circle и haversine на сфере должны совпадать
@@ -498,8 +510,8 @@ mod tests {
             lat: -30.0,
         };
 
-        let d1 = greate_circle_distance(p1, p2);
-        let d2 = greate_circle_distance(p2, p1);
+        let d1 = great_circle_distance(p1, p2);
+        let d2 = great_circle_distance(p2, p1);
 
         assert!((d1 - d2).abs() < EPSILON_M);
     }
@@ -511,7 +523,7 @@ mod tests {
             lat: 45.0,
         };
 
-        let d = greate_circle_distance(p, p);
+        let d = great_circle_distance(p, p);
 
         assert!(d.abs() < EPSILON_M);
     }
@@ -527,7 +539,7 @@ mod tests {
             lon: 0.0,
         };
 
-        let d = greate_circle_distance(north_pole, south_pole);
+        let d = great_circle_distance(north_pole, south_pole);
 
         // Полуокружность Земли
         let expected = PI * Ellipsoid::SPHERE.a;
@@ -543,7 +555,7 @@ mod tests {
             lon: 90.0,
         };
 
-        let d = greate_circle_distance(p1, p2);
+        let d = great_circle_distance(p1, p2);
         let expected = PI * Ellipsoid::SPHERE.a / 2.0;
 
         assert!((d - expected).abs() < 1_000.0);
@@ -560,7 +572,7 @@ mod tests {
             lon: 2.3,
         };
 
-        let d_gc = greate_circle_distance(p1, p2);
+        let d_gc = great_circle_distance(p1, p2);
         let d_vin = vincenty_distance(p1, p2).unwrap();
 
         let diff = (d_gc - d_vin).abs();
@@ -580,7 +592,7 @@ mod tests {
             lon: 2.3,
         };
 
-        let d_gc = greate_circle_distance(p1, p2);
+        let d_gc = great_circle_distance(p1, p2);
         let d_hav = haversine_distance(p1, p2);
 
         assert!((d_gc - d_hav).abs() < 1.0);
@@ -598,10 +610,83 @@ mod tests {
             lon: 13.000001,
         };
 
-        let d_gc = greate_circle_distance(p1, p2);
+        let d_gc = great_circle_distance(p1, p2);
         let d_hav = haversine_distance(p1, p2);
 
         // Здесь haversine численно устойчивее
         assert!((d_gc - d_hav).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_manhattan_zero_distance() {
+        let p = GeoPoint {
+            lon: 37.0,
+            lat: 55.0,
+        };
+
+        let d = manhattan_distance(p, p);
+        assert!(d.abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_manhattan_symmetry() {
+        let p1 = GeoPoint {
+            lon: 56.9514,
+            lat: 57.4342,
+        }; // Кунгур
+        let p2 = GeoPoint {
+            lon: 56.2347,
+            lat: 58.0105,
+        }; // Пермь
+
+        let d1 = manhattan_distance(p1, p2);
+        let d2 = manhattan_distance(p1, p2);
+
+        assert!((d1 - d2).abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_manhattan_geodesic_relation() {
+        let p1 = GeoPoint {
+            lon: 13.4,
+            lat: 52.5,
+        };
+        let p2 = GeoPoint {
+            lon: 2.3,
+            lat: 48.9,
+        };
+
+        let d_man = manhattan_distance(p1, p2);
+        let d_hav = haversine_distance(p1, p2);
+
+        // Манхэттенское расстояние всегда больше или равно геодезическому
+        assert!(d_man >= d_hav);
+    }
+
+    #[test]
+    fn test_manhattan_lat_only() {
+        let p1 = GeoPoint {
+            lon: 10.0,
+            lat: 50.0,
+        };
+        let p2 = GeoPoint {
+            lon: 10.0,
+            lat: 51.0,
+        };
+
+        let d = manhattan_distance(p1, p2);
+
+        // 1 градус широты ~ 111 км
+        assert!((d - 111_000.0).abs() < 1_000.0);
+    }
+
+    #[test]
+    fn test_manhattan_equator_lon() {
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint { lon: 0.0, lat: 1.0 };
+
+        let d = manhattan_distance(p1, p2);
+
+        assert!((d - 111_000.0).abs() < 1_000.0);
     }
 }
