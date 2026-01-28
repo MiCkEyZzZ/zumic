@@ -2,6 +2,8 @@ use std::f64::consts::PI;
 
 use crate::GeoPoint;
 
+pub const METERS_PER_DEGREE_LAT: f64 = 111_000.0;
+
 /// Едицинцы измерения расстояния.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DistanceUnit {
@@ -98,7 +100,7 @@ impl Ellipsoid {
         1.0 - (self.b * self.b) / (self.a * self.a)
     }
 
-    /// Эллипсоид WGS84 (используется GLONAS)
+    /// Эллипсоид WGS84 (используется GPS)
     pub const WGS84: Self = Self {
         a: 6_378_137.0,
         b: 6_356_752.314_245,
@@ -278,8 +280,9 @@ pub fn manhattan_distance(
     p2: GeoPoint,
 ) -> f64 {
     // Конвертируем градусы в метры (приблизительно)
-    let lat_diff = (p2.lat - p1.lat).abs() * 111_000.0;
-    let lon_diff = (p2.lon - p1.lon).abs() * 111_000.0 * p1.lat.to_radians().cos().abs();
+    let lat_diff = (p2.lat - p1.lat).abs() * METERS_PER_DEGREE_LAT;
+    let lon_diff =
+        (p2.lon - p1.lon).abs() * METERS_PER_DEGREE_LAT * p1.lat.to_radians().cos().abs();
 
     lat_diff + lon_diff
 }
@@ -290,8 +293,8 @@ pub fn euclidean_distance(
     p2: GeoPoint,
 ) -> f64 {
     let lat_avg = (p1.lat + p2.lat) * 0.5; // для симметричности берём среднюю широту.
-    let dx = (p2.lon - p1.lon) * 111_000.0 * lat_avg.to_radians().cos();
-    let dy = (p2.lat - p1.lat) * 111_000.0;
+    let dx = (p2.lon - p1.lon) * METERS_PER_DEGREE_LAT * lat_avg.to_radians().cos();
+    let dy = (p2.lat - p1.lat) * METERS_PER_DEGREE_LAT;
 
     (dx * dx + dy * dy).sqrt()
 }
@@ -323,6 +326,17 @@ pub fn calculate_distance(
         iterations,
         error_bound_m,
     }
+}
+
+/// Вычисляет расстояние и конвертирует в указанную единицу.
+pub fn calculate_distance_in(
+    p1: GeoPoint,
+    p2: GeoPoint,
+    method: DistanceMethod,
+    unit: DistanceUnit,
+) -> f64 {
+    let result = calculate_distance(p1, p2, method);
+    unit.convert_from_meters(result.distance_m)
 }
 
 #[cfg(test)]
@@ -375,8 +389,8 @@ mod tests {
             lat: 0.0,
         };
 
-        let resilt = vincenty_distance(p1, p2);
-        assert!(resilt.is_some());
+        let result = vincenty_distance(p1, p2);
+        assert!(result.is_some());
     }
 
     #[test]
@@ -731,7 +745,7 @@ mod tests {
         let d = manhattan_distance(p1, p2);
 
         // 1 градус широты ~ 111 км
-        assert!((d - 111_000.0).abs() < 1_000.0);
+        assert!((d - METERS_PER_DEGREE_LAT).abs() < 1_000.0);
     }
 
     #[test]
@@ -741,7 +755,7 @@ mod tests {
 
         let d = manhattan_distance(p1, p2);
 
-        assert!((d - 111_000.0).abs() < 1_000.0);
+        assert!((d - METERS_PER_DEGREE_LAT).abs() < 1_000.0);
     }
 
     #[test]
@@ -780,7 +794,8 @@ mod tests {
             lat: 51.0,
         };
         let d = euclidean_distance(p1, p2);
-        assert!((d - 111_000.0).abs() < 1_000.0); // 1 градус широты ~ 111 км
+        assert!((d - METERS_PER_DEGREE_LAT).abs() < 1_000.0); // 1 градус широты
+                                                              // ~ 111 км
     }
 
     #[test]
@@ -788,9 +803,9 @@ mod tests {
         let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
         let p2 = GeoPoint { lon: 1.0, lat: 0.0 };
         let d = euclidean_distance(p1, p2);
-        assert!((d - 111_000.0).abs() < 1_000.0); // 1 градус долготы на
-                                                  // экваторе ~
-                                                  // 111 км
+        assert!((d - METERS_PER_DEGREE_LAT).abs() < 1_000.0); // 1 градус долготы на
+                                                              // экваторе ~
+                                                              // 111 км
     }
 
     #[test]
@@ -857,5 +872,34 @@ mod tests {
         let hav = calculate_distance(p1, p2, DistanceMethod::Haversine).distance_m;
 
         assert!(man >= hav);
+    }
+
+    #[test]
+    fn test_calculate_distance_in_units() {
+        let p1 = GeoPoint { lat: 0.0, lon: 0.0 };
+        let p2 = GeoPoint { lat: 1.0, lon: 0.0 };
+
+        let dist_m = calculate_distance_in(p1, p2, DistanceMethod::Haversine, DistanceUnit::Meters);
+        let dist_km =
+            calculate_distance_in(p1, p2, DistanceMethod::Haversine, DistanceUnit::Kilometers);
+        let dist_mi = calculate_distance_in(p1, p2, DistanceMethod::Haversine, DistanceUnit::Miles);
+        let dist_ft = calculate_distance_in(p1, p2, DistanceMethod::Haversine, DistanceUnit::Feet);
+
+        assert!((dist_m - 111_194.9).abs() < 1000.0); // ±1 км допустимо
+        assert!((dist_km - 111.195).abs() < 1.0);
+        assert!((dist_mi - 69.15).abs() < 0.5);
+        assert!((dist_ft - 364_426.0).abs() < 500.0);
+    }
+
+    #[test]
+    fn test_calculate_distance_in() {
+        let p1 = GeoPoint { lat: 0.0, lon: 0.0 };
+        let p2 = GeoPoint { lat: 1.0, lon: 0.0 };
+
+        let dist_km =
+            calculate_distance_in(p1, p2, DistanceMethod::Haversine, DistanceUnit::Kilometers);
+
+        // 1 градус широты ~ 111 км
+        assert!((dist_km - 111.0).abs() < 1.0);
     }
 }
