@@ -31,6 +31,19 @@ pub struct Ellipsoid {
     pub b: f64,
 }
 
+/// Результат вычисления расстояния с метаданными.
+#[derive(Debug, Clone, Copy)]
+pub struct DistanceResult {
+    /// Расстояние в метрах
+    pub distance_m: f64,
+    /// Использованный метод
+    pub method: DistanceMethod,
+    /// Количество итераций (для Vincenty)
+    pub iterations: Option<u32>,
+    /// Оценка погрешности в метрах
+    pub error_bound_m: Option<f64>,
+}
+
 impl DistanceUnit {
     /// Конвертирует метры в указанную единицу.
     pub fn convert_from_meters(
@@ -281,6 +294,35 @@ pub fn euclidean_distance(
     let dy = (p2.lat - p1.lat) * 111_000.0;
 
     (dx * dx + dy * dy).sqrt()
+}
+
+/// Единый расчет расстояния с выбором метода.
+pub fn calculate_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+    method: DistanceMethod,
+) -> DistanceResult {
+    let (distance_m, iterations, error_bound_m) = match method {
+        DistanceMethod::Haversine => (haversine_distance(p1, p2), None, Some(3000.0)),
+        DistanceMethod::Vincenty => {
+            if let Some(dist) = vincenty_distance(p1, p2) {
+                (dist, None, Some(0.0005))
+            } else {
+                // Возврат к Хаверсину, если Винсент не сошелся
+                (haversine_distance(p1, p2), None, Some(3000.0))
+            }
+        }
+        DistanceMethod::GreatCircle => (great_circle_distance(p1, p2), None, Some(3000.0)),
+        DistanceMethod::Manhattan => (manhattan_distance(p1, p2), None, Some(10000.0)),
+        DistanceMethod::Euclidean => (euclidean_distance(p1, p2), None, Some(50000.0)),
+    };
+
+    DistanceResult {
+        distance_m,
+        method,
+        iterations,
+        error_bound_m,
+    }
 }
 
 #[cfg(test)]
@@ -758,5 +800,62 @@ mod tests {
         let d = euclidean_distance(p1, p2);
         let expected = (111_000.0_f64.powi(2) + 111_000.0_f64.powi(2)).sqrt();
         assert!((d - expected).abs() < 1_000.0);
+    }
+
+    #[test]
+    fn test_calculate_distance_method_tag() {
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint { lon: 1.0, lat: 1.0 };
+
+        let res = calculate_distance(p1, p2, DistanceMethod::Euclidean);
+        assert_eq!(res.method, DistanceMethod::Euclidean);
+    }
+
+    #[test]
+    fn test_calculate_distance_vincenty_fallback() {
+        let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
+        let p2 = GeoPoint {
+            lon: 179.999,
+            lat: 0.0,
+        };
+
+        let res = calculate_distance(p1, p2, DistanceMethod::Vincenty);
+
+        assert!(res.distance_m > 0.0);
+        assert!(res.error_bound_m.is_some());
+    }
+
+    #[test]
+    fn test_calculate_distance_euclidean_value() {
+        let p1 = GeoPoint {
+            lat: 10.0,
+            lon: 10.0,
+        };
+        let p2 = GeoPoint {
+            lat: 10.001,
+            lon: 10.001,
+        };
+
+        let direct = euclidean_distance(p1, p2);
+        let via_calc = calculate_distance(p1, p2, DistanceMethod::Euclidean).distance_m;
+
+        assert!((direct - via_calc).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_calculate_distance_manhattan_geodesic_relation() {
+        let p1 = GeoPoint {
+            lat: 52.5,
+            lon: 13.4,
+        };
+        let p2 = GeoPoint {
+            lat: 48.9,
+            lon: 2.3,
+        };
+
+        let man = calculate_distance(p1, p2, DistanceMethod::Manhattan).distance_m;
+        let hav = calculate_distance(p1, p2, DistanceMethod::Haversine).distance_m;
+
+        assert!(man >= hav);
     }
 }
