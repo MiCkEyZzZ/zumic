@@ -14,8 +14,8 @@ use mlua::{
     UserData, UserDataMethods, Value as LuaValue, VmState,
 };
 
-use super::{Hll, Sds, SmartHash, Value};
-use crate::{Dict, QuickList, SkipList};
+use super::{Sds, SmartHash, Value};
+use crate::{Dict, Hll, QuickList, SkipList};
 
 /// Ошибка выполнения Lua скрипта.
 ///

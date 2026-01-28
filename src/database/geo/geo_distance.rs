@@ -243,6 +243,22 @@ pub fn vincenty_distance_ellipsoid(
     Some(s)
 }
 
+/// Расстояние по большому кругу
+pub fn greate_circle_distance(
+    p1: GeoPoint,
+    p2: GeoPoint,
+) -> f64 {
+    let to_rad = PI / 180.0;
+    let lat1 = p1.lat * to_rad;
+    let lat2 = p2.lat * to_rad;
+    let dlon = (p2.lon - p1.lon) * to_rad;
+
+    let cos_c = lat1.sin() * lat2.sin() + lat1.cos() * lat2.cos() * dlon.cos();
+
+    let central_angle = cos_c.clamp(-1.0, 1.0).acos();
+    Ellipsoid::SPHERE.a * central_angle
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,5 +466,142 @@ mod tests {
         let dist = vincenty_distance(kungur, south_pole).unwrap();
         assert!(dist > 0.0);
         assert!(dist < 20_000_000.0);
+    }
+
+    #[test]
+    fn test_great_circle_known_distance() {
+        // Кунгур -> Пермь
+        let kungur = GeoPoint {
+            lon: 56.9514,
+            lat: 57.4342,
+        };
+        let perm = GeoPoint {
+            lon: 56.2347,
+            lat: 58.0105,
+        };
+
+        let d_gc = greate_circle_distance(kungur, perm);
+        let d_hav = haversine_distance(kungur, perm);
+
+        // Great-circle и haversine на сфере должны совпадать
+        assert!((d_gc - d_hav).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_great_circle_symmetry() {
+        let p1 = GeoPoint {
+            lon: 20.0,
+            lat: 10.0,
+        };
+        let p2 = GeoPoint {
+            lon: 80.0,
+            lat: -30.0,
+        };
+
+        let d1 = greate_circle_distance(p1, p2);
+        let d2 = greate_circle_distance(p2, p1);
+
+        assert!((d1 - d2).abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_great_circle_zero_distance() {
+        let p = GeoPoint {
+            lon: 90.0,
+            lat: 45.0,
+        };
+
+        let d = greate_circle_distance(p, p);
+
+        assert!(d.abs() < EPSILON_M);
+    }
+
+    #[test]
+    fn test_great_circle_poles() {
+        let north_pole = GeoPoint {
+            lat: 90.0,
+            lon: 0.0,
+        };
+        let south_pole = GeoPoint {
+            lat: -90.0,
+            lon: 0.0,
+        };
+
+        let d = greate_circle_distance(north_pole, south_pole);
+
+        // Полуокружность Земли
+        let expected = PI * Ellipsoid::SPHERE.a;
+        assert!((d - expected).abs() < 1_000.0);
+    }
+
+    #[test]
+    fn test_great_circle_equator_quarter() {
+        // 90° по экватору
+        let p1 = GeoPoint { lat: 0.0, lon: 0.0 };
+        let p2 = GeoPoint {
+            lat: 0.0,
+            lon: 90.0,
+        };
+
+        let d = greate_circle_distance(p1, p2);
+        let expected = PI * Ellipsoid::SPHERE.a / 2.0;
+
+        assert!((d - expected).abs() < 1_000.0);
+    }
+
+    #[test]
+    fn test_great_circle_vs_vincenty_reasonable_error() {
+        let p1 = GeoPoint {
+            lat: 52.5,
+            lon: 13.4,
+        };
+        let p2 = GeoPoint {
+            lat: 48.9,
+            lon: 2.3,
+        };
+
+        let d_gc = greate_circle_distance(p1, p2);
+        let d_vin = vincenty_distance(p1, p2).unwrap();
+
+        let diff = (d_gc - d_vin).abs();
+
+        // Для сферической модели ошибка в несколько км допустима
+        assert!(diff < 10_000.0, "diff = {} m", diff);
+    }
+
+    #[test]
+    fn test_great_circle_matches_haversine() {
+        let p1 = GeoPoint {
+            lat: 52.5,
+            lon: 13.4,
+        };
+        let p2 = GeoPoint {
+            lat: 48.9,
+            lon: 2.3,
+        };
+
+        let d_gc = greate_circle_distance(p1, p2);
+        let d_hav = haversine_distance(p1, p2);
+
+        assert!((d_gc - d_hav).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_great_circle_near_points_precision() {
+        // Очень близкие точки — потенциальная проблема acos
+        let p1 = GeoPoint {
+            lat: 52.0,
+            lon: 13.0,
+        };
+        let p2 = GeoPoint {
+            lat: 52.000001,
+            lon: 13.000001,
+        };
+
+        let d_gc = greate_circle_distance(p1, p2);
+        let d_hav = haversine_distance(p1, p2);
+
+        // Здесь haversine численно устойчивее
+        assert!((d_gc - d_hav).abs() < 0.5);
     }
 }
