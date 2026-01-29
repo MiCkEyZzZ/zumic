@@ -9,7 +9,7 @@ pub use geo_base::*;
 pub use geo_hash::*;
 pub use geo_rtree::*;
 
-pub const GEO_VERSION: &str = "0.1.0";
+pub const GEO_VERSION: &str = "0.2.0";
 
 #[derive(Debug, Clone)]
 pub struct GeoModuleStats {
@@ -33,6 +33,7 @@ impl GeoSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::geo_distance::{DistanceMethod, DistanceUnit, Ellipsoid};
 
     #[test]
     fn test_module_exports() {
@@ -42,5 +43,15 @@ mod tests {
         let _gh = Geohash::encode(_point, GeohashPrecision::High);
         let _bbox = BoundingBox::new(-1.0, 1.0, -1.0, 1.0);
         let _rtree = RTree::new();
+        let _method = DistanceMethod::Vincenty;
+        let _unit = DistanceUnit::Kilometers;
+        let _ellipsoid = Ellipsoid::WGS84;
+    }
+
+    #[test]
+    fn test_version_tracking() {
+        let gs = GeoSet::new();
+        let stats = gs.module_stats();
+        assert_eq!(stats.version, "0.2.0");
     }
 }

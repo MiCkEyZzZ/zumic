@@ -754,6 +754,7 @@ mod tests {
         gs.add("D".to_string(), 1.0, 0.0);
 
         let results = gs.nearest(0.0, 0.0, 2);
+
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "A");
         assert_eq!(results[1].0, "B");
@@ -788,11 +789,13 @@ mod tests {
     fn test_coordinate_validation() {
         let mut gs = GeoSet::new();
         gs.add("valid".into(), 0.0, 0.0);
+
         assert!(gs.get("valid").is_some());
 
         let initial_len = gs.len();
         gs.add("invalid_lon".into(), 200.0, 0.0);
         gs.add("invalid_lat".into(), 0.0, 100.0);
+
         assert_eq!(gs.len(), initial_len);
     }
 
