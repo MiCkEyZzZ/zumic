@@ -1,6 +1,5 @@
-pub mod hll_base;
-pub mod hll_sparse;
+pub mod intset_base;
 
 // Publicly re-export all error types and functions from the submodules to
 // simplify access from external code.
-pub use hll_base::*;
+pub use intset_base::*;

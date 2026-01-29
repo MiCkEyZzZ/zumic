@@ -1,8 +1,3 @@
-//! R-tree spatial index для эффективного поиска географических точек
-//!
-//! Реализует R-tree структуру данных для O(log n) radius queries вместо O(n).
-//! Поддерживает динамические updated, k-NN search, и range queries.
-
 use std::{cmp::Ordering, collections::BinaryHeap, f64};
 
 use crate::{database::haversine_distance, GeoEntry, GeoPoint};
