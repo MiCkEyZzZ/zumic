@@ -165,6 +165,18 @@ pub fn vincenty_distance_ellipsoid(
     let b = ellipsoid.b;
     let f = ellipsoid.f();
 
+    if (a - b).abs() < 1e-9 {
+        // вычисляем центральный угол и возвращаем a * central_angle
+        let to_rad = PI / 180.0;
+        let lat1 = p1.lat * to_rad;
+        let lat2 = p2.lat * to_rad;
+        let dlon = (p2.lon - p1.lon) * to_rad;
+
+        let cos_c = lat1.sin() * lat2.sin() + lat1.cos() * lat2.cos() * dlon.cos();
+        let central_angle = cos_c.clamp(-1.0, 1.0).acos();
+        return Some(a * central_angle);
+    }
+
     let to_rad = PI / 180.0;
     let lat1 = p1.lat * to_rad;
     let lat2 = p2.lat * to_rad;
@@ -279,10 +291,11 @@ pub fn manhattan_distance(
     p1: GeoPoint,
     p2: GeoPoint,
 ) -> f64 {
-    // Конвертируем градусы в метры (приблизительно)
+    // Возьмём среднюю широту для симметричности
+    let lat_avg = (p1.lat + p2.lat) * 0.5;
     let lat_diff = (p2.lat - p1.lat).abs() * METERS_PER_DEGREE_LAT;
     let lon_diff =
-        (p2.lon - p1.lon).abs() * METERS_PER_DEGREE_LAT * p1.lat.to_radians().cos().abs();
+        (p2.lon - p1.lon).abs() * METERS_PER_DEGREE_LAT * lat_avg.to_radians().cos().abs();
 
     lat_diff + lon_diff
 }
@@ -309,7 +322,7 @@ pub fn calculate_distance(
         DistanceMethod::Haversine => (haversine_dist(p1, p2), None, Some(3000.0)),
         DistanceMethod::Vincenty => {
             if let Some(dist) = vincenty_distance(p1, p2) {
-                (dist, None, Some(0.0005))
+                (dist, Some(0), Some(0.0005))
             } else {
                 // Возврат к Хаверсину, если Винсент не сошелся
                 (haversine_dist(p1, p2), None, Some(3000.0))
