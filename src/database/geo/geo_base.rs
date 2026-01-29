@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::database::{
+    geo_distance::{calculate_distance, haversine_dist, DistanceMethod, DistanceUnit},
     geohash_ranges_for_bbox, BoundingBox, Geohash, GeohashPrecision, RTree, TreeStats,
 };
 
@@ -149,15 +150,37 @@ impl GeoSet {
         self.get(member).map(|p| Geohash::encode(p, precision))
     }
 
-    /// Вычисляет расстояние между двумя точками по их именам (в метрах).
+    /// Вычисляет расстояние между двумя точками (по умолчанию Haversine).
     pub fn dist(
         &self,
         m1: &str,
         m2: &str,
     ) -> Option<f64> {
+        self.dist_with_method(m1, m2, DistanceMethod::Haversine)
+    }
+
+    /// Вычисляет расстояние с указанным методом.
+    pub fn dist_with_method(
+        &self,
+        m1: &str,
+        m2: &str,
+        method: DistanceMethod,
+    ) -> Option<f64> {
         let p1 = self.get(m1)?;
         let p2 = self.get(m2)?;
-        Some(haversine_distance(p1, p2))
+        Some(calculate_distance(p1, p2, method).distance_m)
+    }
+
+    /// Вычисляет расстояние в указанных единицах.
+    pub fn dist_in_units(
+        &self,
+        m1: &str,
+        m2: &str,
+        method: DistanceMethod,
+        unit: DistanceUnit,
+    ) -> Option<f64> {
+        let dist_m = self.dist_with_method(m1, m2, method)?;
+        Some(unit.convert_from_meters(dist_m))
     }
 
     /// Возвращает всех членов в радиусе `radius_m` метров от точки (`lon`,
@@ -204,6 +227,57 @@ impl GeoSet {
                 let dist = haversine_distance(center, entry.point);
                 if dist <= radius_m {
                     Some((entry.member, dist))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Запрос радиуса с настраиваемым методом дальности.
+    pub fn radius_with_method(
+        &mut self,
+        lon: f64,
+        lat: f64,
+        radius: f64,
+        radius_unit: DistanceUnit,
+        options: RadiusOptions,
+        method: DistanceMethod,
+    ) -> Vec<(String, f64)> {
+        if !Self::validate_coords(lon, lat) {
+            return Vec::new();
+        }
+
+        if self.needs_rebuild {
+            self.rebuild_index();
+        }
+
+        let center = GeoPoint { lon, lat };
+        let radius_m = radius_unit.convert_to_meters(radius);
+        let use_geohash = options.use_geohash;
+
+        // Используем geohash или R-tree фильтрацию
+        let candidates = if use_geohash {
+            self.radius_candidates_geohash(center, radius_m, options)
+        } else {
+            let bbox = Self::radius_to_bbox(center, radius_m);
+            self.rtree.range_query(&bbox)
+        };
+
+        // Точная фильтрация с выбранным методом
+        candidates
+            .into_iter()
+            .filter_map(|entry| {
+                let point = if use_geohash {
+                    self.member_index.get(&entry.member)?
+                } else {
+                    &entry.point
+                };
+
+                let dist = calculate_distance(center, *point, method).distance_m;
+
+                if dist <= radius_m {
+                    Some((entry.member.clone(), dist))
                 } else {
                     None
                 }
@@ -273,6 +347,38 @@ impl GeoSet {
         Some(results)
     }
 
+    /// k-NN с настраиваемым методом расстояния.
+    pub fn nearest_with_method(
+        &self,
+        lon: f64,
+        lat: f64,
+        k: usize,
+        method: DistanceMethod,
+    ) -> Vec<(String, f64)> {
+        if !Self::validate_coords(lon, lat) || k == 0 {
+            return Vec::new();
+        }
+
+        let point = GeoPoint { lon, lat };
+
+        // Используем R-дерево для получения кандидатов (с запасом)
+        let candidates = self.rtree.knn(point, k * 2);
+
+        // Пересчитываем расстояние с выбранным методом
+        let mut results: Vec<(String, f64)> = candidates
+            .into_iter()
+            .map(|(entry, _)| {
+                let dist = calculate_distance(point, entry.point, method).distance_m;
+                (entry.member, dist)
+            })
+            .collect();
+
+        // Сортируем и берём top k
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.truncate(k);
+        results
+    }
+
     fn radius_with_geohash(
         &self,
         center: GeoPoint,
@@ -312,6 +418,46 @@ impl GeoSet {
                 } else {
                     None
                 }
+            })
+            .collect()
+    }
+
+    /// Получает кандидатов через geohash.
+    fn radius_candidates_geohash(
+        &self,
+        center: GeoPoint,
+        radius_m: f64,
+        options: RadiusOptions,
+    ) -> Vec<GeoEntry> {
+        let precision = options
+            .geohash_precision
+            .unwrap_or_else(|| GeohashPrecision::from_radius(radius_m));
+
+        let center_gh = Geohash::encode(center, precision);
+        let mut cadidate_members = Vec::new();
+
+        if let Some(members) = self.geohash_index.get(center_gh.as_str()) {
+            cadidate_members.extend(members.iter().cloned());
+        }
+
+        if options.include_neighbors {
+            for neighbor in center_gh.all_neighbors() {
+                if let Some(members) = self.geohash_index.get(neighbor.as_str()) {
+                    cadidate_members.extend(members.iter().cloned());
+                }
+            }
+        }
+
+        // Конвертирует member в GeoEntry
+        cadidate_members
+            .into_iter()
+            .filter_map(|member| {
+                let point = *self.member_index.get(&member)?;
+                Some(GeoEntry {
+                    member,
+                    point,
+                    score: 0,
+                })
             })
             .collect()
     }
@@ -498,14 +644,7 @@ pub fn haversine_distance(
     p1: GeoPoint,
     p2: GeoPoint,
 ) -> f64 {
-    let to_rad = std::f64::consts::PI / 180.0;
-    let dlat = (p2.lat - p1.lat) * to_rad;
-    let dlon = (p2.lon - p1.lon) * to_rad;
-    let lat1 = p1.lat * to_rad;
-    let lat2 = p2.lat * to_rad;
-    let a = (dlat * 0.5).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon * 0.5).sin().powi(2);
-    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
-    6_371_000.0 * c
+    haversine_dist(p1, p2)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -755,5 +894,95 @@ mod tests {
 
         // результаты должны быть одинаковыми
         assert_eq!(results_gh.len(), results_rtree.len());
+    }
+
+    #[test]
+    fn test_dist_with_different_methods() {
+        let mut gs = GeoSet::new();
+        gs.add("A".into(), 0.0, 0.0);
+        gs.add("B".into(), 1.0, 0.0);
+
+        let haversine = gs
+            .dist_with_method("A", "B", DistanceMethod::Haversine)
+            .unwrap();
+        let vincenty = gs
+            .dist_with_method("A", "B", DistanceMethod::Vincenty)
+            .unwrap();
+
+        // Vincenty точнее, но оба должны быть одного порядка
+        let diff = (haversine - vincenty).abs();
+
+        assert!(diff < 300.0, "diff={diff}m");
+        assert!(vincenty > 0.0);
+    }
+
+    #[test]
+    fn test_dist_in_units() {
+        let mut gs = GeoSet::new();
+        gs.add("X".into(), 0.0, 0.0);
+        gs.add("Y".into(), 0.0, 1.0); // ~111км
+
+        let meters = gs
+            .dist_in_units("X", "Y", DistanceMethod::Haversine, DistanceUnit::Meters)
+            .unwrap();
+        let km = gs
+            .dist_in_units(
+                "X",
+                "Y",
+                DistanceMethod::Haversine,
+                DistanceUnit::Kilometers,
+            )
+            .unwrap();
+
+        assert!((km * 1000.0 - meters).abs() < 0.1);
+        assert!((km - 111.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_radius_with_vincenty() {
+        let mut gs = GeoSet::new();
+
+        for i in 0..100 {
+            let lon = (i % 10) as f64 * 0.01;
+            let lat = (i / 10) as f64 * 0.01;
+            gs.add(format!("P{}", i), lon, lat);
+        }
+
+        let opts = RadiusOptions {
+            use_geohash: false,
+            geohash_precision: None,
+            include_neighbors: false,
+        };
+
+        let results = gs.radius_with_method(
+            0.0,
+            0.0,
+            0.5,
+            DistanceUnit::Kilometers,
+            opts,
+            DistanceMethod::Vincenty,
+        );
+
+        assert!(!results.is_empty());
+
+        // Все результаты должны быть в пределах 5км
+        for (_member, dist) in &results {
+            assert!(*dist <= 5000.0);
+        }
+    }
+
+    #[test]
+    fn test_nearest_with_manhattan() {
+        let mut gs = GeoSet::new();
+        gs.add("A".into(), 0.0, 0.0);
+        gs.add("B".into(), 0.1, 0.0);
+        gs.add("C".into(), 0.0, 0.1);
+        gs.add("D".into(), 1.0, 1.0);
+
+        let results = gs.nearest_with_method(0.0, 0.0, 2, DistanceMethod::Manhattan);
+
+        assert_eq!(results.len(), 2);
+        // A должен быть первым (расстояние 0)
+        assert_eq!(results[0].0, "A");
     }
 }
