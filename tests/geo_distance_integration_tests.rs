@@ -11,27 +11,28 @@ const EPSILON: f64 = 0.01; // 1см
 
 #[test]
 fn test_known_distances_accuracy() {
-    // London to Paris: ~343.5km
-    let london = GeoPoint {
-        lon: -0.1278,
-        lat: 51.5074,
+    // Пермь -> Екатеринбург: ~292.244км
+    let perm = GeoPoint {
+        lon: 56.2347,
+        lat: 58.0105,
     };
-    let paris = GeoPoint {
-        lon: 2.3522,
-        lat: 48.8566,
+    let yekaterinburg = GeoPoint {
+        lon: 60.6057,
+        lat: 56.8389,
     };
 
-    let haversine = haversine_distance(london, paris);
-    let vincenty = vincenty_distance(london, paris).unwrap();
-    let great_circle = great_circle_distance(london, paris);
+    let haversine = haversine_distance(perm, yekaterinburg);
+    let vincenty = vincenty_distance(perm, yekaterinburg).unwrap();
+    let great_circle = great_circle_distance(perm, yekaterinburg);
 
-    // Все методы должны быть близки к reference (~343.5km)
-    assert!((haversine - 343_500.0).abs() < 5000.0);
-    assert!((vincenty - 343_500.0).abs() < 1000.0); // Винсети точнее
-    assert!((great_circle - 343_500.0).abs() < 5000.0);
+    // Все методы должны быть близки к ссылке (~292,244 км)
+    let reference_m = 292_244.36073020997_f64;
+    assert!((haversine - reference_m).abs() < 5_000.0);
+    assert!((vincenty - reference_m).abs() < 1_000.0);
+    assert!((great_circle - reference_m).abs() < 5_000.0);
 
-    // Vincenty должен быть наиболее точным
-    assert!(vincenty.abs() - haversine.abs() < 1000.0);
+    // Винсент должен быть более тонким — проверяем малую разницу с хаверсинусом
+    assert!((vincenty - haversine).abs() < 1_000.0);
 }
 
 #[test]
@@ -66,11 +67,11 @@ fn test_antipodal_points() {
         lat: 0.0,
     };
 
-    // Haversine должен работать
+    // Хаверсинус должен работать
     let haversine = haversine_distance(p1, p2);
     assert!(haversine > 19_000_000.0); // ~половина окружности Земли
 
-    // Vincenty может не сойтись для точных антиподов, но должен работать для
+    // Винсенти не может сойтись для точных антиподов, но должен работать для
     // почти-антиподов
     let vincenty = vincenty_distance(p1, p2);
     assert!(vincenty.is_some());
@@ -82,7 +83,7 @@ fn test_very_small_distances() {
     let p2 = GeoPoint {
         lon: 0.000_001,
         lat: 0.000_001,
-    }; // ~0.15m
+    }; // ~0,15м
 
     let haversine = haversine_distance(p1, p2);
     let vincenty = vincenty_distance(p1, p2).unwrap();
@@ -90,7 +91,7 @@ fn test_very_small_distances() {
 
     // Все методы должны быть близки для малых расстояний
     assert!((haversine - vincenty).abs() < 0.001);
-    assert!((euclidean - vincenty).abs() < 0.01); // Euclidean допустим тут
+    assert!((euclidean - vincenty).abs() < 0.01);
 }
 
 #[test]
@@ -110,7 +111,7 @@ fn test_zero_distance() {
 fn test_unit_conversion_precision() {
     let meters = 12_345.678;
 
-    // Round-trip conversions
+    // Преобразование туда и обратно
     for unit in [
         DistanceUnit::Kilometers,
         DistanceUnit::Miles,
@@ -127,19 +128,20 @@ fn test_unit_conversion_precision() {
 fn test_manhattan_properties() {
     let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
 
-    // Diagonal движение
+    // Диагональное движение
     let p2_diag = GeoPoint { lon: 1.0, lat: 1.0 };
-    // Axis-aligned движение
+    // Движение по оси
     let p2_axis = GeoPoint { lon: 0.0, lat: 1.0 };
 
     let manhattan_diag = manhattan_distance(p1, p2_diag);
     let manhattan_axis = manhattan_distance(p1, p2_axis);
     let haversine_diag = haversine_distance(p1, p2_diag);
 
-    // Manhattan всегда >= haversine
+    // Манхэттен всегда >= хаверсинус
     assert!(manhattan_diag >= haversine_diag);
 
-    // Manhattan для диагонали > для axis-aligned (если одинаковая lat/lon разница)
+    // Манхэттен для диагонали > для выравнивания по оси (если одинаковая разница
+    // широты и долготы)
     assert!(manhattan_diag > manhattan_axis);
 }
 
@@ -165,7 +167,7 @@ fn test_ellipsoid_differences() {
     // Sphere должен заметно отличаться от эллипсоидов
     let diff = (wgs84 - sphere).abs();
 
-    // Для 10° по экватору разница радиусов (~7.1km) даёт ~1.2km по дуге
+    // Для 10° по экватору разница радиусов (~7,1 км) дает ~1,2 км по дуге
     assert!(
         diff > 1_000.0 && diff < 2_000.0,
         "Unexpected WGS84 vs Sphere diff = {} m",
@@ -181,29 +183,29 @@ fn test_error_bound_estimates() {
     let vincenty_err = estimate_max_error(DistanceMethod::Vincenty, dist_10km);
     let euclidean_err = estimate_max_error(DistanceMethod::Euclidean, dist_10km);
 
-    // Vincenty должен иметь наименьшую ошибку
+    // Винсент должен совершить наименьшую ошибку
     assert!(vincenty_err < haversine_err);
     assert!(vincenty_err < euclidean_err);
 
-    // Vincenty error должна быть sub-meter
+    // Ошибка Винсенти должна быть субметровой
     assert!(vincenty_err < 1.0);
 }
 
 #[test]
 fn test_method_recommendations() {
-    // Высокая точность -> Vincenty
+    // Высокая точность -> Винсент
     let method1 = recommend_method(10_000.0, 0.0001);
     assert_eq!(method1, DistanceMethod::Vincenty);
 
-    // Стандартная точность -> Haversine
+    // Стандартная точность -> Хаверсинус
     let method2 = recommend_method(100_000.0, 100.0);
     assert_eq!(method2, DistanceMethod::Haversine);
 
-    // Низкая точность, малое расстояние -> Euclidean
+    // Низкая точность, малое расстояние -> Евклидово
     let method3 = recommend_method(50.0, 20.0);
     assert_eq!(method3, DistanceMethod::Euclidean);
 
-    // Очень низкая точность -> Manhattan
+    // Очень низкая точность -> Манхэттен
     let method4 = recommend_method(10_000.0, 2000.0);
     assert_eq!(method4, DistanceMethod::Manhattan);
 }
@@ -222,7 +224,7 @@ fn test_cross_meridian() {
 
     let dist = haversine_distance(p1, p2);
 
-    // Должно быть короткое расстояние (~220km), не через весь мир
+    // Должно быть короткое расстояние (~220км), не через весь мир
     assert!(dist < 300_000.0);
 }
 
@@ -256,7 +258,7 @@ fn test_distance_result_metadata() {
     assert_eq!(result.method, DistanceMethod::Vincenty);
     assert!(result.iterations.is_some());
     assert!(result.error_bound_m.is_some());
-    assert!(result.error_bound_m.unwrap() < 0.001); // <1mm для Vincenty
+    assert!(result.error_bound_m.unwrap() < 0.001);
 }
 
 #[test]
@@ -270,7 +272,7 @@ fn test_batch_distance_calculations() {
         })
         .collect();
 
-    // Проверяем, что все методы работают для batch
+    // Проверяем, что все методы работают для пакетной обработки
     for &point in &points {
         let _ = haversine_distance(origin, point);
         let _ = vincenty_distance(origin, point);
