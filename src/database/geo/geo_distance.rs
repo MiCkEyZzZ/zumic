@@ -120,7 +120,7 @@ impl Ellipsoid {
 }
 
 /// Формула Гаверсина.
-pub fn haversine_distance(
+pub fn haversine_dist(
     p1: GeoPoint,
     p2: GeoPoint,
 ) -> f64 {
@@ -306,13 +306,13 @@ pub fn calculate_distance(
     method: DistanceMethod,
 ) -> DistanceResult {
     let (distance_m, iterations, error_bound_m) = match method {
-        DistanceMethod::Haversine => (haversine_distance(p1, p2), None, Some(3000.0)),
+        DistanceMethod::Haversine => (haversine_dist(p1, p2), None, Some(3000.0)),
         DistanceMethod::Vincenty => {
             if let Some(dist) = vincenty_distance(p1, p2) {
                 (dist, None, Some(0.0005))
             } else {
                 // Возврат к Хаверсину, если Винсент не сошелся
-                (haversine_distance(p1, p2), None, Some(3000.0))
+                (haversine_dist(p1, p2), None, Some(3000.0))
             }
         }
         DistanceMethod::GreatCircle => (great_circle_distance(p1, p2), None, Some(3000.0)),
@@ -402,7 +402,7 @@ mod tests {
             lat: 58.0105,
         };
 
-        let dist = haversine_distance(kungur, perm);
+        let dist = haversine_dist(kungur, perm);
         assert!((dist - 76_925.28266576723).abs() < 100.0); // ±100 м допуск
     }
 
@@ -419,7 +419,7 @@ mod tests {
         };
 
         let vincenty = vincenty_distance(p1, p2).unwrap();
-        let haversine = haversine_distance(p1, p2);
+        let haversine = haversine_dist(p1, p2);
 
         // Винсент должен быть точнее
         assert!((vincenty - haversine).abs() < 1.0); // <1м разница
@@ -464,7 +464,7 @@ mod tests {
             lat: 0.0,
         };
 
-        let dist = haversine_distance(p1, p2);
+        let dist = haversine_dist(p1, p2);
         assert!(dist < 300_000.0); // Короткий путь, не через весь мир
     }
 
@@ -474,7 +474,7 @@ mod tests {
             lon: 20.0,
             lat: 10.0,
         };
-        let dist = haversine_distance(p, p);
+        let dist = haversine_dist(p, p);
         assert!(dist.abs() < EPSILON_M);
     }
 
@@ -490,8 +490,8 @@ mod tests {
         };
         let equator = GeoPoint { lon: 0.0, lat: 0.0 };
 
-        let dist_np_sp = haversine_distance(north_pole, south_pole);
-        let dist_np_eq = haversine_distance(north_pole, equator);
+        let dist_np_sp = haversine_dist(north_pole, south_pole);
+        let dist_np_eq = haversine_dist(north_pole, equator);
 
         assert!((dist_np_sp - 2.0 * 6_371_000.0 * PI / 2.0).abs() < 1000.0);
         assert!((dist_np_eq - 6_371_000.0 * PI / 2.0).abs() < 1000.0);
@@ -508,8 +508,8 @@ mod tests {
             lat: 58.0105,
         }; // Пермь
 
-        let d1 = haversine_distance(p1, p2);
-        let d2 = haversine_distance(p2, p1);
+        let d1 = haversine_dist(p1, p2);
+        let d2 = haversine_dist(p2, p1);
 
         assert!((d1 - d2).abs() < EPSILON_M);
     }
@@ -545,7 +545,7 @@ mod tests {
             lon: 45.0,
         };
 
-        let dist = haversine_distance(p1, p2);
+        let dist = haversine_dist(p1, p2);
         assert!(dist > 0.0);
         assert!(dist < 20_000_000.0); // меньше окружности Земли
     }
@@ -606,7 +606,7 @@ mod tests {
         };
 
         let d_gc = great_circle_distance(kungur, perm);
-        let d_hav = haversine_distance(kungur, perm);
+        let d_hav = haversine_dist(kungur, perm);
 
         // Great-circle и haversine на сфере должны совпадать
         assert!((d_gc - d_hav).abs() < 1.0);
@@ -706,7 +706,7 @@ mod tests {
         };
 
         let d_gc = great_circle_distance(p1, p2);
-        let d_hav = haversine_distance(p1, p2);
+        let d_hav = haversine_dist(p1, p2);
 
         assert!((d_gc - d_hav).abs() < 1.0);
     }
@@ -724,7 +724,7 @@ mod tests {
         };
 
         let d_gc = great_circle_distance(p1, p2);
-        let d_hav = haversine_distance(p1, p2);
+        let d_hav = haversine_dist(p1, p2);
 
         // Здесь haversine численно устойчивее
         assert!((d_gc - d_hav).abs() < 0.5);
@@ -770,7 +770,7 @@ mod tests {
         };
 
         let d_man = manhattan_distance(p1, p2);
-        let d_hav = haversine_distance(p1, p2);
+        let d_hav = haversine_dist(p1, p2);
 
         // Манхэттенское расстояние всегда больше или равно геодезическому
         assert!(d_man >= d_hav);
