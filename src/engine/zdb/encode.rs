@@ -16,7 +16,11 @@ use super::{
     TAG_COMPRESSED, TAG_EOF, TAG_FLOAT, TAG_HASH, TAG_HLL, TAG_INT, TAG_LIST, TAG_NULL, TAG_SET,
     TAG_SSTREAM, TAG_STR, TAG_ZSET,
 };
-use crate::{engine::varint, Sds, Value};
+use crate::{
+    database::{HllDense, HllEncoding},
+    engine::varint,
+    Sds, Value,
+};
 
 /// Сериализует значение с авто-сжатием (как в оригинальном коде).
 pub fn write_value<W: Write>(
@@ -152,8 +156,24 @@ pub fn write_value_inner<W: Write>(
         }
         Value::HyperLogLog(hll) => {
             w.write_u8(TAG_HLL).context("Failed to write HLL tag")?;
-            write_length(w, hll.data.len() as u32, version)?;
-            w.write_all(&hll.data).context("Failed to write HLL data")?;
+
+            match &hll.encoding {
+                HllEncoding::Dense(dense) => {
+                    write_length(w, dense.data.len() as u32, version)?;
+                    w.write_all(&dense.data)
+                        .context("Failed to write HLL data")?;
+                }
+                HllEncoding::Sparse(sparse) => {
+                    // ВАЖНО: пока формат дампа ожидает dense, поэтому ЯВНО конвертируем sparse ->
+                    // dense
+                    let dense = HllDense::from_sparse(sparse);
+
+                    write_length(w, dense.data.len() as u32, version)?;
+                    w.write_all(&dense.data)
+                        .context("Failed to write converted dense HLL data")?;
+                }
+            }
+
             Ok(())
         }
         Value::SStream(entries) => {

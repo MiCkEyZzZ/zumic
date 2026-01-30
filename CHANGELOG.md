@@ -6,6 +6,20 @@
 
 ### Добавлено
 
+- **HLL module (`hll_base`)**
+  - Интегрированы `HllSparse` и `HllDense` в общий модуль.
+  - Добавлена структура **`HllStats`** для хранения статистики.
+  - Добавлены новые функции:
+    - `with_threshold`, `merge`, `stats`, `convert_to_dense`, `is_sparse`.
+  - Покрыта базовыми тестами логика работы HLL.
+
+- **Engine (`engine/zdb`)**
+  - В `decode` и `encode` обновлена логика обработки HLL для поддержки новых вариантов (sparse/dense).
+- **Network / Protocol (`network/protocol/serializer.rs`)**
+  - Обновлена сериализация HLL (`serialize_response`), чтобы корректно обрабатывать новые варианты HLL.
+- **Tests / Generators (`tests/generators.rs`)**
+  - Исправлена тестовая функция `hll_strategy` для корректной генерации HLL с учётом новых полей (`encoding`, `version`) и форматов.
+
 - **benches/geo-benchmark**
   - Бенчмарки производительности GeoSet:
     - Вставка (sequential vs bulk load)
@@ -189,6 +203,10 @@
   - Тесты подтверждают корректность поведения и отсутствие деградации ёмкости буфера.
 
 ### Изменено
+
+- **HLL module (`hll_base`)**
+  - Рефакторинг существующих функций:
+    - `new`, `add`, `estimate_cardinality`, `get_register`, `set_register`.
 
 - **engine**
   - в `memory.rs` исправлена логика заимствования в функции `geo_radius`:
