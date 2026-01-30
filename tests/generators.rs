@@ -7,9 +7,7 @@ use std::{cmp, f64, ops::RangeInclusive};
 
 use ordered_float::OrderedFloat;
 use proptest::{prelude::*, string::string_regex};
-use zumic::{
-    Bitmap, Dict, Hll, Sds, SkipList, SmartHash, StreamEntry, StreamId, Value, DENSE_SIZE,
-};
+use zumic::{Bitmap, Dict, Hll, Sds, SkipList, SmartHash, StreamEntry, StreamId, Value};
 
 /// Размеры для тестирования - от очень маленьких до больших
 const SMALL_SIZE: RangeInclusive<usize> = 0..=10;
@@ -137,21 +135,30 @@ pub fn zset_strategy() -> impl Strategy<Value = Value> {
     })
 }
 
-/// Генератор для HyperLogLog с акцентом на boundary sizes
+/// Генератор для HyperLogLog — использует публичный API Hll::new() и .add().
 #[allow(dead_code)]
 pub fn hll_strategy() -> impl Strategy<Value = Value> {
+    use proptest::{collection::vec, prelude::any};
+
     prop_oneof![
-        // Пустой HLL (все нули)
-        Just({
-            let data = [0u8; DENSE_SIZE]; // Adjust DENSE_SIZE import
-            Value::HyperLogLog(Box::new(Hll { data }))
+        // Пустой HLL (все регистры нулевые)
+        Just(Value::HyperLogLog(Box::new(Hll::new()))),
+        // HLL, в который добавлено несколько случайных элементов
+        // (моделирует реальный непустой HLL)
+        vec(any::<u64>(), 1..=200).prop_map(|vals| {
+            let mut h = Hll::new();
+            for v in vals {
+                h.add(&v.to_le_bytes());
+            }
+            Value::HyperLogLog(Box::new(h))
         }),
-        // HLL с случайными данными
-        any::<[u8; DENSE_SIZE]>().prop_map(|data| { Value::HyperLogLog(Box::new(Hll { data })) }),
-        // HLL со всеми максимальными значениями
-        Just({
-            let data = [0xFF; DENSE_SIZE];
-            Value::HyperLogLog(Box::new(Hll { data }))
+        // Более «плотный» HLL — много вставок (граница/стресс-кейс)
+        vec(any::<u64>(), 500..=2000).prop_map(|vals| {
+            let mut h = Hll::new();
+            for v in vals {
+                h.add(&v.to_le_bytes());
+            }
+            Value::HyperLogLog(Box::new(h))
         }),
     ]
 }

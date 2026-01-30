@@ -7,7 +7,7 @@ use crate::{database::HllSparse, DENSE_SIZE};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HllDense {
     #[serde(with = "BigArray")]
-    data: [u8; DENSE_SIZE],
+    pub data: [u8; DENSE_SIZE],
 }
 
 impl HllDense {

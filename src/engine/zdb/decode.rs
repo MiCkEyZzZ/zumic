@@ -24,7 +24,9 @@ use super::{
     TAG_STR, TAG_ZSET,
 };
 use crate::{
-    database::Bitmap, engine::varint, Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE,
+    database::{Bitmap, HllDense, HllEncoding, SERIALIZATION_VERSION},
+    engine::varint,
+    Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE,
 };
 
 // Константы безопасности для предотвращения атак через огромные размеры
@@ -916,11 +918,19 @@ fn read_hll_value<R: Read>(
     let mut regs = vec![0u8; n as usize];
     r.read_exact(&mut regs).context("Failed to read HLL data")?;
 
+    // Создаём плотный массив и копируем прочитанные биты
     let mut data = [0u8; DENSE_SIZE];
-    data[..n.min(DENSE_SIZE as u32) as usize]
-        .copy_from_slice(&regs[..n.min(DENSE_SIZE as u32) as usize]);
+    let to_copy = std::cmp::min(regs.len(), DENSE_SIZE);
+    data[..to_copy].copy_from_slice(&regs[..to_copy]);
 
-    Ok(Value::HyperLogLog(Box::new(Hll { data })))
+    // Преобразуем в HllDense и возвращаем новый Hll с Dense encoding
+    let dense = HllDense { data };
+    let hll = Hll {
+        encoding: HllEncoding::Dense(Box::new(dense)),
+        version: SERIALIZATION_VERSION,
+    };
+
+    Ok(Value::HyperLogLog(Box::new(hll)))
 }
 
 fn read_array_value<R: Read>(
@@ -1334,13 +1344,16 @@ mod tests {
         let val = read_value_with_version(&mut cursor, LEGACY, None, 0).unwrap();
 
         match val {
-            Value::HyperLogLog(hll) => {
-                assert_eq!(hll.data[0], 1);
-                assert_eq!(hll.data[1], 2);
-                for i in 2..DENSE_SIZE {
-                    assert_eq!(hll.data[i], 0);
+            Value::HyperLogLog(hll) => match &hll.encoding {
+                HllEncoding::Dense(dense) => {
+                    assert_eq!(dense.data[0], 1);
+                    assert_eq!(dense.data[1], 2);
+                    for i in 2..DENSE_SIZE {
+                        assert_eq!(dense.data[i], 0);
+                    }
                 }
-            }
+                _ => panic!("Expected HLL with Dense encoding"),
+            },
             _ => panic!("Expected Value::HyperLogLog"),
         }
     }
@@ -1360,12 +1373,15 @@ mod tests {
         let val = read_value_with_version(&mut cursor, LEGACY, None, 0).unwrap();
 
         match val {
-            Value::HyperLogLog(hll) => {
-                assert_eq!(hll.data.len(), DENSE_SIZE);
-                for &b in hll.data.iter() {
-                    assert_eq!(b, 7);
+            Value::HyperLogLog(hll) => match &hll.encoding {
+                HllEncoding::Dense(dense) => {
+                    assert_eq!(dense.data.len(), DENSE_SIZE);
+                    for &b in dense.data.iter() {
+                        assert_eq!(b, 7);
+                    }
                 }
-            }
+                _ => panic!("Expected HLL with Dense encoding"),
+            },
             _ => panic!("Expected Value::HyperLogLog"),
         }
     }
