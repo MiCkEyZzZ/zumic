@@ -1,5 +1,6 @@
 pub mod hll_base;
 pub mod hll_dense;
+pub mod hll_metrics;
 pub mod hll_sparse;
 
 // Publicly re-export all error types and functions from the submodules to
