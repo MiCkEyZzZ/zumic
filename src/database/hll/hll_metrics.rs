@@ -91,24 +91,24 @@ impl HllMetrics {
             .fetch_add(memory_increase, Ordering::Relaxed);
     }
 
-    /// Регестрирует операции `add`
+    /// Регистрирует операции `add`
     pub fn on_add(&self) {
         self.inner.total_adds.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Регестрирует операцию `merge`.
+    /// Регистрирует операцию `merge`.
     pub fn on_merge(&self) {
         self.inner.total_merges.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Регестрирует оценку кардинальности.
+    /// Регистрирует оценку кардинальности.
     pub fn on_estimation(&self) {
         self.inner.total_estimations.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Обновляет суммарное потребление памяти.
     // ВАЖНО: используется `fetch_update` с saturating-арифметикой, чтобы обеспечить
-    // детерминированное и безопасное поведенеи при конкурентных обновлениях.
+    // детерминированное и безопасное поведение при конкурентных обновлениях.
     // Причины:
     // - `total_memory_bytes` может как увеличиваться, так и уменьшаться
     // - прямое использование `fetch_add` / `fetch_sub` небезопасно при уменьшении
@@ -155,6 +155,8 @@ impl HllMetrics {
     }
 
     /// Сбрасывает все метрики в начальное состояние.
+    // ВАЖНО: reset не синхронизирует с другими потоками. Если метрики обновляются
+    // конкурентно, значения могут измениться сразу после сброса.
     pub fn reset(&self) {
         self.inner.total_created.store(0, Ordering::Relaxed);
         self.inner.sparse_count.store(0, Ordering::Relaxed);
@@ -169,6 +171,37 @@ impl HllMetrics {
     }
 }
 
+impl HllMetricsSnapshot {
+    /// Вычисляет средний размер HLL в памяти.
+    pub fn average_memory_per_hll(&self) -> f64 {
+        let total_hll = self.sparse_count + self.dense_count;
+        if total_hll == 0 {
+            0.0
+        } else {
+            self.total_memory_bytes as f64 / total_hll as f64
+        }
+    }
+
+    /// Вычисляет коэффициент конверсии sparse->dense.
+    pub fn conversion_rate(&self) -> f64 {
+        if self.total_created == 0 {
+            0.0
+        } else {
+            self.sparse_to_dense_conversions as f64 / self.total_created as f64
+        }
+    }
+
+    /// Вычисляет долю sparse HLL от общего кол-ва.
+    pub fn sparse_ratio(&self) -> f64 {
+        let total = self.sparse_count + self.dense_count;
+        if total == 0 {
+            0.0
+        } else {
+            self.sparse_count as f64 / total as f64
+        }
+    }
+}
+
 impl Default for HllMetrics {
     fn default() -> Self {
         Self::new()
@@ -177,6 +210,8 @@ impl Default for HllMetrics {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use super::*;
 
     #[test]
@@ -244,6 +279,24 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_calculations() {
+        let snapshot = HllMetricsSnapshot {
+            total_created: 100,
+            sparse_count: 70,
+            dense_count: 30,
+            sparse_to_dense_conversions: 25,
+            total_adds: 1000,
+            total_merges: 50,
+            total_estimations: 100,
+            total_memory_bytes: 500000,
+        };
+
+        assert_eq!(snapshot.average_memory_per_hll(), 5000.0);
+        assert_eq!(snapshot.conversion_rate(), 0.25);
+        assert_eq!(snapshot.sparse_ratio(), 0.7);
+    }
+
+    #[test]
     fn test_reset() {
         let metrics = HllMetrics::new();
 
@@ -260,5 +313,99 @@ mod tests {
         assert_eq!(snapshot_after.total_created, 0);
         assert_eq!(snapshot_after.total_adds, 0);
         assert_eq!(snapshot_after.total_merges, 0);
+    }
+
+    #[test]
+    fn test_thread_safety() {
+        let metricss = HllMetrics::new();
+        let metrics_clone = metricss.clone();
+
+        let t = thread::spawn(move || {
+            for _ in 0..1000 {
+                metrics_clone.on_add();
+            }
+        });
+
+        for _ in 0..1000 {
+            metricss.on_add();
+        }
+
+        t.join().unwrap();
+
+        let snapshot = metricss.snapshot();
+        assert_eq!(snapshot.total_adds, 2000);
+    }
+
+    #[test]
+    fn test_sparse_to_dense_underflow_protection() {
+        let metrics = HllMetrics::new();
+
+        // Конверсия без предварительного create_sparse
+        metrics.on_sparse_to_dense_conversion(1024);
+
+        let snapshot = metrics.snapshot();
+
+        // Главное: sparse_count НЕ ушёл в usize::MAX
+        assert_eq!(snapshot.sparse_count, 0);
+        assert_eq!(snapshot.dense_count, 1);
+        assert_eq!(snapshot.sparse_to_dense_conversions, 1);
+        assert_eq!(snapshot.total_memory_bytes, 1024);
+    }
+
+    #[test]
+    fn test_update_memory_does_not_underflow() {
+        let metrics = HllMetrics::new();
+
+        metrics.update_memory(-10_000);
+
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.total_memory_bytes, 0);
+    }
+
+    #[test]
+    fn test_multiple_sparse_to_dense_conversions_concurrently() {
+        let metrics = HllMetrics::new();
+
+        // Создаём меньше sparse, чем будет конверсий
+        for _ in 0..10 {
+            metrics.on_create_sparse();
+        }
+
+        let metrics_clone = metrics.clone();
+
+        let t1 = std::thread::spawn(move || {
+            for _ in 0..20 {
+                metrics_clone.on_sparse_to_dense_conversion(100);
+            }
+        });
+
+        for _ in 0..20 {
+            metrics.on_sparse_to_dense_conversion(100);
+        }
+
+        t1.join().unwrap();
+
+        let snapshot = metrics.snapshot();
+
+        // sparse_count не может быть отрицательным
+        assert_eq!(snapshot.sparse_count, 0);
+
+        // dense_count >= conversions всегда
+        assert!(snapshot.dense_count >= snapshot.sparse_to_dense_conversions as usize);
+
+        // память учитывается
+        assert_eq!(
+            snapshot.total_memory_bytes,
+            snapshot.sparse_to_dense_conversions as usize * 100
+        );
+    }
+
+    #[test]
+    fn test_snapshot_calculations_on_empty_metrics() {
+        let snapshot = HllMetrics::new().snapshot();
+
+        assert_eq!(snapshot.average_memory_per_hll(), 0.0);
+        assert_eq!(snapshot.conversion_rate(), 0.0);
+        assert_eq!(snapshot.sparse_ratio(), 0.0);
     }
 }
