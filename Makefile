@@ -205,32 +205,60 @@ release-all: ## Full release cycle: prepare-release + tests + push
 
 ##@ Property testing commands
 .PHONY: proptest proptest-quick proptest-long proptest-verbose proptest-coverage proptest-continuous proptest-timing \
+        proptest-zdb proptest-hll proptest-all \
         stress-test stress-test-quick endurance-test test-all find-bugs-fast
 
 proptest-quick: ## Quick property tests (100 cases)
 	PROPTEST_CASES=100 cargo test --test property_tests
+	PROPTEST_CASES=100 cargo test --test hll_property_tests
 
 proptest: ## Regular property tests (default)
 	cargo test --test property_tests
+	cargo test --test hll_property_tests
 
 proptest-long: ## Long property testing
 	PROPTEST_CASES=10000 cargo test --test property_tests
+	PROPTEST_CASES=10000 cargo test --test hll_property_tests
 
 proptest-verbose: ## Verbose output for property tests
 	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test property_tests -- --nocapture
+	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test hll_property_tests -- --nocapture
+
+proptest-zdb: ## ZDB-only property tests
+	cargo test --test property_tests
+
+proptest-hll: ## HLL-only property tests
+	cargo test --test hll_property_tests
+
+proptest-hll-quick: ## Quick HLL property tests (100 cases)
+	PROPTEST_CASES=100 cargo test --test hll_property_tests
+
+proptest-hll-long: ## Long HLL property tests (10000 cases)
+	PROPTEST_CASES=10000 cargo test --test hll_property_tests
+
+proptest-hll-verbose: ## Verbose HLL property tests
+	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test hll_property_tests -- --nocapture
+
+proptest-all: ## All property tests (ZDB + HLL + others)
+	$(MAKE) proptest-zdb
+	$(MAKE) proptest-hll
 
 proptest-coverage: ## Property test coverage generation (tarpaulin, HTML)
-	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests
+	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests --test hll_property_tests
 
 proptest-continuous: ## Continuous property testing loop (use with caution)
 	while true; do \
 		echo "Running property tests iteration $$(date)"; \
 		PROPTEST_CASES=1000 cargo test --test property_tests || break; \
+		PROPTEST_CASES=1000 cargo test --test hll_property_tests || break; \
 		sleep 60; \
 	done
 
 proptest-timing: ## Measure execution time of property tests
+	@echo "==> ZDB property tests timing:"
 	time PROPTEST_CASES=1000 cargo test --test property_tests
+	@echo "==> HLL property tests timing:"
+	time PROPTEST_CASES=1000 cargo test --test hll_property_tests
 
 stress-test: ## Run stress tests (slow, many iterations)
 	PROPTEST_CASES=10000 cargo test --test stress_tests
@@ -241,14 +269,24 @@ stress-test-quick: ## Quick stress tests (short, for CI)
 endurance-test: ## Endurance test for memory leaks (slow)
 	cargo test --test stress_tests test_endurance_many_iterations --release -- --ignored --nocapture
 
-test-all: ## Complete test suite (unit + property + stress)
-	cargo test
-	$(MAKE) proptest
+test-all: ## Complete test suite (unit + integration + property + stress)
+	@echo "==> Running unit tests..."
+	cargo test --lib
+	@echo "==> Running integration tests..."
+	cargo test --test hll_integration_tests
+	@echo "==> Running property tests (ZDB)..."
+	$(MAKE) proptest-zdb
+	@echo "==> Running property tests (HLL)..."
+	$(MAKE) proptest-hll
+	@echo "==> Running stress tests (quick)..."
 	$(MAKE) stress-test-quick
+	@echo "✅ All tests passed!"
 
 find-bugs-fast: ## Minimal test suite to quickly find bugs
 	PROPTEST_CASES=500 cargo test --test property_tests roundtrip_all_values
 	PROPTEST_CASES=500 cargo test --test property_tests numeric_edge_cases
+	PROPTEST_CASES=500 cargo test --test hll_property_tests add_idempotence
+	PROPTEST_CASES=500 cargo test --test hll_property_tests merge_commutativity
 	cargo test --test stress_tests test_compression_pathological_cases
 
 ##@ Run
