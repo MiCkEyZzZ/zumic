@@ -13,6 +13,10 @@
     - `with_threshold`, `merge`, `stats`, `convert_to_dense`, `is_sparse`.
   - Покрыта базовыми тестами логика работы HLL.
 
+- **tests**
+  - добавлены property tests для HLL `hll_property_tests.rs`
+  - добавлены интеграционные тесты `hll_integration_tests.rs`
+
 - **Engine (`engine/zdb`)**
   - В `decode` и `encode` обновлена логика обработки HLL для поддержки новых вариантов (sparse/dense).
 - **Network / Protocol (`network/protocol/serializer.rs`)**
@@ -203,6 +207,8 @@
   - Тесты подтверждают корректность поведения и отсутствие деградации ёмкости буфера.
 
 ### Изменено
+
+- Обновлён Makefile
 
 - **HLL module (`hll_base`)**
   - Рефакторинг существующих функций:
