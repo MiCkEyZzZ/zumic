@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 2 * * *" # Extended run at night
+    - cron: "0 2 * * *" # Длительная ночная пробежка
   workflow_dispatch: {}
 
 env:
@@ -29,7 +29,9 @@ jobs:
           cache-on-failure: true
 
       - name: Build tests
-        run: cargo test --no-run --test property_tests
+        run: |
+          cargo test --no-run --test property_tests
+          cargo test --no-run --test hll_property_tests
 
   # 2. Запускаем тесты в матрице без повторной сборки
   property-tests:
@@ -39,34 +41,63 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # стабильный
           - rust: stable
+            suite: property_tests
             mode: quick
             cases: 100
             timeout: 5
           - rust: stable
+            suite: hll_property_tests
+            mode: quick
+            cases: 100
+            timeout: 5
+
+          - rust: stable
+            suite: property_tests
             mode: normal
             cases: 1000
             timeout: 10
           - rust: stable
+            suite: hll_property_tests
+            mode: normal
+            cases: 1000
+            timeout: 10
+
+          - rust: stable
+            suite: property_tests
             mode: extended
             cases: 10000
             timeout: 30
+          - rust: stable
+            suite: hll_property_tests
+            mode: extended
+            cases: 10000
+            timeout: 30
+
+          # бета
           - rust: beta
+            suite: property_tests
             mode: quick
             cases: 100
             timeout: 5
           - rust: beta
-            mode: normal
-            cases: 1000
-            timeout: 10
+            suite: hll_property_tests
+            mode: quick
+            cases: 100
+            timeout: 5
+
+          # ночной
           - rust: nightly
+            suite: property_tests
             mode: quick
             cases: 100
             timeout: 5
           - rust: nightly
-            mode: normal
-            cases: 1000
-            timeout: 10
+            suite: hll_property_tests
+            mode: quick
+            cases: 100
+            timeout: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -81,20 +112,29 @@ jobs:
 
       - name: Run property tests (${{ matrix.mode }})
         run: |
-          echo "Running property tests with ${{ matrix.cases }} cases..."
-          PROPTEST_CASES=${{ matrix.cases }} cargo test --test property_tests -- --nocapture
+          echo "Running ${{ matrix.suite }} with ${{ matrix.cases }} cases..."
+          PROPTEST_CASES=${{ matrix.cases }} cargo test --test ${{ matrix.suite }} -- --nocapture
         timeout-minutes: ${{ matrix.timeout }}
 
-  # 3. Extended nightly fuzzing по расписанию
+  # 3.  Ночной расширенный фузз
   nightly-fuzzing:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+
       - uses: Swatinem/rust-cache@v2
-      - name: Extended nightly fuzz run
+
+      - name: Extended nightly fuzz run (property_tests)
         run: |
-          echo "Starting extended nightly fuzz run..."
+          echo "Starting extended nightly fuzz run for property_tests..."
           PROPTEST_CASES=50000 cargo test --test property_tests -- --nocapture
+        timeout-minutes: 120
+
+      - name: Extended nightly fuzz run (hll_property_tests)
+        run: |
+          echo "Starting extended nightly fuzz run for hll_property_tests..."
+          PROPTEST_CASES=50000 cargo test --test hll_property_tests -- --nocapture
         timeout-minutes: 120
