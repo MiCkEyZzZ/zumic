@@ -69,7 +69,7 @@ pub use database::{
     FragmentationInfo, GeoEntry, GeoPoint, GeoSet, Geohash, GeohashPrecision, GeohashStats, Hll,
     IntSet, IntSetIter, IntSetRangeIter, ListPack, Node, PubSubManager, QuickList, RTree,
     RadiusOptions, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash, SmartHashIter,
-    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE, DENSE_SIZE,
+    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE,
 };
 /// Реэкспорт движков хранения.
 pub use engine::{

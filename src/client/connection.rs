@@ -44,7 +44,7 @@ impl ClientConnection {
         read_timeout: Duration,
         write_timeout: Duration,
     ) -> ClientResult<Self> {
-        debug!("Подкючение к {addr}");
+        debug!("Connecting to {addr}");
 
         // Подключаемся с таймаутом
         let stream = timeout(connect_timeout, TcpStream::connect(addr))
@@ -54,7 +54,7 @@ impl ClientConnection {
                 address: addr.to_string(),
                 reason: e.to_string(),
             })?;
-        debug!("Соединение установленно с {addr}");
+        debug!("Connection established with {addr}");
 
         // Разделяем stream на read/write половины
         let (read_half, write_half) = stream.into_split();
@@ -76,7 +76,7 @@ impl ClientConnection {
         &mut self,
         command: &ZspCommand,
     ) -> ClientResult<()> {
-        trace!("Отправка команды: {command:?}");
+        trace!("Sending command: {command:?}");
 
         // Создаём фрейм из команды (нужно будет ф-я преобразования)
         let frame = command_to_frame(command)?;
@@ -98,14 +98,14 @@ impl ClientConnection {
             .map_err(|_| ClientError::WriteTimeout)?
             .map_err(|e: std::io::Error| e)?;
 
-        trace!("Команда отправлена успешно");
+        trace!("Command sent successfully");
 
         Ok(())
     }
 
     /// Получает ответ от сервера
     pub async fn receive_response(&mut self) -> ClientResult<Response> {
-        trace!("Ожидание ответа от сервера");
+        trace!("Waiting for server response");
 
         // Буфер для накопления байт между чтениями
         let mut read_buf: Vec<u8> = Vec::with_capacity(8192);
@@ -123,9 +123,9 @@ impl ClientConnection {
                         let consumed = total - remaining;
                         // удаляем потреблённые байты (кол-во consumed)
                         read_buf.drain(..consumed);
-                        trace!("Получен фрейм: {frame:?}");
+                        trace!("Frame received: {frame:?}");
                         let response = frame_to_response(frame)?;
-                        trace!("Ответ распознан: {response:?}");
+                        trace!("Response parsed: {response:?}");
                         return Ok(response);
                     }
                     Ok(None) => {
@@ -185,7 +185,7 @@ impl ClientConnection {
 
     /// Закрывает соединение
     pub async fn close(mut self) -> ClientResult<()> {
-        debug!("Закрытие соединения с {}", self.addr);
+        debug!("Closing connection to {}", self.addr);
         self.writer
             .shutdown()
             .await
@@ -251,7 +251,7 @@ fn value_to_frame(value: &Value) -> ClientResult<ZspFrame<'static>> {
         Value::Bool(b) => Ok(ZspFrame::Bool(*b)),
         Value::Null => Ok(ZspFrame::Null),
         _ => Err(ClientError::Protocol {
-            reason: format!("Unsupported value type: {:?}", value),
+            reason: format!("Unsupported value type: {value:?}"),
         }
         .into()),
     }

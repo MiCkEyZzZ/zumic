@@ -127,7 +127,7 @@ impl ConsistentHashRing {
         for shard_id in 0..shard_count {
             for virtual_node in 0..virtual_nodes_per_shard {
                 let mut hasher = DefaultHasher::new();
-                format!("shard-{}-vnode-{}", shard_id, virtual_node).hash(&mut hasher);
+                format!("shard-{shard_id}-vnode-{virtual_node}").hash(&mut hasher);
                 let hash = hasher.finish();
                 nodes.insert(hash, shard_id);
             }
@@ -176,7 +176,7 @@ impl ConsistentHashRing {
     ) {
         for virtual_node in 0..self.virtual_nodes_per_shard {
             let mut hasher = DefaultHasher::new();
-            format!("shard-{}-vnode-{}", shard_id, virtual_node).hash(&mut hasher);
+            format!("shard-{shard_id}-vnode-{virtual_node}").hash(&mut hasher);
             let hash = hasher.finish();
             self.nodes.insert(hash, shard_id);
         }

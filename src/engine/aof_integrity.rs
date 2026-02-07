@@ -528,7 +528,7 @@ mod tests {
 
         // сравнение с допуском
         let rate = stats.success_rate();
-        assert!((rate - 66.66666666666667).abs() < 1e-9, "rate = {}", rate);
+        assert!((rate - 66.66666666666667).abs() < 1e-9, "rate = {rate}");
 
         // corruption 33% > 5% -> критическая проблема
         assert!(stats.has_critical_issues());

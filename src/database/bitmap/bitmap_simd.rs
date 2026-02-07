@@ -9,8 +9,6 @@ pub enum BitcountStrategy {
     Popcnt,
     /// AVX2 SIMD (256-битные векторы)
     Avx2,
-    /// AVX-512 SIMD (512-битные векторы)
-    Avx512,
 }
 
 /// Результат обнаружения возможностей процессора.
@@ -20,8 +18,6 @@ pub struct CpuFeatures {
     pub has_popcnt: bool,
     /// Наличие AVX2
     pub has_avx2: bool,
-    /// Наличие AVX-512
-    pub has_avx512: bool,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,8 +32,6 @@ impl CpuFeatures {
             Self {
                 has_popcnt: is_x86_feature_detected!("popcnt"),
                 has_avx2: is_x86_feature_detected!("avx2"),
-                has_avx512: is_x86_feature_detected!("avx512f")
-                    && is_x86_feature_detected!("avx512bw"),
             }
         }
 
@@ -46,16 +40,13 @@ impl CpuFeatures {
             Self {
                 has_popcnt: false,
                 has_avx2: false,
-                has_avx512: false,
             }
         }
     }
 
     /// Возвращает наиболее подходящую доступную стратегию подсчёта битов.
     pub fn best_strategy(&self) -> BitcountStrategy {
-        if self.has_avx512 {
-            BitcountStrategy::Avx512
-        } else if self.has_avx2 {
+        if self.has_avx2 {
             BitcountStrategy::Avx2
         } else if self.has_popcnt {
             BitcountStrategy::Popcnt
@@ -109,38 +100,12 @@ pub fn bitcount_avx2(bytes: &[u8]) -> usize {
     }
 }
 
-/// Безопасный обёртка для подсчёта битов с использованием AVX-512
-#[inline]
-pub fn bitcount_avx512(bytes: &[u8]) -> usize {
-    // Когда включена фича avx512, попытаемся выполнить AVX-512 путь при наличии
-    // CPU-фич
-    #[cfg(all(feature = "avx512", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
-            // AVX-512 impl компилируется только при той же cfg (feature + x86_64)
-            unsafe { bitcount_avx512_impl(bytes) }
-        } else {
-            // если CPU не поддерживает AVX-512 — фоллбек на AVX2 (как в твоей логике)
-            bitcount_avx2(bytes)
-        }
-    }
-
-    // Если фича avx512 НЕ включена (обычная сборка) — поведение НЕ меняем:
-    // используем lookup table (точно как в исходном варианте).
-    #[cfg(not(all(feature = "avx512", target_arch = "x86_64")))]
-    {
-        bitcount_lookup_table(bytes)
-    }
-}
-
 /// Автоматический выбор и выполнение оптимальной стратегии подсчёта битов.
 #[inline]
 pub fn bitcount_auto(bytes: &[u8]) -> usize {
     #[cfg(target_arch = "x86_64")]
     {
-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
-            bitcount_avx512(bytes)
-        } else if is_x86_feature_detected!("avx2") {
+        if is_x86_feature_detected!("avx2") {
             bitcount_avx2(bytes)
         } else if is_x86_feature_detected!("popcnt") {
             bitcount_popcnt(bytes)
@@ -164,7 +129,6 @@ pub fn bitcount_with_strategy(
         BitcountStrategy::LookupTable => bitcount_lookup_table(bytes),
         BitcountStrategy::Popcnt => bitcount_popcnt(bytes),
         BitcountStrategy::Avx2 => bitcount_avx2(bytes),
-        BitcountStrategy::Avx512 => bitcount_avx512(bytes),
     }
 }
 
@@ -269,63 +233,6 @@ unsafe fn bitcount_avx2_impl(bytes: &[u8]) -> usize {
     count
 }
 
-/// Подсчёт битов с использованием AVX-512 SIMD (512-битные векторы)
-/// Компилируется ТОЛЬКО если включена фича "avx512" и таргет x86_64.
-/// Это гарантирует, что на stable без фичи AVX-512 не будет ошибок E0658
-#[cfg(all(feature = "avx512", target_arch = "x86_64"))]
-#[target_feature(enable = "avx512f,avx512bw")]
-unsafe fn bitcount_avx512_impl(bytes: &[u8]) -> usize {
-    let mut count = 0usize;
-    let ptr = bytes.as_ptr();
-    let end = unsafe { ptr.add(bytes.len()) };
-    let mut current = ptr;
-
-    unsafe {
-        // Основной цикл по 64 байта
-        while current.add(64) <= end {
-            use std::arch::x86_64::{
-                __m512i, _mm512_loadu_si512, _mm512_popcnt_epi64, _mm512_reduce_add_epi64,
-            };
-
-            let vec = _mm512_loadu_si512(current as *const __m512i);
-            let popcnt = _mm512_popcnt_epi64(vec);
-            count += _mm512_reduce_add_epi64(popcnt) as usize;
-            current = current.add(64);
-        }
-
-        // Оставшиеся 32 байта
-        if current.add(32) <= end {
-            use std::arch::x86_64::{
-                __m256i, _mm256_extracti128_si256, _mm256_loadu_si256, _mm512_cvtepu8_epi64,
-                _mm512_popcnt_epi64, _mm512_reduce_add_epi64,
-            };
-
-            let vec = _mm256_loadu_si256(current as *const __m256i);
-            let lo = _mm512_cvtepu8_epi64(_mm256_extracti128_si256(vec, 0));
-            let hi = _mm512_cvtepu8_epi64(_mm256_extracti128_si256(vec, 1));
-            count += _mm512_reduce_add_epi64(_mm512_popcnt_epi64(lo)) as usize;
-            count += _mm512_reduce_add_epi64(_mm512_popcnt_epi64(hi)) as usize;
-            current = current.add(32);
-        }
-
-        // Оставшиеся 8-байтные блоки
-        while current.add(8) <= end {
-            use std::arch::x86_64::_popcnt64;
-            let chunk = (current as *const u64).read_unaligned();
-            count += _popcnt64(chunk as i64) as usize;
-            current = current.add(8);
-        }
-
-        // Последние байты
-        while current < end {
-            count += BIT_COUNT_TABLE[*current as usize] as usize;
-            current = current.add(1);
-        }
-    }
-
-    count
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
@@ -343,10 +250,7 @@ mod tests {
         // All platforms should at least have lookup table.
         assert!(matches!(
             features.best_strategy(),
-            BitcountStrategy::LookupTable
-                | BitcountStrategy::Popcnt
-                | BitcountStrategy::Avx2
-                | BitcountStrategy::Avx512
+            BitcountStrategy::LookupTable | BitcountStrategy::Popcnt | BitcountStrategy::Avx2
         ));
     }
 }

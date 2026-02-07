@@ -4,30 +4,68 @@ use serde::{Deserialize, Serialize};
 
 use crate::database::{HllDense, HllSparse};
 
-/// Количество регистров в HyperLogLog
-/// (обычно степень двойки, здесь 16 384).
-const NUM_REGISTERS: usize = 16_384;
+/// HLL по умолчанию с точностью (P=14, 16K регистров, ~0.81% погрешности)
+pub type HllDefault = Hll<14>;
+
+/// HLL с компактной конфигурацией (P=4, 16 регистров, ~26% погрешность)
+pub type HllCompact = Hll<4>;
+
+/// HLL с высокой точностью (P=16, 65K регистров, ~0.5% погрешность)
+pub type HllPrecise = Hll<16>;
+
+/// HLL с максимальной точностью (P=18, 262K регистров, ~0.4% погрешность)
+pub type HllMaxPrecision = Hll<18>;
+
+/// Точность HLL по умолчанию (14 бит = 16,384 регистра).
+///
+/// Стандартная погрешность: ~1.04/sqrt(2^14) ≈ 0.81%
+pub const DEFAULT_PRECISION: usize = 14;
+
+/// Минимальная допустимая точность (4 бита = 16 регистров).
+///
+/// Стандартная погрешность: ~26%
+pub const MIN_PRECISION: usize = 4;
+
+/// Максимальная допустимая точность (18 бит = 262,144 регистра).
+///
+/// Стандартная погрешность: ~0.4%
+pub const MAX_PRECISION: usize = 18;
+
 /// Ширина каждого регистра в битах (6 бит
+///
 /// на регистр для хранения значения rho).
 const REGISTER_BITS: usize = 6;
-/// Общий размер массива регистров в байтах:
-/// NUM_REGISTERS × REGISTER_BITS / 8 = 12 288 байт.
-pub const DENSE_SIZE: usize = NUM_REGISTERS * REGISTER_BITS / 8; // 12288 байт
 
 /// Версия формата сериализации для обратной совместимости.
 pub const SERIALIZATION_VERSION: u8 = 1;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum HllEncoding {
-    Sparse(HllSparse),
-    Dense(Box<HllDense>),
+/// Внутренний трейт для валидации точности на этапе компиляции.
+trait ValidatePrecision {
+    const IS_VALID: ();
 }
 
-/// HyperLogLog — структура для приближённого
-/// подсчёта мощности множества.
+/// Представляет HyperLogLog: плотное или разряженное.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Hll {
-    pub encoding: HllEncoding,
+pub enum HllEncoding<const P: usize> {
+    /// Разреженное представление для малых множеств
+    Sparse(HllSparse<P>),
+
+    /// Плотное представление для больших множеств
+    Dense(Box<HllDense<P>>),
+}
+
+/// HyperLogLog — структура для приближённого подсчёта мощности множества с
+/// настраиваемой точностью.
+///
+/// # Дженерик параметр P (Точность)
+///
+/// - **P ∈ [4..18]** — точность в битах
+/// - **P = 4**: 16 регистров, ~26% погрешность, 6 байт
+/// - **P = 14** (default): 16,384 регистра, ~0.81% погрешность, 12KB
+/// - **P = 18**: 262,144 регистра, ~0.4% погрешность, 196KB
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Hll<const P: usize = DEFAULT_PRECISION> {
+    pub encoding: HllEncoding<P>,
     pub version: u8,
 }
 
@@ -38,30 +76,66 @@ pub struct HllStats {
     pub memory_bytes: usize,
     pub is_sparse: bool,
     pub non_zero_registers: usize,
+    pub precision: usize,
+    pub standard_error: f64,
     pub version: u8,
+}
+
+/// Builder для создания HLL с различными параметрами.
+pub struct HllBuilder<const P: usize = DEFAULT_PRECISION> {
+    threshold: Option<usize>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Собственные методы
 ////////////////////////////////////////////////////////////////////////////////
 
-impl Hll {
-    /// Создаёт новый пустой HLL — все регистры обнулены.
+impl<const P: usize> Hll<P> {
+    /// Создаёт новый пустой HLL с заданной точностью.
     pub fn new() -> Self {
+        let _: () = Self::IS_VALID;
+
         Self {
             encoding: HllEncoding::Sparse(HllSparse::new()),
             version: SERIALIZATION_VERSION,
         }
     }
 
+    /// Создаёт HLL с заданным порогом конверсии sparse->dense.
     pub fn with_threshold(threshold: usize) -> Self {
+        let _: () = Self::IS_VALID;
+
         Self {
             encoding: HllEncoding::Sparse(HllSparse::with_threshold(threshold)),
             version: SERIALIZATION_VERSION,
         }
     }
 
-    /// Добавляет элемент `value` в структуру:
+    /// Возвращает точность HLL (кол-во бит для индекса регистра).
+    #[inline]
+    pub const fn percision(&self) -> usize {
+        P
+    }
+
+    /// Возвращает кол-во регистров.
+    #[inline]
+    pub const fn num_registers(&self) -> usize {
+        num_registers(P)
+    }
+
+    /// Вовзращает размер dense представления в байтах.
+    #[inline]
+    pub const fn dense_size(&self) -> usize {
+        dense_size(P)
+    }
+
+    /// Вовзращает стандартную погрешность для текущей точности.
+    #[inline]
+    pub fn standard_error(&self) -> f64 {
+        standard_error(P)
+    }
+
+    /// Добавляет элемент `value` в структуру HLL
     pub fn add(
         &mut self,
         value: &[u8],
@@ -71,9 +145,9 @@ impl Hll {
 
         match &mut self.encoding {
             HllEncoding::Sparse(sparse) => {
-                let current = sparse.get_register(index as u16);
+                let current = sparse.get_register(index);
                 if rho > current {
-                    sparse.set_register(index as u16, rho);
+                    sparse.set_register(index, rho);
 
                     // Проверяем, нужно ли переключиться на dense
                     if sparse.should_convert_to_dense() {
@@ -102,12 +176,12 @@ impl Hll {
                     sum += 1.0 / (1_u64 << val) as f64;
                 }
                 // Добавляем вклад нулевых регистров
-                zeros = sparse.count_zeros(NUM_REGISTERS);
+                zeros = sparse.count_zeros(self.num_registers());
                 sum += zeros as f64 // 2^0 = 1
             }
             HllEncoding::Dense(dense) => {
                 // Для dense: итерируем все регистры
-                for i in 0..NUM_REGISTERS {
+                for i in 0..self.num_registers() {
                     let val = dense.get_register(i);
                     if val == 0 {
                         zeros += 1;
@@ -117,8 +191,8 @@ impl Hll {
             }
         }
 
-        let m = NUM_REGISTERS as f64;
-        let alpha = 0.7213 / (1.0 + 1.079 / m);
+        let m = self.num_registers() as f64;
+        let alpha = alpha_constant(P);
         let raw_estimate = alpha * m * m / sum;
 
         // Коррекция для малых множеств
@@ -132,8 +206,10 @@ impl Hll {
     /// Объединяет текущий HLL с другими.
     pub fn merge(
         &mut self,
-        other: &Hll,
+        other: &Hll<P>,
     ) {
+        let num_registers = self.num_registers();
+
         match (&mut self.encoding, &other.encoding) {
             (HllEncoding::Sparse(sparse1), HllEncoding::Sparse(sparse2)) => {
                 sparse1.merge(sparse2);
@@ -142,22 +218,19 @@ impl Hll {
                 }
             }
             (HllEncoding::Sparse(_), HllEncoding::Dense(_)) => {
-                // Если другой dense, сначала конвертируем себя
                 self.convert_to_dense();
                 self.merge(other);
             }
             (HllEncoding::Dense(dense1), HllEncoding::Sparse(sparse2)) => {
-                // Объединяем sparse в dense
                 for (index, value) in sparse2.iter() {
-                    let current = dense1.get_register(index as usize);
+                    let current = dense1.get_register(index);
                     if value > current {
-                        dense1.set_register(index as usize, value);
+                        dense1.set_register(index, value);
                     }
                 }
             }
             (HllEncoding::Dense(dense1), HllEncoding::Dense(dense2)) => {
-                // Объединяем два dense
-                for i in 0..NUM_REGISTERS {
+                for i in 0..num_registers {
                     let val1 = dense1.get_register(i);
                     let val2 = dense2.get_register(i);
                     if val2 > val1 {
@@ -176,12 +249,14 @@ impl Hll {
                 memory_bytes: sparse.memory_footprint(),
                 is_sparse: true,
                 non_zero_registers: sparse.len(),
+                precision: P,
+                standard_error: self.standard_error(),
                 version: self.version,
             },
             HllEncoding::Dense(_) => {
                 let mut non_zero = 0;
                 if let HllEncoding::Dense(dense) = &self.encoding {
-                    for i in 0..NUM_REGISTERS {
+                    for i in 0..self.num_registers() {
                         if dense.get_register(i) != 0 {
                             non_zero += 1;
                         }
@@ -189,9 +264,11 @@ impl Hll {
                 }
                 HllStats {
                     cardinality: self.estimate_cardinality(),
-                    memory_bytes: DENSE_SIZE + std::mem::size_of::<Hll>(),
+                    memory_bytes: self.dense_size() + std::mem::size_of::<Hll<P>>(),
                     is_sparse: false,
                     non_zero_registers: non_zero,
+                    precision: P,
+                    standard_error: self.standard_error(),
                     version: self.version,
                 }
             }
@@ -206,6 +283,7 @@ impl Hll {
     }
 
     /// Проверяем, использует ли HLL sparse представление.
+    #[inline]
     pub fn is_sparse(&self) -> bool {
         matches!(self.encoding, HllEncoding::Sparse(_))
     }
@@ -218,12 +296,20 @@ impl Hll {
     }
 
     /// Делит 64-битный хэш:
+    ///
     /// - `index` ← старшие 14 бит (для выбора регистра);
     /// - `rho` ← количество ведущих нулей в оставшихся битах + 1.
     fn index_and_rho(hash: u64) -> (usize, u8) {
-        let index = (hash >> (64 - 14)) as usize;
-        let remaining = hash << 14 | 1 << 13;
-        let rho = remaining.leading_zeros() as u8 + 1;
+        // Старшие Р бит индекс регистра
+        let index = (hash >> (64 - P)) as usize;
+
+        // Оставшиеся (64 - Р) бит
+        let w = hash << P;
+
+        // rho = число ведущих нулей + 1
+        // но НЕ больше (64 - Р + 1)
+        let rho = ((w.leading_zeros() + 1).min((64 - P) as u32 + 1)) as u8;
+
         (index, rho)
     }
 
@@ -238,7 +324,7 @@ impl Hll {
         index: usize,
     ) -> u8 {
         match &self.encoding {
-            HllEncoding::Sparse(sparse) => sparse.get_register(index as u16),
+            HllEncoding::Sparse(sparse) => sparse.get_register(index),
             HllEncoding::Dense(dense) => dense.get_register(index),
         }
     }
@@ -252,7 +338,7 @@ impl Hll {
     ) {
         match &mut self.encoding {
             HllEncoding::Sparse(sparse) => {
-                sparse.set_register(index as u16, value);
+                sparse.set_register(index, value);
                 if sparse.should_convert_to_dense() {
                     self.convert_to_dense();
                 }
@@ -264,24 +350,125 @@ impl Hll {
     }
 }
 
+impl<const P: usize> HllBuilder<P> {
+    /// Создаёт новый builder
+    pub fn new() -> Self {
+        Self { threshold: None }
+    }
+
+    /// Устанавливаем порого конверсии sparse->dense
+    pub fn threshold(
+        mut self,
+        threshold: usize,
+    ) -> Self {
+        self.threshold = Some(threshold);
+        self
+    }
+
+    /// Строит HLL с заданными параметрами.
+    pub fn build(self) -> Hll<P> {
+        match self.threshold {
+            Some(t) => Hll::with_threshold(t),
+            None => Hll::new(),
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-// Общие реализации трейтов для Hll
+// Общие реализации трейтов для Hll, HllBuilder
 ////////////////////////////////////////////////////////////////////////////////
 
-impl Default for Hll {
+impl<const P: usize> ValidatePrecision for Hll<P> {
+    const IS_VALID: () = assert!(
+        P >= MIN_PRECISION && P <= MAX_PRECISION,
+        "HLL precision must be in range [4..18]"
+    );
+}
+
+impl<const P: usize> Default for Hll<P> {
     /// По умолчанию создаёт новый пустой HLL.
     fn default() -> Self {
         Self::new()
     }
 }
 
+impl<const P: usize> Default for HllBuilder<P> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Вычисляет кол-во регистров для заданной точности.
+///
+/// - P=4 -> 16 регистров
+/// - P=14 -> 16,384 регистра (по умолчанию)
+/// - P=17 -> 262,144 регистра
+#[inline]
+pub const fn num_registers(precision: usize) -> usize {
+    1 << precision
+}
+
+/// Вычисляет размер dense массива в байтах для заданной точности.
+#[inline]
+pub const fn dense_size(precision: usize) -> usize {
+    num_registers(precision) * REGISTER_BITS / 8
+}
+
+/// Вычисляет стандартную погрешность для заданной точности.
+///
+/// Формула: σ = 1.04 / sqrt(m), где m = 2^precision
+pub fn standard_error(precision: usize) -> f64 {
+    1.04 / (num_registers(precision) as f64).sqrt()
+}
+
+/// Вычисляет альфу константу для заданной точности.
+///
+/// α_m = 0.7213 / (1 + 1.079/m) для m ≥ 128
+pub fn alpha_constant(precision: usize) -> f64 {
+    let m = num_registers(precision) as f64;
+    if precision >= 7 {
+        0.7213 / (1.0 + 1.079 / m) // m >= 128
+    } else if precision == 4 {
+        0.673
+    } else if precision == 5 {
+        0.697
+    } else {
+        0.709 // precision == 6
+    }
+}
+
+/// Выбирает оптимальную точность на основе ожидаемой кардинальности и целевой
+/// погрешности.
+pub fn choose_precision(
+    _expected_cardinality: u64,
+    target_error: f64,
+) -> usize {
+    let required_registers = (1.04 / target_error).powi(2);
+
+    (required_registers.log2().ceil() as usize).clamp(MIN_PRECISION, MAX_PRECISION)
+}
+
+/// Вычисляет рекомендуемый sparse threshold для заданной точности.
+///
+/// Эвристика: threshold = min(num_register / 4, 3000)
+pub fn recommended_threshold(precision: usize) -> usize {
+    let num_regs = num_registers(precision);
+    (num_regs / 4).min(3000)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    type H = HllDefault;
+
     #[test]
     fn test_new_hll_is_sparse() {
-        let hll = Hll::new();
+        let hll = H::new();
         assert!(hll.is_sparse());
 
         let stats = hll.stats();
@@ -291,12 +478,112 @@ mod tests {
     }
 
     #[test]
+    fn test_precision_constants() {
+        assert_eq!(num_registers(4), 16);
+        assert_eq!(num_registers(14), 16_384);
+        assert_eq!(num_registers(18), 262_144);
+
+        assert_eq!(dense_size(4), 12); // 16 * 6 / 8 = 12 байтов
+        assert_eq!(dense_size(14), 12_288); // 16384 * 6 / 8 = 12288 байтов
+        assert_eq!(dense_size(18), 196_608); // 262144 * 6 / 8 = 196608 байтов
+    }
+
+    #[test]
+    fn test_standard_error_calculation() {
+        let err4 = standard_error(4);
+        let err14 = standard_error(14);
+        let err18 = standard_error(18);
+
+        // P=4; 1.04 / sqrt(16) = 0.26 = 26%
+        assert!((err4 - 0.26).abs() < 0.01);
+
+        // P=14: 1.04/sqrt(16384) ≈ 0.00812 = 0.81%
+        assert!((err14 - 0.00812).abs() < 0.0001);
+
+        // P=18: 1.04/sqrt(262144) ≈ 0.00203 = 0.2%
+        assert!((err18 - 0.00203).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_different_precisions() {
+        let n = 200_000;
+
+        let mut hll4 = Hll::<4>::new();
+        let mut hll14 = Hll::<14>::new();
+        let mut hll18 = Hll::<18>::new();
+
+        // Добавляем одинаковые элементы
+        for i in 0..n {
+            let elem = format!("item_{i}");
+            hll4.add(elem.as_bytes());
+            hll14.add(elem.as_bytes());
+            hll18.add(elem.as_bytes());
+        }
+
+        let error4 = (hll4.estimate_cardinality() - n as f64).abs() / n as f64;
+        let error14 = (hll14.estimate_cardinality() - n as f64).abs() / n as f64;
+        let error18 = (hll18.estimate_cardinality() - n as f64).abs() / n as f64;
+
+        assert!(error18 < error14);
+        assert!(error14 < error4);
+    }
+
+    #[test]
+    fn test_precision_error_bounds() {
+        assert!(standard_error(18) < standard_error(14));
+        assert!(standard_error(14) < standard_error(4));
+    }
+
+    #[test]
+    fn test_type_aliases() {
+        let _compact: HllCompact = Hll::<4>::new();
+        let _default: HllDefault = Hll::<14>::new();
+        let _precise: HllPrecise = Hll::<16>::new();
+        let _max: HllMaxPrecision = Hll::<18>::new();
+    }
+
+    #[test]
+    fn test_builder_pattern() {
+        let hll1 = HllBuilder::<14>::new().build();
+        let hll2 = HllBuilder::<14>::new().threshold(5000).build();
+
+        assert!(hll1.is_sparse());
+        assert!(hll2.is_sparse());
+    }
+
+    #[test]
+    fn test_stats_include_precision() {
+        let mut hll = Hll::<14>::new();
+
+        for i in 0..100 {
+            hll.add(format!("item_{i}").as_bytes());
+        }
+
+        let stats = hll.stats();
+
+        assert_eq!(stats.precision, 14);
+        assert!((stats.standard_error - 0.00812).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_memory_scaling_with_precision() {
+        let hll4 = Hll::<4>::new();
+        let hll14 = Hll::<14>::new();
+        let hll18 = Hll::<18>::new();
+
+        // Плотные размеры должны масштабироваться экспоненциально
+        assert_eq!(hll4.dense_size(), 12); // 6 байт разреженный
+        assert_eq!(hll14.dense_size(), 12_288); // 12 КБ
+        assert_eq!(hll18.dense_size(), 196_608); // 196 КБ
+    }
+
+    #[test]
     fn test_add_elements_sparse() {
-        let mut hll = Hll::new();
+        let mut hll = H::new();
 
         // Добавляем несколько элементов
         for i in 0..100 {
-            hll.add(format!("element_{}", i).as_bytes());
+            hll.add(format!("element_{i}").as_bytes());
         }
 
         // Должно остаться sparse
@@ -308,11 +595,11 @@ mod tests {
 
     #[test]
     fn test_auto_conversion_to_dense() {
-        let mut hll = Hll::with_threshold(100);
+        let mut hll = H::with_threshold(100);
 
         // Добавляем много уникальных элементов
         for i in 0..1000 {
-            hll.add(format!("element_{}", i).as_bytes());
+            hll.add(format!("element_{i}").as_bytes());
         }
 
         // Должно конвертироваться в dense
@@ -320,17 +607,20 @@ mod tests {
 
         let stats = hll.stats();
         assert!(!stats.is_sparse);
-        assert_eq!(stats.memory_bytes, DENSE_SIZE + std::mem::size_of::<Hll>());
+        assert_eq!(
+            stats.memory_bytes,
+            hll.dense_size() + std::mem::size_of::<Hll>()
+        );
     }
 
     #[test]
     fn test_cardinality_estimation() {
-        let mut hll = Hll::new();
+        let mut hll = H::new();
 
         // Добавляем известное кол-во уникальных элементов
         let num_elements = 10000;
         for i in 0..num_elements {
-            hll.add(format!("unique_{}", i).as_bytes());
+            hll.add(format!("unique_{i}").as_bytes());
         }
 
         let estimate = hll.estimate_cardinality();
@@ -348,15 +638,15 @@ mod tests {
 
     #[test]
     fn test_merge_sparse_sparse() {
-        let mut hll1 = Hll::new();
-        let mut hll2 = Hll::new();
+        let mut hll1 = H::new();
+        let mut hll2 = H::new();
 
         // Добавляем разные элементы
         for i in 0..50 {
-            hll1.add(format!("a_{}", i).as_bytes());
+            hll1.add(format!("a_{i}").as_bytes());
         }
         for i in 0..50 {
-            hll2.add(format!("b_{}", i).as_bytes());
+            hll2.add(format!("b_{i}").as_bytes());
         }
 
         let card1 = hll1.estimate_cardinality();
@@ -372,17 +662,17 @@ mod tests {
 
     #[test]
     fn test_merge_sparse_dense() {
-        let mut sparse = Hll::with_threshold(50);
-        let mut dense = Hll::with_threshold(10);
+        let mut sparse = H::with_threshold(50);
+        let mut dense = H::with_threshold(10);
 
         // sparse остаётся sparse
         for i in 0..30 {
-            sparse.add(format!("sparse_{}", i).as_bytes());
+            sparse.add(format!("sparse_{i}").as_bytes());
         }
 
         // dense становится dense
         for i in 0..100 {
-            dense.add(format!("dense_{}", i).as_bytes());
+            dense.add(format!("dense_{i}").as_bytes());
         }
 
         assert!(sparse.is_sparse());
@@ -396,7 +686,7 @@ mod tests {
 
     #[test]
     fn test_duplicate_elements() {
-        let mut hll = Hll::new();
+        let mut hll = H::new();
 
         // Добавляем одинаковые элементы
         for _ in 0..1000 {
@@ -411,10 +701,10 @@ mod tests {
 
     #[test]
     fn test_stats() {
-        let mut hll = Hll::new();
+        let mut hll = H::new();
 
         for i in 0..100 {
-            hll.add(format!("item_{}", i).as_bytes());
+            hll.add(format!("item_{i}").as_bytes());
         }
 
         let stats = hll.stats();
@@ -423,19 +713,19 @@ mod tests {
         assert!(stats.is_sparse);
         assert!(stats.non_zero_registers > 0);
         assert_eq!(stats.version, SERIALIZATION_VERSION);
-        assert!(stats.memory_bytes < DENSE_SIZE);
+        assert!(stats.memory_bytes < hll.dense_size());
     }
 
     #[test]
     fn test_serialization_sparse() {
-        let mut hll = Hll::new();
+        let mut hll = H::new();
 
         for i in 0..100 {
-            hll.add(format!("test_{}", i).as_bytes());
+            hll.add(format!("test_{i}").as_bytes());
         }
 
         let serialized = bincode::serialize(&hll).unwrap();
-        let deserialized: Hll = bincode::deserialize(&serialized).unwrap();
+        let deserialized: H = bincode::deserialize(&serialized).unwrap();
 
         assert_eq!(hll, deserialized);
         assert!(deserialized.is_sparse());
@@ -443,16 +733,16 @@ mod tests {
 
     #[test]
     fn test_serialization_dense() {
-        let mut hll = Hll::with_threshold(10);
+        let mut hll = H::with_threshold(10);
 
         for i in 0..1000 {
-            hll.add(format!("test_{}", i).as_bytes());
+            hll.add(format!("test_{i}").as_bytes());
         }
 
         assert!(!hll.is_sparse());
 
         let serialized = bincode::serialize(&hll).unwrap();
-        let deserialized: Hll = bincode::deserialize(&serialized).unwrap();
+        let deserialized: H = bincode::deserialize(&serialized).unwrap();
 
         assert_eq!(hll, deserialized);
         assert!(!deserialized.is_sparse());
@@ -460,13 +750,13 @@ mod tests {
 
     #[test]
     fn test_memory_efficiency() {
-        let mut sparse = Hll::new();
-        let mut dense = Hll::with_threshold(10);
+        let mut sparse = H::new();
+        let mut dense = H::with_threshold(10);
 
         // Добавляем одинаковое количество элементов
         for i in 0..50 {
-            sparse.add(format!("elem_{}", i).as_bytes());
-            dense.add(format!("elem_{}", i).as_bytes());
+            sparse.add(format!("elem_{i}").as_bytes());
+            dense.add(format!("elem_{i}").as_bytes());
         }
 
         // собираем статистику

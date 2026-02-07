@@ -530,7 +530,7 @@ impl AofLog {
                     messages.push("AOF file successfully repaired and rewritten".to_string());
                 }
                 Err(e) => {
-                    messages.push(format!("Failed to rewrite repaired AOF: {}", e));
+                    messages.push(format!("Failed to rewrite repaired AOF: {e}"));
                 }
             }
         }

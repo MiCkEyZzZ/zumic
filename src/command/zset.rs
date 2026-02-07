@@ -119,6 +119,65 @@ impl CommandExecute for ZRemCommand {
     }
 }
 
+/// Команда ZRANGE — возвращает диапазон элементов по возрастанию балла.
+///
+/// Формат: `ZRANGE key start stop`
+///
+/// # Поля
+/// * `key` — ключ множества.
+/// * `start` — начальный индекс.
+/// * `stop` — конечный индекс.
+///
+/// # Возвращает
+/// Список элементов в заданном диапазоне или `Null`, если множество не
+/// существует.
+#[derive(Debug)]
+pub struct ZRangeCommand {
+    pub key: String,
+    pub start: i64,
+    pub stop: i64,
+}
+
+impl CommandExecute for ZRangeCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::ZSet { sorted, .. }) => {
+                // Собрать члены в порядке возрастания балла.
+                let all: Vec<Sds> = sorted.iter().map(|(_, member)| member.clone()).collect();
+                let len = all.len() as i64;
+                let s = if self.start < 0 {
+                    (len + self.start).max(0)
+                } else {
+                    self.start.min(len)
+                } as usize;
+                let e = if self.stop < 0 {
+                    (len + self.stop).max(0)
+                } else {
+                    self.stop.min(len - 1)
+                } as usize;
+                let slice = if s <= e && s < all.len() {
+                    &all[s..=e]
+                } else {
+                    &[]
+                };
+                let list = QuickList::from_iter(slice.iter().cloned(), 64);
+                Ok(Value::List(list))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Null),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZRANGE"
+    }
+}
+
 /// Команда ZSCORE — возвращает балл (score) элемента.
 ///
 /// Формат: `ZSCORE key member`
@@ -194,65 +253,6 @@ impl CommandExecute for ZCardCommand {
     }
 }
 
-/// Команда ZRANGE — возвращает диапазон элементов по возрастанию балла.
-///
-/// Формат: `ZRANGE key start stop`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `start` — начальный индекс.
-/// * `stop` — конечный индекс.
-///
-/// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если множество не
-/// существует.
-#[derive(Debug)]
-pub struct ZRangeCommand {
-    pub key: String,
-    pub start: i64,
-    pub stop: i64,
-}
-
-impl CommandExecute for ZRangeCommand {
-    fn execute(
-        &self,
-        store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        let key = Sds::from_str(&self.key);
-
-        match store.get(&key)? {
-            Some(Value::ZSet { sorted, .. }) => {
-                // Собрать члены в порядке возрастания балла.
-                let all: Vec<Sds> = sorted.iter().map(|(_, member)| member.clone()).collect();
-                let len = all.len() as i64;
-                let s = if self.start < 0 {
-                    (len + self.start).max(0)
-                } else {
-                    self.start.min(len)
-                } as usize;
-                let e = if self.stop < 0 {
-                    (len + self.stop).max(0)
-                } else {
-                    self.stop.min(len - 1)
-                } as usize;
-                let slice = if s <= e && s < all.len() {
-                    &all[s..=e]
-                } else {
-                    &[]
-                };
-                let list = QuickList::from_iter(slice.iter().cloned(), 64);
-                Ok(Value::List(list))
-            }
-            Some(_) => Err(StoreError::InvalidType),
-            None => Ok(Value::Null),
-        }
-    }
-
-    fn command_name(&self) -> &'static str {
-        "ZRANGE"
-    }
-}
-
 /// Команда ZREVRANGE — возвращает диапазон элементов по убыванию балла.
 ///
 /// Формат: `ZREVRANGE key start stop`
@@ -311,5 +311,83 @@ impl CommandExecute for ZRevRangeCommand {
 
     fn command_name(&self) -> &'static str {
         "ZREVRANGE"
+    }
+}
+
+#[derive(Debug)]
+pub struct ZRankCommand {
+    pub key: String,
+    pub member: String,
+}
+
+impl CommandExecute for ZRankCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZRANK"
+    }
+}
+
+#[derive(Debug)]
+pub struct ZRevRankCommand {
+    pub key: String,
+    pub member: String,
+}
+
+impl CommandExecute for ZRevRankCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZREVRANK"
+    }
+}
+
+#[derive(Debug)]
+pub struct ZCountCommand {
+    pub key: String,
+    pub min: f64,
+    pub max: f64,
+}
+
+impl CommandExecute for ZCountCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZCOUNT"
+    }
+}
+
+#[derive(Debug)]
+pub struct ZIncrByCommand {
+    pub key: String,
+    pub member: String,
+    pub increment: f64,
+}
+
+impl CommandExecute for ZIncrByCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ZINCRBY"
     }
 }

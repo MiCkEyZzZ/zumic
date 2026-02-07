@@ -1,50 +1,47 @@
 use zumic::{
-    database::{hll_metrics::HllMetrics, HllEncoding, DEFAULT_SPARSE_THRESHOLD},
+    database::{hll_metrics::HllMetrics, HllDefault, HllEncoding, DEFAULT_SPARSE_THRESHOLD},
     Hll,
 };
 
 #[test]
 fn test_full_lifecycle() {
-    let mut hll = Hll::new();
+    let mut hll: HllDefault = Hll::new();
 
     // Этап 1: Sparse режим
     for i in 0..100 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     assert!(hll.is_sparse(), "Should start in sparse mode");
     let sparse_cardinality = hll.estimate_cardinality();
     assert!(
         (sparse_cardinality - 100.0).abs() < 10.0,
-        "Sparse estimate should be close to 100, got {}",
-        sparse_cardinality
+        "Sparse estimate should be close to 100, got {sparse_cardinality}",
     );
 
     // Этап 2: Запустить преобразование в dense
     for i in 100..5000 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     assert!(!hll.is_sparse(), "Should convert to dense mode");
     let dense_cardinality = hll.estimate_cardinality();
     assert!(
         (dense_cardinality - 5000.0).abs() < 100.0,
-        "Dense estimate should be close to 5000, got {}",
-        dense_cardinality
+        "Dense estimate should be close to 5000, got {dense_cardinality}",
     );
 
     // Этап 3: Слияние с другой HLL
     let mut hll2 = Hll::new();
     for i in 4000..6000 {
-        hll2.add(format!("item_{}", i).as_bytes());
+        hll2.add(format!("item_{i}").as_bytes());
     }
 
     hll.merge(&hll2);
     let merged_cardinality = hll.estimate_cardinality();
     assert!(
         (merged_cardinality - 6000.0).abs() < 150.0,
-        "Merged estimate should be close to 6000, got {}",
-        merged_cardinality
+        "Merged estimate should be close to 6000, got {merged_cardinality}"
     );
 }
 
@@ -59,10 +56,10 @@ fn test_accuracy_at_different_scales() {
     ];
 
     for (num_elements, tolerance) in test_cases {
-        let mut hll = Hll::new();
+        let mut hll: HllDefault = Hll::new();
 
         for i in 0..num_elements {
-            hll.add(format!("element_{}", i).as_bytes());
+            hll.add(format!("element_{i}").as_bytes());
         }
 
         let estimate = hll.estimate_cardinality();
@@ -70,28 +67,24 @@ fn test_accuracy_at_different_scales() {
 
         assert!(
             error < tolerance,
-            "Scale {}: error {} exceeds tolerance {} (estimate: {})",
-            num_elements,
-            error,
-            tolerance,
-            estimate
+            "Scale {num_elements}: error {error} exceeds tolerance {tolerance} (estimate: {estimate})"
         );
     }
 }
 
 #[test]
 fn test_memory_efficiency_sparse_vs_dense() {
-    let mut sparse_hll = Hll::new();
+    let mut sparse_hll: HllDefault = Hll::new();
     for i in 0..100 {
-        sparse_hll.add(format!("item_{}", i).as_bytes());
+        sparse_hll.add(format!("item_{i}").as_bytes());
     }
 
     let sparse_stats = sparse_hll.stats();
     assert!(sparse_stats.is_sparse);
 
-    let mut dense_hll = Hll::new();
+    let mut dense_hll: HllDefault = Hll::new();
     for i in 0..10_000 {
-        dense_hll.add(format!("item_{}", i).as_bytes());
+        dense_hll.add(format!("item_{i}").as_bytes());
     }
 
     let dense_stats = dense_hll.stats();
@@ -106,12 +99,12 @@ fn test_memory_efficiency_sparse_vs_dense() {
 #[test]
 fn test_threshold_monotonicity() {
     let threshold = 5000;
-    let mut hll = Hll::with_threshold(threshold);
+    let mut hll: HllDefault = Hll::with_threshold(threshold);
 
     let mut was_dense = false;
 
     for i in 0..20_000 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
 
         if !hll.is_sparse() {
             was_dense = true;
@@ -121,8 +114,7 @@ fn test_threshold_monotonicity() {
         if was_dense {
             assert!(
                 !hll.is_sparse(),
-                "HLL reverted to sparse after becoming dense at element {}",
-                i
+                "HLL reverted to sparse after becoming dense at element {i}"
             );
         }
     }
@@ -132,12 +124,12 @@ fn test_threshold_monotonicity() {
 
 #[test]
 fn test_merge_combinations() {
-    let mut sparse1 = Hll::new();
-    let mut sparse2 = Hll::new();
+    let mut sparse1: HllDefault = Hll::new();
+    let mut sparse2: HllDefault = Hll::new();
 
     for i in 0..100 {
-        sparse1.add(format!("a_{}", i).as_bytes());
-        sparse2.add(format!("b_{}", i).as_bytes());
+        sparse1.add(format!("a_{i}").as_bytes());
+        sparse2.add(format!("b_{i}").as_bytes());
     }
 
     assert!(sparse1.is_sparse() && sparse2.is_sparse());
@@ -147,18 +139,17 @@ fn test_merge_combinations() {
 
     assert!(
         (estimate - 200.0).abs() < 20.0,
-        "Sparse+Sparse merge: expected ~200, got {}",
-        estimate
+        "Sparse+Sparse merge: expected ~200, got {estimate}"
     );
 
-    let mut dense = Hll::with_threshold(50);
-    let mut sparse = Hll::new();
+    let mut dense: HllDefault = Hll::with_threshold(50);
+    let mut sparse: HllDefault = Hll::new();
 
     for i in 0..1000 {
-        dense.add(format!("d_{}", i).as_bytes());
+        dense.add(format!("d_{i}").as_bytes());
     }
     for i in 500..600 {
-        sparse.add(format!("s_{}", i).as_bytes());
+        sparse.add(format!("s_{i}").as_bytes());
     }
 
     assert!(!dense.is_sparse() && sparse.is_sparse());
@@ -168,18 +159,17 @@ fn test_merge_combinations() {
 
     assert!(
         (estimate - 1100.0).abs() < 100.0,
-        "Dense+Sparse merge: expected ~1100, got {}",
-        estimate
+        "Dense+Sparse merge: expected ~1100, got {estimate}"
     );
 
-    let mut dense1 = Hll::with_threshold(50);
-    let mut dense2 = Hll::with_threshold(50);
+    let mut dense1: HllDefault = Hll::with_threshold(50);
+    let mut dense2: HllDefault = Hll::with_threshold(50);
 
     for i in 0..2000 {
-        dense1.add(format!("x_{}", i).as_bytes());
+        dense1.add(format!("x_{i}").as_bytes());
     }
     for i in 1500..3500 {
-        dense2.add(format!("y_{}", i).as_bytes());
+        dense2.add(format!("y_{i}").as_bytes());
     }
 
     assert!(!dense1.is_sparse() && !dense2.is_sparse());
@@ -191,15 +181,14 @@ fn test_merge_combinations() {
     // так как HLL — вероятностная структура, и merge увеличивает дисперсию.
     assert!(
         estimate > 3000.0 && estimate < 4500.0,
-        "Dense+Dense merge: estimate {} out of expected range",
-        estimate
+        "Dense+Dense merge: estimate {estimate} out of expected range"
     );
 }
 
 #[test]
 fn test_add_idempotence() {
-    let mut hll1 = Hll::new();
-    let mut hll2 = Hll::new();
+    let mut hll1: HllDefault = Hll::new();
+    let mut hll2: HllDefault = Hll::new();
 
     let data = b"test_element";
 
@@ -216,23 +205,21 @@ fn test_add_idempotence() {
 
     assert!(
         (estimate1 - estimate2).abs() < 0.1,
-        "Idempotence failed: {} vs {}",
-        estimate1,
-        estimate2,
+        "Idempotence failed: {estimate1} vs {estimate2}"
     );
 }
 
 #[test]
 fn test_merge_commutativity() {
-    let mut hll_a = Hll::new();
-    let mut hll_b = Hll::new();
+    let mut hll_a: HllDefault = Hll::new();
+    let mut hll_b: HllDefault = Hll::new();
 
     for i in 0..500 {
-        hll_a.add(format!("a_{}", i).as_bytes());
+        hll_a.add(format!("a_{i}").as_bytes());
     }
 
     for i in 250..700 {
-        hll_b.add(format!("b_{}", i).as_bytes());
+        hll_b.add(format!("b_{i}").as_bytes());
     }
 
     let mut merged_ab = hll_a.clone();
@@ -246,28 +233,26 @@ fn test_merge_commutativity() {
 
     assert!(
         (estimate_ab - estimate_ba).abs() < 1.0,
-        "Commutativity failed: {} vs {}",
-        estimate_ab,
-        estimate_ba
+        "Commutativity failed: {estimate_ab} vs {estimate_ba}"
     );
 }
 
 #[test]
 fn test_merge_associativity() {
-    let mut hll1 = Hll::new();
-    let mut hll2 = Hll::new();
-    let mut hll3 = Hll::new();
+    let mut hll1: HllDefault = Hll::new();
+    let mut hll2: HllDefault = Hll::new();
+    let mut hll3: HllDefault = Hll::new();
 
     for i in 0..300 {
-        hll1.add(format!("1_{}", i).as_bytes());
+        hll1.add(format!("1_{i}").as_bytes());
     }
 
     for i in 200..500 {
-        hll2.add(format!("2_{}", i).as_bytes());
+        hll2.add(format!("2_{i}").as_bytes());
     }
 
     for i in 400..700 {
-        hll3.add(format!("3_{}", i).as_bytes());
+        hll3.add(format!("3_{i}").as_bytes());
     }
 
     let mut left_assoc = hll1.clone();
@@ -284,18 +269,16 @@ fn test_merge_associativity() {
 
     assert!(
         (estimate_left - estimate_right).abs() < 0.5,
-        "Associativity failed: {} vs {}",
-        estimate_left,
-        estimate_right,
+        "Associativity failed: {estimate_left} vs {estimate_right}"
     );
 }
 
 #[test]
 fn test_sparse_serialization() {
-    let mut hll = Hll::new();
+    let mut hll: HllDefault = Hll::new();
 
     for i in 0..200 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     assert!(hll.is_sparse());
@@ -313,10 +296,10 @@ fn test_sparse_serialization() {
 
 #[test]
 fn test_dense_serialization() {
-    let mut hll = Hll::new();
+    let mut hll: HllDefault = Hll::new();
 
     for i in 0..200 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     assert!(hll.is_sparse());
@@ -371,7 +354,7 @@ fn test_metrics_tracking() {
 
 #[test]
 fn test_hll_stats() {
-    let mut hll = Hll::new();
+    let mut hll: HllDefault = Hll::new();
 
     // Пустой HLL
     let empty_stats = hll.stats();
@@ -381,7 +364,7 @@ fn test_hll_stats() {
 
     // Sparse HLL
     for i in 0..100 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     let sparse_stats = hll.stats();
@@ -392,7 +375,7 @@ fn test_hll_stats() {
 
     // Dense HLL
     for i in 100..10000 {
-        hll.add(format!("item_{}", i).as_bytes());
+        hll.add(format!("item_{i}").as_bytes());
     }
 
     let dense_stats = hll.stats();
@@ -404,7 +387,7 @@ fn test_hll_stats() {
 
 #[test]
 fn test_large_cardinality() {
-    let mut hll = Hll::new();
+    let mut hll: HllDefault = Hll::new();
 
     // Добавляем 1 миллион уникальных элементов
     for i in 0..1_000_000 {
@@ -412,7 +395,7 @@ fn test_large_cardinality() {
             // Переодически проверяем, что HLL работает
             let _ = hll.estimate_cardinality();
         }
-        hll.add(format!("element_{}", i).as_bytes());
+        hll.add(format!("element_{i}").as_bytes());
     }
 
     let estimate = hll.estimate_cardinality();
@@ -432,13 +415,13 @@ fn test_large_cardinality() {
 fn test_conversion_performance() {
     use std::time::Instant;
 
-    let mut hll = Hll::with_threshold(DEFAULT_SPARSE_THRESHOLD);
+    let mut hll: HllDefault = Hll::with_threshold(DEFAULT_SPARSE_THRESHOLD);
 
     match &mut hll.encoding {
         HllEncoding::Sparse(sparse) => {
             for idx in 0..(DEFAULT_SPARSE_THRESHOLD + 1) {
                 // Устанавливаем небольшой ненулевой rho (1) в каждый регистр.
-                sparse.set_register(idx as u16, 1);
+                sparse.set_register(idx, 1);
             }
         }
         _ => panic!("Expected newly created HLL to be sparse"),
@@ -454,14 +437,13 @@ fn test_conversion_performance() {
     // Проверяем, что операции в dense режиме быстрые
     let start = Instant::now();
     for i in 0..1000 {
-        hll.add(format!("new_item_{}", i).as_bytes());
+        hll.add(format!("new_item_{i}").as_bytes());
     }
     let duration = start.elapsed();
 
     // 1000 операций должны занять < 10ms
     assert!(
         duration.as_millis() < 10,
-        "Dense operations too slow: {:?}",
-        duration
+        "Dense operations too slow: {duration:?}",
     );
 }

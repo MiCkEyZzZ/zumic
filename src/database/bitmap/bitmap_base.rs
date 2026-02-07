@@ -114,10 +114,10 @@ impl Bitmap {
     /// Подсчитывает количество установленных (`true`) битов в диапазоне
     /// `[start, end)`.
     ///
-    /// Использует SIMD-ускоренные инструкции (AVX-512, AVX2, POPCNT)
+    /// Использует SIMD-ускоренные инструкции (AVX2, POPCNT)
     /// когда доступны, автоматически выбирая оптимальную реализацию.
     pub fn bitcount(
-        &self, // <-- &mut self -> &self
+        &self,
         start: usize,
         end: usize,
     ) -> usize {
@@ -162,7 +162,7 @@ impl Bitmap {
 
     /// Подсчитывает биты с конкретной стратегией
     pub fn bitcount_with_strategy(
-        &self, // <-- &mut self -> &self
+        &self,
         start: usize,
         end: usize,
         strategy: BitcountStrategy,
@@ -379,16 +379,13 @@ mod tests {
         let features = Bitmap::cpu_features();
         let strategy = Bitmap::best_strategy();
 
-        println!("Detected CPU features: {:?}", features);
-        println!("Best strategy: {:?}", strategy);
+        println!("Detected CPU features: {features:?}");
+        println!("Best strategy: {strategy:?}");
 
         // Должна быть хотя бы базовая стратегия
         assert!(matches!(
             strategy,
-            BitcountStrategy::LookupTable
-                | BitcountStrategy::Popcnt
-                | BitcountStrategy::Avx2
-                | BitcountStrategy::Avx512
+            BitcountStrategy::LookupTable | BitcountStrategy::Popcnt | BitcountStrategy::Avx2
         ));
     }
 }

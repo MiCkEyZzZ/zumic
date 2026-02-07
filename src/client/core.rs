@@ -44,7 +44,7 @@ impl ZumicClient {
         addr: SocketAddr,
         config: ClientConfig,
     ) -> ClientResult<Self> {
-        info!("Подключение к Zumic серверу: {addr}");
+        info!("Connecting to Zumic server: {addr}");
 
         let connection = ClientConnection::connect(
             addr,
@@ -65,7 +65,7 @@ impl ZumicClient {
         //     client.authenticate().await?;
         // }
 
-        info!("Успешно подключён к {addr}");
+        info!("Successfully connected to {addr}");
         Ok(client)
     }
 
@@ -79,7 +79,7 @@ impl ZumicClient {
                     reason: "No password provided".to_string(),
                 })?;
 
-        debug!("Аутентификация на сервере");
+        debug!("Authenticating on the server");
 
         let command = Command::Auth {
             user: self.config.username.clone(),
@@ -89,7 +89,7 @@ impl ZumicClient {
         match self.connection.execute_command(&command).await? {
             Response::Ok => {
                 self.authenticated = true;
-                info!("Аутентификация успешна");
+                info!("Authentication successful");
                 Ok(())
             }
             Response::Error(msg) => Err(ClientError::AuthenticationFailed {
@@ -102,14 +102,13 @@ impl ZumicClient {
 
     /// Проверка соединения (PING).
     pub async fn ping(&mut self) -> ClientResult<bool> {
-        debug!("Отправка PING");
+        debug!("Sending PING");
 
         let response = self.connection.execute_command(&Command::Ping).await?;
 
         match response {
             Response::Ok => Ok(true),
             Response::String(ref s) if s == "PONG" => Ok(true),
-            // Response::Error(msg) => Err(ClientError::ServerError(msg)),
             Response::Error(msg) => Err(ClientError::ServerError {
                 message: msg.to_string(),
             }
@@ -191,7 +190,7 @@ impl ZumicClient {
         &mut self,
         command: Command,
     ) -> ClientResult<Response> {
-        debug!("Выполнение команды: {command:?}");
+        debug!("Executing command: {command:?}");
         self.connection.execute_command(&command).await
     }
 
@@ -204,7 +203,7 @@ impl ZumicClient {
     }
 
     pub async fn close(self) -> ClientResult<()> {
-        info!("Закрытие соединения с сервером");
+        info!("Closing connection to the server");
         self.connection.close().await
     }
 }

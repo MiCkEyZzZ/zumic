@@ -503,7 +503,7 @@ mod tests {
         let slot_manager = setup_slot_manager(4);
         for shard_id in 0..4 {
             for _ in 0..50 {
-                slot_manager.record_operation(&format!("key{}", shard_id));
+                slot_manager.record_operation(&format!("key{shard_id}"));
             }
         }
 
@@ -542,7 +542,7 @@ mod tests {
         // Симулируем равномерную нагрузку
         for shard_id in 0..4 {
             for _ in 0..50 {
-                slot_manager.record_operation(&format!("key{}", shard_id));
+                slot_manager.record_operation(&format!("key{shard_id}"));
             }
         }
 

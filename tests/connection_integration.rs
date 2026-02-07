@@ -47,12 +47,12 @@ async fn connection_handler_ping_and_quit() -> Result<()> {
         let mut buf = vec![0u8; 128];
         let n = client.read(&mut buf).await?;
         let got = String::from_utf8_lossy(&buf[..n]);
-        assert!(got.contains("+PONG"), "expected +PONG, got {:?}", got);
+        assert!(got.contains("+PONG"), "expected +PONG, got {got:?}");
 
         client.write_all(b"QUIT\r\n").await?;
         let n = client.read(&mut buf).await?;
         let got = String::from_utf8_lossy(&buf[..n]);
-        assert!(got.contains("+OK"), "expected +OK, got {:?}", got);
+        assert!(got.contains("+OK"), "expected +OK, got {got:?}");
 
         Ok::<(), anyhow::Error>(())
     };

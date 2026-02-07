@@ -71,7 +71,7 @@ impl CommandRegistry {
                 .map(|v| Sds::from(v.as_str().unwrap().as_bytes()))
                 .collect();
             let added = ctx.sadd(&key, &members).unwrap_or(0);
-            format!(":{}\r\n", added).into_bytes()
+            format!(":{added}\r\n").into_bytes()
         });
 
         // === SMEMBERS ===
@@ -96,7 +96,7 @@ impl CommandRegistry {
             }
             let key = Sds::from(arr[0].as_str().unwrap().as_bytes());
             let count = ctx.scard(&key).unwrap_or(0);
-            format!(":{}\r\n", count).into_bytes()
+            format!(":{count}\r\n").into_bytes()
         });
 
         // === SREM ===
@@ -112,7 +112,7 @@ impl CommandRegistry {
                 .map(|v| Sds::from(v.as_str().unwrap().as_bytes()))
                 .collect();
             let removed = ctx.srem(&key, &members).unwrap_or(0);
-            format!(":{}\r\n", removed).into_bytes()
+            format!(":{removed}\r\n").into_bytes()
         });
 
         // === SISMEMBER ===

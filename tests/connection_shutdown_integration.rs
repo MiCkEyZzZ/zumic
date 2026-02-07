@@ -60,8 +60,7 @@ async fn connection_handler_shutdown_notify() -> Result<()> {
         let got = String::from_utf8_lossy(&buf[..n]).to_string();
         assert!(
             got.contains("Server shutting down") || got.contains("-ERR"),
-            "expected shutdown message, got: {:?}",
-            got
+            "expected shutdown message, got: {got:?}"
         );
 
         Ok::<(), anyhow::Error>(())

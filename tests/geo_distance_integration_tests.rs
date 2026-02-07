@@ -120,7 +120,7 @@ fn test_unit_conversion_precision() {
     ] {
         let converted = unit.convert_from_meters(meters);
         let back = unit.convert_to_meters(converted);
-        assert!((back - meters).abs() < EPSILON, "Failed for {:?}", unit);
+        assert!((back - meters).abs() < EPSILON, "Failed for {unit:?}");
     }
 }
 
@@ -170,8 +170,7 @@ fn test_ellipsoid_differences() {
     // Для 10° по экватору разница радиусов (~7,1 км) дает ~1,2 км по дуге
     assert!(
         diff > 1_000.0 && diff < 2_000.0,
-        "Unexpected WGS84 vs Sphere diff = {} m",
-        diff
+        "Unexpected WGS84 vs Sphere diff = {diff} m"
     );
 }
 
@@ -304,8 +303,7 @@ fn test_distance_symmetry() {
 
         assert!(
             (forward - backward).abs() < EPSILON,
-            "Symmetry failed for {:?}",
-            method
+            "Symmetry failed for {method:?}"
         );
     }
 }

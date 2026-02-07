@@ -417,13 +417,13 @@ mod tests {
                     // ждём ответ с таймаутом чтобы не зависнуть в тесте
                     let n = timeout(Duration::from_secs(2), stream.read(&mut buf)).await??;
                     let got = String::from_utf8_lossy(&buf[..n]).to_string();
-                    assert!(got.contains("+PONG"), "expected +PONG, got: {:?}", got);
+                    assert!(got.contains("+PONG"), "expected +PONG, got: {got:?}");
 
                     // QUIT
                     stream.write_all(b"QUIT\r\n").await?;
                     let n = timeout(Duration::from_secs(2), stream.read(&mut buf)).await??;
                     let got = String::from_utf8_lossy(&buf[..n]).to_string();
-                    assert!(got.contains("+OK"), "expected +OK, got: {:?}", got);
+                    assert!(got.contains("+OK"), "expected +OK, got: {got:?}");
 
                     Ok::<(), anyhow::Error>(())
                 };

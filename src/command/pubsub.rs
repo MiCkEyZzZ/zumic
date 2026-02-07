@@ -54,3 +54,58 @@ impl CommandExecute for PublishCommand {
         "PUBLISH"
     }
 }
+
+#[derive(Debug)]
+pub struct PSubscribeCommand {
+    pub patterns: Vec<String>,
+}
+
+impl CommandExecute for PSubscribeCommand {
+    fn execute(
+        &self,
+        _store: &mut crate::StorageEngine,
+    ) -> Result<Value, crate::StoreError> {
+        unimplemented!("PSUBSCRIBE is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "PSUBSCRIBE"
+    }
+}
+
+#[derive(Debug)]
+pub struct PUnsubscribeCommand {
+    pub patterns: Vec<String>,
+}
+
+impl CommandExecute for PUnsubscribeCommand {
+    fn execute(
+        &self,
+        _store: &mut crate::StorageEngine,
+    ) -> Result<Value, crate::StoreError> {
+        unimplemented!("PUNSUBSCRIBE is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "PUNSUBSCRIBE"
+    }
+}
+
+#[derive(Debug)]
+pub struct PubSubCommand {
+    pub subcommand: String,
+    pub args: Vec<String>,
+}
+
+impl CommandExecute for PubSubCommand {
+    fn execute(
+        &self,
+        _store: &mut crate::StorageEngine,
+    ) -> Result<Value, crate::StoreError> {
+        unimplemented!("PUBSUB command is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "PUBSUB"
+    }
+}

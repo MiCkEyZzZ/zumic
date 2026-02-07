@@ -155,6 +155,27 @@ impl CommandExecute for BitOpCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct BitPosCommand {
+    pub key: String,
+    pub bit: bool,
+    pub start: Option<usize>,
+    pub end: Option<usize>,
+}
+
+impl CommandExecute for BitPosCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "BITPOS"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

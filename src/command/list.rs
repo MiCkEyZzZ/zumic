@@ -256,6 +256,46 @@ impl CommandExecute for LRangeCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct LSetCommand {
+    pub key: String,
+    pub index: i64,
+    pub value: String,
+}
+
+impl CommandExecute for LSetCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "LSET"
+    }
+}
+
+#[derive(Debug)]
+pub struct LRemCommand {
+    pub key: String,
+    pub count: i64,
+    pub value: String,
+}
+
+impl CommandExecute for LRemCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "LREM"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

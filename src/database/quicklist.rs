@@ -688,11 +688,11 @@ mod tests {
 
         for i in 0..15 {
             list.push_back(i);
-            assert!(list.validate().is_ok(), "Failed after push_back {}", i);
+            assert!(list.validate().is_ok(), "Failed after push_back {i}");
         }
 
         for i in 0..15 {
-            assert_eq!(list.get(i), Some(&(i as i32)), "Failed to get index {}", i);
+            assert_eq!(list.get(i), Some(&(i as i32)), "Failed to get index {i}");
         }
     }
 

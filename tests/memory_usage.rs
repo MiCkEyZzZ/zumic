@@ -78,10 +78,9 @@ fn generate_large_dump(
     let iter = (0..entries).map(|i| {
         let key = Sds::from_str(&format!("key_{i:08}"));
         let value = Value::Str(Sds::from_str(&format!(
-            "This is a relatively long string value for entry number {}. \
+            "This is a relatively long string value for entry number {i}. \
              It contains some padding to make the dump larger. \
-             Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-            i
+             Lorem ipsum dolor sit amet, consectetur adipiscing elit."
         )));
         (key, value)
     });

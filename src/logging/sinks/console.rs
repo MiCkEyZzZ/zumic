@@ -95,8 +95,7 @@ mod tests {
             let l = layer_with_config::<Registry>(&cfg);
             assert!(
                 l.is_ok(),
-                "layer_with_config должен вернуть Ok при with_ansi={}",
-                ansi
+                "layer_with_config должен вернуть Ok при with_ansi={ansi}"
             );
 
             // не регистрируем subscriber — достаточно убедиться, что построение

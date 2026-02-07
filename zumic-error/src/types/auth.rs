@@ -119,7 +119,7 @@ impl fmt::Display for SessionError {
             SessionError::TokenExpired => write!(f, "JWT token expired"),
             SessionError::TokenRevoked => write!(f, "JWT token revoked"),
             SessionError::InvalidSessionId => write!(f, "Invalid session ID"),
-            SessionError::Storage(msg) => write!(f, "Storage error: {}", msg),
+            SessionError::Storage(msg) => write!(f, "Storage error: {msg}"),
         }
     }
 }
@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn test_session_storage_error_hidden() {
         let err = SessionError::Storage("db down".into());
-        assert_eq!(err.status_code(), StatusCode::InternalError);
+        assert_eq!(err.status_code(), StatusCode::Internal);
         assert_eq!(err.client_message(), "Internal server error");
         assert!(err.to_string().contains("db down"));
     }

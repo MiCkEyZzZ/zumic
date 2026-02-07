@@ -218,7 +218,7 @@ impl SizeRotatingWriter {
             FileNaming::Dated => {
                 let date = chrono::Local::now().format("%Y-%m-%d");
                 self.base_path
-                    .with_file_name(format!("{}-{}.{}", base_name, date, extension))
+                    .with_file_name(format!("{base_name}-{date}.{extension}"))
             }
             FileNaming::Sequential => self.base_path.with_file_name(format!(
                 "{}-{:03}.{}",
@@ -442,7 +442,7 @@ mod tests {
 
         // Создаём 5 файлов с разным временем
         for i in 0..5 {
-            let p = dir.path().join(format!("file-{}.log", i));
+            let p = dir.path().join(format!("file-{i}.log"));
             fs::write(&p, vec![0u8; 10]).unwrap();
             // выставим разные времена: чем меньше i — тем старее
             let t = SystemTime::now() - Duration::from_secs((5 - i) as u64 * 86400);
@@ -471,7 +471,7 @@ mod tests {
 
         // Создадим три файла: 1KB, 1KB, 1KB => total 3KB
         for i in 0..3 {
-            let p = dir.path().join(format!("size-{}.log", i));
+            let p = dir.path().join(format!("size-{i}.log"));
             fs::write(&p, vec![0u8; 1024]).unwrap();
             // стареее проще не трогать
         }

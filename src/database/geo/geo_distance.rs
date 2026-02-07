@@ -704,7 +704,7 @@ mod tests {
         let diff = (d_gc - d_vin).abs();
 
         // Для сферической модели ошибка в несколько км допустима
-        assert!(diff < 10_000.0, "diff = {} m", diff);
+        assert!(diff < 10_000.0, "diff = {diff} m");
     }
 
     #[test]
