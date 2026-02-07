@@ -1,11 +1,5 @@
-#![cfg_attr(
-    all(feature = "avx512", target_arch = "x86_64"),
-    feature(stdarch_x86_avx512)
-)]
-#![cfg_attr(
-    all(feature = "avx512", target_arch = "x86_64"),
-    feature(avx512_target_feature)
-)]
+#![feature(stdarch_x86_avx512)]
+#![feature(avx512_target_feature)]
 
 //! Zumic — высокопроизводительный движок хранения ключ-значение в памяти.
 //!

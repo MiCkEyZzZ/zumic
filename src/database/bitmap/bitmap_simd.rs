@@ -36,8 +36,8 @@ impl CpuFeatures {
             Self {
                 has_popcnt: is_x86_feature_detected!("popcnt"),
                 has_avx2: is_x86_feature_detected!("avx2"),
-                // FIX 2: AVX-512 popcnt требует avx512vpopcntdq
-                has_avx512: is_x86_feature_detected!("avx512f")
+                has_avx512: cfg!(feature = "avx512")
+                    && is_x86_feature_detected!("avx512f")
                     && is_x86_feature_detected!("avx512bw")
                     && is_x86_feature_detected!("avx512vpopcntdq"),
             }
@@ -135,25 +135,12 @@ pub fn bitcount_avx512(bytes: &[u8]) -> usize {
 /// Автоматический выбор и выполнение оптимальной стратегии подсчёта битов.
 #[inline]
 pub fn bitcount_auto(bytes: &[u8]) -> usize {
-    #[cfg(target_arch = "x86_64")]
-    {
-        if is_x86_feature_detected!("avx512f")
-            && is_x86_feature_detected!("avx512bw")
-            && is_x86_feature_detected!("avx512vpopcntdq")
-        {
-            bitcount_avx512(bytes)
-        } else if is_x86_feature_detected!("avx2") {
-            bitcount_avx2(bytes)
-        } else if is_x86_feature_detected!("popcnt") {
-            bitcount_popcnt(bytes)
-        } else {
-            bitcount_lookup_table(bytes)
-        }
-    }
-
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        bitcount_lookup_table(bytes)
+    let features = CpuFeatures::detect();
+    match features.best_strategy() {
+        BitcountStrategy::Avx512 => bitcount_avx512(bytes),
+        BitcountStrategy::Avx2 => bitcount_avx2(bytes),
+        BitcountStrategy::Popcnt => bitcount_popcnt(bytes),
+        BitcountStrategy::LookupTable => bitcount_lookup_table(bytes),
     }
 }
 
@@ -178,8 +165,8 @@ pub fn bitcount_with_strategy(
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "popcnt")]
 unsafe fn bitcount_popcnt_impl(bytes: &[u8]) -> usize {
-    let mut count = 0usize;
-    let mut i = 0usize;
+    let mut count = 0;
+    let mut i = 0;
 
     while i + 8 <= bytes.len() {
         let v = u64::from_le_bytes(bytes[i..i + 8].try_into().unwrap());
@@ -201,7 +188,7 @@ unsafe fn bitcount_popcnt_impl(bytes: &[u8]) -> usize {
 unsafe fn bitcount_avx2_impl(bytes: &[u8]) -> usize {
     use std::arch::x86_64::*;
 
-    let mut count = 0usize;
+    let mut count = 0;
     let mut ptr = bytes.as_ptr();
     let end = ptr.add(bytes.len());
 
@@ -248,11 +235,10 @@ unsafe fn bitcount_avx2_impl(bytes: &[u8]) -> usize {
 /// Это гарантирует, что на stable без фичи AVX-512 не будет ошибок E0658
 #[cfg(all(feature = "avx512", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f,avx512bw,avx512vpopcntdq")]
-// FIX 3: добавлен avx512vpopcntdq + убран reduce_add
 unsafe fn bitcount_avx512_impl(bytes: &[u8]) -> usize {
     use std::arch::x86_64::*;
 
-    let mut count = 0usize;
+    let mut count = 0;
     let mut ptr = bytes.as_ptr();
     let end = ptr.add(bytes.len());
 
@@ -294,7 +280,6 @@ mod tests {
         println!("CPU Features: {features:?}");
         println!("Best strategy: {:?}", features.best_strategy());
 
-        // All platforms should at least have lookup table.
         assert!(matches!(
             features.best_strategy(),
             BitcountStrategy::LookupTable
