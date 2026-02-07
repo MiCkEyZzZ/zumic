@@ -9,8 +9,6 @@ pub enum BitcountStrategy {
     Popcnt,
     /// AVX2 SIMD (256-битные векторы)
     Avx2,
-    /// AVX-512 SIMD (512-битные векторы)
-    Avx512,
 }
 
 /// Результат обнаружения возможностей процессора.
@@ -20,8 +18,6 @@ pub struct CpuFeatures {
     pub has_popcnt: bool,
     /// Наличие AVX2
     pub has_avx2: bool,
-    /// Наличие AVX-512
-    pub has_avx512: bool,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,10 +32,6 @@ impl CpuFeatures {
             Self {
                 has_popcnt: is_x86_feature_detected!("popcnt"),
                 has_avx2: is_x86_feature_detected!("avx2"),
-                has_avx512: cfg!(feature = "avx512")
-                    && is_x86_feature_detected!("avx512f")
-                    && is_x86_feature_detected!("avx512bw")
-                    && is_x86_feature_detected!("avx512vpopcntdq"),
             }
         }
 
@@ -48,16 +40,13 @@ impl CpuFeatures {
             Self {
                 has_popcnt: false,
                 has_avx2: false,
-                has_avx512: false,
             }
         }
     }
 
     /// Возвращает наиболее подходящую доступную стратегию подсчёта битов.
     pub fn best_strategy(&self) -> BitcountStrategy {
-        if self.has_avx512 {
-            BitcountStrategy::Avx512
-        } else if self.has_avx2 {
+        if self.has_avx2 {
             BitcountStrategy::Avx2
         } else if self.has_popcnt {
             BitcountStrategy::Popcnt
@@ -111,36 +100,23 @@ pub fn bitcount_avx2(bytes: &[u8]) -> usize {
     }
 }
 
-/// Безопасный обёртка для подсчёта битов с использованием AVX-512
-#[inline]
-pub fn bitcount_avx512(bytes: &[u8]) -> usize {
-    #[cfg(all(feature = "avx512", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx512f")
-            && is_x86_feature_detected!("avx512bw")
-            && is_x86_feature_detected!("avx512vpopcntdq")
-        {
-            unsafe { bitcount_avx512_impl(bytes) }
-        } else {
-            bitcount_avx2(bytes)
-        }
-    }
-
-    #[cfg(not(all(feature = "avx512", target_arch = "x86_64")))]
-    {
-        bitcount_lookup_table(bytes)
-    }
-}
-
 /// Автоматический выбор и выполнение оптимальной стратегии подсчёта битов.
 #[inline]
 pub fn bitcount_auto(bytes: &[u8]) -> usize {
-    let features = CpuFeatures::detect();
-    match features.best_strategy() {
-        BitcountStrategy::Avx512 => bitcount_avx512(bytes),
-        BitcountStrategy::Avx2 => bitcount_avx2(bytes),
-        BitcountStrategy::Popcnt => bitcount_popcnt(bytes),
-        BitcountStrategy::LookupTable => bitcount_lookup_table(bytes),
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            bitcount_avx2(bytes)
+        } else if is_x86_feature_detected!("popcnt") {
+            bitcount_popcnt(bytes)
+        } else {
+            bitcount_lookup_table(bytes)
+        }
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        bitcount_lookup_table(bytes)
     }
 }
 
@@ -153,7 +129,6 @@ pub fn bitcount_with_strategy(
         BitcountStrategy::LookupTable => bitcount_lookup_table(bytes),
         BitcountStrategy::Popcnt => bitcount_popcnt(bytes),
         BitcountStrategy::Avx2 => bitcount_avx2(bytes),
-        BitcountStrategy::Avx512 => bitcount_avx512(bytes),
     }
 }
 
@@ -165,16 +140,23 @@ pub fn bitcount_with_strategy(
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "popcnt")]
 unsafe fn bitcount_popcnt_impl(bytes: &[u8]) -> usize {
-    let mut count = 0;
-    let mut i = 0;
+    // Обрабатываем по 8 байт (u64) блокам, используя portable count_ones()
+    let mut count: usize = 0;
+    let mut i = 0usize;
+    let len = bytes.len();
 
-    while i + 8 <= bytes.len() {
-        let v = u64::from_le_bytes(bytes[i..i + 8].try_into().unwrap());
+    // Проходим по u64 блокам
+    while i + 8 <= len {
+        let mut chunk_bytes = [0u8; 8];
+        // safe copy — alignment не важен
+        chunk_bytes.copy_from_slice(&bytes[i..i + 8]);
+        let v = u64::from_le_bytes(chunk_bytes);
         count += v.count_ones() as usize;
         i += 8;
     }
 
-    while i < bytes.len() {
+    // Оставшиеся байты
+    while i < len {
         count += BIT_COUNT_TABLE[bytes[i] as usize] as usize;
         i += 1;
     }
@@ -186,83 +168,68 @@ unsafe fn bitcount_popcnt_impl(bytes: &[u8]) -> usize {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn bitcount_avx2_impl(bytes: &[u8]) -> usize {
-    use std::arch::x86_64::*;
+    use std::arch::x86_64::{_mm256_set1_epi8, _mm256_setr_epi8};
 
-    let mut count = 0;
+    let mut count = 0usize;
     let mut ptr = bytes.as_ptr();
-    let end = ptr.add(bytes.len());
+    let end = unsafe { ptr.add(bytes.len()) };
 
+    // Таблица для подсчёта битов в 4-битных половинках байта (nibbles)
     let lookup = _mm256_setr_epi8(
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3,
         3, 4,
     );
     let low_mask = _mm256_set1_epi8(0x0f);
 
-    while ptr.add(32) <= end {
-        let vec = _mm256_loadu_si256(ptr as *const __m256i);
+    // Обрабатываем по 32 байта за раз
+    while unsafe { ptr.add(32) <= end } {
+        use std::arch::x86_64::{
+            __m256i, _mm256_add_epi8, _mm256_and_si256, _mm256_extracti128_si256,
+            _mm256_loadu_si256, _mm256_sad_epu8, _mm256_setzero_si256, _mm256_shuffle_epi8,
+            _mm256_srli_epi16, _mm_extract_epi64,
+        };
 
+        let vec = unsafe { _mm256_loadu_si256(ptr as *const __m256i) };
+
+        // Разделяем на младшие и старшие половинки байта
         let lo = _mm256_and_si256(vec, low_mask);
         let hi = _mm256_and_si256(_mm256_srli_epi16(vec, 4), low_mask);
 
-        let sum = _mm256_add_epi8(
-            _mm256_shuffle_epi8(lookup, lo),
-            _mm256_shuffle_epi8(lookup, hi),
-        );
+        // Получаем количество единиц для каждой половинки через lookup
+        let popcnt_lo = _mm256_shuffle_epi8(lookup, lo);
+        let popcnt_hi = _mm256_shuffle_epi8(lookup, hi);
 
+        // Складываем результаты
+        let sum = _mm256_add_epi8(popcnt_lo, popcnt_hi);
+
+        // Горизонтальная сумма с использованием SAD (сумма абсолютных разностей)
         let sad = _mm256_sad_epu8(sum, _mm256_setzero_si256());
-        let mut tmp = [0u64; 4];
-        _mm256_storeu_si256(tmp.as_mut_ptr() as *mut __m256i, sad);
-        count += tmp.iter().sum::<u64>() as usize;
 
-        ptr = ptr.add(32);
+        // Извлекаем и аккумулируем количество единиц
+        let lower = _mm256_extracti128_si256(sad, 0);
+        let upper = _mm256_extracti128_si256(sad, 1);
+        count += _mm_extract_epi64(lower, 0) as usize;
+        count += _mm_extract_epi64(lower, 1) as usize;
+        count += _mm_extract_epi64(upper, 0) as usize;
+        count += _mm_extract_epi64(upper, 1) as usize;
+        ptr = unsafe { ptr.add(32) };
     }
 
-    while ptr.add(8) <= end {
-        count += _popcnt64((ptr as *const u64).read_unaligned() as i64) as usize;
-        ptr = ptr.add(8);
+    // Обрабатываем оставшиеся 8-байтные блоки через POPCNT
+    while unsafe { ptr.add(8) <= end } {
+        use std::arch::x86_64::_popcnt64;
+
+        let chunk = unsafe { (ptr as *const u64).read_unaligned() };
+        count += unsafe { _popcnt64(chunk as i64) as usize };
+        ptr = unsafe { ptr.add(8) };
     }
 
+    // Обрабатываем оставшиеся байты через lookup table
     while ptr < end {
-        count += BIT_COUNT_TABLE[*ptr as usize] as usize;
-        ptr = ptr.add(1);
+        let byte = unsafe { *ptr };
+        count += BIT_COUNT_TABLE[byte as usize] as usize;
+        ptr = unsafe { ptr.add(1) };
     }
-
-    count
-}
-
-/// Подсчёт битов с использованием AVX-512 SIMD (512-битные векторы)
-/// Компилируется ТОЛЬКО если включена фича "avx512" и таргет x86_64.
-/// Это гарантирует, что на stable без фичи AVX-512 не будет ошибок E0658
-#[cfg(all(feature = "avx512", target_arch = "x86_64"))]
-#[target_feature(enable = "avx512f,avx512bw,avx512vpopcntdq")]
-unsafe fn bitcount_avx512_impl(bytes: &[u8]) -> usize {
-    use std::arch::x86_64::*;
-
-    let mut count = 0;
-    let mut ptr = bytes.as_ptr();
-    let end = ptr.add(bytes.len());
-
-    while ptr.add(64) <= end {
-        let vec = _mm512_loadu_si512(ptr as *const __m512i);
-        let pop = _mm512_popcnt_epi64(vec);
-
-        let mut tmp = [0u64; 8];
-        _mm512_storeu_si512(tmp.as_mut_ptr() as *mut __m512i, pop);
-        count += tmp.iter().sum::<u64>() as usize;
-
-        ptr = ptr.add(64);
-    }
-
-    while ptr.add(8) <= end {
-        count += _popcnt64((ptr as *const u64).read_unaligned() as i64) as usize;
-        ptr = ptr.add(8);
-    }
-
-    while ptr < end {
-        count += BIT_COUNT_TABLE[*ptr as usize] as usize;
-        ptr = ptr.add(1);
-    }
-
     count
 }
 
@@ -280,12 +247,10 @@ mod tests {
         println!("CPU Features: {features:?}");
         println!("Best strategy: {:?}", features.best_strategy());
 
+        // All platforms should at least have lookup table.
         assert!(matches!(
             features.best_strategy(),
-            BitcountStrategy::LookupTable
-                | BitcountStrategy::Popcnt
-                | BitcountStrategy::Avx2
-                | BitcountStrategy::Avx512
+            BitcountStrategy::LookupTable | BitcountStrategy::Popcnt | BitcountStrategy::Avx2
         ));
     }
 }
