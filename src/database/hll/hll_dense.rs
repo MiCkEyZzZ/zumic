@@ -215,4 +215,47 @@ mod tests {
 
         assert_eq!(dense, decoded);
     }
+
+    #[test]
+    fn test_different_precisions() {
+        let dense4 = HllDense::<4>::new();
+        let dense14 = HllDense::<14>::new();
+        let dense18 = HllDense::<18>::new();
+
+        // Размеры должны соответствовать точности
+        assert_eq!(dense4.size(), 12); // 16 * 6 / 8 = 12
+        assert_eq!(dense14.size(), 12_288); // 16384 * 6 / 8 = 12288
+        assert_eq!(dense18.size(), 196_608); // 262144 * 6 / 8 = 196608
+    }
+
+    #[test]
+    fn test_precision_4_operations() {
+        let mut dense = HllDense::<4>::new();
+
+        // P=4 означает 16 регистров (2^4)
+        for i in 0..16 {
+            dense.set_register(i, (i as u8 + 1) % 64);
+        }
+
+        for i in 0..16 {
+            assert_eq!(dense.get_register(i), (i as u8 + 1) % 64);
+        }
+    }
+
+    #[test]
+    fn test_precision_18_operations() {
+        let mut dense = HllDense::<18>::new();
+
+        // P=18 означает 262144 регистра
+        // Тестируем несколько разрозненных регистров
+        let test_indices = [0, 1000, 10000, 200000, 262143];
+
+        for &idx in &test_indices {
+            dense.set_register(idx, 42);
+        }
+
+        for &idx in &test_indices {
+            assert_eq!(dense.get_register(idx), 42);
+        }
+    }
 }
