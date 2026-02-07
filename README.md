@@ -15,18 +15,18 @@ cd zumic
 cargo build
 
 # Run server (memory / persistent / cluster)
-RUST_ENV=memory cargo run --bin zumic
-RUST_ENV=persistent cargo run --bin zumic
-RUST_ENV=cluster cargo run --bin zumic
+ZUMIC_MODE=memory cargo run --bin zumic
+ZUMIC_MODE=persistent cargo run --bin zumic
+ZUMIC_MODE=cluster cargo run --bin zumic
 ```
 
 ### Storage Modes
 
-| Mode         | Persistence | File Created    | Data Survives Restart |
-|--------------|-------------|-----------------|-----------------------|
-| `memory`     | ❌ No       | None            | ❌ No                 |
-| `persistent` | ✅ Yes      | `zumic.aof`     | ✅ Yes                |
-| `cluster`    | 🚧 WIP      | TBD             | 🚧 WIP                |
+| Mode         | Persistence | File Created | Data Survives Restart |
+| ------------ | ----------- | ------------ | --------------------- |
+| `memory`     | ❌ No       | None         | ❌ No                 |
+| `persistent` | ✅ Yes      | `zumic.aof`  | ✅ Yes                |
+| `cluster`    | 🚧 WIP      | TBD          | 🚧 WIP                |
 
 **Memory mode**: All data stored in RAM only. Fast, but data is lost on restart.
 **Persistent mode**: Data is written to `zumic.aof` file. After server restart, all data is restored automatically.
@@ -36,26 +36,26 @@ RUST_ENV=cluster cargo run --bin zumic
 
 There are two common ways to interact with Zumic:
 
-* **Wire(raw)** — the exact bytes exchanged on the network ZSP. Tools like `nc` show raw frames including protocol prefixes (`+`, `:`, `,`, `$`, `*`, etc.). Use this for protocol debugging and tests.
-* **CLI(pretty)** — the Zumic client parses protocol frames and prints the *semantic* value only (no protocol prefixes). This is human-friendly and is the CLI default.
-* **JSON** — is a machine-readable output, convenient for scripts and CI.
+- **Wire(raw)** — the exact bytes exchanged on the network ZSP. Tools like `nc` show raw frames including protocol prefixes (`+`, `:`, `,`, `$`, `*`, etc.). Use this for protocol debugging and tests.
+- **CLI(pretty)** — the Zumic client parses protocol frames and prints the _semantic_ value only (no protocol prefixes). This is human-friendly and is the CLI default.
+- **JSON** — is a machine-readable output, convenient for scripts and CI.
 
 Mapping examples:
 
-| Wire (ZSP)       | CLI (pretty)                                         |
-| ---------------- | ---------------------------------------------------- |
-| `+OK`            | `OK`                                                 |
-| `+bar`           | `bar`                                                |
-| `:1`             | `1`                                                  |
-| `$-1`            | `(nil)`                                              |
-| `*3` / bulks     | printed as list or one-per-line depending on command |
+| Wire (ZSP)   | CLI (pretty)                                         |
+| ------------ | ---------------------------------------------------- |
+| `+OK`        | `OK`                                                 |
+| `+bar`       | `bar`                                                |
+| `:1`         | `1`                                                  |
+| `$-1`        | `(nil)`                                              |
+| `*3` / bulks | printed as list or one-per-line depending on command |
 
 ## Example Usage
 
 ### Starting the Server
 
 ```zsh
-RUST_ENV=memory cargo run --bin zumic
+ZUMIC_MODE=memory cargo run --bin zumic
 ```
 
 **Output:**
@@ -125,11 +125,10 @@ $ cargo run --bin zumic-cli -- --output json -- GET foo
 
 `zumic-cli` supports subcommands and flags. Important option:
 
-* `--output <pretty|raw|json>` — controls how responses are printed.
-
-  * `pretty` — default, human readable.
-  * `raw` — prints wire-level frames.
-  * `json` — prints JSON-encoded semantic values.
+- `--output <pretty|raw|json>` — controls how responses are printed.
+  - `pretty` — default, human readable.
+  - `raw` — prints wire-level frames.
+  - `json` — prints JSON-encoded semantic values.
 
 Examples:
 
@@ -191,9 +190,9 @@ cargo run --bin zumic-cli -- --output json   GET mykey
 
 ## Troubleshooting
 
-* If `nc` output differs from `zumic-cli` output, that is expected: `nc` shows protocol frames; `zumic-cli` prints parsed values.
-* If you need protocol-level debugging, use `nc` or `--output raw`.
-* To integrate Zumic into scripts, prefer `--output json` for deterministic parsing.
+- If `nc` output differs from `zumic-cli` output, that is expected: `nc` shows protocol frames; `zumic-cli` prints parsed values.
+- If you need protocol-level debugging, use `nc` or `--output raw`.
+- To integrate Zumic into scripts, prefer `--output json` for deterministic parsing.
 
 ## Contributing
 

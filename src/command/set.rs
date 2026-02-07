@@ -72,36 +72,32 @@ impl CommandExecute for SRemCommand {
     }
 }
 
-/// Команда SISMEMBER — проверяет наличие элемента во множестве.
+/// Команда SCARD — возвращает количество элементов во множестве.
 ///
-/// Формат: `SISMEMBER key member`
+/// Формат: `SCARD key`
 ///
 /// # Поля
 /// * `key` — ключ множества.
-/// * `member` — проверяемый элемент.
 ///
 /// # Возвращает
-/// 1, если элемент найден, 0 — если не найден.
+/// Количество элементов во множестве.
 #[derive(Debug)]
-pub struct SIsMemberCommand {
+pub struct SCardCommand {
     pub key: String,
-    pub member: String,
 }
 
-impl CommandExecute for SIsMemberCommand {
+impl CommandExecute for SCardCommand {
     fn execute(
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        let member = Sds::from_str(&self.member);
-
-        let exists = store.sismember(&key, &member)?;
-        Ok(Value::Int(exists as i64))
+        let count = store.scard(&key)?;
+        Ok(Value::Int(count as i64))
     }
 
     fn command_name(&self) -> &'static str {
-        "SISMEMBER"
+        "SCARD"
     }
 }
 
@@ -142,32 +138,36 @@ impl CommandExecute for SMembersCommand {
     }
 }
 
-/// Команда SCARD — возвращает количество элементов во множестве.
+/// Команда SISMEMBER — проверяет наличие элемента во множестве.
 ///
-/// Формат: `SCARD key`
+/// Формат: `SISMEMBER key member`
 ///
 /// # Поля
 /// * `key` — ключ множества.
+/// * `member` — проверяемый элемент.
 ///
 /// # Возвращает
-/// Количество элементов во множестве.
+/// 1, если элемент найден, 0 — если не найден.
 #[derive(Debug)]
-pub struct SCardCommand {
+pub struct SIsMemberCommand {
     pub key: String,
+    pub member: String,
 }
 
-impl CommandExecute for SCardCommand {
+impl CommandExecute for SIsMemberCommand {
     fn execute(
         &self,
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        let count = store.scard(&key)?;
-        Ok(Value::Int(count as i64))
+        let member = Sds::from_str(&self.member);
+
+        let exists = store.sismember(&key, &member)?;
+        Ok(Value::Int(exists as i64))
     }
 
     fn command_name(&self) -> &'static str {
-        "SCARD"
+        "SISMEMBER"
     }
 }
 
@@ -241,6 +241,60 @@ impl CommandExecute for SPopCommand {
 
     fn command_name(&self) -> &'static str {
         "SPOP"
+    }
+}
+
+#[derive(Debug)]
+pub struct SInterCommand {
+    pub keys: Vec<String>,
+}
+
+impl CommandExecute for SInterCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SINTER"
+    }
+}
+
+#[derive(Debug)]
+pub struct SUnionCommand {
+    pub keys: Vec<String>,
+}
+
+impl CommandExecute for SUnionCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SUNION"
+    }
+}
+
+#[derive(Debug)]
+pub struct SDiffCommand {
+    pub keys: Vec<String>,
+}
+
+impl CommandExecute for SDiffCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "SDIFF"
     }
 }
 

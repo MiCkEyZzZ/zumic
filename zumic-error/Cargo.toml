@@ -2,7 +2,6 @@
 name = "zumic-error"
 version = "0.1.0"
 edition = "2021"
-author = ["MickeyZzz<https://t.me/Mickey_Zzz>"]
 description = "Centralized error handling system for Zumic"
 license = "Apache-2.0"
 publish = false

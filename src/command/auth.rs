@@ -34,6 +34,61 @@ impl CommandExecute for AuthCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct AclSetUserCommand {
+    pub user: String,
+    pub rules: Vec<String>,
+}
+
+impl CommandExecute for AclSetUserCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!("ACL SETUSER is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ACL SETUSER"
+    }
+}
+
+#[derive(Debug)]
+pub struct AclGetUserCommand {
+    pub user: String,
+}
+
+impl CommandExecute for AclGetUserCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!("ACL GETUSER is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ACL GETUSER"
+    }
+}
+
+#[derive(Debug)]
+pub struct AclDelUserCommand {
+    pub user: String,
+}
+
+impl CommandExecute for AclDelUserCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!("ACL DELUSER is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "ACL DELUSER"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

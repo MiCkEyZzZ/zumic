@@ -194,7 +194,7 @@ impl CompactionManager {
             .unwrap()
             .as_secs();
 
-        let snapshot_name = format!("snapshot_{}.db", timestamp);
+        let snapshot_name = format!("snapshot_{timestamp}.db");
         let snapshot_path = self.config.snapshot_dir.join(snapshot_name);
 
         // Collect all data from shards (сбор в память — OK пока без streaming)

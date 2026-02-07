@@ -1,3 +1,12 @@
+#![cfg_attr(
+    all(feature = "avx512", target_arch = "x86_64"),
+    feature(stdarch_x86_avx512)
+)]
+#![cfg_attr(
+    all(feature = "avx512", target_arch = "x86_64"),
+    feature(avx512_target_feature)
+)]
+
 //! Zumic — высокопроизводительный движок хранения ключ-значение в памяти.
 //!
 //! Основные модули:
@@ -69,7 +78,7 @@ pub use database::{
     FragmentationInfo, GeoEntry, GeoPoint, GeoSet, Geohash, GeohashPrecision, GeohashStats, Hll,
     IntSet, IntSetIter, IntSetRangeIter, ListPack, Node, PubSubManager, QuickList, RTree,
     RadiusOptions, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash, SmartHashIter,
-    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE, DENSE_SIZE,
+    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE,
 };
 /// Реэкспорт движков хранения.
 pub use engine::{

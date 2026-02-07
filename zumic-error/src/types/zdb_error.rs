@@ -495,7 +495,7 @@ impl ErrorExt for ZdbError {
     }
 
     fn log_message(&self) -> String {
-        let mut msg = format!("{:?}", self);
+        let mut msg = format!("{self:?}");
         if let Some(hint) = self.recovery_hint() {
             msg.push_str(&format!(" | Hint: {hint}"));
         }

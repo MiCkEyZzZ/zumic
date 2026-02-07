@@ -171,6 +171,79 @@ impl CommandExecute for HGetAllCommand {
     }
 }
 
+#[derive(Debug)]
+pub struct HExistsCommand {
+    pub key: String,
+    pub field: String,
+}
+
+impl CommandExecute for HExistsCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HEXISTS"
+    }
+}
+
+#[derive(Debug)]
+pub struct HLenCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HLenCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HLEN"
+    }
+}
+
+#[derive(Debug)]
+pub struct HKeysCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HKeysCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HKEYS"
+    }
+}
+
+#[derive(Debug)]
+pub struct HValsCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HValsCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!()
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HVALSs"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -948,7 +948,7 @@ mod tests {
         for i in 0..100 {
             let lon = (i % 10) as f64 * 0.01;
             let lat = (i / 10) as f64 * 0.01;
-            gs.add(format!("P{}", i), lon, lat);
+            gs.add(format!("P{i}"), lon, lat);
         }
 
         let opts = RadiusOptions {

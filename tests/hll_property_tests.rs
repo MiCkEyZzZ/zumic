@@ -4,7 +4,10 @@
 //! что математические свойства выполняются во всех случаях.
 
 use proptest::prelude::*;
-use zumic::{database::DEFAULT_SPARSE_THRESHOLD, Hll};
+use zumic::{
+    database::{DEFAULT_PRECISION, DEFAULT_SPARSE_THRESHOLD},
+    Hll,
+};
 
 /// Basic proptest setting - number of iterations and other parameters.
 const PROPTEST_CASES: u32 = 1000;
@@ -91,8 +94,8 @@ proptest! {
     /// Добавление одного и того же элемента N раз не должно менять кардинальность
     #[test]
     fn add_idempotence(element in element_strategy(), n in 1usize..100) {
-        let mut hll1 = Hll::new();
-        let mut hll2 = Hll::new();
+        let mut hll1: Hll<DEFAULT_PRECISION> = Hll::new();
+        let mut hll2: Hll<DEFAULT_PRECISION> = Hll::new();
 
         // Добавляем один раз
         hll1.add(&element);
@@ -107,8 +110,7 @@ proptest! {
 
         prop_assert!(
             (est1 - est2).abs() < 1.0,
-            "Idempotence violated: single add = {}, {} adds = {}",
-            est1, n, est2
+            "Idempotence violated: single add = {est1}, {n} adds = {est2}",
         );
     }
 
@@ -129,16 +131,15 @@ proptest! {
 
         prop_assert!(
             (est1 - est2).abs() < 5.0,
-            "Threshold affected merge result: {} vs {}",
-            est1, est2
+            "Threshold affected merge result: {est1} vs {est2}"
         );
     }
 
     /// Идемпотентность для массива элементов
     #[test]
     fn add_multiple_idempotence(elements in element_vec_strategy()) {
-        let mut hll1 = Hll::new();
-        let mut hll2 = Hll::new();
+        let mut hll1: Hll<DEFAULT_PRECISION> = Hll::new();
+        let mut hll2: Hll<DEFAULT_PRECISION> = Hll::new();
 
         // Добавляем каждый элемент один раз
         for elem in &elements {
@@ -157,8 +158,7 @@ proptest! {
 
         prop_assert!(
             (est1 - est2).abs() < 10.0,
-            "Multiple idempotence violated: {} vs {}",
-            est1, est2
+            "Multiple idempotence violated: {est1} vs {est2}"
         );
     }
 
@@ -180,8 +180,7 @@ proptest! {
 
         prop_assert!(
             (est_ab - est_ba).abs() < 1.0,
-            "Commutativity violated: merge(A,B) = {}, merge(B,A) = {}",
-            est_ab, est_ba
+            "Commutativity violated: merge(A,B) = {est_ab}, merge(B,A) = {est_ba}"
         );
     }
 
@@ -191,8 +190,8 @@ proptest! {
         elements_a in prop::collection::vec(element_strategy(), 10..50),
         elements_b in prop::collection::vec(element_strategy(), 10..50)
     ) {
-        let mut hll_a = Hll::new();
-        let mut hll_b = Hll::new();
+        let mut hll_a: Hll<DEFAULT_PRECISION> = Hll::new();
+        let mut hll_b: Hll<DEFAULT_PRECISION> = Hll::new();
 
         for elem in &elements_a {
             hll_a.add(elem);
@@ -215,8 +214,7 @@ proptest! {
 
         prop_assert!(
             (est_ab - est_ba).abs() < 1.0,
-            "Sparse commutativity violated: {} vs {}",
-            est_ab, est_ba
+            "Sparse commutativity violated: {est_ab} vs {est_ba}"
         );
     }
 
@@ -243,8 +241,7 @@ proptest! {
 
         prop_assert!(
             (est_left - est_right).abs() < 5.0,
-            "Associativity violated: ((A∪B)∪C) = {}, (A∪(B∪C)) = {}",
-            est_left, est_right
+            "Associativity violated: ((A∪B)∪C) = {est_left}, (A∪(B∪C)) = {est_right}"
         );
     }
 
@@ -255,7 +252,7 @@ proptest! {
     /// Кардинальность не должна уменьшаться при добавлении элементов
     #[test]
     fn cardinality_monotonicity(elements in element_vec_strategy()) {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
         let mut prev_cardinality = 0.0;
 
         for elem in elements {
@@ -264,8 +261,7 @@ proptest! {
 
             prop_assert!(
                 curr_cardinality >= prev_cardinality - 1.0, // -1.0 для учёта погрешности
-                "Monotonicity violated: {} < {} after adding element",
-                curr_cardinality, prev_cardinality
+                "Monotonicity violated: {curr_cardinality} < {prev_cardinality} after adding element"
             );
 
             prev_cardinality = curr_cardinality;
@@ -284,8 +280,7 @@ proptest! {
 
         prop_assert!(
             est_merged >= est_a - 1.0 && est_merged >= est_b - 1.0,
-            "Merge monotonicity violated: A = {}, B = {}, merge(A,B) = {}",
-            est_a, est_b, est_merged
+            "Merge monotonicity violated: A = {est_a}, B = {est_b}, merge(A,B) = {est_merged}"
         );
     }
 
@@ -296,11 +291,11 @@ proptest! {
     /// Точность для известного количества уникальных элементов
     #[test]
     fn cardinality_accuracy(n in 10usize..1000) {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
 
         // Добавляем n уникальных элементов
         for i in 0..n {
-            hll.add(format!("unique_{}", i).as_bytes());
+            hll.add(format!("unique_{i}").as_bytes());
         }
 
         let estimate = hll.estimate_cardinality();
@@ -327,11 +322,11 @@ proptest! {
 
         // Сериализация
         let serialized = bincode::serialize(&hll)
-            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {e}")))?;
 
         // Десериализация
         let deserialized: Hll = bincode::deserialize(&serialized)
-            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {e}")))?;
 
         let deserialized_estimate = deserialized.estimate_cardinality();
         let deserialized_is_sparse = deserialized.is_sparse();
@@ -343,8 +338,7 @@ proptest! {
 
         prop_assert!(
             (original_estimate - deserialized_estimate).abs() < 0.01,
-            "Cardinality changed during serialization: {} -> {}",
-            original_estimate, deserialized_estimate
+            "Cardinality changed during serialization: {original_estimate} -> {deserialized_estimate}"
         );
     }
 
@@ -356,10 +350,10 @@ proptest! {
         let original_estimate = hll.estimate_cardinality();
 
         let serialized = bincode::serialize(&hll)
-            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {e}")))?;
 
         let deserialized: Hll = bincode::deserialize(&serialized)
-            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {e}")))?;
 
         prop_assert!(deserialized.is_sparse(), "Deserialized HLL should be sparse");
 
@@ -377,10 +371,10 @@ proptest! {
         let original_is_sparse = hll.is_sparse();
 
         let serialized = bincode::serialize(&hll)
-            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Serialization failed: {e}")))?;
 
         let deserialized: Hll = bincode::deserialize(&serialized)
-            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {}", e)))?;
+            .map_err(|e| TestCaseError::fail(format!("Deserialization failed: {e}")))?;
 
         prop_assert_eq!(
             original_is_sparse, deserialized.is_sparse(),
@@ -403,7 +397,7 @@ proptest! {
     fn sparse_to_dense_conversion_preserves_cardinality(
         elements in prop::collection::vec(element_strategy(), 50..200)
     ) {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
 
         for elem in &elements {
             hll.add(elem);
@@ -420,26 +414,24 @@ proptest! {
 
         prop_assert!(
             (sparse_estimate - dense_estimate).abs() < 1.0,
-            "Conversion changed cardinality: {} -> {}",
-            sparse_estimate, dense_estimate
+            "Conversion changed cardinality: {sparse_estimate} -> {dense_estimate}",
         );
     }
 
     /// Автоматическая конверсия при превышении порога
     #[test]
     fn automatic_conversion_at_threshold(threshold in 100usize..1000) {
-        let mut hll = Hll::with_threshold(threshold);
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::with_threshold(threshold);
 
         // Добавляем элементы до превышения порога
         for i in 0..(threshold + 500) {
-            hll.add(format!("elem_{}", i).as_bytes());
+            hll.add(format!("elem_{i}").as_bytes());
         }
 
         // Должен быть dense после превышения порога
         prop_assert!(
             !hll.is_sparse(),
-            "HLL should convert to dense after threshold {}",
-            threshold
+            "HLL should convert to dense after threshold {threshold}",
         );
     }
 
@@ -454,8 +446,8 @@ proptest! {
         threshold1 in 100usize..5000,
         threshold2 in 100usize..5000
     ) {
-        let mut hll1 = Hll::with_threshold(threshold1);
-        let mut hll2 = Hll::with_threshold(threshold2);
+        let mut hll1: Hll<DEFAULT_PRECISION> = Hll::with_threshold(threshold1);
+        let mut hll2: Hll<DEFAULT_PRECISION> = Hll::with_threshold(threshold2);
 
         for elem in elements {
             hll1.add(&elem);
@@ -467,8 +459,7 @@ proptest! {
 
         prop_assert!(
             (est1 - est2).abs() < 5.0,
-            "Threshold affects cardinality: threshold {} = {}, threshold {} = {}",
-            threshold1, est1, threshold2, est2
+            "Threshold affects cardinality: threshold {threshold1} = {est1}, threshold {threshold2} = {est2}",
         );
     }
 
@@ -479,7 +470,7 @@ proptest! {
     /// Пустой HLL должен давать кардинальность 0
     #[test]
     fn empty_hll_zero_cardinality(_unit in any::<()>()) {
-        let hll = Hll::new();
+        let hll: Hll<DEFAULT_PRECISION> = Hll::new();
         let estimate = hll.estimate_cardinality();
 
         prop_assert_eq!(
@@ -492,7 +483,7 @@ proptest! {
     /// Один элемент должен давать кардинальность ≈1
     #[test]
     fn single_element_cardinality(element in element_strategy()) {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
         hll.add(&element);
 
         let estimate = hll.estimate_cardinality();
@@ -520,8 +511,7 @@ proptest! {
 
         prop_assert!(
             (original_estimate - merged_estimate).abs() < 1.0,
-            "Merge with self changed cardinality: {} -> {}",
-            original_estimate, merged_estimate
+            "Merge with self changed cardinality: {original_estimate} -> {merged_estimate}",
         );
     }
 
@@ -565,18 +555,18 @@ proptest! {
 
 #[cfg(test)]
 mod edge_cases {
-    use zumic::database::HllEncoding;
+    use zumic::database::{HllEncoding, DEFAULT_PRECISION};
 
     use super::*;
 
     #[test]
     fn test_default_threshold() {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
 
         match &mut hll.encoding {
             HllEncoding::Sparse(sparse) => {
                 for idx in 0..=DEFAULT_SPARSE_THRESHOLD {
-                    sparse.set_register(idx as u16, 1);
+                    sparse.set_register(idx, 1);
                 }
             }
             _ => panic!("Expected sparse HLL initially"),
@@ -592,7 +582,7 @@ mod edge_cases {
 
     #[test]
     fn test_merge_empty_hlls() {
-        let mut hll1 = Hll::new();
+        let mut hll1: Hll<DEFAULT_PRECISION> = Hll::new();
         let hll2 = Hll::new();
 
         hll1.merge(&hll2);
@@ -603,9 +593,9 @@ mod edge_cases {
 
     #[test]
     fn test_merge_with_empty() {
-        let mut hll1 = Hll::new();
+        let mut hll1: Hll<DEFAULT_PRECISION> = Hll::new();
         for i in 0..100 {
-            hll1.add(format!("elem_{}", i).as_bytes());
+            hll1.add(format!("elem_{i}").as_bytes());
         }
 
         let est_before = hll1.estimate_cardinality();
@@ -623,10 +613,10 @@ mod edge_cases {
 
     #[test]
     fn test_repeated_conversions() {
-        let mut hll = Hll::new();
+        let mut hll: Hll<DEFAULT_PRECISION> = Hll::new();
 
         for i in 0..100 {
-            hll.add(format!("elem_{}", i).as_bytes());
+            hll.add(format!("elem_{i}").as_bytes());
         }
 
         let est_sparse = hll.estimate_cardinality();

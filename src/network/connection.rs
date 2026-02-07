@@ -608,9 +608,9 @@ impl ConnectionHandler {
                         ctx.connection_id, ctx.addr, e
                     );
                     ctx.connection_info.record_error();
-                    let err_frame = ZspFrame::FrameError(format!("ERR zsp decode: {}", e));
+                    let err_frame = ZspFrame::FrameError(format!("ERR zsp decode: {e}"));
                     let enc = ZspEncoder::encode(&err_frame)
-                        .map_err(|e| anyhow::anyhow!("Zsp encode failed: {}", e))?;
+                        .map_err(|e| anyhow::anyhow!("Zsp encode failed: {e}"))?;
                     timeout(ctx.config.write_timeout, writer.write_all(&enc))
                         .await
                         .context("Write timeout")??;
@@ -665,7 +665,7 @@ impl ConnectionHandler {
                 let k = Sds::from(parts[1].as_bytes());
                 match engine.get(&k) {
                     Ok(Some(Value::Str(s))) => match String::from_utf8(s.to_vec()) {
-                        Ok(s) => format!("+{}\r\n", s),
+                        Ok(s) => format!("+{s}\r\n"),
                         Err(_) => "-ERR Invalid UTF-8\r\n".to_string(),
                     },
                     Ok(Some(_)) => "-ERR Unsupported type\r\n".to_string(),
@@ -774,7 +774,7 @@ impl ConnectionHandler {
                 let m2 = Sds::from(parts[3].as_bytes());
                 let unit = parts.get(4).copied().unwrap_or("m");
                 match engine.geo_dist(&k, &m1, &m2, unit) {
-                    Ok(Some(d)) => format!("+{}\r\n", d),
+                    Ok(Some(d)) => format!("+{d}\r\n"),
                     Ok(None) => "$-1\r\n".to_string(),
                     Err(e) => {
                         error!("GEODIST command failed: {}", e);
@@ -797,7 +797,7 @@ impl ConnectionHandler {
                         for (name, distance, point) in results {
                             resp += "*3\r\n";
                             resp += &format!("${}\r\n{}\r\n", name.len(), name);
-                            resp += &format!("+{}\r\n", distance);
+                            resp += &format!("+{distance}\r\n");
                             resp += &format!(
                                 "*2\r\n${}\r\n{}\r\n${}\r\n{}\r\n",
                                 point.lon.to_string().len(),
@@ -819,7 +819,7 @@ impl ConnectionHandler {
                 let members: Vec<Sds> =
                     parts[2..].iter().map(|s| Sds::from(s.as_bytes())).collect();
                 match engine.sadd(&k, &members) {
-                    Ok(added) => format!(":{}\r\n", added),
+                    Ok(added) => format!(":{added}\r\n"),
                     Err(e) => {
                         error!("SADD command failed: {e}");
                         "-ERR SADD failed\r\n".to_string()
@@ -848,7 +848,7 @@ impl ConnectionHandler {
             "SCARD" if parts.len() == 2 => {
                 let k = Sds::from(parts[1].as_bytes());
                 match engine.scard(&k) {
-                    Ok(n) => format!(":{}\r\n", n),
+                    Ok(n) => format!(":{n}\r\n"),
                     Err(e) => {
                         error!("SCARD failed: {}", e);
                         "-ERR SCARD failed\r\n".to_string()
@@ -872,7 +872,7 @@ impl ConnectionHandler {
                 let members: Vec<Sds> =
                     parts[2..].iter().map(|s| Sds::from(s.as_bytes())).collect();
                 match engine.srem(&k, &members) {
-                    Ok(removed) => format!(":{}\r\n", removed),
+                    Ok(removed) => format!(":{removed}\r\n"),
                     Err(e) => {
                         error!("SREM failed: {}", e);
                         "-ERR SREM failed\r\n".to_string()
@@ -1064,7 +1064,7 @@ impl ConnectionHandler {
                     }
                     Err(e) => {
                         connection_info.record_error();
-                        let err_frame = ZspFrame::FrameError(format!("ERR exec: {}", e));
+                        let err_frame = ZspFrame::FrameError(format!("ERR exec: {e}"));
                         let enc = ZspEncoder::encode(&err_frame)
                             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                         timeout(config.write_timeout, writer.write_all(&enc))
@@ -1076,7 +1076,7 @@ impl ConnectionHandler {
             }
             Err(e) => {
                 connection_info.record_error();
-                let err_frame = ZspFrame::FrameError(format!("ERR parse: {}", e));
+                let err_frame = ZspFrame::FrameError(format!("ERR parse: {e}"));
                 let enc =
                     ZspEncoder::encode(&err_frame).map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 timeout(config.write_timeout, writer.write_all(&enc))

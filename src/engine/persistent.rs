@@ -166,7 +166,7 @@ impl InPersistentStore {
         // Опционально создаём финальный снапшот
         if self.config.compaction.enable_snapshots {
             if let Err(e) = self.create_snapshot() {
-                eprintln!("Warning: Failed to create shutdown snapshot: {:?}", e);
+                eprintln!("Warning: Failed to create shutdown snapshot: {e:?}");
             }
         }
 
@@ -1129,7 +1129,7 @@ impl Storage for InPersistentStore {
             let snapshot_info = self.create_snapshot()?;
 
             if self.config.enable_operation_logging {
-                println!("Snapshot created: {:?}", snapshot_info);
+                println!("Snapshot created: {snapshot_info:?}");
             }
         }
 
@@ -1219,10 +1219,10 @@ mod tests {
 
         // --- базовый сценарий: небольшое количество ключей ---
         let keys: Vec<Sds> = (0..10)
-            .map(|i| Sds::from_str(&format!("key_{}", i)))
+            .map(|i| Sds::from_str(&format!("key_{i}")))
             .collect();
         let values: Vec<Value> = (0..10)
-            .map(|i| Value::Str(Sds::from_str(&format!("value_{}", i))))
+            .map(|i| Value::Str(Sds::from_str(&format!("value_{i}"))))
             .collect();
 
         let entries: Vec<(&Sds, Value)> = keys.iter().zip(values.iter().cloned()).collect();
@@ -1241,10 +1241,10 @@ mod tests {
 
         // --- проверка балансировки на большом числе ключей ---
         let big_keys: Vec<Sds> = (0..3000)
-            .map(|i| Sds::from_str(&format!("big_key_{}", i)))
+            .map(|i| Sds::from_str(&format!("big_key_{i}")))
             .collect();
         let big_values: Vec<Value> = (0..3000)
-            .map(|i| Value::Str(Sds::from_str(&format!("val_{}", i))))
+            .map(|i| Value::Str(Sds::from_str(&format!("val_{i}"))))
             .collect();
         let big_entries: Vec<(&Sds, Value)> =
             big_keys.iter().zip(big_values.iter().cloned()).collect();
@@ -1294,7 +1294,7 @@ mod tests {
         while store.index.shard_for_key(k1.as_bytes()) == store.index.shard_for_key(k2.as_bytes()) {
             // модифицируем k2, пока не попадут в разные шарды
             let n = rand::random::<u32>() % 10000;
-            k2 = Sds::from_str(&format!("k_{}", n));
+            k2 = Sds::from_str(&format!("k_{n}"));
         }
 
         let v = Value::Str(Sds::from_str("value"));
@@ -1323,8 +1323,8 @@ mod tests {
 
         // наполняем базу
         for i in 0..30 {
-            let k = Sds::from_str(&format!("flush_key_{}", i));
-            let v = Value::Str(Sds::from_str(&format!("val_{}", i)));
+            let k = Sds::from_str(&format!("flush_key_{i}"));
+            let v = Value::Str(Sds::from_str(&format!("val_{i}")));
             store.set(&k, v)?;
         }
 
@@ -1337,7 +1337,7 @@ mod tests {
 
         // все ключи должны быть отсутствовать
         for i in 0..30 {
-            let k = Sds::from_str(&format!("flush_key_{}", i));
+            let k = Sds::from_str(&format!("flush_key_{i}"));
             assert!(store.get(&k)?.is_none());
         }
 

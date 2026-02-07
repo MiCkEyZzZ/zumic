@@ -6,6 +6,9 @@
 
 ### Добавлено
 
+- **.github/workflows**
+  - Добавлена поддержка property tests для HLL в файле `property-tests.yml`
+
 - **HLL module (`hll_base`)**
   - Интегрированы `HllSparse` и `HllDense` в общий модуль.
   - Добавлена структура **`HllStats`** для хранения статистики.

@@ -379,8 +379,8 @@ mod tests {
         let features = Bitmap::cpu_features();
         let strategy = Bitmap::best_strategy();
 
-        println!("Detected CPU features: {:?}", features);
-        println!("Best strategy: {:?}", strategy);
+        println!("Detected CPU features: {features:?}");
+        println!("Best strategy: {strategy:?}");
 
         // Должна быть хотя бы базовая стратегия
         assert!(matches!(

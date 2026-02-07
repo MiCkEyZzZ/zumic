@@ -43,9 +43,8 @@ where
             // TODO: Полная реализация size-based через custom appender
             // Пока используем daily с предупреждением
             eprintln!(
-                "Warning: Size-based rotation ({}MB) partially implemented, using daily rotation.\n\
-                 Background cleanup will run periodically.",
-                mb
+                "Warning: Size-based rotation ({mb}MB) partially implemented, using daily rotation.\n\
+                 Background cleanup will run periodically."
             );
 
             rolling::daily(log_dir, filename)

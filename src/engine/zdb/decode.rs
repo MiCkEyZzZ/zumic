@@ -26,9 +26,10 @@ use super::{
 use crate::{
     database::{Bitmap, HllDense, HllEncoding, SERIALIZATION_VERSION},
     engine::varint,
-    Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE,
+    Dict, Hll, Sds, SkipList, SmartHash, Value,
 };
 
+const DENSE_SIZE: usize = 16 * 1024;
 // Константы безопасности для предотвращения атак через огромные размеры
 const MAX_COMPRESSED_SIZE: u32 = 100 * 1024 * 1024; // 100 MB
 const MAX_STRING_SIZE: u32 = 512 * 1024 * 1024; // 512 MB
@@ -924,7 +925,9 @@ fn read_hll_value<R: Read>(
     data[..to_copy].copy_from_slice(&regs[..to_copy]);
 
     // Преобразуем в HllDense и возвращаем новый Hll с Dense encoding
-    let dense = HllDense { data };
+    let dense = HllDense {
+        data: data.to_vec(),
+    };
     let hll = Hll {
         encoding: HllEncoding::Dense(Box::new(dense)),
         version: SERIALIZATION_VERSION,

@@ -29,7 +29,7 @@ struct Cli {
         long,
         default_value = "127.0.0.1",
         env = "ZUMIC_HOST",
-        help = "Хост сервера для подключения"
+        help = "Server host to connect to"
     )]
     host: String,
     /// Порт сервера
@@ -38,7 +38,7 @@ struct Cli {
         long,
         default_value = "6174",
         env = "ZUMIC_PORT",
-        help = "Порт сервера для подключения"
+        help = "Server port to connect to"
     )]
     port: u16,
     /// Пароль для аутентификации
@@ -46,45 +46,49 @@ struct Cli {
         short,
         long,
         env = "ZUMIC_PASSWORD",
-        help = "Пароль для аутентификации (можно использовать переменную окружения ZUMIC_PASSWORD)"
+        help = "Password for authentication (can use the ZUMIC_PASSWORD environment variable)"
     )]
     auth: Option<String>,
     /// Таймаут соединения в секундах
-    #[arg(long, default_value = "5", help = "Таймаут соединения в секундах")]
+    #[arg(long, default_value = "5", help = "Connection timeout in seconds")]
     timeout: u64,
     /// Таймаут чтения данных в секундах
     #[arg(
         long,
         default_value = "30",
-        help = "Таймаут ожидания ответа сервера в секундах"
+        help = "Server response timeout in seconds"
     )]
     read_timeout: u64,
     /// Таймаут записи данных в секундах
     #[arg(
         long,
         default_value = "10",
-        help = "Таймаут отправки команды серверу в секундах"
+        help = "Timeout for sending a command to the server in seconds"
     )]
     write_timeout: u64,
     /// Включить подробный вывод (debug)
-    #[arg(short, long, help = "Включить подробный вывод для отладки")]
+    #[arg(short, long, help = "Enable verbose output for debugging")]
     verbose: bool,
     /// Подавить большинство логов (только warn/error)
-    #[arg(short = 'q', long, help = "Подавить логирование (только warn/error)")]
+    #[arg(
+        short = 'q',
+        long,
+        help = "Suppress logging (warnings and errors only)"
+    )]
     quiet: bool,
     /// Формат вывода результатов
     #[arg(
         long,
         value_enum,
         default_value = "pretty",
-        help = "Формат вывода ответа сервера"
+        help = "Output format of the server response"
     )]
     output: OutputFormat,
     /// Подкоманда для выполнения
     #[command(subcommand)]
     command: Option<Commands>,
     /// Прямое выполнение команды (например: GET key)
-    #[arg(help = "Прямая команда для выполнения (например, 'GET key' или 'SET key value')")]
+    #[arg(help = "Direct command to execute (e.g., 'GET key' or 'SET key value')")]
     args: Vec<String>,
 }
 
@@ -109,7 +113,7 @@ enum Commands {
         #[arg(
             long,
             default_value = "~/.zumic_history",
-            help = "Файл для сохранения истории команд"
+            help = "File to save command history"
         )]
         history: String,
     },
@@ -117,7 +121,7 @@ enum Commands {
     #[command(alias = "e")]
     Exec {
         /// Команда с аргументами
-        #[arg(required = true, help = "Команда для выполнения (например, 'GET key')")]
+        #[arg(required = true, help = "Command to execute (e.g., 'GET key')")]
         args: Vec<String>,
     },
     /// Проверка соединения с сервером
@@ -127,7 +131,7 @@ enum Commands {
             short = 'c',
             long,
             default_value = "1",
-            help = "Количество пингов для отправки"
+            help = "Number of pings to send"
         )]
         count: u32,
 
@@ -136,7 +140,7 @@ enum Commands {
             short,
             long,
             default_value = "1000",
-            help = "Интервал между пингами в миллисекундах"
+            help = "Interval between pings in milliseconds"
         )]
         interval: u64,
     },
@@ -144,7 +148,7 @@ enum Commands {
     #[command(alias = "status")]
     Info {
         /// Раздел информации (например: server, memory, stats)
-        #[arg(help = "Название раздела информации (например, 'server', 'memory', 'stats')")]
+        #[arg(help = "Name of the information section (e.g., 'server', 'memory', 'stats')")]
         section: Option<String>,
     },
     /// Режим мониторинга команд (реaltime)
@@ -157,7 +161,7 @@ enum Commands {
             short = 'n',
             long,
             default_value = "100000",
-            help = "Количество запросов для теста"
+            help = "Number of requests for the test"
         )]
         requests: usize,
         /// Количество параллельных клиентов
@@ -165,7 +169,7 @@ enum Commands {
             short = 'c',
             long,
             default_value = "50",
-            help = "Количество параллельных клиентов"
+            help = "Number of parallel clients"
         )]
         clients: usize,
         /// Тестируемые команды (например: SET,GET)
@@ -173,7 +177,7 @@ enum Commands {
             short = 't',
             long,
             default_value = "SET,GET",
-            help = "Список команд для тестирования"
+            help = "List of commands to test"
         )]
         tests: String,
     },
@@ -193,7 +197,7 @@ impl TryFrom<&Cli> for CliConfig {
     fn try_from(cli: &Cli) -> Result<Self> {
         let server_addr: SocketAddr = format!("{}:{}", cli.host, cli.port)
             .parse()
-            .context("Неверный формат адреса сервера")?;
+            .context("Invalid server address format")?;
 
         let client_config = ClientConfig {
             connect_timeout: Duration::from_secs(cli.timeout),
@@ -223,7 +227,7 @@ async fn main() -> Result<()> {
     }
 
     let config = CliConfig::try_from(&cli)?;
-    debug!("Конфигурация CLI: {config:?}");
+    debug!("CLI configuration: {config:?}");
 
     match handle_command(&cli, &config).await {
         Ok(_) => Ok(()),
@@ -283,7 +287,7 @@ fn init_logging(
         .with_line_number(false)
         .with_level(true)
         .try_init()
-        .map_err(|e| anyhow::anyhow!("Ошибка инициализации логирования: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {e}"))?;
 
     Ok(())
 }
@@ -296,9 +300,9 @@ async fn interactive_mode(
     config: &CliConfig,
     _history_path: &str,
 ) -> Result<()> {
-    println!("Интерактивный режим - заглушка");
-    println!("Сервер: {}", config.server_addr);
-    println!("Пока используйте: zumic-cli exec <команда>");
+    println!("Interactive mode - placeholder");
+    println!("Server: {}", config.server_addr);
+    println!("For now, use: zumic-cli exec <command>");
     Ok(())
 }
 
@@ -342,10 +346,10 @@ fn format_value_raw(v: &ZumicValue) -> String {
     match v {
         ZumicValue::Str(s) => {
             let s_text = String::from_utf8_lossy(s);
-            format!("+{}\r\n", s_text)
+            format!("+{s_text}\r\n")
         }
-        ZumicValue::Int(i) => format!(":{}\r\n", i),
-        ZumicValue::Float(f) => format!(",{}\r\n", f),
+        ZumicValue::Int(i) => format!(":{i}\r\n"),
+        ZumicValue::Float(f) => format!(",{f}\r\n"),
         ZumicValue::Bool(b) => format!("#{}\r\n", if *b { "t" } else { "f" }),
         ZumicValue::Null => "$-1\r\n".to_string(),
         ZumicValue::Array(arr) => {
@@ -356,8 +360,8 @@ fn format_value_raw(v: &ZumicValue) -> String {
                         let s_text = String::from_utf8_lossy(s);
                         out.push_str(&format!("${}\r\n{}\r\n", s_text.len(), s_text));
                     }
-                    ZumicValue::Int(i) => out.push_str(&format!(":{}\r\n", i)),
-                    ZumicValue::Float(f) => out.push_str(&format!(",{}\r\n", f)),
+                    ZumicValue::Int(i) => out.push_str(&format!(":{i}\r\n")),
+                    ZumicValue::Float(f) => out.push_str(&format!(",{f}\r\n")),
                     ZumicValue::Null => out.push_str("$-1\r\n"),
                     other => {
                         let pretty = format_value_for_cli(other);
@@ -438,14 +442,14 @@ async fn execute_command(
     args: &[String],
 ) -> Result<()> {
     if args.is_empty() {
-        anyhow::bail!("Не указана команда");
+        anyhow::bail!("No command specified");
     }
 
     let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
         .await
-        .context("Не удалось подключиться к серверу")?;
+        .context("Failed to connect to the server")?;
 
-    debug!("✓ Подключено к {}", config.server_addr);
+    debug!("✓ Connected to {}", config.server_addr);
 
     let cmd = args[0].to_uppercase();
 
@@ -478,7 +482,7 @@ async fn execute_command(
         }
         "GET" => {
             if args.len() != 2 {
-                anyhow::bail!("Использование: GET <ключ>");
+                anyhow::bail!("Usage: GET <key>");
             }
             match client.get(&args[1]).await? {
                 Some(value) => match config.output_format {
@@ -497,7 +501,7 @@ async fn execute_command(
         }
         "SET" => {
             if args.len() != 3 {
-                anyhow::bail!("Использование: SET <ключ> <значение>");
+                anyhow::bail!("Usage: SET <key> <value>");
             }
             let value = zumic::Value::Str(zumic::Sds::from_str(&args[2]));
             client.set(&args[1], value).await?;
@@ -509,7 +513,7 @@ async fn execute_command(
         }
         "DEL" => {
             if args.len() != 2 {
-                anyhow::bail!("Использование: DEL <ключ>");
+                anyhow::bail!("Usage: DEL <key>");
             }
             let deleted = client.del(&args[1]).await?;
             let n = if deleted { 1 } else { 0 };
@@ -520,7 +524,7 @@ async fn execute_command(
             }
         }
         _ => {
-            anyhow::bail!("Неизвестная команда: {cmd}. Поддерживаются: PING, GET, SET, DEL");
+            anyhow::bail!("Unknown command: {cmd}. Supported commands: PING, GET, SET, DEL");
         }
     }
 
@@ -538,7 +542,7 @@ async fn ping_server(
 
     let mut client = ZumicClient::connect(config.server_addr, config.client_config.clone())
         .await
-        .context("Не удалось подключиться к серверу")?;
+        .context("Failed to connect to the server")?;
 
     let mut successful = 0;
     let mut total_time = Duration::ZERO;
@@ -551,13 +555,13 @@ async fn ping_server(
                 let elapsed = start.elapsed();
                 total_time += elapsed;
                 successful += 1;
-                println!("#{i}: PONG - время={:.2}ms", elapsed.as_secs_f64() * 1000.0);
+                println!("#{i}: PONG - time={:.2}ms", elapsed.as_secs_f64() * 1000.0);
             }
             Ok(false) => {
-                println!("#{i}: Неожиданный ответ");
+                println!("#{i}: Unexpected response");
             }
             Err(e) => {
-                println!("#{i}: Ошибка - {e}");
+                println!("#{i}: Error - {e}");
             }
         }
 
@@ -567,13 +571,13 @@ async fn ping_server(
     }
 
     println!();
-    println!("--- Статистика ---");
-    println!("Отправлено: {}", count);
-    println!("Успешно: {}", successful);
-    println!("Потеряно: {}", count - successful);
+    println!("--- Statistics ---");
+    println!("Sent: {count}");
+    println!("Successful: {successful}");
+    println!("Lost: {}", count - successful);
     if successful > 0 {
         let avg_ms = (total_time.as_secs_f64() * 1000.0) / successful as f64;
-        println!("Среднее время: {avg_ms:.2}ms");
+        println!("Average time: {avg_ms:.2}ms");
     }
 
     client.close().await?;
@@ -584,18 +588,18 @@ async fn get_server_info(
     config: &CliConfig,
     section: Option<&str>,
 ) -> Result<()> {
-    println!("Режим информации - заглушка");
-    println!("Сервер: {}", config.server_addr);
+    println!("Info mode - placeholder");
+    println!("Server: {}", config.server_addr);
     if let Some(sec) = section {
-        println!("Раздел: {sec}");
+        println!("Section: {sec}");
     }
     println!();
     Ok(())
 }
 
 async fn monitor_mode(config: &CliConfig) -> Result<()> {
-    println!("Режим мониторинга - заглушка");
-    println!("Сервер: {}", config.server_addr);
+    println!("Monitor mode - placeholder");
+    println!("Server: {}", config.server_addr);
     println!();
     Ok(())
 }
@@ -606,10 +610,10 @@ async fn run_benchmark(
     clients: usize,
     tests: &str,
 ) -> Result<()> {
-    println!("Режим бенчмарка - заглушка");
-    println!("Сервер: {}", config.server_addr);
-    println!("Запросов: {requests}, Клиентов: {clients}");
-    println!("Тестируемые команды: {tests}");
+    println!("Benchmark mode - placeholder");
+    println!("Server: {}", config.server_addr);
+    println!("Requests: {requests}, Clients: {clients}");
+    println!("Commands being tested: {tests}");
     println!();
     Ok(())
 }

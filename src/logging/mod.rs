@@ -104,6 +104,6 @@ fn init_slow_log(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Error
 pub fn init_logging_simple() {
     let config = LoggingConfig::default();
     if let Err(e) = init_logging(config) {
-        eprintln!("Failed to initialize logging: {}", e);
+        eprintln!("Failed to initialize logging: {e}");
     }
 }

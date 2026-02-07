@@ -5,19 +5,26 @@ use serde::{Deserialize, Serialize};
 /// Пороговое значение для автоматического переключения sparse->dense.
 pub const DEFAULT_SPARSE_THRESHOLD: usize = 3000;
 
+/// Разреженное представление HyperLogLog с настраиваемой точностью.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct HllSparse {
+pub struct HllSparse<const P: usize> {
     /// Карта ненулевых регистров: индекс -> значение
-    registers: BTreeMap<u16, u8>,
+    registers: BTreeMap<usize, u8>,
     /// Порог для переключения на dense encoding
     threshold: usize,
 }
 
-impl HllSparse {
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
+impl<const P: usize> HllSparse<P> {
+    /// Создаёт новый sparse HLL с порогом по умолчанию.
     pub fn new() -> Self {
         Self::with_threshold(DEFAULT_SPARSE_THRESHOLD)
     }
 
+    /// Создаёт новый sparse HLL с заданным порогом.
     pub fn with_threshold(threshold: usize) -> Self {
         Self {
             registers: BTreeMap::new(),
@@ -25,9 +32,10 @@ impl HllSparse {
         }
     }
 
+    /// Устанавливает значение регистра.
     pub fn set_register(
         &mut self,
-        index: u16,
+        index: usize,
         value: u8,
     ) -> bool {
         if value == 0 {
@@ -43,17 +51,20 @@ impl HllSparse {
         }
     }
 
+    /// Возвращает значение регистра (0 если не установлен).
     pub fn get_register(
         &self,
-        index: u16,
+        index: usize,
     ) -> u8 {
         self.registers.get(&index).copied().unwrap_or(0)
     }
 
+    /// Проверяет, нужно ли конвертировать в dense.
     pub fn should_convert_to_dense(&self) -> bool {
         self.registers.len() > self.threshold
     }
 
+    /// Проверяет, пустой ли sparse HLL.
     pub fn is_empty(&self) -> bool {
         self.registers.is_empty()
     }
@@ -62,19 +73,19 @@ impl HllSparse {
         self.registers.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (u16, u8)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, u8)> + '_ {
         self.registers.iter().map(|(&k, &v)| (k, v))
     }
 
     pub fn memory_footprint(&self) -> usize {
         // BTreeMap overhead: ~32 байта на узел (зависит от реализации)
         // + размер самой структуры
-        size_of::<Self>() + self.registers.len() * 32
+        std::mem::size_of::<Self>() + self.registers.len() * 32
     }
 
     pub fn merge(
         &mut self,
-        other: &HllSparse,
+        other: &HllSparse<P>,
     ) {
         for (&index, &value) in other.registers.iter() {
             self.set_register(index, value);
@@ -93,11 +104,19 @@ impl HllSparse {
     }
 }
 
-impl Default for HllSparse {
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для HllSparse
+////////////////////////////////////////////////////////////////////////////////
+
+impl<const P: usize> Default for HllSparse<P> {
     fn default() -> Self {
         Self::new()
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
@@ -105,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_new_sparse() {
-        let sparse = HllSparse::new();
+        let sparse = HllSparse::<4>::new();
         assert!(sparse.is_empty());
         assert_eq!(sparse.len(), 0);
         assert_eq!(sparse.threshold, DEFAULT_SPARSE_THRESHOLD);
@@ -113,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_set_and_get_register() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
 
         // Установка значения
         assert!(sparse.set_register(100, 5));
@@ -136,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_zero_value_not_stored() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
 
         // Нулевые значения не должны храниться
         assert!(!sparse.set_register(100, 0));
@@ -145,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_should_convert_to_dense() {
-        let mut sparse = HllSparse::with_threshold(10);
+        let mut sparse = HllSparse::<4>::with_threshold(10);
 
         // Добавляем меньше threshold
         for i in 0..10 {
@@ -160,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut sparse1 = HllSparse::new();
+        let mut sparse1 = HllSparse::<4>::new();
         sparse1.set_register(100, 5);
         sparse1.set_register(200, 3);
 
@@ -179,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_count_zeros() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
         sparse.set_register(0, 1);
         sparse.set_register(1, 2);
         sparse.set_register(2, 3);
@@ -189,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_memory_footprint() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
         let empty_size = sparse.memory_footprint();
 
         // Добавляем несколько регистров
@@ -203,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
         sparse.set_register(100, 5);
         sparse.set_register(200, 3);
 
@@ -215,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<4>::new();
         sparse.set_register(100, 5);
         sparse.set_register(50, 3);
         sparse.set_register(200, 7);
@@ -239,7 +258,7 @@ mod tests {
         let serialized = bincode::serialize(&sparse).unwrap();
 
         // Десериализация
-        let deserialized: HllSparse = bincode::deserialize(&serialized).unwrap();
+        let deserialized: HllSparse<4> = bincode::deserialize(&serialized).unwrap();
 
         assert_eq!(sparse, deserialized);
     }

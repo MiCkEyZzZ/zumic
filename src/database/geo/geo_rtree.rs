@@ -1063,7 +1063,7 @@ mod tests {
         for i in 0..1000 {
             let lon = (i % 100) as f64 * 0.1;
             let lat = (i / 100) as f64 * 0.1;
-            tree.insert(make_entry(&format!("P{}", i), lon, lat));
+            tree.insert(make_entry(&format!("P{i}"), lon, lat));
         }
 
         assert_eq!(tree.len(), 1000);

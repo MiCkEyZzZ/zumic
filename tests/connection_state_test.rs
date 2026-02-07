@@ -72,11 +72,7 @@ async fn test_full_connection_lifecycle_with_admin() -> anyhow::Result<()> {
             let mut buf = vec![0u8; 128];
             let n = client1.read(&mut buf).await?;
             let response = String::from_utf8_lossy(&buf[..n]);
-            assert!(
-                response.contains("+PONG"),
-                "Expected PONG, got: {}",
-                response
-            );
+            assert!(response.contains("+PONG"), "Expected PONG, got: {response}");
 
             // === Тест 2: Проверка метаданных ===
             println!("Test 2: Connection metadata");
@@ -117,7 +113,7 @@ async fn test_full_connection_lifecycle_with_admin() -> anyhow::Result<()> {
             assert!(stats.total_bytes_sent > 0);
             assert!(stats.total_bytes_received > 0);
 
-            println!("Global stats: {:#?}", stats);
+            println!("Global stats: {stats:#?}");
 
             // === Тест 5: Фильтрация по IP ===
             println!("Test 5: Filter by IP");
@@ -141,7 +137,7 @@ async fn test_full_connection_lifecycle_with_admin() -> anyhow::Result<()> {
             assert!(stats_response.contains("Active Connections: 3"));
             assert!(stats_response.contains("Total Commands:"));
 
-            println!("Admin stats response:\n{}", stats_response);
+            println!("Admin stats response:\n{stats_response}");
 
             // === Тест 7: Закрытие соединения ===
             println!("Test 7: Connection closing");

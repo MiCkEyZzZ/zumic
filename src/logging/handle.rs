@@ -177,7 +177,7 @@ impl LoggingHandle {
                 tracing::info!("Async logging shutdown completed successfully");
             }
             Ok(Err(e)) => {
-                eprintln!("Logging shutdown task panicked: {}", e);
+                eprintln!("Logging shutdown task panicked: {e}");
             }
             Err(_) => {
                 eprintln!(

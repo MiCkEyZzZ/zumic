@@ -116,7 +116,7 @@ fn default_log_level_str() -> &'static str {
 /// ## Загрузка значений
 /// Значения объединяются из следующих источников (по приоритету):
 /// 1. `config/default.toml`
-/// 2. `config/<RUST_ENV>.toml`
+/// 2. `config/<ZUMIC_MODE>.toml`
 /// 3. Переменные окружения `ZUMIC_*`
 #[derive(Debug, Deserialize)]
 pub struct Settings {
@@ -187,7 +187,7 @@ impl Settings {
     /// Загружает и валидирует конфигурацию приложения.
     ///
     /// Автоматически:
-    /// - определяет профиль окружения (`RUST_ENV`, по умолчанию `dev`);
+    /// - определяет профиль окружения (`ZUMIC_MODE`, по умолчанию `dev`);
     /// - объединяет настройки из файлов и env;
     /// - применяет обратную совместимость `log_level → logging.level`;
     /// - выполняет валидацию конфигурации логирования.
@@ -198,7 +198,7 @@ impl Settings {
     /// - значения имеют неверный формат,
     /// - не проходит валидация логирования.
     pub fn load() -> Result<Self, ConfigError> {
-        let profile = std::env::var("RUST_ENV").unwrap_or_else(|_| "dev".into());
+        let profile = std::env::var("ZUMIC_MODE").unwrap_or_else(|_| "dev".into());
 
         let builder = Config::builder()
             .add_source(File::with_name("src/config/default").required(false))
@@ -245,7 +245,7 @@ mod tests {
                 env::remove_var(&key);
             }
         }
-        env::remove_var("RUST_ENV");
+        env::remove_var("ZUMIC_MODE");
     }
 
     /// Создаёт минимальную конфигурацию без зависимости от файлов

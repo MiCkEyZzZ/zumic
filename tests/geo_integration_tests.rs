@@ -25,12 +25,7 @@ fn test_restaurant_search_scenario() {
 
     // Все результаты должны быть в пределах радиуса
     for (name, dist) in &nearby {
-        assert!(
-            *dist <= 500.0,
-            "{} is {}m away, expected <= 500m",
-            name,
-            dist
-        );
+        assert!(*dist <= 500.0, "{name} is {dist}m away, expected <= 500m");
     }
 }
 
@@ -43,7 +38,7 @@ fn test_geohash_neighbor_coverage() {
         for j in 0..10 {
             let lon = i as f64 * 0.01;
             let lat = j as f64 * 0.01;
-            gs.add(format!("P_{}_{}", i, j), lon, lat);
+            gs.add(format!("P_{i}_{j}"), lon, lat);
         }
     }
 
@@ -91,10 +86,7 @@ fn test_geohash_accuracy_by_precision() {
 
         assert!(
             error < max_error_m,
-            "Precision {:?}: error {}m exceeds max {}m",
-            precision,
-            error,
-            max_error_m
+            "Precision {precision:?}: error {error}m exceeds max {max_error_m}m"
         );
     }
 }
@@ -163,7 +155,7 @@ fn test_large_dataset_performance() {
     for i in 0..10_000 {
         let lon = ((i % 100) as f64) * 0.1 - 5.0; // [-5, 4.9] ок
         let lat = ((i / 100) % 100) as f64 * 0.1 - 5.0; // теперь lat ∈ [-5, 4.9], все валидно
-        gs.add(format!("P{}", i), lon, lat);
+        gs.add(format!("P{i}"), lon, lat);
     }
 
     assert_eq!(gs.len(), 10_000);
@@ -199,7 +191,7 @@ fn test_query_consistency() {
     for i in 0..1_000 {
         let lon = (i % 50) as f64 * 0.02;
         let lat = (i / 50) as f64 * 0.02;
-        gs.add(format!("P{}", i), lon, lat);
+        gs.add(format!("P{i}"), lon, lat);
     }
 
     let center_lon = 0.5;
@@ -262,13 +254,11 @@ fn test_edge_coordinates() {
         let retrieved = gs.get(name).unwrap();
         assert!(
             (retrieved.lon - lon).abs() < 0.01,
-            "{} longitude mismatch",
-            name
+            "{name} longitude mismatch"
         );
         assert!(
             (retrieved.lat - lat).abs() < 0.01,
-            "{} latitude mismatch",
-            name
+            "{name} latitude mismatch"
         );
 
         // Geohash должен работать
@@ -276,7 +266,7 @@ fn test_edge_coordinates() {
         let decoded = gh.decode();
 
         let error = haversine_distance(retrieved, decoded);
-        assert!(error < 1000.0, "Large error at edge {}: {}m", name, error);
+        assert!(error < 1000.0, "Large error at edge {name}: {error}m");
     }
 }
 
