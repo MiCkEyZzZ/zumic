@@ -113,7 +113,7 @@ impl<const P: usize> Hll<P> {
 
     /// Возвращает точность HLL (кол-во бит для индекса регистра).
     #[inline]
-    pub const fn percision(&self) -> usize {
+    pub const fn precision(&self) -> usize {
         P
     }
 
@@ -244,27 +244,30 @@ impl<const P: usize> Hll<P> {
     /// Возвращает статистику использования HLL.
     pub fn stats(&self) -> HllStats {
         match &self.encoding {
-            HllEncoding::Sparse(sparse) => HllStats {
-                cardinality: self.estimate_cardinality(),
-                memory_bytes: sparse.memory_footprint(),
-                is_sparse: true,
-                non_zero_registers: sparse.len(),
-                precision: P,
-                standard_error: self.standard_error(),
-                version: self.version,
-            },
-            HllEncoding::Dense(_) => {
-                let mut non_zero = 0;
-                if let HllEncoding::Dense(dense) = &self.encoding {
-                    for i in 0..self.num_registers() {
-                        if dense.get_register(i) != 0 {
-                            non_zero += 1;
-                        }
-                    }
-                }
+            HllEncoding::Sparse(sparse) => {
+                let heap = sparse.memory_footprint();
                 HllStats {
                     cardinality: self.estimate_cardinality(),
-                    memory_bytes: self.dense_size() + std::mem::size_of::<Hll<P>>(),
+                    memory_bytes: std::mem::size_of::<Hll<P>>().saturating_add(heap),
+                    is_sparse: true,
+                    non_zero_registers: sparse.len(),
+                    precision: P,
+                    standard_error: self.standard_error(),
+                    version: self.version,
+                }
+            }
+            HllEncoding::Dense(dense) => {
+                let mut non_zero = 0;
+                for i in 0..self.num_registers() {
+                    if dense.get_register(i) != 0 {
+                        non_zero += 1;
+                    }
+                }
+
+                let heap = dense.memory_footprint();
+                HllStats {
+                    cardinality: self.estimate_cardinality(),
+                    memory_bytes: std::mem::size_of::<Hll<P>>().saturating_add(heap),
                     is_sparse: false,
                     non_zero_registers: non_zero,
                     precision: P,
@@ -597,19 +600,22 @@ mod tests {
     fn test_auto_conversion_to_dense() {
         let mut hll = H::with_threshold(100);
 
-        // Добавляем много уникальных элементов
         for i in 0..1000 {
             hll.add(format!("element_{i}").as_bytes());
         }
 
-        // Должно конвертироваться в dense
         assert!(!hll.is_sparse());
 
         let stats = hll.stats();
         assert!(!stats.is_sparse);
-        assert_eq!(
+
+        let min_expected = std::mem::size_of::<Hll>() + hll.dense_size();
+
+        assert!(
+            stats.memory_bytes >= min_expected,
+            "memory_bytes={}, min_expected={}",
             stats.memory_bytes,
-            hll.dense_size() + std::mem::size_of::<Hll>()
+            min_expected
         );
     }
 
