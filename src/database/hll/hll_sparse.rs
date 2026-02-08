@@ -279,4 +279,31 @@ mod tests {
 
         assert_eq!(sparse, deserialized);
     }
+
+    #[test]
+    fn test_merge_idempotent() {
+        let mut sparse = HllSparse::<14>::new();
+
+        for i in 0..100 {
+            sparse.set_register(i, (i % 63 + 1) as u8);
+        }
+
+        let before = sparse.clone();
+        sparse.merge(&before);
+
+        assert_eq!(sparse, before);
+    }
+
+    #[test]
+    fn test_memory_monotonic_growth() {
+        let mut sparse = HllSparse::<14>::new();
+        let mut last = sparse.memory_footprint();
+
+        for i in 0..200 {
+            sparse.set_register(i, 1);
+            let now = sparse.memory_footprint();
+            assert!(now >= last);
+            last = now;
+        }
+    }
 }
