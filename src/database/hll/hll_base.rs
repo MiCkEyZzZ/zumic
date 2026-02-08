@@ -782,4 +782,44 @@ mod tests {
             dense_stats.memory_bytes
         );
     }
+
+    #[test]
+    fn test_memory_monotonic_growth() {
+        let mut hll = Hll::<14>::with_threshold(50);
+        let mut last_mem = hll.stats().memory_bytes;
+
+        for i in 0..200 {
+            hll.add(format!("elem_{i}").as_bytes());
+            let mem = hll.stats().memory_bytes;
+            assert!(mem >= last_mem);
+            last_mem = mem;
+        }
+    }
+
+    #[test]
+    fn test_merge_idempotent() {
+        let mut hll = Hll::<14>::new();
+
+        for i in 0..1000 {
+            hll.add(format!("x_{i}").as_bytes());
+        }
+
+        let before = hll.clone();
+        hll.merge(&before);
+
+        assert_eq!(hll, before);
+    }
+
+    #[test]
+    fn test_clone_preserves_memory_footprint() {
+        let mut hll = Hll::<14>::with_threshold(50);
+
+        for i in 0..500 {
+            hll.add(format!("e_{i}").as_bytes());
+        }
+
+        let clone = hll.clone();
+
+        assert_eq!(hll.stats().memory_bytes, clone.stats().memory_bytes);
+    }
 }
