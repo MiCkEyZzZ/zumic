@@ -175,6 +175,7 @@ impl<const P: usize> Hll<P> {
                 for (_index, val) in sparse.iter() {
                     sum += 1.0 / (1_u64 << val) as f64;
                 }
+
                 // Добавляем вклад нулевых регистров
                 zeros = sparse.count_zeros(self.num_registers());
                 sum += zeros as f64 // 2^0 = 1
