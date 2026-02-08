@@ -33,6 +33,7 @@ impl<const P: usize> HllSparse<P> {
     }
 
     /// Устанавливает значение регистра.
+    #[inline]
     pub fn set_register(
         &mut self,
         index: usize,
@@ -52,6 +53,7 @@ impl<const P: usize> HllSparse<P> {
     }
 
     /// Возвращает значение регистра (0 если не установлен).
+    #[inline]
     pub fn get_register(
         &self,
         index: usize,
@@ -77,10 +79,13 @@ impl<const P: usize> HllSparse<P> {
         self.registers.iter().map(|(&k, &v)| (k, v))
     }
 
+    /// Возвращает приблизительную память кучи, используемую BTreeMap в байтах.
+    /// (не включает size_of::<HllSparse>(), чтобы не дублировать при суммарном
+    /// подсчёте)
     pub fn memory_footprint(&self) -> usize {
-        // BTreeMap overhead: ~32 байта на узел (зависит от реализации)
-        // + размер самой структуры
-        std::mem::size_of::<Self>() + self.registers.len() * 32
+        // Эвристика: ~32 байта на узел BTreeMap (можно скорректировать)
+        const BTREE_NODE_OVERHEAD: usize = 32;
+        self.registers.len().saturating_mul(BTREE_NODE_OVERHEAD)
     }
 
     pub fn merge(
@@ -124,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_new_sparse() {
-        let sparse = HllSparse::<4>::new();
+        let sparse = HllSparse::<14>::new();
         assert!(sparse.is_empty());
         assert_eq!(sparse.len(), 0);
         assert_eq!(sparse.threshold, DEFAULT_SPARSE_THRESHOLD);
@@ -132,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_set_and_get_register() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
 
         // Установка значения
         assert!(sparse.set_register(100, 5));
@@ -155,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_zero_value_not_stored() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
 
         // Нулевые значения не должны храниться
         assert!(!sparse.set_register(100, 0));
@@ -164,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_should_convert_to_dense() {
-        let mut sparse = HllSparse::<4>::with_threshold(10);
+        let mut sparse = HllSparse::<14>::with_threshold(10);
 
         // Добавляем меньше threshold
         for i in 0..10 {
@@ -179,11 +184,11 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut sparse1 = HllSparse::<4>::new();
+        let mut sparse1 = HllSparse::<14>::new();
         sparse1.set_register(100, 5);
         sparse1.set_register(200, 3);
 
-        let mut sparse2 = HllSparse::new();
+        let mut sparse2 = HllSparse::<14>::new();
         sparse2.set_register(100, 3); // меньше, чем в sparse1
         sparse2.set_register(200, 7); // больше, чем в sparse1
         sparse2.set_register(300, 4); // новый регистр
@@ -198,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_count_zeros() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
         sparse.set_register(0, 1);
         sparse.set_register(1, 2);
         sparse.set_register(2, 3);
@@ -208,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_memory_footprint() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
         let empty_size = sparse.memory_footprint();
 
         // Добавляем несколько регистров
@@ -222,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
         sparse.set_register(100, 5);
         sparse.set_register(200, 3);
 
@@ -234,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_iter() {
-        let mut sparse = HllSparse::<4>::new();
+        let mut sparse = HllSparse::<14>::new();
         sparse.set_register(100, 5);
         sparse.set_register(50, 3);
         sparse.set_register(200, 7);
@@ -249,8 +254,20 @@ mod tests {
     }
 
     #[test]
+    fn test_different_precisions() {
+        let sparse4 = HllSparse::<4>::new();
+        let sparse14 = HllSparse::<14>::new();
+        let sparse18 = HllSparse::<18>::new();
+
+        // Все должны работать одинаково
+        assert!(sparse4.is_empty());
+        assert!(sparse14.is_empty());
+        assert!(sparse18.is_empty());
+    }
+
+    #[test]
     fn test_serialization() {
-        let mut sparse = HllSparse::new();
+        let mut sparse = HllSparse::<14>::new();
         sparse.set_register(100, 5);
         sparse.set_register(200, 3);
 
@@ -258,7 +275,7 @@ mod tests {
         let serialized = bincode::serialize(&sparse).unwrap();
 
         // Десериализация
-        let deserialized: HllSparse<4> = bincode::deserialize(&serialized).unwrap();
+        let deserialized: HllSparse<14> = bincode::deserialize(&serialized).unwrap();
 
         assert_eq!(sparse, deserialized);
     }

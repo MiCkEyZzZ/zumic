@@ -21,6 +21,22 @@ impl<const P: usize> HllDense<P> {
         }
     }
 
+    /// Возвращает heap-часть, занятую dense-представлением:
+    /// - размер структуры HllDense (Vec metadata) — будет на куче, т.к.
+    ///   HllDense хранится в Box
+    /// - плюс реальная capacity() в байтах (Vec<u8>)
+    /// - плюс небольшой консервативный overhead для аллокатора
+    pub fn memory_footprint(&self) -> usize {
+        const ALLOC_OVERHEAD: usize = 32;
+        // size_of::<Self>() — размер HllDense (в т.ч. метаданные Vec) — живёт в куче
+        // под Box
+        let struct_heap = std::mem::size_of::<Self>();
+        let heap_data = self.data.capacity();
+        struct_heap
+            .saturating_add(heap_data)
+            .saturating_add(ALLOC_OVERHEAD)
+    }
+
     /// Записывает 6-битное значение `value` в регистр `index`.
     pub fn set_register(
         &mut self,
