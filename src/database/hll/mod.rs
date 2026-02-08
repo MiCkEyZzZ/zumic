@@ -1,5 +1,6 @@
 pub mod hll_base;
 pub mod hll_dense;
+pub mod hll_hash;
 pub mod hll_metrics;
 pub mod hll_sparse;
 
@@ -7,4 +8,5 @@ pub mod hll_sparse;
 // simplify access from external code.
 pub use hll_base::*;
 pub use hll_dense::*;
+pub use hll_hash::*;
 pub use hll_sparse::*;
