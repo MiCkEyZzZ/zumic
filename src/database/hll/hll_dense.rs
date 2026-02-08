@@ -22,8 +22,8 @@ impl<const P: usize> HllDense<P> {
     }
 
     /// Возвращает heap-часть, занятую dense-представлением:
-    /// - размер структуры HllDense (Vec metadata) — будет на куче, т.к.
-    ///   HllDense хранится в Box
+    /// - size_of::<HllDense>() — структура, размещённая в куче под Box
+    ///   (включает Vec metadata: ptr, len, cap)
     /// - плюс реальная capacity() в байтах (Vec<u8>)
     /// - плюс небольшой консервативный overhead для аллокатора
     pub fn memory_footprint(&self) -> usize {
@@ -273,5 +273,13 @@ mod tests {
         for &idx in &test_indices {
             assert_eq!(dense.get_register(idx), 42);
         }
+    }
+
+    #[test]
+    fn test_dense_memory_footprint_is_reasonable() {
+        let dense = HllDense::<14>::new();
+        let mem = dense.memory_footprint();
+        let min = std::mem::size_of::<HllDense<14>>() + dense.size();
+        assert!(mem >= min);
     }
 }
