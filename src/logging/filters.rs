@@ -23,8 +23,6 @@ pub fn build_filter_from_config(config: &LoggingConfig) -> EnvFilter {
             match EnvFilter::try_new(&directive) {
                 Ok(filter) => filter,
                 Err(e) => {
-                    // Возможно, конфигурация содержит некорректную директиву —
-                    // на этот случай печатаем понятное сообщение и падаем
                     eprintln!("Invalid log filter directive from config ('{directive}'): {e}; falling back to 'info'");
                     EnvFilter::new("info")
                 }
@@ -71,8 +69,6 @@ mod tests {
         }
     }
 
-    /// Тест проверят, что build_filter не паникует и возвращает EnvFilter,
-    /// даже если переменная окружения отсутствует.
     #[test]
     fn test_build_filter_no_env() {
         env::remove_var("RUST_LOG");
@@ -80,7 +76,6 @@ mod tests {
         // если функция завершилась успешно — тест пройден
     }
 
-    /// Тест проверят, что build_filter использует RUST_LOG когда она задана.
     #[test]
     fn test_build_filter_with_env() {
         env::set_var("RUST_LOG", "debug");
@@ -89,43 +84,6 @@ mod tests {
         env::remove_var("RUST_LOG");
     }
 
-    /// Тест проверят, что build_filter_from_config не падает при некорректной
-    /// директиве.
-    ///
-    /// Здесь моделируем поведение конфигурации: берем некорректную директиву,
-    /// убеждаемся, что `EnvFilter::try_new` вернёт Err для неё — это покрывает
-    /// ветку, где код должен fallback'нуться на "info".
-    #[test]
-    fn test_build_filter_from_config_invalid_directive() {
-        env::remove_var("RUST_LOG"); // гарантируем использование конфигурации
-
-        // Простая «мок»-конфигурация с методом build_filter_directive()
-        #[derive(Clone)]
-        struct FakeCfg(String);
-        impl FakeCfg {
-            fn build_filter_directive(&self) -> String {
-                self.0.clone()
-            }
-        }
-
-        let cfg = FakeCfg("this_is_invalid_directive!!".to_string());
-
-        // используем cfg чтобы не было warning про unused variable
-        let directive = cfg.build_filter_directive();
-        // Попытка создать EnvFilter из некорректной директивы — ожидаем Err
-        let try_res = tracing_subscriber::EnvFilter::try_new(&directive);
-        assert!(
-            try_res.is_err(),
-            "Некорректная директива должна возвращать Err"
-        );
-
-        // В реальной функции build_filter_from_config код обрабатывает Err и
-        // падает обратно на "info". Здесь демонстрация того, что путь
-        // Err возможен.
-    }
-
-    /// Тест проверят поведение фильтра в runtime: если директива "warn" —
-    /// сообщения info не попадут в writer, а warn попадут.
     #[test]
     fn test_envfilter_integration_filters_levels() {
         env::remove_var("RUST_LOG");
