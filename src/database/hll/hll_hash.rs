@@ -1,6 +1,6 @@
 use std::{hash::Hasher, io::Cursor};
 
-use murmur3::murmur3_x86_128;
+use murmur3::murmur3_x64_128;
 use siphasher::sip::SipHasher13;
 use xxhash_rust::xxh64::xxh64;
 
@@ -87,8 +87,8 @@ impl HllHasher for MurmurHasher {
     ) -> u64 {
         let mut cursor = Cursor::new(bytes);
         let hash128 =
-            murmur3_x86_128(&mut cursor, self.seed as u32).expect("murmur3 hashing failed");
-        hash128 as u64
+            murmur3_x64_128(&mut cursor, self.seed as u32).expect("murmur3 hashing failed");
+        (hash128 >> 64) as u64
     }
 
     fn name(&self) -> &'static str {
@@ -139,6 +139,23 @@ mod tests {
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, hash3);
         assert_eq!(hasher.name(), "MurmurHash");
+    }
+
+    #[test]
+    fn test_murmur_high_bits_vary() {
+        let h = MurmurHasher::default();
+
+        // две строки, отличающиеся в «высоких» частях
+        let a = b"\x80\x00\x00\x00low";
+        let b = b"\x00\x00\x00\x00low";
+
+        let ha = h.hash_bytes(a);
+        let hb = h.hash_bytes(b);
+
+        assert_ne!(
+            ha, hb,
+            "high 64 bits should differ for inputs with different high bytes"
+        );
     }
 
     #[test]
@@ -284,5 +301,23 @@ mod tests {
             let data = format!("random_{}_{}", i, i * i);
             let _ = hasher.hash_bytes(data.as_bytes());
         }
+    }
+
+    #[test]
+    fn test_hll_index_distribution() {
+        const P: usize = 10;
+        let hasher = XxHasher::default();
+        let mut buckets = vec![0usize; 1 << P];
+
+        for i in 0..100_000 {
+            let h = hasher.hash_bytes(format!("k{i}").as_bytes());
+            let idx = (h >> (64 - P)) as usize;
+            buckets[idx] += 1;
+        }
+
+        let min = *buckets.iter().min().unwrap();
+        let max = *buckets.iter().max().unwrap();
+
+        assert!(max - min < 1000);
     }
 }
