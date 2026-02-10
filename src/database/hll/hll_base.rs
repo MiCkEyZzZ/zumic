@@ -1,20 +1,19 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
-
 use serde::{Deserialize, Serialize};
 
+use super::{HllHasher, MurmurHasher};
 use crate::database::{HllDense, HllSparse};
 
 /// HLL по умолчанию с точностью (P=14, 16K регистров, ~0.81% погрешности)
-pub type HllDefault = Hll<14>;
+pub type HllDefault = Hll<14, MurmurHasher>;
 
 /// HLL с компактной конфигурацией (P=4, 16 регистров, ~26% погрешность)
-pub type HllCompact = Hll<4>;
+pub type HllCompact = Hll<4, MurmurHasher>;
 
 /// HLL с высокой точностью (P=16, 65K регистров, ~0.5% погрешность)
-pub type HllPrecise = Hll<16>;
+pub type HllPrecise = Hll<16, MurmurHasher>;
 
 /// HLL с максимальной точностью (P=18, 262K регистров, ~0.4% погрешность)
-pub type HllMaxPrecision = Hll<18>;
+pub type HllMaxPrecision = Hll<18, MurmurHasher>;
 
 /// Точность HLL по умолчанию (14 бит = 16,384 регистра).
 ///
@@ -64,9 +63,12 @@ pub enum HllEncoding<const P: usize> {
 /// - **P = 14** (default): 16,384 регистра, ~0.81% погрешность, 12KB
 /// - **P = 18**: 262,144 регистра, ~0.4% погрешность, 196KB
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Hll<const P: usize = DEFAULT_PRECISION> {
+pub struct Hll<const P: usize = DEFAULT_PRECISION, H: HllHasher = MurmurHasher> {
     pub encoding: HllEncoding<P>,
     pub version: u8,
+    #[serde(skip, default)]
+    pub hasher: H, /* ПРИМЕЧАНИЕ: хешер не сериализуется. После десериализации будет
+                    * использована функция H::default(). */
 }
 
 /// Статистика использования HLL для мониторинга.
@@ -78,19 +80,21 @@ pub struct HllStats {
     pub non_zero_registers: usize,
     pub precision: usize,
     pub standard_error: f64,
+    pub hasher_name: &'static str,
     pub version: u8,
 }
 
 /// Builder для создания HLL с различными параметрами.
-pub struct HllBuilder<const P: usize = DEFAULT_PRECISION> {
+pub struct HllBuilder<const P: usize = DEFAULT_PRECISION, H: HllHasher = MurmurHasher> {
     threshold: Option<usize>,
+    hasher: H,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Собственные методы
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<const P: usize> Hll<P> {
+impl<const P: usize, H: HllHasher> Hll<P, H> {
     /// Создаёт новый пустой HLL с заданной точностью.
     pub fn new() -> Self {
         let _: () = Self::IS_VALID;
@@ -98,6 +102,18 @@ impl<const P: usize> Hll<P> {
         Self {
             encoding: HllEncoding::Sparse(HllSparse::new()),
             version: SERIALIZATION_VERSION,
+            hasher: H::default(),
+        }
+    }
+
+    /// Создаёт HLL с заданным хешером.
+    pub fn with_hasher(hasher: H) -> Self {
+        let _: () = Self::IS_VALID;
+
+        Self {
+            encoding: HllEncoding::Sparse(HllSparse::new()),
+            version: SERIALIZATION_VERSION,
+            hasher,
         }
     }
 
@@ -108,6 +124,7 @@ impl<const P: usize> Hll<P> {
         Self {
             encoding: HllEncoding::Sparse(HllSparse::with_threshold(threshold)),
             version: SERIALIZATION_VERSION,
+            hasher: H::default(),
         }
     }
 
@@ -135,12 +152,18 @@ impl<const P: usize> Hll<P> {
         standard_error(P)
     }
 
+    /// Возвращает имя используемого хешера.
+    #[inline]
+    pub fn hasher_name(&self) -> &'static str {
+        self.hasher.name()
+    }
+
     /// Добавляет элемент `value` в структуру HLL
     pub fn add(
         &mut self,
         value: &[u8],
     ) {
-        let hash = Self::hash(value);
+        let hash = self.hasher.hash_bytes(value);
         let (index, rho) = Self::index_and_rho(hash);
 
         match &mut self.encoding {
@@ -205,9 +228,12 @@ impl<const P: usize> Hll<P> {
     }
 
     /// Объединяет текущий HLL с другими.
+    ///
+    /// **ВАЖНО**: Оба HLL должны иметь одинаковый тип хешера `H`.
+    /// Это гарантирует типовой системой: `merge(&mut self, other: &Hll<P, H>)`.
     pub fn merge(
         &mut self,
-        other: &Hll<P>,
+        other: &Hll<P, H>,
     ) {
         let num_registers = self.num_registers();
 
@@ -249,11 +275,12 @@ impl<const P: usize> Hll<P> {
                 let heap = sparse.memory_footprint();
                 HllStats {
                     cardinality: self.estimate_cardinality(),
-                    memory_bytes: std::mem::size_of::<Hll<P>>().saturating_add(heap),
+                    memory_bytes: std::mem::size_of::<Hll<P, H>>().saturating_add(heap),
                     is_sparse: true,
                     non_zero_registers: sparse.len(),
                     precision: P,
                     standard_error: self.standard_error(),
+                    hasher_name: self.hasher_name(),
                     version: self.version,
                 }
             }
@@ -268,11 +295,12 @@ impl<const P: usize> Hll<P> {
                 let heap = dense.memory_footprint();
                 HllStats {
                     cardinality: self.estimate_cardinality(),
-                    memory_bytes: std::mem::size_of::<Hll<P>>().saturating_add(heap),
+                    memory_bytes: std::mem::size_of::<Hll<P, H>>().saturating_add(heap),
                     is_sparse: false,
                     non_zero_registers: non_zero,
                     precision: P,
                     standard_error: self.standard_error(),
+                    hasher_name: self.hasher_name(),
                     version: self.version,
                 }
             }
@@ -290,13 +318,6 @@ impl<const P: usize> Hll<P> {
     #[inline]
     pub fn is_sparse(&self) -> bool {
         matches!(self.encoding, HllEncoding::Sparse(_))
-    }
-
-    /// Хэширует срез байт в 64-битное значение, используя стандартный Hasher.
-    fn hash(value: &[u8]) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
     }
 
     /// Делит 64-битный хэш:
@@ -354,10 +375,21 @@ impl<const P: usize> Hll<P> {
     }
 }
 
-impl<const P: usize> HllBuilder<P> {
+impl<const P: usize, H: HllHasher> HllBuilder<P, H> {
     /// Создаёт новый builder
     pub fn new() -> Self {
-        Self { threshold: None }
+        Self {
+            threshold: None,
+            hasher: H::default(),
+        }
+    }
+
+    /// Создаёт builder с заданным хешером.
+    pub fn with_hasher(hasher: H) -> Self {
+        Self {
+            threshold: None,
+            hasher,
+        }
     }
 
     /// Устанавливаем порого конверсии sparse->dense
@@ -370,10 +402,18 @@ impl<const P: usize> HllBuilder<P> {
     }
 
     /// Строит HLL с заданными параметрами.
-    pub fn build(self) -> Hll<P> {
+    pub fn build(self) -> Hll<P, H> {
         match self.threshold {
-            Some(t) => Hll::with_threshold(t),
-            None => Hll::new(),
+            Some(t) => Hll {
+                encoding: HllEncoding::Sparse(HllSparse::with_threshold(t)),
+                version: SERIALIZATION_VERSION,
+                hasher: self.hasher,
+            },
+            None => Hll {
+                encoding: HllEncoding::Sparse(HllSparse::new()),
+                version: SERIALIZATION_VERSION,
+                hasher: self.hasher,
+            },
         }
     }
 }
@@ -382,25 +422,29 @@ impl<const P: usize> HllBuilder<P> {
 // Общие реализации трейтов для Hll, HllBuilder
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<const P: usize> ValidatePrecision for Hll<P> {
+impl<const P: usize, H: HllHasher> ValidatePrecision for Hll<P, H> {
     const IS_VALID: () = assert!(
         P >= MIN_PRECISION && P <= MAX_PRECISION,
         "HLL precision must be in range [4..18]"
     );
 }
 
-impl<const P: usize> Default for Hll<P> {
+impl<const P: usize, H: HllHasher> Default for Hll<P, H> {
     /// По умолчанию создаёт новый пустой HLL.
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<const P: usize> Default for HllBuilder<P> {
+impl<const P: usize, H: HllHasher> Default for HllBuilder<P, H> {
     fn default() -> Self {
         Self::new()
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Внешние методы и функции
+////////////////////////////////////////////////////////////////////////////////
 
 /// Вычисляет кол-во регистров для заданной точности.
 ///
@@ -467,6 +511,7 @@ pub fn recommended_threshold(precision: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::{SipHasher, XxHasher};
 
     type H = HllDefault;
 
@@ -479,6 +524,47 @@ mod tests {
         assert!(stats.is_sparse);
         assert_eq!(stats.non_zero_registers, 0);
         assert!(stats.memory_bytes < 1000); // Должно быть намного меньше 12KB
+        assert_eq!(stats.hasher_name, "MurmurHash");
+    }
+
+    #[test]
+    fn test_different_hashers() {
+        let mut hll_murmur = Hll::<14, MurmurHasher>::new();
+        let mut hll_xxhash = Hll::<14, XxHasher>::new();
+        let mut hll_siphash = Hll::<14, SipHasher>::new();
+
+        // Добавляем одинаковые данные
+        for i in 0..1000 {
+            let data = format!("item_{i}");
+            hll_murmur.add(data.as_bytes());
+            hll_xxhash.add(data.as_bytes());
+            hll_siphash.add(data.as_bytes());
+        }
+
+        // Все должны давать близкие оценки
+        let est_murmur = hll_murmur.estimate_cardinality();
+        let est_xxhash = hll_xxhash.estimate_cardinality();
+        let est_siphash = hll_siphash.estimate_cardinality();
+
+        assert!((est_murmur - 1000.0).abs() < 100.0);
+        assert!((est_xxhash - 1000.0).abs() < 100.0);
+        assert!((est_siphash - 1000.0).abs() < 100.0);
+
+        // Проверяем имена хеширов
+        assert_eq!(hll_murmur.hasher_name(), "MurmurHash");
+        assert_eq!(hll_xxhash.hasher_name(), "XxHasher");
+        assert_eq!(hll_siphash.hasher_name(), "SipHash");
+    }
+
+    #[test]
+    fn test_builder_with_hasher() {
+        let xxhasher = XxHasher::default();
+        let hll = HllBuilder::<14, XxHasher>::with_hasher(xxhasher)
+            .threshold(5000)
+            .build();
+
+        assert_eq!(hll.hasher_name(), "XxHasher");
+        assert!(hll.is_sparse());
     }
 
     #[test]
@@ -610,7 +696,7 @@ mod tests {
         let stats = hll.stats();
         assert!(!stats.is_sparse);
 
-        let min_expected = std::mem::size_of::<Hll>() + hll.dense_size();
+        let min_expected = std::mem::size_of::<Hll<14, MurmurHasher>>() + hll.dense_size();
 
         assert!(
             stats.memory_bytes >= min_expected,
@@ -822,5 +908,55 @@ mod tests {
         let clone = hll.clone();
 
         assert_eq!(hll.stats().memory_bytes, clone.stats().memory_bytes);
+    }
+
+    #[test]
+    fn test_merge_with_same_hasher() {
+        let mut hll1 = Hll::<14, MurmurHasher>::new();
+        let mut hll2 = Hll::<14, MurmurHasher>::new();
+
+        for i in 0..50 {
+            hll1.add(format!("a_{i}").as_bytes());
+        }
+        for i in 0..50 {
+            hll2.add(format!("b_{i}").as_bytes());
+        }
+
+        let card1 = hll1.estimate_cardinality();
+        let card2 = hll2.estimate_cardinality();
+
+        hll1.merge(&hll2);
+        let card_merged = hll1.estimate_cardinality();
+
+        assert!(card_merged > card1 && card_merged > card2);
+        assert!((card_merged - (card1 + card2)).abs() < 20.0);
+    }
+
+    #[test]
+    fn test_stats_includes_hasher_name() {
+        let hll = Hll::<14, XxHasher>::new();
+        let stats = hll.stats();
+
+        assert_eq!(stats.hasher_name, "XxHasher");
+        assert_eq!(stats.precision, 14);
+    }
+
+    #[test]
+    fn test_serialization_preserves_functionality() {
+        let mut hll = H::new();
+
+        for i in 0..100 {
+            hll.add(format!("test_{i}").as_bytes());
+        }
+
+        let serialized = bincode::serialize(&hll).unwrap();
+        let mut deserialized: H = bincode::deserialize(&serialized).unwrap();
+
+        // После десериализации хешер восстанавливается через Default
+        assert_eq!(deserialized.hasher_name(), "MurmurHash");
+
+        // Можем продолжать добавлять элементы
+        deserialized.add(b"new_item");
+        assert!(deserialized.estimate_cardinality() > 100.0);
     }
 }
