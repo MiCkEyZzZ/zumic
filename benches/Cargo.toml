@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/geo-benchmark/geo_distance.rs"
+path = "benches/hll_benchmark/hll.rs"
 harness = false
 
 [lints]
