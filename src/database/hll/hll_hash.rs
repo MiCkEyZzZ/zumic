@@ -1,8 +1,10 @@
-use std::{hash::Hasher, io::Cursor};
+use std::{hash::Hasher, io::Cursor, time::Instant};
 
 use murmur3::murmur3_x64_128;
 use siphasher::sip::SipHasher13;
 use xxhash_rust::xxh64::xxh64;
+
+use super::HllDense;
 
 pub trait HllHasher: Default + Clone {
     fn hash_bytes(
@@ -27,6 +29,24 @@ pub struct XxHasher {
 pub struct SipHasher {
     key0: u64,
     key1: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct HashMetrics {
+    /// Среднее время хещирования
+    pub avg_hash_time_ns: f64,
+    /// задержка p50
+    pub p50_ns: f64,
+    /// задержка p95
+    pub p95_ns: f64,
+    /// Пропускная способность (элементов в секунду)
+    pub throughput_ops_sec: f64,
+    /// Стандартное отклонение распредления индексов регистров
+    pub register_index_stddev: f64,
+    /// Среднее относительная ошибка HLL
+    pub avg_relative_error: f64,
+    /// Максимальная относительная ошибка HLL
+    pub max_relative_error: f64,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -94,8 +114,7 @@ impl HllHasher for MurmurHasher {
         bytes: &[u8],
     ) -> u64 {
         let mut cursor = Cursor::new(bytes);
-        let hash128 =
-            murmur3_x64_128(&mut cursor, self.seed as u32).expect("murmur3 hashing failed");
+        let hash128 = murmur3_x64_128(&mut cursor, self.seed as u32).unwrap();
         (hash128 >> 64) as u64
     }
 
@@ -132,6 +151,77 @@ impl HllHasher for SipHasher {
     }
 }
 
+pub fn benchmark_hasher<H: HllHasher, const P: usize>(
+    hasher: &H,
+    num_samples: usize,
+) -> HashMetrics {
+    let mut times = Vec::with_capacity(num_samples);
+    let mut hll = HllDense::<P>::new();
+
+    let m = 1 << P;
+    let mut index_counts = vec![0usize; m];
+    let mut errors = Vec::with_capacity(num_samples);
+    let mut true_cardinality = 0u64;
+
+    for i in 0..num_samples {
+        let data = format!("item_{i}");
+        let bytes = data.as_bytes();
+
+        let start = Instant::now();
+        let hash = hasher.hash_bytes(bytes);
+        times.push(start.elapsed().as_nanos() as f64);
+
+        // HLL
+        let idx = (hash >> (64 - P)) as usize;
+        let rho = ((hash << P).leading_zeros() + 1).min(64 - P as u32 + 1) as u8;
+
+        if rho > hll.get_register(idx) {
+            hll.set_register(idx, rho);
+        }
+
+        index_counts[idx] += 1;
+
+        // относительная ошибка
+        true_cardinality += 1;
+        let est = hll.estimate();
+        let rel_error = ((est as f64 - true_cardinality as f64) / true_cardinality as f64).abs();
+        errors.push(rel_error);
+    }
+
+    // Метрики времени
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let avg_time = times.iter().sum::<f64>() / num_samples as f64;
+    let p50 = times[num_samples / 2];
+    let p95_idx = ((num_samples as f64 * 0.95).ceil() as usize).min(num_samples - 1);
+    let p95 = times[p95_idx];
+    let throughput_ops_sec = 1_000_000_000.0 / avg_time;
+
+    // Стандартное отклонение распределения индексов регистров
+    let mean = num_samples as f64 / m as f64;
+    let var = index_counts
+        .iter()
+        .map(|&c| {
+            let diff = c as f64 - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / m as f64;
+    let register_index_stddev = var.sqrt();
+
+    let avg_relative_error = errors.iter().sum::<f64>() / errors.len() as f64;
+    let max_relative_error = errors.iter().cloned().reduce(f64::max).unwrap_or(0.0);
+
+    HashMetrics {
+        avg_hash_time_ns: avg_time,
+        p50_ns: p50,
+        p95_ns: p95,
+        throughput_ops_sec,
+        register_index_stddev,
+        avg_relative_error,
+        max_relative_error,
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,6 +229,63 @@ impl HllHasher for SipHasher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_hll_estimate_basic() {
+        const P: usize = 10;
+        let mut hll = HllDense::<P>::new();
+
+        // В начало пустой HLL
+        assert_eq!(hll.estimate(), 0);
+
+        // Устанавляиваем несколько регистров вручную
+        hll.set_register(0, 1);
+        hll.set_register(1, 2);
+        hll.set_register(2, 3);
+
+        let est = hll.estimate();
+
+        // Должно быть ненулевым, хотя точность маленькая
+        assert!(est >= 3, "estimate should be >= 3, got {est}");
+    }
+
+    #[test]
+    fn test_benchmark_hasher_runs() {
+        const P: usize = 10;
+        let hasher = MurmurHasher::default();
+        let metrics = benchmark_hasher::<_, P>(&hasher, 1000);
+
+        // Проверяем базовые метрики на разумные значения
+        assert!(metrics.avg_hash_time_ns > 0.0);
+        assert!(metrics.p50_ns > 0.0);
+        assert!(metrics.p95_ns > 0.0);
+        assert!(metrics.throughput_ops_sec > 0.0);
+        assert!(metrics.register_index_stddev >= 0.0);
+        assert!(metrics.avg_relative_error >= 0.0);
+        assert!(metrics.max_relative_error >= 0.0);
+    }
+
+    #[test]
+    fn test_hll_relative_error_small() {
+        const P: usize = 12;
+        let hasher = XxHasher::default();
+        let metrics = benchmark_hasher::<_, P>(&hasher, 5000);
+
+        // Для разумного числа элементов HLL ошибка < 10%
+        assert!(metrics.avg_relative_error < 0.1, "avg error too high");
+        assert!(metrics.max_relative_error < 0.25, "max error too high");
+    }
+
+    #[test]
+    fn test_hll_register_stddev() {
+        const P: usize = 10;
+        let hasher = SipHasher::default();
+        let metrics = benchmark_hasher::<_, P>(&hasher, 10000);
+
+        // Стандартное отклонение должно быть меньше ~2 * среднее
+        let expected_mean = 10000.0 / (1 << P) as f64;
+        assert!(metrics.register_index_stddev < expected_mean * 2.0);
+    }
 
     #[test]
     fn test_murmur_hasher() {

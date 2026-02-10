@@ -1,4 +1,4 @@
-# zumic
+# Zumic
 
 > ⚠️ Project Status: Active development. Experimental project. Not yet production-ready (except for basic persistent mode).
 
