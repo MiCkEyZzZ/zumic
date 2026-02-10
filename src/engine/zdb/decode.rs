@@ -24,7 +24,7 @@ use super::{
     TAG_STR, TAG_ZSET,
 };
 use crate::{
-    database::{Bitmap, HllDense, HllEncoding, SERIALIZATION_VERSION},
+    database::{Bitmap, HllDense, HllEncoding, MurmurHasher, SERIALIZATION_VERSION},
     engine::varint,
     Dict, Hll, Sds, SkipList, SmartHash, Value,
 };
@@ -931,6 +931,7 @@ fn read_hll_value<R: Read>(
     let hll = Hll {
         encoding: HllEncoding::Dense(Box::new(dense)),
         version: SERIALIZATION_VERSION,
+        hasher: MurmurHasher::default(),
     };
 
     Ok(Value::HyperLogLog(Box::new(hll)))
