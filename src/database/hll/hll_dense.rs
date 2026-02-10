@@ -99,6 +99,33 @@ impl<const P: usize> HllDense<P> {
     pub fn size(&self) -> usize {
         self.data.len()
     }
+
+    /// Оценка кардинальности HyperLogLog
+    pub fn estimate(&self) -> u64 {
+        let m = 1 << P;
+        let alpha_m = match m {
+            16 => 0.673,
+            32 => 0.697,
+            64 => 0.709,
+            _ => 0.7213 / (1.0 + 1.079 / m as f64),
+        };
+
+        let sum: f64 = (0..m)
+            .map(|i| 2f64.powi(-(self.get_register(i) as i32)))
+            .sum();
+
+        let raw_estimate = alpha_m * (m * m) as f64 / sum;
+
+        // Small range correction
+        if raw_estimate <= 2.5 * m as f64 {
+            let v = (0..m).filter(|&i| self.get_register(i) == 0).count();
+            if v > 0 {
+                return (m as f64 * (m as f64 / v as f64).ln()) as u64;
+            }
+        }
+
+        raw_estimate as u64
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
