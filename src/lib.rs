@@ -66,10 +66,13 @@ pub use config::settings::{Settings, StorageConfig, StorageType};
 /// Реэкспорт встроенных структур данных.
 pub use database::{
     haversine_distance, Bitmap, BoundingBox, Dict, DictIter, Direction, ExpireMap,
-    FragmentationInfo, GeoEntry, GeoPoint, GeoSet, Geohash, GeohashPrecision, GeohashStats, Hll,
-    IntSet, IntSetIter, IntSetRangeIter, ListPack, Node, PubSubManager, QuickList, RTree,
-    RadiusOptions, RangeIter, ReverseIter, Sds, SkipList, SkipListIter, SmartHash, SmartHashIter,
-    Stream, StreamEntry, StreamId, TreeStats, Value, BIT_COUNT_TABLE,
+    FragmentationInfo, GeoEntry, GeoModuleStats, GeoPoint, GeoSet, Geohash, GeohashPrecision,
+    GeohashStats, HashMetrics, Hll, HllBuilder, HllCompact, HllDefault, HllDense, HllEncoding,
+    HllHasher, HllMaxPrecision, HllPrecise, HllSparse, HllStats, IntSet, IntSetIter,
+    IntSetRangeIter, ListPack, MurmurHasher, Node, QuickList, RTree, RadiusOptions, RangeIter,
+    ReverseIter, Sds, SipHasher, SkipList, SkipListIter, SmartHash, SmartHashIter, Stream,
+    StreamEntry, StreamId, TreeStats, Value, XxHasher, BIT_COUNT_TABLE, DEFAULT_PRECISION,
+    DEFAULT_SPARSE_THRESHOLD, GEO_VERSION, MAX_PRECISION, MIN_PRECISION, SERIALIZATION_VERSION,
 };
 /// Реэкспорт движков хранения.
 pub use engine::{

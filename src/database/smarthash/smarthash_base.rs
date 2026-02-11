@@ -14,7 +14,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::sds::Sds;
+use crate::Sds;
 
 /// Порог, при достижении которого `SmartHash` переключается с
 /// `Zip` на `Map`.

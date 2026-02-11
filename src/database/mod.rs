@@ -10,7 +10,6 @@
 //!   т.п.).
 //! - `int_set`: компактное множество целых чисел для небольших коллекций.
 //! - `list_pack`: компактная структура списка для эффективного хранения.
-//! - `lua`: привязки и контекст для встроенного Lua.
 //! - `quicklist`: гибридный список, сочетающий связные списки и зиплисты.
 //! - `sds`: простые динамические строки (SDS), похожие на внутренние строки
 //!   Redis.
@@ -30,8 +29,6 @@ pub mod geo;
 pub mod hll;
 pub mod intset;
 pub mod listpack;
-pub mod lua;
-pub mod pubsub_manager;
 pub mod quicklist;
 pub mod sds;
 pub mod skiplist;
@@ -48,7 +45,6 @@ pub use geo::*;
 pub use hll::*;
 pub use intset::*;
 pub use listpack::*;
-pub use pubsub_manager::*;
 pub use quicklist::*;
 pub use sds::*;
 pub use skiplist::*;
