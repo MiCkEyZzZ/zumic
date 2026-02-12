@@ -52,14 +52,23 @@ pub use auth::{
 };
 /// Реэкспорт основных команд key-value.
 pub use command::{
-    AppendCommand, AuthCommand, Command as StoreCommand, CommandExecute, DecrByCommand,
-    DecrByFloatCommand, DecrCommand, DelCommand, ExistsCommand, FlushDbCommand, GetCommand,
-    GetRangeCommand, HDelCommand, HGetAllCommand, HGetCommand, HSetCommand, IncrByCommand,
-    IncrByFloatCommand, IncrCommand, LLenCommand, LPopCommand, LPushCommand, LRangeCommand,
-    MGetCommand, MSetCommand, RPopCommand, RPushCommand, RenameCommand, RenameNxCommand,
-    SAddCommand, SCardCommand, SIsMemberCommand, SMembersCommand, SRemCommand, SetCommand,
-    SetFloatCommand, SetNxCommand, StrLenCommand, ZAddCommand, ZCardCommand, ZRangeCommand,
-    ZRemCommand, ZRevRangeCommand, ZScoreCommand,
+    AclDelUserCommand, AclGetUserCommand, AclSetUserCommand, AppendCommand, AuthCommand,
+    BgSaveCommand, BitCountCommand, BitOpCommand, BitPosCommand, Command as StoreCommand,
+    CommandExecute, CommandExecutor, DbSizeCommand, DecrByCommand, DecrByFloatCommand, DecrCommand,
+    DelCommand, EchoCommand, ExistsCommand, FlushDbCommand, GeoAddCommand, GeoPosCommand,
+    GeoRadiusByMemberCommand, GeoRadiusCommand, GetBitCommand, GetCommand, GetDistCommand,
+    GetRangeCommand, HDelCommand, HExistsCommand, HGetAllCommand, HGetCommand, HIncrByCommand,
+    HIncrByFloatCommand, HKeysCommand, HLenCommand, HRandFieldCommand, HSetCommand, HValsCommand,
+    HmGetCommand, IncrByCommand, IncrByFloatCommand, IncrCommand, InfoCommand, LLenCommand,
+    LPopCommand, LPushCommand, LRangeCommand, LRemCommand, LSetCommand, MGetCommand, MSetCommand,
+    PfAddCommand, PfCountCommand, PfMergeCommand, PingCommand, RPopCommand, RPushCommand,
+    RenameCommand, RenameNxCommand, SAddCommand, SCardCommand, SDiffCommand, SInterCommand,
+    SIsMemberCommand, SMembersCommand, SPopCommand, SRandMemberCommand, SRemCommand, SUnionCommand,
+    SaveCommand, SelectCommand, SetBitCommand, SetCommand, SetFloatCommand, SetNxCommand,
+    ShutdownCommand, StrLenCommand, TimeCommand, XAckCommand, XAddCommand, XDelCommand,
+    XGroupCreateCommand, XLenCommand, XRangeCommand, XReadCommand, XRevRangeCommand, XTrimCommand,
+    ZAddCommand, ZCardCommand, ZCountCommand, ZIncrByCommand, ZRangeCommand, ZRankCommand,
+    ZRemCommand, ZRevRangeCommand, ZRevRankCommand, ZScoreCommand,
 };
 /// Реэкспорт настроек конфигурации.
 pub use config::settings::{Settings, StorageConfig, StorageType};

@@ -44,6 +44,12 @@ pub enum StoreError {
     #[error("Invalid type")]
     InvalidType,
 
+    #[error("Invalid value")]
+    InvalidValue,
+
+    #[error("Overflow value")]
+    Overflow,
+
     #[error("Operation not implemented: {0}")]
     NotImplemented(String),
 
