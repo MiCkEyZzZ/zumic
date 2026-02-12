@@ -389,12 +389,117 @@ impl CommandExecute for HRandFieldCommand {
     }
 }
 
+/// Команда HINCRBY — автомарно увеличивает целочисленное поле хеша.
+#[derive(Debug)]
+pub struct HIncrByCommand {
+    pub key: String,
+    pub field: String,
+    pub increment: i64,
+}
+
+impl CommandExecute for HIncrByCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+        let field = Sds::from_str(&self.field);
+
+        // Получаем хеш или создаём новый
+        let mut hash = match store.get(&key)? {
+            Some(Value::Hash(h)) => h,
+            Some(_) => return Err(StoreError::InvalidType),
+            None => SmartHash::new(),
+        };
+
+        // Получаем текущее значение (или 0 если не существует)
+        let current: i64 = match hash.get(&field) {
+            Some(v) => {
+                let s = v.as_str().map_err(|_| StoreError::InvalidValue)?;
+                s.parse().map_err(|_| StoreError::InvalidValue)?
+            }
+            None => 0,
+        };
+
+        // Выполняем checked_add для обнаружения overflow
+        let new_value = current
+            .checked_add(self.increment)
+            .ok_or(StoreError::Overflow)?;
+
+        // Сохраняем новое значение
+        let new_str = new_value.to_string();
+        hash.insert(field, Sds::from_str(&new_str));
+        store.set(&key, Value::Hash(hash))?;
+
+        Ok(Value::Int(new_value))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HINCRBY"
+    }
+}
+
+/// Команда HINCRBYFLOAT — атомарно увеличивает поле с плавающей точкой.
+#[derive(Debug)]
+pub struct HIncrByFloatCommand {
+    pub key: String,
+    pub field: String,
+    pub increment: f64,
+}
+
+impl CommandExecute for HIncrByFloatCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+        let field = Sds::from_str(&self.field);
+
+        let mut hash = match store.get(&key)? {
+            Some(Value::Hash(h)) => h,
+            Some(_) => return Err(StoreError::InvalidType),
+            None => SmartHash::new(),
+        };
+
+        // Получаем текущее значение (или 0.0 если не существует)
+        let current: f64 = match hash.get(&field) {
+            Some(v) => {
+                let s = v.as_str().map_err(|_| StoreError::InvalidValue)?;
+                s.parse().map_err(|_| StoreError::InvalidValue)?
+            }
+            None => 0.0,
+        };
+
+        if self.increment.is_nan() {
+            return Err(StoreError::InvalidValue);
+        }
+
+        let new_value = current + self.increment;
+
+        if !new_value.is_finite() {
+            return Err(StoreError::InvalidValue);
+        }
+
+        // Сохраняем новое значение
+        hash.insert(field, Sds::from_str(&new_value.to_string()));
+        store.set(&key, Value::Hash(hash))?;
+
+        Ok(Value::Float(new_value))
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HINCRBYFLOAT"
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use super::*;
     use crate::InMemoryStore;
 
@@ -793,6 +898,309 @@ mod tests {
         let res = HGetCommand {
             key: "str".into(),
             field: "f".into(),
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidType)));
+    }
+
+    #[test]
+    fn test_hincrby_new_field() {
+        let mut store = create_store();
+
+        let res = HIncrByCommand {
+            key: "counter".into(),
+            field: "views".into(),
+            increment: 10,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(res, Value::Int(10));
+
+        // Проверяем что значение сохранилось
+        let get = HGetCommand {
+            key: "counter".into(),
+            field: "views".into(),
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(get, Value::Str(Sds::from_str("10")));
+    }
+
+    #[test]
+    fn test_hincrby_existing_field() {
+        let mut store = create_store();
+
+        // Устанавливаем начальное значение
+        HSetCommand {
+            key: "stats".into(),
+            entries: vec![("hits".into(), "100".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        // Инкремент
+        let res = HIncrByCommand {
+            key: "stats".into(),
+            field: "hits".into(),
+            increment: 5,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(res, Value::Int(105));
+    }
+
+    #[test]
+    fn test_hincrby_negative() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "balance".into(),
+            entries: vec![("amount".into(), "1000".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByCommand {
+            key: "balance".into(),
+            field: "amount".into(),
+            increment: -250,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(res, Value::Int(750));
+    }
+
+    #[test]
+    fn test_hincrby_invalid_value() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "user".into(),
+            entries: vec![("name".into(), "Anton".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByCommand {
+            key: "user".into(),
+            field: "name".into(),
+            increment: 1,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidValue)));
+    }
+
+    #[test]
+    fn test_hincrby_overflow() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "big".into(),
+            entries: vec![("num".into(), i64::MAX.to_string())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByCommand {
+            key: "big".into(),
+            field: "num".into(),
+            increment: 1,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::Overflow)));
+    }
+
+    #[test]
+    fn test_hincrby_underflow() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "small".into(),
+            entries: vec![("num".into(), i64::MIN.to_string())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByCommand {
+            key: "small".into(),
+            field: "num".into(),
+            increment: -1,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::Overflow)));
+    }
+
+    #[test]
+    fn test_hincrby_wrong_type() {
+        let mut store = create_store();
+
+        store
+            .set(&Sds::from_str("str"), Value::Str(Sds::from_str("hello")))
+            .unwrap();
+
+        let res = HIncrByCommand {
+            key: "str".into(),
+            field: "f".into(),
+            increment: 1,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidType)));
+    }
+
+    #[test]
+    fn test_hincrbyfloat_new_field() {
+        let mut store = create_store();
+
+        let res = HIncrByFloatCommand {
+            key: "metrics".into(),
+            field: "pi".into(),
+            increment: PI,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(res, Value::Float(PI));
+    }
+
+    #[test]
+    fn test_hincrbyfloat_existing() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "temp".into(),
+            entries: vec![("celsius".into(), "20.5".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "temp".into(),
+            field: "celsius".into(),
+            increment: 2.3,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::Float(v) = res {
+            assert!((v - 22.8).abs() < 0.0001);
+        } else {
+            panic!("expected Float");
+        }
+    }
+
+    /// HINCRBYFLOAT с отрицательным инкрементом
+    #[test]
+    fn test_hincrbyfloat_negative() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "price".into(),
+            entries: vec![("usd".into(), "99.99".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "price".into(),
+            field: "usd".into(),
+            increment: -10.0,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::Float(v) = res {
+            assert!((v - 89.99).abs() < 0.0001);
+        } else {
+            panic!("expected Float");
+        }
+    }
+
+    #[test]
+    fn test_hincrbyfloat_invalid_value() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "data".into(),
+            entries: vec![("text".into(), "not_a_number".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "data".into(),
+            field: "text".into(),
+            increment: 1.5,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidValue)));
+    }
+
+    #[test]
+    fn test_hincrbyfloat_nan() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "nan".into(),
+            entries: vec![("val".into(), "0.0".into())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "nan".into(),
+            field: "val".into(),
+            increment: f64::NAN,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidValue)));
+    }
+
+    #[test]
+    fn test_hincrbyfloat_infinity() {
+        let mut store = create_store();
+
+        HSetCommand {
+            key: "inf".into(),
+            entries: vec![("val".into(), f64::MAX.to_string())],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "inf".into(),
+            field: "val".into(),
+            increment: f64::MAX,
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidValue)));
+    }
+
+    #[test]
+    fn test_hincrbyfloat_wrong_type() {
+        let mut store = create_store();
+
+        store
+            .set(
+                &Sds::from_str("list"),
+                Value::List(QuickList::from_iter(empty(), 64)),
+            )
+            .unwrap();
+
+        let res = HIncrByFloatCommand {
+            key: "list".into(),
+            field: "f".into(),
+            increment: 1.0,
         }
         .execute(&mut store);
 
