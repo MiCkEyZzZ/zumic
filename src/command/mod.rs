@@ -51,5 +51,6 @@ pub use keys::*;
 pub use list::*;
 pub use server::*;
 pub use set::*;
+pub use stream::*;
 pub use string::*;
 pub use zset::*;

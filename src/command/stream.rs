@@ -1,6 +1,6 @@
 use super::CommandExecute;
 
-/// Команда XADD добавляет запись в поток.
+/// Команда XADD — добавляет запись в поток.
 #[derive(Debug)]
 pub struct XAddCommand {
     pub key: String,
@@ -12,7 +12,7 @@ impl CommandExecute for XAddCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XADD is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -20,6 +20,7 @@ impl CommandExecute for XAddCommand {
     }
 }
 
+/// Команда XREAD — читает записи из одного или нескольких потоков.
 #[derive(Debug)]
 pub struct XReadCommand {
     pub streams: Vec<(String, String)>,
@@ -31,7 +32,7 @@ impl CommandExecute for XReadCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XREAD is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -39,7 +40,7 @@ impl CommandExecute for XReadCommand {
     }
 }
 
-/// Команда XRANGE возвращает записи из потока в диапазоне ID.
+/// Команда XRANGE — возвращает записи из потока в диапазоне ID.
 #[derive(Debug)]
 pub struct XRangeCommand {
     pub key: String,
@@ -52,7 +53,7 @@ impl CommandExecute for XRangeCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XRANGE is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -60,7 +61,7 @@ impl CommandExecute for XRangeCommand {
     }
 }
 
-/// Команда XREVRANGE возвращает записи из потока в обратном порядке.
+/// Команда XREVRANGE — возвращает записи из потока в обратном порядке.
 #[derive(Debug)]
 pub struct XRevRangeCommand {
     pub key: String,
@@ -73,7 +74,7 @@ impl CommandExecute for XRevRangeCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XREVRANGE is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -81,7 +82,7 @@ impl CommandExecute for XRevRangeCommand {
     }
 }
 
-/// Команда XLEN возвращает кол-во записей в потоке.
+/// Команда XLEN — возвращает количество записей в потоке.
 #[derive(Debug)]
 pub struct XLenCommand {
     pub key: String,
@@ -92,7 +93,7 @@ impl CommandExecute for XLenCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XLEN is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -100,7 +101,7 @@ impl CommandExecute for XLenCommand {
     }
 }
 
-/// Команда XDEL удаляет записи по их ID.
+/// Команда XDEL — удаляет записи по их ID.
 #[derive(Debug)]
 pub struct XDelCommand {
     pub key: String,
@@ -112,7 +113,7 @@ impl CommandExecute for XDelCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XDEL is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -120,7 +121,8 @@ impl CommandExecute for XDelCommand {
     }
 }
 
-/// Команда XTRIM обрезает поток, оставляя только последние N записей.
+/// Команда XTRIM — обрезает поток, оставляя только последние `max_len`
+/// записей.
 #[derive(Debug)]
 pub struct XTrimCommand {
     pub key: String,
@@ -132,7 +134,7 @@ impl CommandExecute for XTrimCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XTRIM is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -140,6 +142,7 @@ impl CommandExecute for XTrimCommand {
     }
 }
 
+/// Команда XGROUP CREATE — создаёт группу потребителей для потока.
 #[derive(Debug)]
 pub struct XGroupCreateCommand {
     pub key: String,
@@ -152,7 +155,7 @@ impl CommandExecute for XGroupCreateCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XGROUP CREATE is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -160,6 +163,7 @@ impl CommandExecute for XGroupCreateCommand {
     }
 }
 
+/// Команда XACK — подтверждает получение записей группой потребителей.
 #[derive(Debug)]
 pub struct XAckCommand {
     pub key: String,
@@ -172,7 +176,7 @@ impl CommandExecute for XAckCommand {
         &self,
         _store: &mut crate::StorageEngine,
     ) -> Result<crate::Value, crate::StoreError> {
-        unimplemented!()
+        unimplemented!("XACK is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {

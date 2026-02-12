@@ -1193,7 +1193,7 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let val = read_value_with_version(&mut cursor, LEGACY, None, 0).unwrap();
         match val {
-            Value::Hash(mut m) => {
+            Value::Hash(m) => {
                 assert_eq!(m.len(), 1);
                 assert_eq!(
                     m.get(&Sds::from_vec(key.to_vec())).unwrap(),

@@ -1,21 +1,6 @@
-//! Команды для работы с множествами (Set) в Zumic.
-//!
-//! Реализует команды SADD, SREM, SISMEMBER, SMEMBERS, SCARD для управления
-//! элементами множеств по ключу. Каждая команда реализует трейт
-//! [`CommandExecute`].
-
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 /// Команда SADD — добавляет элемент во множество.
-///
-/// Формат: `SADD key member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — добавляемый элемент.
-///
-/// # Возвращает
-/// 1, если элемент был добавлен, 0 — если уже существовал.
 #[derive(Debug)]
 pub struct SAddCommand {
     pub key: String,
@@ -40,15 +25,6 @@ impl CommandExecute for SAddCommand {
 }
 
 /// Команда SREM — удаляет элемент из множества.
-///
-/// Формат: `SREM key member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — удаляемый элемент.
-///
-/// # Возвращает
-/// 1, если элемент был удалён, 0 — если не найден.
 #[derive(Debug)]
 pub struct SRemCommand {
     pub key: String,
@@ -73,14 +49,6 @@ impl CommandExecute for SRemCommand {
 }
 
 /// Команда SCARD — возвращает количество элементов во множестве.
-///
-/// Формат: `SCARD key`
-///
-/// # Поля
-/// * `key` — ключ множества.
-///
-/// # Возвращает
-/// Количество элементов во множестве.
 #[derive(Debug)]
 pub struct SCardCommand {
     pub key: String,
@@ -102,14 +70,6 @@ impl CommandExecute for SCardCommand {
 }
 
 /// Команда SMEMBERS — возвращает все элементы множества.
-///
-/// Формат: `SMEMBERS key`
-///
-/// # Поля
-/// * `key` — ключ множества.
-///
-/// # Возвращает
-/// Список всех элементов множества или `Null`, если множество не существует.
 #[derive(Debug)]
 pub struct SMembersCommand {
     pub key: String,
@@ -139,15 +99,6 @@ impl CommandExecute for SMembersCommand {
 }
 
 /// Команда SISMEMBER — проверяет наличие элемента во множестве.
-///
-/// Формат: `SISMEMBER key member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — проверяемый элемент.
-///
-/// # Возвращает
-/// 1, если элемент найден, 0 — если не найден.
 #[derive(Debug)]
 pub struct SIsMemberCommand {
     pub key: String,
@@ -172,10 +123,6 @@ impl CommandExecute for SIsMemberCommand {
 }
 
 /// Команда SRANDMEMBER — возвращает случайный(е) элемент(ы) множества.
-///
-/// Формат: `SRANDMEMBER key count`
-/// Если count == 1 — вернём массив с одним элементом (упрощённо).
-/// Если ключ отсутствует — возвращаем Null.
 #[derive(Debug)]
 pub struct SRandMemberCommand {
     pub key: String,
@@ -209,9 +156,6 @@ impl CommandExecute for SRandMemberCommand {
 }
 
 /// Команда SPOP — удаляет и возвращает случайный(е) элемент(ы) множества.
-///
-/// Формат: `SPOP key count`
-/// Если ключ отсутствует — возвращаем Null.
 #[derive(Debug)]
 pub struct SPopCommand {
     pub key: String,
@@ -244,6 +188,7 @@ impl CommandExecute for SPopCommand {
     }
 }
 
+/// Команда SINTER — возвращает пересечение множеств.
 #[derive(Debug)]
 pub struct SInterCommand {
     pub keys: Vec<String>,
@@ -254,7 +199,7 @@ impl CommandExecute for SInterCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("SINTER is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -262,6 +207,7 @@ impl CommandExecute for SInterCommand {
     }
 }
 
+/// Команда SUNION — возвращает объединение множеств.
 #[derive(Debug)]
 pub struct SUnionCommand {
     pub keys: Vec<String>,
@@ -272,7 +218,7 @@ impl CommandExecute for SUnionCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("SUNION is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -280,6 +226,7 @@ impl CommandExecute for SUnionCommand {
     }
 }
 
+/// Команда SDIFF — возвращает разность множеств.
 #[derive(Debug)]
 pub struct SDiffCommand {
     pub keys: Vec<String>,
@@ -290,13 +237,17 @@ impl CommandExecute for SDiffCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("SDIFF is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
         "SDIFF"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

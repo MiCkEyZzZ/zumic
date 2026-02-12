@@ -1,21 +1,6 @@
-//! Команды для работы со списками (List) в Zumic.
-//!
-//! Реализует команды LPUSH, RPUSH, LPOP, RPOP, LLEN, LRANGE для управления
-//! элементами списков по ключу. Каждая команда реализует трейт
-//! [`CommandExecute`].
-
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 /// Команда LPUSH — добавляет элемент в начало списка.
-///
-/// Формат: `LPUSH key value`
-///
-/// # Поля
-/// * `key` — ключ списка.
-/// * `value` — добавляемое значение.
-///
-/// # Возвращает
-/// Новая длина списка после вставки.
 #[derive(Debug)]
 pub struct LPushCommand {
     pub key: String,
@@ -48,15 +33,6 @@ impl CommandExecute for LPushCommand {
 }
 
 /// Команда RPUSH — добавляет элемент в конец списка.
-///
-/// Формат: `RPUSH key value`
-///
-/// # Поля
-/// * `key` — ключ списка.
-/// * `value` — добавляемое значение.
-///
-/// # Возвращает
-/// Новая длина списка после вставки.
 #[derive(Debug)]
 pub struct RPushCommand {
     pub key: String,
@@ -89,14 +65,6 @@ impl CommandExecute for RPushCommand {
 }
 
 /// Команда LPOP — удаляет и возвращает первый элемент списка.
-///
-/// Формат: `LPOP key`
-///
-/// # Поля
-/// * `key` — ключ списка.
-///
-/// # Возвращает
-/// Значение первого элемента или `Null`, если список пуст или не существует.
 #[derive(Debug)]
 pub struct LPopCommand {
     pub key: String,
@@ -129,14 +97,6 @@ impl CommandExecute for LPopCommand {
 }
 
 /// Команда RPOP — удаляет и возвращает последний элемент списка.
-///
-/// Формат: `RPOP key`
-///
-/// # Поля
-/// * `key` — ключ списка.
-///
-/// # Возвращает
-/// Значение последнего элемента или `Null`, если список пуст или не существует.
 #[derive(Debug)]
 pub struct RPopCommand {
     pub key: String,
@@ -169,14 +129,6 @@ impl CommandExecute for RPopCommand {
 }
 
 /// Команда LLEN — возвращает длину списка.
-///
-/// Формат: `LLEN key`
-///
-/// # Поля
-/// * `key` — ключ списка.
-///
-/// # Возвращает
-/// Длина списка (количество элементов).
 #[derive(Debug)]
 pub struct LLenCommand {
     pub key: String,
@@ -201,16 +153,6 @@ impl CommandExecute for LLenCommand {
 }
 
 /// Команда LRANGE — возвращает диапазон элементов списка.
-///
-/// Формат: `LRANGE key start stop`
-///
-/// # Поля
-/// * `key` — ключ списка.
-/// * `start` — начальный индекс.
-/// * `stop` — конечный индекс.
-///
-/// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если список не существует.
 #[derive(Debug)]
 pub struct LRangeCommand {
     pub key: String,
@@ -256,6 +198,7 @@ impl CommandExecute for LRangeCommand {
     }
 }
 
+/// Команда LSET — устанавливает значение элемента списка по индексу.
 #[derive(Debug)]
 pub struct LSetCommand {
     pub key: String,
@@ -268,7 +211,7 @@ impl CommandExecute for LSetCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("LSET is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -276,6 +219,7 @@ impl CommandExecute for LSetCommand {
     }
 }
 
+/// Команда LREM — удаляет элементы из списка по значению.
 #[derive(Debug)]
 pub struct LRemCommand {
     pub key: String,
@@ -288,13 +232,17 @@ impl CommandExecute for LRemCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("LREM is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
         "LREM"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

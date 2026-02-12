@@ -1,24 +1,8 @@
-//! Команды для работы с упорядоченными множествами (ZSet, sorted set) в Zumic.
-//!
-//! Реализует команды ZADD, ZREM, ZSCORE, ZCARD, ZRANGE, ZREVRANGE для
-//! управления элементами с баллами (score). Каждая команда реализует трейт
-//! [`CommandExecute`].
-
 use ordered_float::OrderedFloat;
 
 use crate::{CommandExecute, Dict, QuickList, Sds, SkipList, StorageEngine, StoreError, Value};
 
 /// Команда ZADD — добавляет элемент с баллом (score) в упорядоченное множество.
-///
-/// Формат: `ZADD key score member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — добавляемый элемент.
-/// * `score` — балл (score) элемента.
-///
-/// # Возвращает
-/// 1, если элемент был добавлен, 0 — если обновлён.
 #[derive(Debug)]
 pub struct ZAddCommand {
     pub key: String,
@@ -66,15 +50,6 @@ impl CommandExecute for ZAddCommand {
 }
 
 /// Команда ZREM — удаляет элемент из упорядоченного множества.
-///
-/// Формат: `ZREM key member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — удаляемый элемент.
-///
-/// # Возвращает
-/// 1, если элемент был удалён, 0 — если не найден.
 #[derive(Debug)]
 pub struct ZRemCommand {
     pub key: String,
@@ -119,18 +94,7 @@ impl CommandExecute for ZRemCommand {
     }
 }
 
-/// Команда ZRANGE — возвращает диапазон элементов по возрастанию балла.
-///
-/// Формат: `ZRANGE key start stop`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `start` — начальный индекс.
-/// * `stop` — конечный индекс.
-///
-/// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если множество не
-/// существует.
+/// Команда ZRANGE — возвращает элементы по возрастанию score.
 #[derive(Debug)]
 pub struct ZRangeCommand {
     pub key: String,
@@ -178,16 +142,7 @@ impl CommandExecute for ZRangeCommand {
     }
 }
 
-/// Команда ZSCORE — возвращает балл (score) элемента.
-///
-/// Формат: `ZSCORE key member`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `member` — элемент.
-///
-/// # Возвращает
-/// Балл (score) элемента или `Null`, если элемент не найден.
+/// Команда ZSCORE — возвращает score для указанного элемента.
 #[derive(Debug)]
 pub struct ZScoreCommand {
     pub key: String,
@@ -222,14 +177,6 @@ impl CommandExecute for ZScoreCommand {
 }
 
 /// Команда ZCARD — возвращает количество элементов в упорядоченном множестве.
-///
-/// Формат: `ZCARD key`
-///
-/// # Поля
-/// * `key` — ключ множества.
-///
-/// # Возвращает
-/// Количество элементов в множестве.
 #[derive(Debug)]
 pub struct ZCardCommand {
     pub key: String,
@@ -254,17 +201,6 @@ impl CommandExecute for ZCardCommand {
 }
 
 /// Команда ZREVRANGE — возвращает диапазон элементов по убыванию балла.
-///
-/// Формат: `ZREVRANGE key start stop`
-///
-/// # Поля
-/// * `key` — ключ множества.
-/// * `start` — начальный индекс.
-/// * `stop` — конечный индекс.
-///
-/// # Возвращает
-/// Список элементов в заданном диапазоне или `Null`, если множество не
-/// существует.
 #[derive(Debug)]
 pub struct ZRevRangeCommand {
     pub key: String,
@@ -314,6 +250,7 @@ impl CommandExecute for ZRevRangeCommand {
     }
 }
 
+/// Команда ZRANK — возвращает индекс элемента по возрастанию score.
 #[derive(Debug)]
 pub struct ZRankCommand {
     pub key: String,
@@ -325,7 +262,7 @@ impl CommandExecute for ZRankCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("ZRANK is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -333,6 +270,7 @@ impl CommandExecute for ZRankCommand {
     }
 }
 
+/// Команда ZREVRANK — возвращает индекс элемента по убыванию score.
 #[derive(Debug)]
 pub struct ZRevRankCommand {
     pub key: String,
@@ -344,7 +282,7 @@ impl CommandExecute for ZRevRankCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("ZREVRANK is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -352,6 +290,8 @@ impl CommandExecute for ZRevRankCommand {
     }
 }
 
+/// Команда ZCOUNT — возвращает количество элементов, score которых в диапазоне
+/// [min, max].
 #[derive(Debug)]
 pub struct ZCountCommand {
     pub key: String,
@@ -364,7 +304,7 @@ impl CommandExecute for ZCountCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("ZCOUNT is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
@@ -372,6 +312,7 @@ impl CommandExecute for ZCountCommand {
     }
 }
 
+/// Команда ZINCRBY — увеличивает score элемента на заданное значение.
 #[derive(Debug)]
 pub struct ZIncrByCommand {
     pub key: String,
@@ -384,7 +325,7 @@ impl CommandExecute for ZIncrByCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("ZINCRBY is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
