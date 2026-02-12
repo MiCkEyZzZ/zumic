@@ -1,14 +1,6 @@
-//! Команды для работы с ключами в Zumic.
-//!
-//! Реализует команды DEL, EXISTS, RENAME, RENAMENX, FLUSHDB для управления
-//! ключами и базой данных. Каждая команда реализует трейт [`CommandExecute`].
-
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 /// Команда DEL — удаляет значение по ключу.
-///
-/// # Поля
-/// * `key` — ключ, который требуется удалить.
 #[derive(Debug)]
 pub struct DelCommand {
     pub key: String,
@@ -29,9 +21,6 @@ impl CommandExecute for DelCommand {
 }
 
 /// Команда EXISTS — проверяет существование одного или нескольких ключей.
-///
-/// # Поля
-/// * `keys` — список ключей для проверки.
 #[derive(Debug)]
 pub struct ExistsCommand {
     pub keys: Vec<String>,
@@ -59,10 +48,6 @@ impl CommandExecute for ExistsCommand {
 }
 
 /// Команда RENAME — переименовывает существующий ключ.
-///
-/// # Поля
-/// * `from` — исходный ключ.
-/// * `to` — новый ключ.
 #[derive(Debug)]
 pub struct RenameCommand {
     pub from: String,
@@ -85,10 +70,6 @@ impl CommandExecute for RenameCommand {
 
 /// Команда RENAMENX — переименовывает ключ, только если новый ключ не
 /// существует.
-///
-/// # Поля
-/// * `from` — исходный ключ.
-/// * `to` — новый ключ.
 #[derive(Debug)]
 pub struct RenameNxCommand {
     pub from: String,
@@ -126,6 +107,10 @@ impl CommandExecute for FlushDbCommand {
         "FLUSHDB"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

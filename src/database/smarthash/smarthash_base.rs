@@ -86,7 +86,7 @@ impl SmartHash {
         &mut self,
         key: Sds,
         value: Sds,
-    ) {
+    ) -> bool {
         if self.pending_downgrade {
             self.do_downgrade();
         }
@@ -95,9 +95,11 @@ impl SmartHash {
             Repr::Zip(vec) => {
                 if let Some((_, v)) = vec.iter_mut().find(|(k, _)| *k == key) {
                     *v = value;
-                    return;
+                    return false;
                 }
+
                 vec.push((key, value));
+
                 if vec.len() >= THRESHOLD {
                     let mut map = HashMap::with_capacity(vec.len());
                     for (k, v) in vec.drain(..) {
@@ -105,10 +107,14 @@ impl SmartHash {
                     }
                     self.repr = Repr::Map(map);
                 }
+
+                true
             }
             Repr::Map(map) => {
-                map.insert(key, value);
-                // map‑режим без даунгрейда на hset
+                map.insert(key, value).is_none()
+                // HashMap::insert возвращает:
+                // Some(old_value) если ключ существовал
+                // None если ключ новый
             }
         }
     }
@@ -116,13 +122,9 @@ impl SmartHash {
     /// Возвращает ссылку на значение, соответствующее заданному
     /// ключу, если оно существует.
     pub fn get(
-        &mut self,
+        &self,
         key: &Sds,
     ) -> Option<&Sds> {
-        if self.pending_downgrade {
-            self.do_downgrade()
-        }
-
         match &self.repr {
             Repr::Zip(vec) => vec.iter().find(|(k, _)| k == key).map(|(_, v)| v),
             Repr::Map(map) => map.get(key),
@@ -401,7 +403,7 @@ mod tests {
             (Sds::from_str("k1"), Sds::from_str("v1")),
             (Sds::from_str("k2"), Sds::from_str("v2")),
         ];
-        let mut sh: SmartHash = pairs.clone().into_iter().collect();
+        let sh: SmartHash = pairs.clone().into_iter().collect();
         assert_eq!(sh.len(), 2);
         for (k, v) in pairs {
             assert_eq!(sh.get(&k), Some(&v));

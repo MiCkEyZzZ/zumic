@@ -1,23 +1,8 @@
-//! Служебные команды сервера Zumic.
-//!
-//! Реализует команды PING, ECHO, INFO, DBSIZE, TIME, SELECT для управления
-//! сервером и получения информации о его состоянии.
-//! Каждая команда реализует трейт [`CommandExecute`].
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 /// Команда PING — проверка соединения с сервером.
-///
-/// Формат: `PING [message]`
-///
-/// # Поля
-/// * `message` — необязательное сообщение для возврата.
-///
-/// # Возвращает
-/// * Если `message` указано — возвращает это сообщение.
-/// * Если `message` не указано — возвращает "PONG".
 #[derive(Debug)]
 pub struct PingCommand {
     pub message: Option<String>,
@@ -40,14 +25,6 @@ impl CommandExecute for PingCommand {
 }
 
 /// Команда ECHO — возвращает переданное сообщение.
-///
-/// Формат: `ECHO message`
-///
-/// # Поля
-/// * `message` — сообщение для возврата.
-///
-/// # Возвращает
-/// Переданное сообщение.
 #[derive(Debug)]
 pub struct EchoCommand {
     pub message: String,
@@ -67,11 +44,6 @@ impl CommandExecute for EchoCommand {
 }
 
 /// Команда DBSIZE — возвращает количество ключей в текущей базе данных.
-///
-/// Формат: `DBSIZE`
-///
-/// # Возвращает
-/// Количество ключей в БД.
 #[derive(Debug)]
 pub struct DbSizeCommand;
 
@@ -90,14 +62,6 @@ impl CommandExecute for DbSizeCommand {
 }
 
 /// Команда INFO — возвращает информацию о сервере.
-///
-/// Формат: `INFO [section]`
-///
-/// # Поля
-/// * `section` — необязательная секция (Server, Memory, Stats, и т.д.).
-///
-/// # Возвращает
-/// Строку с информацией о сервере в формате key:value.
 #[derive(Debug)]
 pub struct InfoCommand {
     pub section: Option<String>,
@@ -143,13 +107,6 @@ impl CommandExecute for InfoCommand {
 }
 
 /// Команда TIME — возвращает текущее время сервера.
-///
-/// Формат: `TIME`
-///
-/// # Возвращает
-/// Массив из двух элементов:
-/// * Unix timestamp в секундах
-/// * Микросекунды
 #[derive(Debug)]
 pub struct TimeCommand;
 
@@ -178,18 +135,6 @@ impl CommandExecute for TimeCommand {
 }
 
 /// Команда SELECT — выбирает базу данных по индексу.
-///
-/// Формат: `SELECT index`
-///
-/// # Поля
-/// * `db` — индекс базы данных (0-15).
-///
-/// # Возвращает
-/// "OK" при успешном переключении.
-///
-/// # Примечание
-/// В текущей версии Zumic может не поддерживать множественные БД,
-/// поэтому команда может всегда возвращать ошибку или принимать только 0.
 #[derive(Debug)]
 pub struct SelectCommand {
     pub db: usize,
@@ -217,14 +162,6 @@ impl CommandExecute for SelectCommand {
 }
 
 /// Команда SAVE — синхронное сохранение БД на диск.
-///
-/// Формат: `SAVE`
-///
-/// # Возвращает
-/// "OK" после успешного сохранения.
-///
-/// # Примечание
-/// Блокирует сервер до завершения сохранения.
 #[derive(Debug)]
 pub struct SaveCommand;
 
@@ -243,15 +180,6 @@ impl CommandExecute for SaveCommand {
 }
 
 /// Команда BGSAVE — асинхронное (фоновое) сохранение БД на диск.
-///
-/// Формат: `BGSAVE`
-///
-/// # Возвращает
-/// "Background saving started" если сохранение запущено.
-///
-/// # Примечание
-/// В текущей реализации может выполняться синхронно,
-/// в зависимости от реализации StorageEngine.
 #[derive(Debug)]
 pub struct BgSaveCommand;
 
@@ -271,18 +199,6 @@ impl CommandExecute for BgSaveCommand {
 }
 
 /// Команда SHUTDOWN — корректное завершение работы сервера.
-///
-/// Формат: `SHUTDOWN [SAVE|NOSAVE]`
-///
-/// # Поля
-/// * `save` — если `true`, сохраняет БД перед выключением.
-///
-/// # Возвращает
-/// Обычно не возвращает ответ, т.к. сервер завершает работу.
-///
-/// # Примечание
-/// Эта команда требует специальной обработки на уровне сервера,
-/// т.к. должна завершить все соединения и остановить event loop.
 #[derive(Debug)]
 pub struct ShutdownCommand {
     pub save: bool,

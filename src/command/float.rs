@@ -1,16 +1,6 @@
-//! Команды для работы с числами с плавающей точкой (float) в Zumic.
-//!
-//! Реализует команды INCRBYFLOAT, DECRBYFLOAT, SETFLOAT для изменения и
-//! установки float-значений по ключу. Каждая команда реализует трейт
-//! [`CommandExecute`].
-
 use crate::{CommandExecute, Sds, StorageEngine, StoreError, Value};
 
 /// Команда INCRBYFLOAT — увеличивает значение float по ключу на заданное число.
-///
-/// # Поля
-/// * `key` — ключ, значение которого увеличивается.
-/// * `increment` — на сколько увеличить значение.
 #[derive(Debug)]
 pub struct IncrByFloatCommand {
     pub key: String,
@@ -44,10 +34,6 @@ impl CommandExecute for IncrByFloatCommand {
 }
 
 /// Команда DECRBYFLOAT — уменьшает значение float по ключу на заданное число.
-///
-/// # Поля
-/// * `key` — ключ, значение которого уменьшается.
-/// * `decrement` — на сколько уменьшить значение.
 #[derive(Debug)]
 pub struct DecrByFloatCommand {
     pub key: String,
@@ -81,10 +67,6 @@ impl CommandExecute for DecrByFloatCommand {
 }
 
 /// Команда SETFLOAT — устанавливает значение float по ключу.
-///
-/// # Поля
-/// * `key` — ключ, в который сохраняется значение.
-/// * `value` — сохраняемое значение.
 #[derive(Debug)]
 pub struct SetFloatCommand {
     pub key: String,
@@ -105,6 +87,10 @@ impl CommandExecute for SetFloatCommand {
         "SETFLOAT"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

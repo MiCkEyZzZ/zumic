@@ -1,26 +1,14 @@
-//! Команды для работы с хэш-таблицами (HASH) в Zumic.
-//!
-//! Реализует команды HSET, HGET, HDEL, HGETALL для управления полями и
-//! значениями в хешах. Каждая команда реализует трейт [`CommandExecute`].
+use std::iter::empty;
+
+use rand::seq::IteratorRandom;
 
 use crate::{CommandExecute, QuickList, Sds, SmartHash, StorageEngine, StoreError, Value};
 
-/// Команда HSET — устанавливает значение поля в хеше.
-///
-/// Формат: `HSET key field value`
-///
-/// # Поля
-/// * `key` — ключ хеша.
-/// * `field` — имя поля.
-/// * `value` — значение поля.
-///
-/// # Возвращает
-/// 1, если поле было добавлено или обновлено.
+/// Команда HSET — устанавливает одно или несколько полей хеша.
 #[derive(Debug)]
 pub struct HSetCommand {
     pub key: String,
-    pub field: String,
-    pub value: String,
+    pub entries: Vec<(String, String)>,
 }
 
 impl CommandExecute for HSetCommand {
@@ -29,21 +17,39 @@ impl CommandExecute for HSetCommand {
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        let field = Sds::from_str(&self.field);
-        let value = Sds::from_str(&self.value);
 
         match store.get(&key)? {
-            Some(Value::Hash(mut smart_hash)) => {
-                smart_hash.insert(field.clone(), value.clone());
-                store.set(&key, Value::Hash(smart_hash))?;
-                Ok(Value::Int(1))
+            Some(Value::Hash(mut sh)) => {
+                let mut added = 0;
+
+                for (f, v) in &self.entries {
+                    let field = Sds::from_str(f);
+                    let value = Sds::from_str(v);
+
+                    if sh.insert(field, value) {
+                        added += 1;
+                    }
+                }
+
+                store.set(&key, Value::Hash(sh))?;
+                Ok(Value::Int(added))
             }
             Some(_) => Err(StoreError::InvalidType),
             None => {
-                let mut smart_hash = SmartHash::new();
-                smart_hash.insert(field.clone(), value.clone());
-                store.set(&key, Value::Hash(smart_hash))?;
-                Ok(Value::Int(1))
+                let mut sh = SmartHash::new();
+                let mut added = 0;
+
+                for (f, v) in &self.entries {
+                    let field = Sds::from_str(f);
+                    let value = Sds::from_str(v);
+
+                    if sh.insert(field, value) {
+                        added += 1;
+                    }
+                }
+
+                store.set(&key, Value::Hash(sh))?;
+                Ok(Value::Int(added))
             }
         }
     }
@@ -54,15 +60,6 @@ impl CommandExecute for HSetCommand {
 }
 
 /// Команда HGET — получает значение поля из хеша.
-///
-/// Формат: `HGET key field`
-///
-/// # Поля
-/// * `key` — ключ хеша.
-/// * `field` — имя поля.
-///
-/// # Возвращает
-/// Значение поля или `Null`, если поле не найдено.
 #[derive(Debug)]
 pub struct HGetCommand {
     pub key: String,
@@ -77,14 +74,17 @@ impl CommandExecute for HGetCommand {
         let key = Sds::from_str(&self.key);
         let field = Sds::from_str(&self.field);
 
-        if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {
-            if let Some(value) = smart_hash.get(&field) {
-                return Ok(Value::Str(value.clone()));
-            } else {
-                return Ok(Value::Null);
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => {
+                if let Some(value) = sh.get(&field) {
+                    Ok(Value::Str(value.clone()))
+                } else {
+                    Ok(Value::Null)
+                }
             }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Null),
         }
-        Ok(Value::Null)
     }
 
     fn command_name(&self) -> &'static str {
@@ -92,20 +92,50 @@ impl CommandExecute for HGetCommand {
     }
 }
 
+/// Команда HMGET - получает значения нескольких полей хеша.
+#[derive(Debug)]
+pub struct HmGetCommand {
+    pub key: String,
+    pub fields: Vec<String>,
+}
+
+impl CommandExecute for HmGetCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => {
+                let result = self
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        let field = Sds::from_str(f);
+                        match sh.get(&field) {
+                            Some(v) => Value::Str(v.clone()),
+                            None => Value::Null,
+                        }
+                    })
+                    .collect();
+                Ok(Value::Array(result))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Array(vec![Value::Null; self.fields.len()])),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HMGET"
+    }
+}
+
 /// Команда HDEL — удаляет поле из хеша.
-///
-/// Формат: `HDEL key field`
-///
-/// # Поля
-/// * `key` — ключ хеша.
-/// * `field` — имя поля.
-///
-/// # Возвращает
-/// 1, если поле было удалено, 0 — если поле не найдено.
 #[derive(Debug)]
 pub struct HDelCommand {
     pub key: String,
-    pub field: String,
+    pub fields: Vec<String>,
 }
 
 impl CommandExecute for HDelCommand {
@@ -114,17 +144,29 @@ impl CommandExecute for HDelCommand {
         store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
-        let field = Sds::from_str(&self.field);
 
-        if let Some(Value::Hash(mut smart_hash)) = store.get(&key)? {
-            let removed = smart_hash.remove(&field);
-            if removed {
-                store.set(&key, Value::Hash(smart_hash))?;
-                return Ok(Value::Int(1));
+        match store.get(&key)? {
+            Some(Value::Hash(mut sh)) => {
+                let mut removed = 0;
+
+                for f in &self.fields {
+                    let field = Sds::from_str(f);
+                    if sh.remove(&field) {
+                        removed += 1;
+                    }
+                }
+
+                // если контейнер пуст - можно опционально удалить ключ из store
+                if sh.is_empty() {
+                    store.del(&key)?;
+                } else {
+                    store.set(&key, Value::Hash(sh))?;
+                }
+                Ok(Value::Int(removed))
             }
-            return Ok(Value::Int(0));
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Int(0)),
         }
-        Ok(Value::Int(0))
     }
 
     fn command_name(&self) -> &'static str {
@@ -132,16 +174,117 @@ impl CommandExecute for HDelCommand {
     }
 }
 
+/// Команда HEXISTS — проверяет существование поля в хеше.
+#[derive(Debug)]
+pub struct HExistsCommand {
+    pub key: String,
+    pub field: String,
+}
+
+impl CommandExecute for HExistsCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+        let field = Sds::from_str(&self.field);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => Ok(Value::Int(i64::from(sh.contains(&field)))),
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Int(0)),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HEXISTS"
+    }
+}
+
+/// Команда HLEN — возвращает количество полей в хеше.
+#[derive(Debug)]
+pub struct HLenCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HLenCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => Ok(Value::Int(sh.len() as i64)),
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Int(0)),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HLEN"
+    }
+}
+
+/// Команда HKEYS — возвращает список всех полей хеша.
+#[derive(Debug)]
+pub struct HKeysCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HKeysCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => {
+                let keys = sh.keys();
+                Ok(Value::List(QuickList::from_iter(keys, 64)))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::List(QuickList::from_iter(empty(), 64))),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HKEYS"
+    }
+}
+
+/// Команда HVALS — возвращает список всех значений хеша.
+#[derive(Debug)]
+pub struct HValsCommand {
+    pub key: String,
+}
+
+impl CommandExecute for HValsCommand {
+    fn execute(
+        &self,
+        store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => {
+                let vals = sh.values();
+                Ok(Value::List(QuickList::from_iter(vals, 64)))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::List(QuickList::from_iter(empty(), 64))),
+        }
+    }
+
+    fn command_name(&self) -> &'static str {
+        "HVALS"
+    }
+}
+
 /// Команда HGETALL — получает все поля и значения хеша.
 ///
-/// Формат: `HGETALL key`
-///
-/// # Поля
-/// * `key` — ключ хеша.
-///
-/// # Возвращает
-/// Список всех полей и значений (как чередующиеся элементы списка) или `Null`,
-/// если хэш не найден.
+/// Ключи сортируются по алфавиту для предсказуемого порядка (важно для тестов).
 #[derive(Debug)]
 pub struct HGetAllCommand {
     pub key: String,
@@ -154,16 +297,23 @@ impl CommandExecute for HGetAllCommand {
     ) -> Result<Value, StoreError> {
         let key = Sds::from_str(&self.key);
 
-        if let Some(Value::Hash(ref mut smart_hash)) = store.get(&key)? {
-            let result: QuickList<Sds> = QuickList::from_iter(
-                smart_hash.iter().flat_map(|(k, v)| {
-                    [Sds::from_str(&k.to_string()), Sds::from_str(&v.to_string())]
-                }),
-                64,
-            );
-            return Ok(Value::List(result));
+        match store.get(&key)? {
+            Some(Value::Hash(mut sh)) => {
+                // сортируем ключи для предсказуемого порядка
+                let mut entries: Vec<_> = sh.iter().collect();
+                entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+
+                let result: QuickList<Sds> = QuickList::from_iter(
+                    entries
+                        .into_iter()
+                        .flat_map(|(k, v)| [k.clone(), v.clone()]),
+                    64,
+                );
+                Ok(Value::List(result))
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => Ok(Value::Null),
         }
-        Ok(Value::Null)
     }
 
     fn command_name(&self) -> &'static str {
@@ -171,78 +321,77 @@ impl CommandExecute for HGetAllCommand {
     }
 }
 
+/// Команда HRANDFIELD — возвращает одно или несколько случайных полей хеша.
+/// Если count отрицательный — возвращает ровно |count| элементов, повторения
+/// возможны.
 #[derive(Debug)]
-pub struct HExistsCommand {
+pub struct HRandFieldCommand {
     pub key: String,
-    pub field: String,
+    pub count: Option<i64>,
+    pub with_values: bool,
 }
 
-impl CommandExecute for HExistsCommand {
+impl CommandExecute for HRandFieldCommand {
     fn execute(
         &self,
-        _store: &mut StorageEngine,
+        store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        let key = Sds::from_str(&self.key);
+
+        match store.get(&key)? {
+            Some(Value::Hash(sh)) => {
+                let entries = sh.entries();
+                let mut rng = rand::thread_rng();
+
+                match self.count {
+                    Some(count) if count < 0 => {
+                        let n = count.unsigned_abs() as usize;
+                        let items: Vec<_> = (0..n)
+                            .filter_map(|_| entries.iter().choose(&mut rng).cloned())
+                            .collect();
+
+                        let flat: Vec<Sds> = if self.with_values {
+                            items.into_iter().flat_map(|(f, v)| [f, v]).collect()
+                        } else {
+                            items.into_iter().map(|(f, _)| f).collect()
+                        };
+
+                        Ok(Value::List(QuickList::from_iter(flat, 64)))
+                    }
+                    Some(count) => {
+                        let n = (count as usize).min(entries.len());
+                        let items: Vec<_> = entries.into_iter().choose_multiple(&mut rng, n);
+
+                        let flat: Vec<Sds> = if self.with_values {
+                            items.into_iter().flat_map(|(f, v)| [f, v]).collect()
+                        } else {
+                            items.into_iter().map(|(f, _)| f).collect()
+                        };
+
+                        Ok(Value::List(QuickList::from_iter(flat, 64)))
+                    }
+                    None => match entries.into_iter().choose(&mut rng) {
+                        Some((field, _)) => Ok(Value::Str(field)),
+                        None => Ok(Value::Null),
+                    },
+                }
+            }
+            Some(_) => Err(StoreError::InvalidType),
+            None => match self.count {
+                Some(_) => Ok(Value::List(QuickList::from_iter(empty(), 64))),
+                None => Ok(Value::Null),
+            },
+        }
     }
 
     fn command_name(&self) -> &'static str {
-        "HEXISTS"
+        "HRANDFIELD"
     }
 }
 
-#[derive(Debug)]
-pub struct HLenCommand {
-    pub key: String,
-}
-
-impl CommandExecute for HLenCommand {
-    fn execute(
-        &self,
-        _store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        unimplemented!()
-    }
-
-    fn command_name(&self) -> &'static str {
-        "HLEN"
-    }
-}
-
-#[derive(Debug)]
-pub struct HKeysCommand {
-    pub key: String,
-}
-
-impl CommandExecute for HKeysCommand {
-    fn execute(
-        &self,
-        _store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        unimplemented!()
-    }
-
-    fn command_name(&self) -> &'static str {
-        "HKEYS"
-    }
-}
-
-#[derive(Debug)]
-pub struct HValsCommand {
-    pub key: String,
-}
-
-impl CommandExecute for HValsCommand {
-    fn execute(
-        &self,
-        _store: &mut StorageEngine,
-    ) -> Result<Value, StoreError> {
-        unimplemented!()
-    }
-
-    fn command_name(&self) -> &'static str {
-        "HVALSs"
-    }
-}
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
@@ -254,6 +403,20 @@ mod tests {
         StorageEngine::Memory(InMemoryStore::new())
     }
 
+    // Вспомогательная ф-я для создания хеша с тремя полями
+    fn setup_hash(store: &mut StorageEngine) {
+        HSetCommand {
+            key: "user:1".into(),
+            entries: vec![
+                ("name".into(), "Anton".into()),
+                ("age".into(), "38".into()),
+                ("city".into(), "Kungur".into()),
+            ],
+        }
+        .execute(store)
+        .unwrap();
+    }
+
     /// Тестирует установку поля в хэш с помощью HSet и получение его с помощью
     /// HGet
     #[test]
@@ -262,9 +425,8 @@ mod tests {
 
         // Устанавливаем поле хеша с помощью HSetCommand.
         let hset_cmd = HSetCommand {
-            key: "hash".to_string(),
-            field: "field1".to_string(),
-            value: "value1".to_string(),
+            key: "hash".into(),
+            entries: vec![("field1".into(), "value1".into())],
         };
 
         let result = hset_cmd.execute(&mut store);
@@ -293,8 +455,7 @@ mod tests {
         // Сначала установим одно поле
         let hset_cmd = HSetCommand {
             key: "hash".to_string(),
-            field: "field1".to_string(),
-            value: "value1".to_string(),
+            entries: vec![("field1".to_string(), "value1".to_string())],
         };
         hset_cmd.execute(&mut store).unwrap();
 
@@ -320,15 +481,14 @@ mod tests {
         // Сначала установим одно поле
         let hset_cmd = HSetCommand {
             key: "hash".to_string(),
-            field: "field1".to_string(),
-            value: "value1".to_string(),
+            entries: vec![("field1".to_string(), "value1".to_string())],
         };
         hset_cmd.execute(&mut store).unwrap();
 
         // Удаляем это поле
         let hdel_cmd = HDelCommand {
             key: "hash".to_string(),
-            field: "field1".to_string(),
+            fields: vec!["field1".to_string()],
         };
         let del_result = hdel_cmd.execute(&mut store);
         match del_result {
@@ -356,13 +516,11 @@ mod tests {
 
         let hset_cmd1 = HSetCommand {
             key: "hash".to_string(),
-            field: "field1".to_string(),
-            value: "value1".to_string(),
+            entries: vec![("field1".to_string(), "value1".to_string())],
         };
         let hset_cmd2 = HSetCommand {
             key: "hash".to_string(),
-            field: "field2".to_string(),
-            value: "value2".to_string(),
+            entries: vec![("field2".to_string(), "value2".to_string())],
         };
         hset_cmd1.execute(&mut store).unwrap();
         hset_cmd2.execute(&mut store).unwrap();
@@ -398,5 +556,246 @@ mod tests {
         } else {
             panic!("Expected Value::List from HGetAllCommand");
         }
+    }
+
+    #[test]
+    fn test_hmget_mixed() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let res = HmGetCommand {
+            key: "user:1".into(),
+            fields: vec!["name".into(), "missing".into(), "city".into()],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(
+            res,
+            Value::Array(vec![
+                Value::Str(Sds::from_str("Anton")),
+                Value::Null,
+                Value::Str(Sds::from_str("Kungur")),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_hmget_missing_key() {
+        let mut store = create_store();
+
+        let res = HmGetCommand {
+            key: "ghost".into(),
+            fields: vec!["f1".into(), "f2".into()],
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(res, Value::Array(vec![Value::Null, Value::Null]));
+    }
+
+    #[test]
+    fn test_hexists() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        assert_eq!(
+            HExistsCommand {
+                key: "user:1".into(),
+                field: "age".into()
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(1)
+        );
+        assert_eq!(
+            HExistsCommand {
+                key: "user:1".into(),
+                field: "phone".into(),
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(0)
+        );
+        assert_eq!(
+            HExistsCommand {
+                key: "ghost".into(),
+                field: "age".into(),
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(0)
+        );
+    }
+
+    #[test]
+    fn test_hlen() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        assert_eq!(
+            HLenCommand {
+                key: "user:1".into()
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(3)
+        );
+        assert_eq!(
+            HLenCommand {
+                key: "ghost".into(),
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(0)
+        );
+    }
+
+    #[test]
+    fn test_hkeys() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let keys_com = HKeysCommand {
+            key: "user:1".into(),
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::List(ql) = keys_com {
+            let keys: Vec<String> = ql.iter().map(|s| s.to_string()).collect();
+            assert_eq!(keys.len(), 3);
+            assert!(keys.contains(&"name".to_string()));
+            assert!(keys.contains(&"age".to_string()));
+            assert!(keys.contains(&"city".to_string()));
+        } else {
+            panic!("expected Value::List from HKEYS");
+        }
+    }
+
+    #[test]
+    fn test_hvals() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let vals_com = HValsCommand {
+            key: "user:1".into(),
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::List(ql) = vals_com {
+            let vals: Vec<String> = ql.iter().map(|s| s.to_string()).collect();
+            assert_eq!(vals.len(), 3);
+            assert!(vals.contains(&"Anton".to_string()));
+            assert!(vals.contains(&"38".to_string()));
+            assert!(vals.contains(&"Kungur".to_string()));
+        } else {
+            panic!("expected Value::List from HVALS");
+        }
+    }
+
+    #[test]
+    fn test_hrandfield_single() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let res = HRandFieldCommand {
+            key: "user:1".into(),
+            count: None,
+            with_values: false,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert!(matches!(res, Value::Str(_)));
+
+        let res2 = HRandFieldCommand {
+            key: "ghost".into(),
+            count: None,
+            with_values: false,
+        }
+        .execute(&mut store)
+        .unwrap();
+        assert_eq!(res2, Value::Null);
+    }
+
+    #[test]
+    fn test_hrandfield_count_positive() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let rand_field = HRandFieldCommand {
+            key: "user:1".into(),
+            count: Some(2),
+            with_values: false,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::List(ql) = rand_field {
+            assert!(ql.len() <= 2);
+        } else {
+            panic!("expected Value::List");
+        }
+    }
+
+    #[test]
+    fn test_hrandfield_count_negative() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let rand_field_ng = HRandFieldCommand {
+            key: "user:1".into(),
+            count: Some(-3),
+            with_values: false,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::List(ql) = rand_field_ng {
+            assert_eq!(ql.len(), 3);
+        } else {
+            panic!("expected Value::List");
+        }
+    }
+
+    #[test]
+    fn test_hrandfield_with_values() {
+        let mut store = create_store();
+        setup_hash(&mut store);
+
+        let rand_field_ps = HRandFieldCommand {
+            key: "user:1".into(),
+            count: Some(2),
+            with_values: true,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        if let Value::List(ql) = rand_field_ps {
+            assert_eq!(ql.len() % 2, 0);
+            assert!(ql.len() <= 4);
+        } else {
+            panic!("expected Value::List");
+        }
+    }
+
+    #[test]
+    fn test_wrong_type_error() {
+        let mut store = create_store();
+
+        // Создаём строку
+        store
+            .set(&Sds::from_str("str"), Value::Str(Sds::from_str("hello")))
+            .unwrap();
+
+        let res = HGetCommand {
+            key: "str".into(),
+            field: "f".into(),
+        }
+        .execute(&mut store);
+
+        assert!(matches!(res, Err(StoreError::InvalidType)));
     }
 }

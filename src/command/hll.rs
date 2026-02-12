@@ -1,6 +1,6 @@
 use super::CommandExecute;
 
-/// Команда PFADD добавляет элементы в HLL.
+/// Команда PFADD добавляет элементы в структуру HyperLogLog.
 #[derive(Debug)]
 pub struct PfAddCommand {
     pub key: String,
@@ -20,7 +20,8 @@ impl CommandExecute for PfAddCommand {
     }
 }
 
-/// Команда PFCOUNT возвращает приблизительное кол-во уникальных элементов.
+/// Команда PFCOUNT возвращает приблизительное количество уникальных элементов в
+/// HyperLogLog.
 #[derive(Debug)]
 pub struct PfCountCommand {
     pub key: String,
@@ -39,7 +40,7 @@ impl CommandExecute for PfCountCommand {
     }
 }
 
-/// Команда PFMERGE объежиняет несколько HLL в один.
+/// Команда PFMERGE объединяет несколько HyperLogLog структур в одну.
 #[derive(Debug)]
 pub struct PfMergeCommand {
     pub data: String,

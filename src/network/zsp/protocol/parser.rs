@@ -18,7 +18,7 @@ impl IntoExecutable for ZSPCommand {
             ZSPCommand::MSet { entries } => Ok(StoreCommand::MSet(MSetCommand { entries })),
             ZSPCommand::MGet { keys } => Ok(StoreCommand::MGet(MGetCommand { keys })),
             ZSPCommand::SetNx { key, value } => {
-                Ok(StoreCommand::Setnx(SetNxCommand { key, value }))
+                Ok(StoreCommand::SetNx(SetNxCommand { key, value }))
             }
             ZSPCommand::Rename { from, to } => Ok(StoreCommand::Rename(RenameCommand { from, to })),
             ZSPCommand::RenameNx { from, to } => {

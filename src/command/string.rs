@@ -1,16 +1,6 @@
-//! Команды для работы со строками (String) в Zumic.
-//!
-//! Реализует команды SET, GET, SETNX, MSET, MGET, STRLEN, APPEND, GETRANGE
-//! для управления строковыми значениями по ключу.
-//! Каждая команда реализует трейт [`CommandExecute`].
-
 use crate::{CommandExecute, QuickList, Sds, StorageEngine, StoreError, Value};
 
 /// Команда SET — устанавливает значение по ключу.
-///
-/// # Поля
-/// * `key` — ключ, по которому сохраняется значение.
-/// * `value` — сохраняемое значение.
 #[derive(Debug)]
 pub struct SetCommand {
     pub key: String,
@@ -32,9 +22,6 @@ impl CommandExecute for SetCommand {
 }
 
 /// Команда GET — получает значение по ключу.
-///
-/// # Поля
-/// * `key` — ключ, значение которого требуется получить.
 #[derive(Debug)]
 pub struct GetCommand {
     pub key: String,
@@ -60,10 +47,6 @@ impl CommandExecute for GetCommand {
 
 /// Команда SETNX — устанавливает значение по ключу, только если ключ не
 /// существует.
-///
-/// # Поля
-/// * `key` — ключ, по которому сохраняется значение.
-/// * `value` — сохраняемое значение.
 #[derive(Debug)]
 pub struct SetNxCommand {
     pub key: String,
@@ -90,9 +73,6 @@ impl CommandExecute for SetNxCommand {
 }
 
 /// Команда MSET — устанавливает значения по нескольким ключам одновременно.
-///
-/// # Поля
-/// * `entries` — вектор пар (ключ, значение) для установки.
 #[derive(Debug)]
 pub struct MSetCommand {
     pub entries: Vec<(String, Value)>,
@@ -122,9 +102,6 @@ impl CommandExecute for MSetCommand {
 }
 
 /// Команда MGET — получает значения по нескольким ключам одновременно.
-///
-/// # Поля
-/// * `keys` — список ключей для получения значений.
 #[derive(Debug)]
 pub struct MGetCommand {
     pub keys: Vec<String>,
@@ -160,14 +137,6 @@ impl CommandExecute for MGetCommand {
 }
 
 /// Команда STRLEN — возвращает длину строки по ключу.
-///
-/// Формат: `STRLEN key`
-///
-/// # Поля
-/// * `key` — ключ строки.
-///
-/// # Возвращает
-/// Длину строки (в байтах) или 0, если ключ не существует.
 #[derive(Debug)]
 pub struct StrLenCommand {
     pub key: String,
@@ -196,15 +165,6 @@ impl CommandExecute for StrLenCommand {
 }
 
 /// Команда APPEND — добавляет данные к строке по ключу.
-///
-/// Формат: `APPEND key value`
-///
-/// # Поля
-/// * `key` — ключ строки.
-/// * `value` — добавляемое значение.
-///
-/// # Возвращает
-/// Новую длину строки после добавления.
 #[derive(Debug)]
 pub struct AppendCommand {
     pub key: String,
@@ -245,16 +205,6 @@ impl CommandExecute for AppendCommand {
 }
 
 /// Команда GETRANGE — возвращает подстроку по диапазону индексов.
-///
-/// Формат: `GETRANGE key start end`
-///
-/// # Поля
-/// * `key` — ключ строки.
-/// * `start` — начальный индекс.
-/// * `end` — конечный индекс.
-///
-/// # Возвращает
-/// Подстроку в заданном диапазоне или `Null`, если ключ не существует.
 #[derive(Debug)]
 pub struct GetRangeCommand {
     pub key: String,
@@ -304,6 +254,10 @@ impl CommandExecute for GetRangeCommand {
         "GETRANGE"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

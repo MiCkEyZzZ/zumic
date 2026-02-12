@@ -1,19 +1,9 @@
-//! Битовые команды для Zumic: SETBIT, GETBIT, BITCOUNT, BITOP и др.
-//!
-//! Реализация команд для работы с битовыми строками (bitmap) в хранилище Zumic.
-//! Каждая команда реализует трейт [`CommandExecute`].
-
 use std::ops::Not;
 
 use super::CommandExecute;
 use crate::{database::Bitmap, Sds, StorageEngine, StoreError, Value};
 
 /// Команда SETBIT — устанавливает значение бита по смещению.
-///
-/// # Поля
-/// * `key` — ключ bitmap.
-/// * `offset` — смещение (позиция бита).
-/// * `value` — устанавливаемое значение (true/false).
 #[derive(Debug)]
 pub struct SetBitCommand {
     pub key: String,
@@ -41,10 +31,6 @@ impl CommandExecute for SetBitCommand {
 }
 
 /// Команда GETBIT — получает значение бита по смещению.
-///
-/// # Поля
-/// * `key` — ключ bitmap.
-/// * `offset` — смещение (позиция бита).
 #[derive(Debug)]
 pub struct GetBitCommand {
     pub key: String,
@@ -70,11 +56,6 @@ impl CommandExecute for GetBitCommand {
 }
 
 /// Команда BITCOUNT — считает количество установленных битов в диапазоне.
-///
-/// # Поля
-/// * `key` — ключ bitmap.
-/// * `start` — начальный индекс.
-/// * `end` — конечный индекс (не включительно).
 #[derive(Debug)]
 pub struct BitCountCommand {
     pub key: String,
@@ -101,11 +82,6 @@ impl CommandExecute for BitCountCommand {
 }
 
 /// Команда BITOP — выполняет побитовые операции (AND, OR, XOR, NOT) над bitmap.
-///
-/// # Поля
-/// * `op` — операция: "AND", "OR", "XOR", "NOT".
-/// * `dest` — ключ, в который сохраняется результат.
-/// * `keys` — список ключей-операндов.
 #[derive(Debug)]
 pub struct BitOpCommand {
     pub op: String,
@@ -155,6 +131,7 @@ impl CommandExecute for BitOpCommand {
     }
 }
 
+/// Команда BITPOS — находит позицию первого бита со значением 0 или 1 в bitmap.
 #[derive(Debug)]
 pub struct BitPosCommand {
     pub key: String,
@@ -168,13 +145,17 @@ impl CommandExecute for BitPosCommand {
         &self,
         _store: &mut StorageEngine,
     ) -> Result<Value, StoreError> {
-        unimplemented!()
+        unimplemented!("BITPOS is not implemented yet")
     }
 
     fn command_name(&self) -> &'static str {
         "BITPOS"
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
