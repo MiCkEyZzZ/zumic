@@ -205,24 +205,28 @@ release-all: ## Full release cycle: prepare-release + tests + push
 
 ##@ Property testing commands
 .PHONY: proptest proptest-quick proptest-long proptest-verbose proptest-coverage proptest-continuous proptest-timing \
-        proptest-zdb proptest-hll proptest-all \
+        proptest-zdb proptest-hll property_skiplist proptest-all \
         stress-test stress-test-quick endurance-test test-all find-bugs-fast
 
 proptest-quick: ## Quick property tests (100 cases)
 	PROPTEST_CASES=100 cargo test --test property_tests
 	PROPTEST_CASES=100 cargo test --test hll_property_tests
+	PROPTEST_CASES=100 cargo test --test skiplist_property_tests
 
 proptest: ## Regular property tests (default)
 	cargo test --test property_tests
 	cargo test --test hll_property_tests
+	cargo test --test skiplist_property_tests
 
 proptest-long: ## Long property testing
 	PROPTEST_CASES=10000 cargo test --test property_tests
 	PROPTEST_CASES=10000 cargo test --test hll_property_tests
+	PROPTEST_CASES=10000 cargo test --test skiplist_property_tests
 
 proptest-verbose: ## Verbose output for property tests
 	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test property_tests -- --nocapture
 	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test hll_property_tests -- --nocapture
+	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test skiplist_property_tests -- --nocapture
 
 proptest-zdb: ## ZDB-only property tests
 	cargo test --test property_tests
@@ -230,8 +234,17 @@ proptest-zdb: ## ZDB-only property tests
 proptest-hll: ## HLL-only property tests
 	cargo test --test hll_property_tests
 
+proptest-skiplist: ## SkipList-only property tests
+	cargo test --test skiplist_property_tests
+
 proptest-hll-quick: ## Quick HLL property tests (100 cases)
 	PROPTEST_CASES=100 cargo test --test hll_property_tests
+
+proptest-skiplist-quick: ## Quick SkipList property tests (100 cases)
+	PROPTEST_CASES=100 cargo test --test skiplist_property_tests
+
+proptest-skiplist-long: ## Long SkipList property tests (10000 cases)
+	PROPTEST_CASES=10000 cargo test --test skiplist_property_tests
 
 proptest-hll-long: ## Long HLL property tests (10000 cases)
 	PROPTEST_CASES=10000 cargo test --test hll_property_tests
@@ -239,18 +252,23 @@ proptest-hll-long: ## Long HLL property tests (10000 cases)
 proptest-hll-verbose: ## Verbose HLL property tests
 	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test hll_property_tests -- --nocapture
 
+proptest-skiplist-verbose: ## Verbose SkipList property tests
+	PROPTEST_CASES=1000 RUST_LOG=debug cargo test --test skiplist_property_tests -- --nocapture
+
 proptest-all: ## All property tests (ZDB + HLL + others)
 	$(MAKE) proptest-zdb
 	$(MAKE) proptest-hll
+	$(MAKE) proptest-skiplist
 
 proptest-coverage: ## Property test coverage generation (tarpaulin, HTML)
-	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests --test hll_property_tests
+	cargo tarpaulin --tests --out Html --output-dir coverage/ --test property_tests --test hll_property_tests --test skiplist_property_tests
 
 proptest-continuous: ## Continuous property testing loop (use with caution)
 	while true; do \
 		echo "Running property tests iteration $$(date)"; \
 		PROPTEST_CASES=1000 cargo test --test property_tests || break; \
 		PROPTEST_CASES=1000 cargo test --test hll_property_tests || break; \
+		PROPTEST_CASES=1000 cargo test --test skiplist_property_tests || break; \
 		sleep 60; \
 	done
 
@@ -259,6 +277,8 @@ proptest-timing: ## Measure execution time of property tests
 	time PROPTEST_CASES=1000 cargo test --test property_tests
 	@echo "==> HLL property tests timing:"
 	time PROPTEST_CASES=1000 cargo test --test hll_property_tests
+	@echo "==> SkipList property tests timing:"
+	time PROPTEST_CASES=1000 cargo test --test skiplist_property_tests
 
 stress-test: ## Run stress tests (slow, many iterations)
 	PROPTEST_CASES=10000 cargo test --test stress_tests
@@ -278,6 +298,8 @@ test-all: ## Complete test suite (unit + integration + property + stress)
 	$(MAKE) proptest-zdb
 	@echo "==> Running property tests (HLL)..."
 	$(MAKE) proptest-hll
+	@echo "==> Running property tests (SkipList)..."
+	$(MAKE) proptest-skiplist
 	@echo "==> Running stress tests (quick)..."
 	$(MAKE) stress-test-quick
 	@echo "✅ All tests passed!"

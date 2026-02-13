@@ -180,6 +180,58 @@ impl CommandExecute for GeoRadiusByMemberCommand {
     }
 }
 
+/// Команда GEOHASH — возвращает geohash для указанных участников.
+#[derive(Debug)]
+pub struct GoHashCommand {
+    pub key: String,
+    pub members: Vec<String>,
+}
+
+impl CommandExecute for GoHashCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!("GEOHASH is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GEOHASH"
+    }
+}
+
+/// Источник поиска для GEOSEARCH
+#[derive(Debug)]
+pub enum GeoSearchFrom {
+    Member(String),
+    LoLat { lon: f64, lat: f64 },
+}
+
+/// Команда GEOSEARCH — универсальный поиск по гео-набору.
+#[derive(Debug)]
+pub struct GeoSearchCommand {
+    pub key: String,
+    pub from: GeoSearchFrom,
+    pub radius: f64,
+    pub unit: Option<String>, // м, км и т.д.
+    pub with_dist: bool,
+    pub with_coord: bool,
+    pub count: Option<usize>,
+}
+
+impl CommandExecute for GeoSearchCommand {
+    fn execute(
+        &self,
+        _store: &mut StorageEngine,
+    ) -> Result<Value, StoreError> {
+        unimplemented!("GEOSEARCH is not implemented yet")
+    }
+
+    fn command_name(&self) -> &'static str {
+        "GEOSEARCH"
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
