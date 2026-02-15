@@ -58,10 +58,7 @@ where
         let mut guard = self.inner.write().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_write(elapsed);
 
         let old_len = guard.len();
         guard.insert(key, value);
@@ -81,10 +78,7 @@ where
         let guard = self.inner.read().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_read(elapsed);
 
         guard.search(key).cloned()
     }
@@ -97,10 +91,7 @@ where
         let mut guard = self.inner.write().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_write(elapsed);
 
         let result = guard.remove(key);
 
@@ -132,10 +123,7 @@ where
         let mut guard = self.inner.write().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_write(elapsed);
 
         guard.clear();
 
@@ -147,10 +135,7 @@ where
         let guard = self.inner.read().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_read(elapsed);
 
         guard.first().map(|(k, v)| (k.clone(), v.clone()))
     }
@@ -160,10 +145,7 @@ where
         let guard = self.inner.read().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_read(elapsed);
 
         guard.last().map(|(k, v)| (k.clone(), v.clone()))
     }
@@ -194,16 +176,14 @@ where
         loop {
             if let Ok(guard) = self.inner.try_read() {
                 let elapsed = start.elapsed().as_nanos() as u64;
-                self.metrics
-                    .total_wait_time_ns
-                    .fetch_add(elapsed, Ordering::Relaxed);
-                self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
+                self.metrics.inc_read(elapsed);
 
                 return guard.search(key).cloned();
             }
 
             if start.elapsed() > timeout {
-                self.metrics.lock_failures.fetch_add(1, Ordering::Relaxed);
+                self.metrics.inc_failure();
                 return None;
             }
 
@@ -222,10 +202,8 @@ where
         loop {
             if let Ok(mut guard) = self.inner.try_write() {
                 let elapsed = start.elapsed().as_nanos() as u64;
-                self.metrics
-                    .total_wait_time_ns
-                    .fetch_add(elapsed, Ordering::Relaxed);
-                self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+
+                self.metrics.inc_write(elapsed);
 
                 let old_len = guard.len();
                 guard.insert(key, value);
@@ -239,7 +217,7 @@ where
             }
 
             if start.elapsed() > timeout {
-                self.metrics.lock_failures.fetch_add(1, Ordering::Relaxed);
+                self.metrics.inc_failure();
                 return false;
             }
 
@@ -258,10 +236,7 @@ where
         let guard = self.inner.read().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_read(elapsed);
 
         f(guard)
     }
@@ -277,16 +252,29 @@ where
         let mut guard = self.inner.write().unwrap();
         let elapsed = start.elapsed().as_nanos() as u64;
 
-        self.metrics
-            .total_wait_time_ns
-            .fetch_add(elapsed, Ordering::Relaxed);
-        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+        self.metrics.inc_write(elapsed);
 
         let result = f(&mut guard);
 
         self.cached_length.store(guard.len(), Ordering::Relaxed);
 
         result
+    }
+
+    pub fn reset_metrics(&self) {
+        self.metrics.reset();
+    }
+
+    pub fn snapshot_and_reset(&self) -> ContentionSnapshot {
+        // Снимаем текущие значения
+        let snapshot = ContentionSnapshot {
+            read_locks: self.metrics.read_locks.swap(0, Ordering::Relaxed),
+            write_locks: self.metrics.write_locks.swap(0, Ordering::Relaxed),
+            lock_failures: self.metrics.lock_failures.swap(0, Ordering::Relaxed),
+            total_wait_time_ns: self.metrics.total_wait_time_ns.swap(0, Ordering::Relaxed),
+        };
+
+        snapshot
     }
 }
 
@@ -386,6 +374,40 @@ impl ContentionSnapshot {
     }
 }
 
+impl ContentionMetrics {
+    pub fn reset(&self) {
+        self.read_locks.store(0, Ordering::Relaxed);
+        self.write_locks.store(0, Ordering::Relaxed);
+        self.lock_failures.store(0, Ordering::Relaxed);
+        self.total_wait_time_ns.store(0, Ordering::Relaxed);
+    }
+
+    #[inline(always)]
+    pub fn inc_read(
+        &self,
+        duration_ns: u64,
+    ) {
+        self.read_locks.fetch_add(1, Ordering::Relaxed);
+        self.total_wait_time_ns
+            .fetch_add(duration_ns, Ordering::Relaxed);
+    }
+
+    #[inline(always)]
+    pub fn inc_write(
+        &self,
+        duration_ns: u64,
+    ) {
+        self.write_locks.fetch_add(1, Ordering::Relaxed);
+        self.total_wait_time_ns
+            .fetch_add(duration_ns, Ordering::Relaxed);
+    }
+
+    #[inline(always)]
+    pub fn inc_failure(&self) {
+        self.lock_failures.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Общие реализации трейтов для ConcurrentSkipList
 ////////////////////////////////////////////////////////////////////////////////
@@ -416,7 +438,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{sync::Barrier, thread, time::Duration};
 
     use super::*;
 
@@ -853,5 +875,125 @@ mod tests {
         };
 
         assert!(snapshot.is_contended());
+    }
+
+    #[test]
+    fn test_try_insert_timeout_records_failure() {
+        let list = ConcurrentSkipList::new();
+        let barrier = Arc::new(Barrier::new(2));
+        let b = barrier.clone();
+        let list_holder = list.clone();
+
+        let holder = thread::spawn(move || {
+            // внутри with_write мы держим write-lock до выхода из замыкания
+            list_holder.with_write(|_guard| {
+                // сигнализируем, что держим lock
+                b.wait();
+                // держим lock дольше, чем таймаут теста
+                std::thread::sleep(Duration::from_millis(200));
+            });
+        });
+
+        // ждём, пока holder реально захватит lock
+        barrier.wait();
+
+        // короткий таймаут - должен вернуть false и увеличить счётчик неудач
+        let ok = list.try_insert(42, "v", Duration::from_millis(50));
+        assert!(
+            !ok,
+            "try_insert must time out and return false under contention"
+        );
+
+        holder.join().unwrap();
+
+        let snap = list.metrics();
+        assert!(
+            snap.lock_failures > 0,
+            "lock_failures must be > 0 after try_insert timeout"
+        );
+    }
+
+    #[test]
+    fn test_try_search_timeout_records_failure() {
+        let list = ConcurrentSkipList::new();
+        // наполним список, чтобы search не возвращал None по другой причине
+        list.insert(1, 1);
+
+        let barrier = Arc::new(Barrier::new(2));
+        let b = barrier.clone();
+        let list_holder = list.clone();
+
+        let holder = thread::spawn(move || {
+            list_holder.with_write(|_g| {
+                b.wait();
+                std::thread::sleep(Duration::from_millis(200));
+            });
+        });
+
+        barrier.wait();
+
+        let res = list.try_search(&1, Duration::from_millis(50));
+        assert_eq!(res, None);
+        holder.join().unwrap();
+
+        let snap = list.metrics();
+        assert!(snap.lock_failures > 0);
+    }
+
+    #[test]
+    fn test_reset_metrics_works() {
+        let list = ConcurrentSkipList::new();
+        list.insert(1, "one");
+        list.search(&1);
+        list.remove(&1);
+
+        let before = list.metrics();
+        assert!(before.read_locks > 0 || before.write_locks > 0 || before.total_wait_time_ns > 0);
+
+        list.reset_metrics();
+        let after = list.metrics();
+        assert_eq!(after.read_locks, 0);
+        assert_eq!(after.write_locks, 0);
+        assert_eq!(after.lock_failures, 0);
+        assert_eq!(after.total_wait_time_ns, 0);
+    }
+
+    #[test]
+    fn test_snapshot_format_report_contains_fields() {
+        let snap = ContentionSnapshot {
+            read_locks: 3,
+            write_locks: 1,
+            lock_failures: 1,
+            total_wait_time_ns: 10_000,
+        };
+        let s = snap.format_report();
+        assert!(s.contains("Read locks"));
+        assert!(s.contains("Write locks"));
+        assert!(s.contains("Avg wait"));
+    }
+
+    #[test]
+    fn smoke_stress_no_panic() {
+        use std::sync::Arc;
+        let list = Arc::new(ConcurrentSkipList::new());
+        let mut handles = vec![];
+        for t in 0..8 {
+            let l = Arc::clone(&list);
+            handles.push(thread::spawn(move || {
+                for i in 0..1000 {
+                    l.insert(i + t * 10000, i);
+                    if i % 3 == 0 {
+                        let _ = l.search(&(i + t * 10000));
+                    }
+                    if i % 5 == 0 {
+                        l.remove(&(i + t * 10000));
+                    }
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        // неassert на конкретное число — главное, чтобы не упало
     }
 }
