@@ -143,12 +143,28 @@ where
     }
 
     pub fn first(&self) -> Option<(K, V)> {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         guard.first().map(|(k, v)| (k.clone(), v.clone()))
     }
 
     pub fn last(&self) -> Option<(K, V)> {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         guard.last().map(|(k, v)| (k.clone(), v.clone()))
     }
 
@@ -238,7 +254,15 @@ where
     where
         F: FnOnce(RwLockReadGuard<SkipList<K, V>>) -> R,
     {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         f(guard)
     }
 
@@ -249,9 +273,19 @@ where
     where
         F: FnOnce(&mut SkipList<K, V>) -> R,
     {
+        let start = Instant::now();
         let mut guard = self.inner.write().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+
         let result = f(&mut guard);
+
         self.cached_length.store(guard.len(), Ordering::Relaxed);
+
         result
     }
 }
@@ -321,7 +355,7 @@ impl ContentionSnapshot {
         }
     }
 
-    pub fn is_countended(&self) -> bool {
+    pub fn is_contended(&self) -> bool {
         self.lock_failures > 0
     }
 
@@ -818,6 +852,6 @@ mod tests {
             total_wait_time_ns: 1000,
         };
 
-        assert!(snapshot.is_countended());
+        assert!(snapshot.is_contended());
     }
 }
