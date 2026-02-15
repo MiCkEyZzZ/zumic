@@ -32,6 +32,10 @@ pub struct ContentionSnapshot {
     pub total_wait_time_ns: u64,
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
 impl<K, V> ConcurrentSkipList<K, V>
 where
     K: Ord + Clone + Default + Debug,
@@ -252,6 +256,78 @@ where
     }
 }
 
+impl ContentionSnapshot {
+    pub fn average_wait_time_ns(&self) -> f64 {
+        let total_locks = self.read_locks + self.write_locks;
+
+        if total_locks == 0 {
+            0.0
+        } else {
+            self.total_wait_time_ns as f64 / total_locks as f64
+        }
+    }
+
+    pub fn read_write_ratio(&self) -> f64 {
+        if self.write_locks == 0 {
+            f64::INFINITY
+        } else {
+            self.read_locks as f64 / self.write_locks as f64
+        }
+    }
+
+    pub fn failure_rate(&self) -> f64 {
+        let total_attempts = self.read_locks + self.write_locks + self.lock_failures;
+
+        if total_attempts == 0 {
+            0.0
+        } else {
+            self.lock_failures as f64 / total_attempts as f64
+        }
+    }
+
+    pub fn total_locks(&self) -> usize {
+        self.read_locks + self.write_locks
+    }
+
+    pub fn contention_rate(&self) -> f64 {
+        if self.total_locks() == 0 {
+            0.0
+        } else {
+            self.lock_failures as f64 / self.total_locks() as f64
+        }
+    }
+
+    pub fn avg_wait_time_us(&self) -> f64 {
+        self.average_wait_time_ns() / 1000.0
+    }
+
+    pub fn avg_wait_time_ms(&self) -> f64 {
+        self.average_wait_time_ns() / 1_000_000.0
+    }
+
+    pub fn format_report(&self) -> String {
+        format!(
+            "Contention Metrics:\n\
+                Read locks: {}\n\
+                Write locks: {}\n\
+                Lock failures: {}\n\
+                R/W ratio: {:.2}\n\
+                Failure rate: {:.2}%\n\
+                Avg wait time: {:.2} µs\n",
+            self.read_locks,
+            self.write_locks,
+            self.lock_failures,
+            self.read_write_ratio(),
+            self.failure_rate() * 100.0,
+            self.average_wait_time_ns() / 1000.0
+        )
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для ConcurrentSkipList
+////////////////////////////////////////////////////////////////////////////////
+
 impl<K, V> Clone for ConcurrentSkipList<K, V> {
     fn clone(&self) -> Self {
         Self {
@@ -271,6 +347,10 @@ where
         Self::new()
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
