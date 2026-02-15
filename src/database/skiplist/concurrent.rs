@@ -2,12 +2,12 @@ use std::{
     fmt::Debug,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc, RwLock,
+        Arc, RwLock, RwLockReadGuard,
     },
     time::{Duration, Instant},
 };
 
-use super::SkipList;
+use super::{SkipList, ValidationError};
 
 #[derive(Debug)]
 pub struct ConcurrentSkipList<K, V> {
@@ -148,6 +148,11 @@ where
         guard.last().map(|(k, v)| (k.clone(), v.clone()))
     }
 
+    pub fn validate_invariants(&self) -> Result<(), ValidationError> {
+        let guard = self.inner.read().unwrap();
+        guard.validate_invariants()
+    }
+
     pub fn metrics(&self) -> ContentionSnapshot {
         ContentionSnapshot {
             read_locks: self.metrics.read_locks.load(Ordering::Relaxed),
@@ -220,6 +225,30 @@ where
 
             std::thread::yield_now();
         }
+    }
+
+    pub fn with_read<F, R>(
+        &self,
+        f: F,
+    ) -> R
+    where
+        F: FnOnce(RwLockReadGuard<SkipList<K, V>>) -> R,
+    {
+        let guard = self.inner.read().unwrap();
+        f(guard)
+    }
+
+    pub fn with_write<F, R>(
+        &self,
+        f: F,
+    ) -> R
+    where
+        F: FnOnce(&mut SkipList<K, V>) -> R,
+    {
+        let mut guard = self.inner.write().unwrap();
+        let result = f(&mut guard);
+        self.cached_length.store(guard.len(), Ordering::Relaxed);
+        result
     }
 }
 
@@ -449,5 +478,178 @@ mod tests {
         assert!(metrics.read_locks > 0);
         assert!(metrics.write_locks > 0);
         assert!(metrics.total_wait_time_ns > 0);
+    }
+
+    #[test]
+    fn test_validate_invariants_after_operations() {
+        let list = ConcurrentSkipList::new();
+
+        for i in 0..1000 {
+            list.insert(i, i);
+        }
+
+        for i in 0..500 {
+            list.remove(&i);
+        }
+
+        assert!(list.validate_invariants().is_ok());
+    }
+
+    #[test]
+    fn test_validate_invariants_concurrent() {
+        let list = ConcurrentSkipList::new();
+        let mut handles = vec![];
+
+        for t in 0..4 {
+            let list_c = list.clone();
+            handles.push(thread::spawn(move || {
+                for i in 0..500 {
+                    list_c.insert(i + t * 1000, i);
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert!(list.validate_invariants().is_ok());
+    }
+
+    #[test]
+    fn test_with_read_access() {
+        let list = ConcurrentSkipList::new();
+
+        list.insert(10, 20);
+
+        let result = list.with_read(|guard| guard.search(&10).cloned());
+
+        assert_eq!(result, Some(20));
+    }
+
+    #[test]
+    fn test_with_read_concurrent() {
+        let list = ConcurrentSkipList::new();
+        let mut handles = vec![];
+
+        for i in 0..100 {
+            list.insert(i, i);
+        }
+
+        for _ in 0..8 {
+            let list_c = list.clone();
+            handles.push(thread::spawn(move || {
+                list_c.with_read(|guard| {
+                    for i in 0..100 {
+                        assert_eq!(guard.search(&i).cloned(), Some(i));
+                    }
+                })
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn test_with_write_insert() {
+        let list = ConcurrentSkipList::new();
+
+        list.with_write(|guard| {
+            guard.insert(1, 100);
+        });
+
+        assert_eq!(list.search(&1), Some(100));
+    }
+
+    #[test]
+    fn test_with_write_concurrent() {
+        let list = ConcurrentSkipList::new();
+        let mut handles = vec![];
+
+        for t in 0..4 {
+            let list_c = list.clone();
+
+            handles.push(thread::spawn(move || {
+                list_c.with_write(|guard| {
+                    for i in 0..100 {
+                        guard.insert(i + t * 1000, i);
+                    }
+                });
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert_eq!(list.len(), 400);
+    }
+
+    #[test]
+    fn test_with_write_cached_length_consistency_after_mutations() {
+        let list = ConcurrentSkipList::new();
+
+        list.with_write(|guard| {
+            for i in 0..100 {
+                guard.insert(i, i);
+            }
+        });
+
+        assert_eq!(list.len(), 100);
+
+        list.with_write(|guard| {
+            for i in 0..50 {
+                guard.remove(&i);
+            }
+        });
+
+        assert_eq!(list.len(), 50);
+
+        list.with_write(|guard| {
+            guard.clear();
+        });
+
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_invariants_under_heavy_concurrency() {
+        let list = ConcurrentSkipList::new();
+        let mut handles = vec![];
+
+        for t in 0..8 {
+            let list_c = list.clone();
+
+            handles.push(thread::spawn(move || {
+                for i in 0..1000 {
+                    list_c.insert(i + t * 10000, i);
+
+                    if i % 2 == 0 {
+                        list_c.remove(&(i + t * 10000));
+                    }
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert!(list.validate_invariants().is_ok());
+    }
+
+    #[test]
+    fn test_with_write_cached_length_consistency() {
+        let list = ConcurrentSkipList::new();
+
+        list.with_write(|guard| {
+            for i in 0..100 {
+                guard.insert(i, i);
+            }
+        });
+
+        assert_eq!(list.len(), 100);
     }
 }
