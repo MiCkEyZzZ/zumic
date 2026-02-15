@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -21,7 +21,7 @@ pub struct ContentionMetrics {
     pub read_locks: AtomicUsize,
     pub write_locks: AtomicUsize,
     pub lock_failures: AtomicUsize,
-    pub total_wait_time_ns: AtomicUsize,
+    pub total_wait_time_ns: AtomicU64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +29,7 @@ pub struct ContentionSnapshot {
     pub read_locks: usize,
     pub write_locks: usize,
     pub lock_failures: usize,
-    pub total_wait_time_ns: usize,
+    pub total_wait_time_ns: u64,
 }
 
 impl<K, V> ConcurrentSkipList<K, V>
@@ -52,7 +52,7 @@ where
     ) {
         let start = Instant::now();
         let mut guard = self.inner.write().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics
             .total_wait_time_ns
@@ -75,7 +75,7 @@ where
     ) -> Option<V> {
         let start = Instant::now();
         let guard = self.inner.read().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics
             .total_wait_time_ns
@@ -90,18 +90,18 @@ where
         key: &K,
     ) -> Option<V> {
         let start = Instant::now();
-        let mut gurard = self.inner.write().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let mut guard = self.inner.write().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics
             .total_wait_time_ns
             .fetch_add(elapsed, Ordering::Relaxed);
         self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
 
-        let result = gurard.remove(key);
+        let result = guard.remove(key);
 
-        if result.is_none() {
-            let new_len = gurard.len();
+        if result.is_some() {
+            let new_len = guard.len();
             self.cached_length.store(new_len, Ordering::Relaxed);
         }
 
@@ -114,6 +114,38 @@ where
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn contains(
+        &self,
+        key: &K,
+    ) -> bool {
+        self.search(key).is_some()
+    }
+
+    pub fn clear(&self) {
+        let start = Instant::now();
+        let mut guard = self.inner.write().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+
+        guard.clear();
+
+        self.cached_length.store(0, Ordering::Relaxed);
+    }
+
+    pub fn first(&self) -> Option<(K, V)> {
+        let guard = self.inner.read().unwrap();
+        guard.first().map(|(k, v)| (k.clone(), v.clone()))
+    }
+
+    pub fn last(&self) -> Option<(K, V)> {
+        let guard = self.inner.read().unwrap();
+        guard.last().map(|(k, v)| (k.clone(), v.clone()))
     }
 
     pub fn metrics(&self) -> ContentionSnapshot {
@@ -136,7 +168,7 @@ where
         // В позже можно использовать parking_lot::RwLock с try_read_for()
         loop {
             if let Ok(guard) = self.inner.try_read() {
-                let elapsed = start.elapsed().as_nanos() as usize;
+                let elapsed = start.elapsed().as_nanos() as u64;
                 self.metrics
                     .total_wait_time_ns
                     .fetch_add(elapsed, Ordering::Relaxed);
@@ -164,7 +196,7 @@ where
 
         loop {
             if let Ok(mut guard) = self.inner.try_write() {
-                let elapsed = start.elapsed().as_nanos() as usize;
+                let elapsed = start.elapsed().as_nanos() as u64;
                 self.metrics
                     .total_wait_time_ns
                     .fetch_add(elapsed, Ordering::Relaxed);
@@ -210,9 +242,6 @@ where
         Self::new()
     }
 }
-
-unsafe impl<K, V> Send for ConcurrentSkipList<K, V> {}
-unsafe impl<K, V> Sync for ConcurrentSkipList<K, V> {}
 
 #[cfg(test)]
 mod tests {
@@ -305,5 +334,120 @@ mod tests {
 
         // try_search должен успеть
         assert_eq!(list.try_search(&1, Duration::from_secs(1)), Some("one"));
+    }
+
+    #[test]
+    fn test_concurrent_remove_clear() {
+        let list = ConcurrentSkipList::new();
+
+        for i in 0..100 {
+            list.insert(i, i);
+        }
+
+        let list1 = list.clone();
+        let list2 = list.clone();
+
+        let remover = thread::spawn(move || {
+            for i in 0..50 {
+                list1.remove(&i);
+            }
+        });
+
+        let cleaner = thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(10));
+            list2.clear();
+        });
+
+        remover.join().unwrap();
+        cleaner.join().unwrap();
+
+        assert_eq!(list.len(), 0);
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_cached_length_consistency() {
+        let list = ConcurrentSkipList::new();
+
+        for i in 0..1000 {
+            list.insert(i, i);
+        }
+
+        assert_eq!(list.len(), 1000);
+
+        for i in 0..500 {
+            list.remove(&i);
+        }
+
+        assert_eq!(list.len(), 500);
+    }
+
+    #[test]
+    fn test_first_last_concurrent() {
+        let list = ConcurrentSkipList::new();
+
+        for i in 1..=100 {
+            list.insert(i, i);
+        }
+
+        let list_r = list.clone();
+        let reader = thread::spawn(move || {
+            for _ in 0..50 {
+                let f = list_r.first().unwrap();
+                let l = list_r.last().unwrap();
+                assert!(f.0 <= l.0);
+            }
+        });
+
+        reader.join().unwrap();
+    }
+
+    #[test]
+    fn test_try_operations_contention() {
+        let list = ConcurrentSkipList::new();
+
+        let mut handles = vec![];
+
+        for _ in 0..5 {
+            let list_c = list.clone();
+            handles.push(thread::spawn(move || {
+                for j in 0..100 {
+                    let _ = list_c.try_insert(j, j, Duration::from_millis(1));
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // Проверяем, что cached_length <= 100
+        assert!(list.len() <= 100);
+    }
+
+    #[test]
+    fn test_metrics_under_load() {
+        let list = ConcurrentSkipList::new();
+
+        let mut handles = vec![];
+
+        for _ in 0..10 {
+            let list_c = list.clone();
+            handles.push(thread::spawn(move || {
+                for j in 0..100 {
+                    list_c.insert(j, j);
+                    let _ = list_c.search(&j);
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let metrics = list.metrics();
+        assert!(metrics.read_locks > 0);
+        assert!(metrics.write_locks > 0);
+        assert!(metrics.total_wait_time_ns > 0);
     }
 }
