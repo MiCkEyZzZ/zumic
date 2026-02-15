@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/smarthash_benchmark/smarthash_bench.rs"
+path = "benches/skiplist_benchmark/skiplist.rs"
 harness = false
 
 [lints]
