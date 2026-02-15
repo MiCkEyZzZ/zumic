@@ -23,7 +23,7 @@ proptest! {
                     prop_assert_eq!(r1, r2);
                 }
                 2 => { // search
-                    let r1 = sl.search(&key);
+                    let r1 = sl.search(&key).cloned();
                     let r2 = map.get(&key).cloned();
                     prop_assert_eq!(r1, r2);
                 }
@@ -35,8 +35,12 @@ proptest! {
         }
 
         // финальная проверка порядка
-        let sl_items: Vec<_> = sl.iter().collect();
-        let map_items: Vec<_> = map.into_iter().collect();
+        let sl_items: Vec<_> =
+            sl.iter().map(|(k,v)| (*k,*v)).collect();
+
+        let map_items: Vec<_> =
+            map.into_iter().collect();
+
         prop_assert_eq!(sl_items, map_items);
     }
 }
@@ -54,9 +58,9 @@ proptest! {
 
         for (k, _) in sl.iter() {
             if let Some(p) = prev {
-                prop_assert!(k > p);
+                prop_assert!(*k > p);
             }
-            prev = Some(k);
+            prev = Some(*k);
         }
 
         prop_assert!(sl.validate_invariants().is_ok());
