@@ -143,12 +143,28 @@ where
     }
 
     pub fn first(&self) -> Option<(K, V)> {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         guard.first().map(|(k, v)| (k.clone(), v.clone()))
     }
 
     pub fn last(&self) -> Option<(K, V)> {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         guard.last().map(|(k, v)| (k.clone(), v.clone()))
     }
 
@@ -238,7 +254,15 @@ where
     where
         F: FnOnce(RwLockReadGuard<SkipList<K, V>>) -> R,
     {
+        let start = Instant::now();
         let guard = self.inner.read().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.read_locks.fetch_add(1, Ordering::Relaxed);
+
         f(guard)
     }
 
@@ -249,9 +273,19 @@ where
     where
         F: FnOnce(&mut SkipList<K, V>) -> R,
     {
+        let start = Instant::now();
         let mut guard = self.inner.write().unwrap();
+        let elapsed = start.elapsed().as_nanos() as u64;
+
+        self.metrics
+            .total_wait_time_ns
+            .fetch_add(elapsed, Ordering::Relaxed);
+        self.metrics.write_locks.fetch_add(1, Ordering::Relaxed);
+
         let result = f(&mut guard);
+
         self.cached_length.store(guard.len(), Ordering::Relaxed);
+
         result
     }
 }
@@ -290,10 +324,12 @@ impl ContentionSnapshot {
     }
 
     pub fn contention_rate(&self) -> f64 {
-        if self.total_locks() == 0 {
+        let locks = self.total_locks();
+
+        if locks == 0 {
             0.0
         } else {
-            self.lock_failures as f64 / self.total_locks() as f64
+            self.lock_failures as f64 / locks as f64
         }
     }
 
@@ -305,21 +341,47 @@ impl ContentionSnapshot {
         self.average_wait_time_ns() / 1_000_000.0
     }
 
+    pub fn total_attempts(&self) -> usize {
+        self.read_locks + self.write_locks + self.lock_failures
+    }
+
+    pub fn success_rate(&self) -> f64 {
+        let attempts = self.total_attempts();
+
+        if attempts == 0 {
+            1.0
+        } else {
+            self.total_locks() as f64 / attempts as f64
+        }
+    }
+
+    pub fn is_contended(&self) -> bool {
+        self.lock_failures > 0
+    }
+
+    pub fn average_wait_duration(&self) -> Duration {
+        Duration::from_nanos(self.average_wait_time_ns() as u64)
+    }
+
     pub fn format_report(&self) -> String {
         format!(
             "Contention Metrics:\n\
-                Read locks: {}\n\
-                Write locks: {}\n\
-                Lock failures: {}\n\
-                R/W ratio: {:.2}\n\
-                Failure rate: {:.2}%\n\
-                Avg wait time: {:.2} µs\n",
+                 Read locks: {}\n\
+                 Write locks: {}\n\
+                 Lock failures: {}\n\
+                 Total attempts: {}\n\
+                 Success rate: {:.2}%\n\
+                 Failure rate: {:.2}%\n\
+                 R/W ratio: {:.2}\n\
+                 Avg wait time: {:.2} µs\n",
             self.read_locks,
             self.write_locks,
             self.lock_failures,
-            self.read_write_ratio(),
+            self.total_attempts(),
+            self.success_rate() * 100.0,
             self.failure_rate() * 100.0,
-            self.average_wait_time_ns() / 1000.0
+            self.read_write_ratio(),
+            self.avg_wait_time_us(),
         )
     }
 }
@@ -731,5 +793,65 @@ mod tests {
         });
 
         assert_eq!(list.len(), 100);
+    }
+
+    #[test]
+    fn test_snapshot_total_attempts() {
+        let snapshot = ContentionSnapshot {
+            read_locks: 10,
+            write_locks: 5,
+            lock_failures: 2,
+            total_wait_time_ns: 1000,
+        };
+
+        assert_eq!(snapshot.total_attempts(), 17);
+    }
+
+    #[test]
+    fn test_snapshot_success_rate() {
+        let snapshot = ContentionSnapshot {
+            read_locks: 8,
+            write_locks: 2,
+            lock_failures: 0,
+            total_wait_time_ns: 1000,
+        };
+
+        assert_eq!(snapshot.success_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_snapshot_failure_rate() {
+        let snapshot = ContentionSnapshot {
+            read_locks: 8,
+            write_locks: 2,
+            lock_failures: 10,
+            total_wait_time_ns: 1000,
+        };
+
+        assert!((snapshot.failure_rate() - 0.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_snapshot_avg_wait() {
+        let snapshot = ContentionSnapshot {
+            read_locks: 5,
+            write_locks: 5,
+            lock_failures: 0,
+            total_wait_time_ns: 1000,
+        };
+
+        assert_eq!(snapshot.average_wait_time_ns(), 100.0);
+    }
+
+    #[test]
+    fn test_snapshot_is_contended() {
+        let snapshot = ContentionSnapshot {
+            read_locks: 5,
+            write_locks: 5,
+            lock_failures: 1,
+            total_wait_time_ns: 1000,
+        };
+
+        assert!(snapshot.is_contended());
     }
 }
