@@ -2,10 +2,12 @@ use std::{
     fmt::Debug,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc, RwLock, RwLockReadGuard,
+        Arc,
     },
     time::{Duration, Instant},
 };
+
+use parking_lot::{RwLock, RwLockReadGuard};
 
 use super::{SkipList, ValidationError};
 
@@ -55,7 +57,7 @@ where
         value: V,
     ) {
         let start = Instant::now();
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_write(elapsed);
@@ -75,7 +77,7 @@ where
         key: &K,
     ) -> Option<V> {
         let start = Instant::now();
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_read(elapsed);
@@ -88,7 +90,7 @@ where
         key: &K,
     ) -> Option<V> {
         let start = Instant::now();
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_write(elapsed);
@@ -120,7 +122,7 @@ where
 
     pub fn clear(&self) {
         let start = Instant::now();
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_write(elapsed);
@@ -132,7 +134,7 @@ where
 
     pub fn first(&self) -> Option<(K, V)> {
         let start = Instant::now();
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_read(elapsed);
@@ -142,7 +144,7 @@ where
 
     pub fn last(&self) -> Option<(K, V)> {
         let start = Instant::now();
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_read(elapsed);
@@ -151,7 +153,7 @@ where
     }
 
     pub fn validate_invariants(&self) -> Result<(), ValidationError> {
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read();
         guard.validate_invariants()
     }
 
@@ -171,24 +173,14 @@ where
     ) -> Option<V> {
         let start = Instant::now();
 
-        // Простая реализация timeout через polling
-        // В позже можно использовать parking_lot::RwLock с try_read_for()
-        loop {
-            if let Ok(guard) = self.inner.try_read() {
-                let elapsed = start.elapsed().as_nanos() as u64;
-
-                self.metrics.inc_read(elapsed);
-
-                return guard.search(key).cloned();
-            }
-
-            if start.elapsed() > timeout {
-                self.metrics.inc_failure();
-                return None;
-            }
-
-            std::thread::yield_now();
+        if let Some(guard) = self.inner.try_read_for(timeout) {
+            let elapsed = start.elapsed().as_nanos() as u64;
+            self.metrics.inc_read(elapsed);
+            return guard.search(key).cloned();
         }
+
+        self.metrics.inc_failure();
+        None
     }
 
     pub fn try_insert(
@@ -199,30 +191,25 @@ where
     ) -> bool {
         let start = std::time::Instant::now();
 
-        loop {
-            if let Ok(mut guard) = self.inner.try_write() {
-                let elapsed = start.elapsed().as_nanos() as u64;
+        if let Some(mut guard) = self.inner.try_write_for(timeout) {
+            let elapsed = start.elapsed().as_nanos() as u64;
+            self.metrics.inc_write(elapsed);
 
-                self.metrics.inc_write(elapsed);
+            let old_len = guard.len();
+            guard.insert(key, value);
 
-                let old_len = guard.len();
-                guard.insert(key, value);
-                let new_len = guard.len();
+            let new_len = guard.len();
 
-                if new_len != old_len {
-                    self.cached_length.store(new_len, Ordering::Relaxed);
-                }
-
-                return true;
+            if new_len != old_len {
+                self.cached_length.store(new_len, Ordering::Relaxed);
             }
 
-            if start.elapsed() > timeout {
-                self.metrics.inc_failure();
-                return false;
-            }
-
-            std::thread::yield_now();
+            return true;
         }
+
+        self.metrics.inc_failure();
+
+        false
     }
 
     pub fn with_read<F, R>(
@@ -233,7 +220,7 @@ where
         F: FnOnce(RwLockReadGuard<SkipList<K, V>>) -> R,
     {
         let start = Instant::now();
-        let guard = self.inner.read().unwrap();
+        let guard = self.inner.read();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_read(elapsed);
@@ -249,7 +236,7 @@ where
         F: FnOnce(&mut SkipList<K, V>) -> R,
     {
         let start = Instant::now();
-        let mut guard = self.inner.write().unwrap();
+        let mut guard = self.inner.write();
         let elapsed = start.elapsed().as_nanos() as u64;
 
         self.metrics.inc_write(elapsed);

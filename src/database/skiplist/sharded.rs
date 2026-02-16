@@ -50,6 +50,7 @@ where
         let shards: Vec<_> = (0..num_shards)
             .map(|_| Arc::new(RwLock::new(SkipList::new())))
             .collect();
+
         let shard_metrics: Vec<_> = (0..num_shards)
             .map(|_| Arc::new(ShardMetrics::default()))
             .collect();

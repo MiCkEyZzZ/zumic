@@ -418,8 +418,8 @@ impl SlotManager {
                     }
                 }
 
-                overloaded_shards.sort_by(|a, b| b.1.cmp(&a.1));
-                underloaded_shards.sort_by(|a, b| a.1.cmp(&b.1));
+                overloaded_shards.sort_by_key(|b| std::cmp::Reverse(b.1));
+                underloaded_shards.sort_by_key(|a| a.1);
 
                 let assignments = self.slot_assignments.read().unwrap();
 
@@ -498,8 +498,8 @@ impl SlotManager {
             return migrations;
         }
 
-        overloaded.sort_by(|a, b| b.1.cmp(&a.1));
-        underloaded.sort_by(|a, b| a.1.cmp(&b.1));
+        overloaded.sort_by_key(|b| std::cmp::Reverse(b.1));
+        underloaded.sort_by_key(|a| a.1);
 
         let assignments = self.slot_assignments.read().unwrap();
 
@@ -657,7 +657,7 @@ impl SlotManager {
             .map(|(k, &c)| (k.clone(), c))
             .collect();
 
-        hot_keys.sort_by(|a, b| b.1.cmp(&a.1));
+        hot_keys.sort_by_key(|b| std::cmp::Reverse(b.1));
         hot_keys
     }
 
