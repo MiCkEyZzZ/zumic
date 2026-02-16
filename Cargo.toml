@@ -168,7 +168,7 @@ optional = true
 version = "1.3"
 
 [features]
-default = []
+default = ["concurrent"]
 concurrent = []
 fuzz = []
 avx512 = []
@@ -178,3 +178,11 @@ opt-level = 1     # меньше оптимизаций быстрее сбор�
 lto = false       # отключаем link-time optimization (жрет память)
 codegen-units = 1 # пусть компилятор компилирует последовательно
 debug = 1         # сохраняем минимум отладочной информации
+
+[profile.test]
+opt-level = 1
+
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

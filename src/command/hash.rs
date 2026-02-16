@@ -301,7 +301,7 @@ impl CommandExecute for HGetAllCommand {
             Some(Value::Hash(mut sh)) => {
                 // сортируем ключи для предсказуемого порядка
                 let mut entries: Vec<_> = sh.iter().collect();
-                entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+                entries.sort_by_key(|(k1, _)| *k1);
 
                 let result: QuickList<Sds> = QuickList::from_iter(
                     entries

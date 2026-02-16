@@ -348,8 +348,8 @@ mod tests {
         sh.extend(pairs.clone());
         let mut got: Vec<_> = sh.iter().collect();
         let mut expected: Vec<_> = pairs.iter().map(|(k, v)| (k, v)).collect();
-        got.sort_by(|(a, _), (b, _)| a.cmp(b));
-        expected.sort_by(|(a, _), (b, _)| a.cmp(b));
+        got.sort_by_key(|(a, _)| *a);
+        expected.sort_by_key(|(a, _)| *a);
         assert_eq!(got, expected);
     }
 
@@ -390,7 +390,7 @@ mod tests {
         sh.extend(pairs.clone());
         let mut got: Vec<_> = sh.iter().collect();
         // Сортировать по ключу для стабильности
-        got.sort_by(|(a, _), (b, _)| a.cmp(b));
+        got.sort_by_key(|(a, _)| *a);
         let mut expected = pairs.clone();
         expected.sort_by(|(a, _), (b, _)| a.cmp(b));
         let expected_refs: Vec<_> = expected.iter().map(|(k, v)| (k, v)).collect();
