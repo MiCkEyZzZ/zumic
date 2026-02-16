@@ -267,14 +267,12 @@ where
 
     pub fn snapshot_and_reset(&self) -> ContentionSnapshot {
         // Снимаем текущие значения
-        let snapshot = ContentionSnapshot {
+        ContentionSnapshot {
             read_locks: self.metrics.read_locks.swap(0, Ordering::Relaxed),
             write_locks: self.metrics.write_locks.swap(0, Ordering::Relaxed),
             lock_failures: self.metrics.lock_failures.swap(0, Ordering::Relaxed),
             total_wait_time_ns: self.metrics.total_wait_time_ns.swap(0, Ordering::Relaxed),
-        };
-
-        snapshot
+        }
     }
 }
 
