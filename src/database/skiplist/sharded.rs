@@ -2,7 +2,7 @@ use std::{
     fmt::Debug,
     hash::{DefaultHasher, Hash, Hasher},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::Instant,
@@ -29,7 +29,7 @@ struct ShardMetrics {
     inserts: AtomicUsize,
     searches: AtomicUsize,
     removes: AtomicUsize,
-    wait_time_ns: AtomicUsize,
+    wait_time_ns: AtomicU64,
 }
 
 impl<K, V> ShardedSkipList<K, V>
@@ -70,7 +70,7 @@ where
         let shard_idx = self.shard_index(&key);
         let start = std::time::Instant::now();
         let mut guard = self.shards[shard_idx].write().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.shard_metrics[shard_idx]
             .wait_time_ns
@@ -95,7 +95,7 @@ where
         let shard_idx = self.shard_index(key);
         let start = Instant::now();
         let guard = self.shards[shard_idx].read().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.shard_metrics[shard_idx]
             .wait_time_ns
@@ -114,7 +114,7 @@ where
         let shard_idx = self.shard_index(key);
         let start = Instant::now();
         let mut guard = self.shards[shard_idx].write().unwrap();
-        let elapsed = start.elapsed().as_nanos() as usize;
+        let elapsed = start.elapsed().as_nanos() as u64;
 
         self.shard_metrics[shard_idx]
             .wait_time_ns
@@ -126,7 +126,7 @@ where
         let result = guard.remove(key);
 
         if result.is_some() {
-            self.total_length.fetch_add(1, Ordering::Relaxed);
+            self.total_length.fetch_sub(1, Ordering::Relaxed);
         }
 
         result
