@@ -425,4 +425,178 @@ mod tests {
 
         assert!(list.validate_invariants().is_ok());
     }
+
+    #[test]
+    fn test_shard_metrics_update() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, "one");
+        list.insert(2, "two");
+        let _ = list.search(&1);
+        let _ = list.remove(&2);
+
+        let metrics: Vec<_> = list
+            .shard_metrics
+            .iter()
+            .map(|m| {
+                (
+                    m.inserts.load(Ordering::Relaxed),
+                    m.searches.load(Ordering::Relaxed),
+                    m.removes.load(Ordering::Relaxed),
+                    m.wait_time_ns.load(Ordering::Relaxed),
+                )
+            })
+            .collect();
+
+        let total_inserts: usize = metrics.iter().map(|(i, ..)| *i).sum();
+        let total_searches: usize = metrics.iter().map(|(_, s, ..)| *s).sum();
+        let total_removes: usize = metrics.iter().map(|(_, _, r, _)| *r).sum();
+
+        assert_eq!(total_inserts, 2);
+        assert_eq!(total_searches, 1);
+        assert_eq!(total_removes, 1);
+
+        // wait_time_ns должен быть >0 для всех шардов, где были операции
+        assert!(metrics.iter().any(|(_, _, _, t)| *t > 0));
+    }
+
+    #[test]
+    fn test_first_last_empty_shards() {
+        let list = ShardedSkipList::<i32, i32>::with_shards(4);
+        assert_eq!(list.first(), None);
+        assert_eq!(list.last(), None);
+
+        list.insert(42, 100);
+        assert_eq!(list.first(), Some((42, 100)));
+        assert_eq!(list.last(), Some((42, 100)));
+    }
+
+    #[test]
+    fn test_high_concurrency() {
+        use std::sync::Arc;
+        let list = Arc::new(ShardedSkipList::with_shards(16));
+        let mut handles = vec![];
+
+        // 16 потоков пишут
+        for i in 0..16 {
+            let list = Arc::clone(&list);
+            handles.push(thread::spawn(move || {
+                for j in 0..1000 {
+                    list.insert(i * 1000 + j, j);
+                }
+            }));
+        }
+
+        // 16 потоков читают
+        for _ in 0..16 {
+            let list = Arc::clone(&list);
+            handles.push(thread::spawn(move || {
+                for j in 0..16000 {
+                    let _ = list.search(&j);
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // Проверяем, что длина правильная
+        assert_eq!(list.len(), 16 * 1000);
+    }
+
+    #[test]
+    fn test_clear_full_load() {
+        let list = ShardedSkipList::with_shards(4);
+        for i in 0..1000 {
+            list.insert(i, i);
+        }
+
+        assert_eq!(list.len(), 1000);
+        list.clear();
+        assert_eq!(list.len(), 0);
+        for shard_len in list.shard_distribution() {
+            assert_eq!(shard_len, 0);
+        }
+    }
+
+    #[test]
+    fn test_insert_overwrites_value() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, "one");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.search(&1), Some("one"));
+
+        list.insert(1, "uno");
+        assert_eq!(list.len(), 1); // len не увеличился
+        assert_eq!(list.search(&1), Some("uno")); // значение обновилось
+    }
+
+    #[test]
+    fn test_contains_after_remove() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(10, "ten");
+        assert!(list.contains(&10));
+
+        let removed = list.remove(&10);
+        assert_eq!(removed, Some("ten"));
+        assert!(!list.contains(&10));
+    }
+
+    #[test]
+    fn test_first_last_after_removals() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, "one");
+        list.insert(2, "two");
+        list.insert(3, "three");
+
+        assert_eq!(list.first(), Some((1, "one")));
+        assert_eq!(list.last(), Some((3, "three")));
+
+        list.remove(&1);
+        assert_eq!(list.first(), Some((2, "two")));
+
+        list.remove(&3);
+        assert_eq!(list.last(), Some((2, "two")));
+    }
+
+    #[test]
+    fn test_clear_after_partial_removal() {
+        let list = ShardedSkipList::with_shards(4);
+
+        for i in 0..10 {
+            list.insert(i, i);
+        }
+
+        list.remove(&0);
+        list.remove(&9);
+
+        assert_eq!(list.len(), 8);
+        list.clear();
+        assert_eq!(list.len(), 0);
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_shard_metrics_consistency() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, "a");
+        list.insert(2, "b");
+        let _ = list.search(&1);
+        let _ = list.search(&3); // несуществующий
+        let _ = list.remove(&2);
+        let _ = list.remove(&4); // несуществующий
+
+        let total_wait: u64 = list
+            .shard_metrics
+            .iter()
+            .map(|m| m.wait_time_ns.load(Ordering::Relaxed))
+            .sum();
+
+        assert!(total_wait > 0);
+    }
 }
