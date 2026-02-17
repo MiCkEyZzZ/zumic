@@ -1,6 +1,9 @@
-use std::{fmt::Debug, marker::PhantomData, ptr::NonNull};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+    ptr::{self, NonNull},
+};
 
-use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::ValidationError;
@@ -10,32 +13,31 @@ use crate::validate;
 const MAX_LEVEL: usize = 16;
 
 /// Вероятностный коэффициент для определения уровня нового узла.
-const P: f64 = 0.5;
+const P: f64 = 0.25;
+
+type Link<K, V> = Option<NonNull<Node<K, V>>>;
 
 /// Узел пропускного списка.
 #[derive(Debug)]
 pub struct Node<K, V> {
     key: K,
     value: V,
-    forward: Vec<Option<NonNull<Node<K, V>>>>,
-    backward: Option<NonNull<Node<K, V>>>,
+    forward: [Link<K, V>; MAX_LEVEL],
+    backward: Link<K, V>,
 }
 
 /// SkipList — структура с головным узлом, текущим уровнем и количеством
 /// элементов.
 #[derive(Debug)]
 pub struct SkipList<K, V> {
-    /// Головной (dummy) узел; не содержит полезных данных.
-    head: Box<Node<K, V>>,
-    /// Текущий максимальный уровень.
+    head: NonNull<Node<K, V>>,
     level: usize,
-    /// Количество элементов (без головы).
     length: usize,
 }
 
 /// Итератор по узлам списка в прямом порядке.
 pub struct SkipListIter<'a, K, V> {
-    current: Option<NonNull<Node<K, V>>>,
+    current: Link<K, V>,
     _marker: PhantomData<&'a Node<K, V>>,
 }
 
@@ -49,7 +51,7 @@ pub struct ReverseIter<'a, K, V> {
 /// Итератор по диапазону в SkipList.
 pub struct RangeIter<'a, K, V> {
     current: Option<NonNull<Node<K, V>>>,
-    end: Option<K>, // Конечный (не включается) ключ диапазона
+    end: Option<&'a K>,
     _marker: PhantomData<&'a Node<K, V>>,
 }
 
@@ -58,16 +60,18 @@ pub struct RangeIter<'a, K, V> {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl<K, V> Node<K, V> {
+    #[allow(clippy::needless_range_loop)]
     /// Создаёт новый узел с заданным уровнем.
     fn new(
         key: K,
         value: V,
-        level: usize,
     ) -> Box<Self> {
+        let forward = [None; MAX_LEVEL];
+
         Box::new(Node {
             key,
             value,
-            forward: vec![None; level],
+            forward,
             backward: None,
         })
     }
@@ -90,20 +94,24 @@ where
 {
     /// Создаёт новый пустой SkipList.
     pub fn new() -> Self {
-        let head = Node::new(Default::default(), Default::default(), MAX_LEVEL);
-        SkipList {
-            head,
+        let head = Box::new(Node::head());
+
+        Self {
+            head: unsafe { NonNull::new_unchecked(Box::into_raw(head)) },
             level: 1,
             length: 0,
         }
     }
+
     /// Генерирует случайный уровень для нового узла.
+    #[inline(always)]
     fn random_level() -> usize {
         let mut lvl = 1;
-        let mut rng = rand::thread_rng();
-        while rng.gen::<f64>() < P && lvl < MAX_LEVEL {
+
+        while lvl < MAX_LEVEL && rand::random::<f64>() < P {
             lvl += 1;
         }
+
         lvl
     }
 
@@ -111,11 +119,12 @@ where
     unsafe fn find_update(
         &self,
         key: &K,
-    ) -> Vec<*mut Node<K, V>> {
-        let mut update: Vec<*mut Node<K, V>> = vec![std::ptr::null_mut(); MAX_LEVEL];
-        let mut current = self.head.as_ref() as *const Node<K, V> as *mut Node<K, V>;
+    ) -> [*mut Node<K, V>; MAX_LEVEL] {
+        let mut update = [std::ptr::null_mut(); MAX_LEVEL];
+        let mut current = self.head.as_ptr();
+
         for i in (0..self.level).rev() {
-            while let Some(next) = (&(*current).forward)[i] {
+            while let Some(next) = (*current).forward[i] {
                 if (*next.as_ptr()).key < *key {
                     current = next.as_ptr();
                 } else {
@@ -123,11 +132,12 @@ where
                 }
             }
             update[i] = current;
-            debug_assert!(!update[i].is_null(), "update[{i}] must not be null");
         }
+
         update
     }
 
+    #[allow(clippy::needless_range_loop)]
     /// Вставляет ключ и значение в пропускной список.
     pub fn insert(
         &mut self,
@@ -136,6 +146,7 @@ where
     ) {
         unsafe {
             let mut update = self.find_update(&key);
+
             // Проверяем наличие узла с тем же ключом в уровне 0.
             if let Some(node_ptr) = (&(*update[0]).forward)[0] {
                 if (*node_ptr.as_ptr()).key == key {
@@ -143,37 +154,30 @@ where
                     return;
                 }
             }
-            let new_level = Self::random_level();
-            let head_ptr = self.head.as_mut() as *mut Node<K, V>;
-            if new_level > self.level {
-                update
-                    .iter_mut()
-                    .take(new_level)
-                    .skip(self.level)
-                    .for_each(|slot| {
-                        *slot = head_ptr;
-                    });
-                self.level = new_level;
-            }
-            let new_node = Node::new(key, value, new_level);
-            let new_node_ptr = NonNull::new(Box::into_raw(new_node)).unwrap();
-            // Обновляем forward-ссылки для уровней от 0 до new_level-1.
-            update
-                .iter()
-                .enumerate()
-                .take(new_level)
-                .for_each(|(i, &prev)| {
-                    (&mut (*new_node_ptr.as_ptr()).forward)[i] = (&(*prev).forward)[i];
-                    (&mut (*prev).forward)[i] = Some(new_node_ptr);
-                });
 
-            // Устанавливаем backward-ссылку для нового узла (уровень 0).
-            // update[0] всегда указывает на узел перед позицией вставки.
-            (*new_node_ptr.as_ptr()).backward = Some(NonNull::new_unchecked(update[0]));
-            // Если новый узел не последний, обновляем backward следующего узла.
-            if let Some(next_ptr) = (&(*new_node_ptr.as_ptr()).forward)[0] {
-                (*next_ptr.as_ptr()).backward = Some(new_node_ptr);
+            let lvl = Self::random_level();
+
+            if lvl > self.level {
+                for i in self.level..lvl {
+                    update[i] = self.head.as_ptr();
+                }
+                self.level = lvl;
             }
+
+            let new_node = Node::new(key, value);
+            let new_ptr = NonNull::new_unchecked(Box::into_raw(new_node));
+
+            for i in 0..lvl {
+                (*new_ptr.as_ptr()).forward[i] = (*update[i]).forward[i];
+                (*update[i]).forward[i] = Some(new_ptr);
+            }
+
+            (*new_ptr.as_ptr()).backward = NonNull::new(update[0]);
+
+            if let Some(next) = (*new_ptr.as_ptr()).forward[0] {
+                (*next.as_ptr()).backward = NonNull::new(update[0]);
+            }
+
             self.length += 1;
         }
     }
@@ -184,26 +188,26 @@ where
         &self,
         key: &K,
     ) -> Option<&V> {
-        let mut current = self.head.as_ref();
-
         unsafe {
+            let mut current = self.head.as_ptr();
+
             for i in (0..self.level).rev() {
-                while let Some(next) = current.forward[i] {
-                    let next_ref = next.as_ref();
-                    if &next_ref.key < key {
-                        current = next_ref;
+                while let Some(next) = (*current).forward[i] {
+                    if (*next.as_ptr()).key < *key {
+                        current = next.as_ptr();
                     } else {
                         break;
                     }
                 }
             }
-            if let Some(node_ptr) = current.forward[0] {
-                let node_ref = node_ptr.as_ref();
-                if &node_ref.key == key {
-                    return Some(&node_ref.value);
+
+            if let Some(node) = (*current).forward[0] {
+                if (*node.as_ptr()).key == *key {
+                    return Some(&(*node.as_ptr()).value);
                 }
             }
         }
+
         None
     }
 
@@ -231,39 +235,38 @@ where
         key: &K,
     ) -> Option<V> {
         unsafe {
-            let mut update = self.find_update(key);
+            let update = self.find_update(key);
 
-            if let Some(node_ptr) = (&(*update[0]).forward)[0] {
-                let node_ref = node_ptr.as_ref();
-                if &node_ref.key == key {
-                    // Сохраняем значение для возврата.
-                    let result = node_ref.value.clone();
-                    // Обновляем ссылки на всех уровнях.
-                    update
-                        .iter_mut()
-                        .enumerate()
-                        .take(self.level)
-                        .for_each(|(i, &mut prev)| {
-                            if (&(*prev).forward)[i] == Some(node_ptr) {
-                                (&mut (*prev).forward)[i] = node_ref.forward[i];
-                            }
-                        });
-                    // Если существует следующий узел на уровне 0,
-                    // обновляем его backward-ссылку.
-                    if let Some(next_ptr) = node_ref.forward[0] {
-                        (*next_ptr.as_ptr()).backward = node_ref.backward;
+            // есть ли на уровне 0 следующий узел?
+            if let Some(node_ptr) = (*update[0]).forward[0] {
+                if (*node_ptr.as_ptr()).key == *key {
+                    // перепривязываем forward для всех уровней
+                    for (i, &update_node) in update.iter().enumerate().take(self.level) {
+                        if (*update_node).forward[i] == Some(node_ptr) {
+                            (*update_node).forward[i] = (*node_ptr.as_ptr()).forward[i];
+                        }
                     }
-                    // Освобождаем память удаляемого узла.
-                    drop(Box::from_raw(node_ptr.as_ptr()));
-                    // Корректировка текущего уровня.
-                    while self.level > 1 && self.head.forward[self.level - 1].is_none() {
+
+                    // фикс backward у следующего узла (если есть)
+                    if let Some(next) = (*node_ptr.as_ptr()).forward[0] {
+                        (*next.as_ptr()).backward = (*node_ptr.as_ptr()).backward;
+                    }
+
+                    // понижаем уровень списка если нужно
+                    while self.level > 1 && (*self.head.as_ptr()).forward[self.level - 1].is_none()
+                    {
                         self.level -= 1;
                     }
+
                     self.length -= 1;
-                    return Some(result);
+
+                    // забираем владение над узлом и возвращаем value (move)
+                    let boxed = Box::from_raw(node_ptr.as_ptr());
+                    return Some(boxed.value);
                 }
             }
         }
+
         None
     }
 
@@ -273,18 +276,20 @@ where
     }
 
     /// Возвращает итератор по (&K, &V) в порядке возрастания ключа.
-    pub fn iter<'a>(&'a self) -> SkipListIter<'a, K, V> {
-        SkipListIter {
-            current: self.head.forward[0],
-            _marker: PhantomData,
+    pub fn iter(&self) -> SkipListIter<'_, K, V> {
+        unsafe {
+            SkipListIter {
+                current: self.head.as_ref().forward[0],
+                _marker: PhantomData,
+            }
         }
     }
 
     /// Возвращает итератор по элементам в обратном порядке.
-    pub fn iter_rev<'a>(&'a self) -> ReverseIter<'a, K, V> {
+    pub fn iter_rev(&self) -> ReverseIter<'_, K, V> {
         ReverseIter {
             current: self.last_node(),
-            head: self.head.as_ref() as *const Node<K, V>,
+            head: self.head.as_ptr(),
             _marker: PhantomData,
         }
     }
@@ -294,7 +299,7 @@ where
     pub fn range<'a>(
         &'a self,
         start: &K,
-        end: &K,
+        end: &'a K,
     ) -> RangeIter<'a, K, V> {
         unsafe {
             let mut current = self.head.as_ref();
@@ -309,11 +314,13 @@ where
                     }
                 }
             }
+
             let start_ptr = current.forward[0];
+
             RangeIter {
                 current: start_ptr,
-                end: Some(end.clone()),
-                _marker: std::marker::PhantomData,
+                end: Some(end),
+                _marker: PhantomData,
             }
         }
     }
@@ -334,14 +341,21 @@ where
     /// Удаляет все элементы из списка
     pub fn clear(&mut self) {
         unsafe {
-            let mut current = self.head.forward[0];
-            while let Some(node_ptr) = current {
-                current = node_ptr.as_ref().forward[0];
-                drop(Box::from_raw(node_ptr.as_ptr()));
+            let mut current = self.head.as_ref().forward[0];
+
+            while let Some(node) = current {
+                current = node.as_ref().forward[0];
+                drop(Box::from_raw(node.as_ptr()));
             }
-            for slot in &mut self.head.forward {
+
+            let head = self.head.as_mut();
+
+            for slot in head.forward.iter_mut() {
                 *slot = None;
             }
+
+            head.backward = None;
+
             self.level = 1;
             self.length = 0;
         }
@@ -350,36 +364,49 @@ where
     /// Возвращает первый элемент (минимальный ключ) списка.
     pub fn first(&self) -> Option<(&K, &V)> {
         unsafe {
-            // Если список пуст, сразу возвращаем None
-            self.head.forward[0].map(|node_ptr| {
-                let node = node_ptr.as_ref();
-                (&node.key, &node.value)
+            (*self.head.as_ptr()).forward[0].map(|node| {
+                let n = node.as_ref();
+                (&n.key, &n.value)
             })
         }
     }
 
     /// Возвращает последний элемент (максимальный ключ) списка.
     pub fn last(&self) -> Option<(&K, &V)> {
-        self.last_node().map(|tail_ptr| {
-            let node = unsafe { tail_ptr.as_ref() }; // Только тут и оправдан `unsafe`
-            (&node.key, &node.value)
-        })
+        unsafe {
+            let mut current = self.head.as_ptr();
+
+            for i in (0..self.level).rev() {
+                while let Some(next) = (*current).forward[i] {
+                    current = next.as_ptr();
+                }
+            }
+
+            if ptr::eq(current, self.head.as_ptr()) {
+                None
+            } else {
+                let node = &*current;
+                Some((&node.key, &node.value))
+            }
+        }
     }
 
     /// Возвращает указатель на последний элемент (хвост) списка (исключая
     /// голову).
     pub fn last_node(&self) -> Option<NonNull<Node<K, V>>> {
         unsafe {
-            let mut current = self.head.as_ref();
-            while let Some(next) = current.forward[0] {
-                current = next.as_ref();
+            let mut current = self.head.as_ref() as *const Node<K, V> as *mut Node<K, V>;
+
+            for i in (0..self.level).rev() {
+                while let Some(next) = (*current).forward[i] {
+                    current = next.as_ptr();
+                }
             }
-            // Если current совпадает с head, то список пуст.
+
             if std::ptr::eq(current, self.head.as_ref()) {
                 None
             } else {
-                // Преобразуем current совпадает с head, то список пуст.
-                NonNull::new(current as *const Node<K, V> as *mut Node<K, V>)
+                NonNull::new(current)
             }
         }
     }
@@ -387,7 +414,7 @@ where
     pub fn validate_invariants(&self) -> Result<(), ValidationError> {
         unsafe {
             let mut count = 0;
-            let mut current = self.head.forward[0];
+            let mut current = self.head.as_ref().forward[0];
 
             let mut prev_key: Option<&K> = None;
 
@@ -435,6 +462,17 @@ where
 // Общие реализации трейтов для SkipList
 ////////////////////////////////////////////////////////////////////////////////
 
+impl<K: Default, V: Default> Node<K, V> {
+    fn head() -> Self {
+        Self {
+            key: K::default(),
+            value: V::default(),
+            forward: [None; MAX_LEVEL],
+            backward: None,
+        }
+    }
+}
+
 impl<K, V> Default for SkipList<K, V>
 where
     K: Ord + Clone + Default + Debug,
@@ -463,11 +501,12 @@ impl<'a, K, V> Iterator for SkipListIter<'a, K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            self.current.map(|node_ptr| {
-                let node = node_ptr.as_ref();
-                self.current = node.forward[0];
-                (&node.key, &node.value)
-            })
+            let node_ptr = self.current?;
+            let node = node_ptr.as_ref();
+
+            self.current = node.forward[0];
+
+            Some((&node.key, &node.value))
         }
     }
 }
@@ -477,18 +516,17 @@ impl<'a, K, V> Iterator for ReverseIter<'a, K, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            if let Some(node_ptr) = self.current {
-                // Если достигнут , итерация завершена.
-                if std::ptr::eq(node_ptr.as_ptr(), self.head) {
-                    None
-                } else {
-                    let node = node_ptr.as_ref();
-                    self.current = node.backward;
-                    Some((&node.key, &node.value))
-                }
-            } else {
-                None
+            let node_ptr = self.current?;
+
+            if std::ptr::eq(node_ptr.as_ptr(), self.head as *mut Node<K, V>) {
+                return None;
             }
+
+            let node = node_ptr.as_ref();
+
+            self.current = node.backward;
+
+            Some((&node.key, &node.value))
         }
     }
 }
@@ -503,7 +541,7 @@ where
         unsafe {
             if let Some(node_ptr) = self.current {
                 let node = node_ptr.as_ref();
-                if let Some(ref end_key) = self.end {
+                if let Some(end_key) = self.end {
                     if &node.key >= end_key {
                         return None;
                     }
@@ -556,17 +594,16 @@ impl<K, V> Drop for SkipList<K, V> {
     fn drop(&mut self) {
         // Безопасно обходим, начиная с первого элемента.
         unsafe {
-            let mut current = self.head.forward[0];
-            while let Some(node_ptr) = current {
+            let mut current = (*self.head.as_ptr()).forward[0];
+
+            while let Some(node) = current {
                 // Переходим к следующему узлу до освобождения текущего
-                current = node_ptr.as_ref().forward[0];
+                current = node.as_ref().forward[0];
                 // Восстанавливать владение над узлом и освобождаем его память
-                drop(Box::from_raw(node_ptr.as_ptr()));
+                drop(Box::from_raw(node.as_ptr()));
             }
-            // В качестве меры на всякий случай очищаем все ссылки в head.
-            for slot in self.head.forward.iter_mut() {
-                *slot = None;
-            }
+
+            drop(Box::from_raw(self.head.as_ptr()));
         }
     }
 }
@@ -584,8 +621,8 @@ where
             return false;
         }
 
-        let mut a = self.head.forward[0];
-        let mut b = other.head.forward[0];
+        let mut a = unsafe { self.head.as_ref().forward[0] };
+        let mut b = unsafe { other.head.as_ref().forward[0] };
 
         unsafe {
             loop {
