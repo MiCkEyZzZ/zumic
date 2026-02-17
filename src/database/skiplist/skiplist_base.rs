@@ -13,7 +13,8 @@ use crate::validate;
 const MAX_LEVEL: usize = 16;
 
 /// Вероятностный коэффициент для определения уровня нового узла.
-const P: f64 = 0.25;
+const P: u32 = 0x4000;
+const MASK: u32 = 0xFFFF;
 
 type Link<K, V> = Option<NonNull<Node<K, V>>>;
 
@@ -43,14 +44,14 @@ pub struct SkipListIter<'a, K, V> {
 
 /// Итератор по узлам списка в обратном порядке.
 pub struct ReverseIter<'a, K, V> {
-    current: Option<NonNull<Node<K, V>>>,
+    current: Link<K, V>,
     head: *const Node<K, V>,
     _marker: PhantomData<&'a Node<K, V>>,
 }
 
 /// Итератор по диапазону в SkipList.
 pub struct RangeIter<'a, K, V> {
-    current: Option<NonNull<Node<K, V>>>,
+    current: Link<K, V>,
     end: Option<&'a K>,
     _marker: PhantomData<&'a Node<K, V>>,
 }
@@ -60,7 +61,6 @@ pub struct RangeIter<'a, K, V> {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl<K, V> Node<K, V> {
-    #[allow(clippy::needless_range_loop)]
     /// Создаёт новый узел с заданным уровнем.
     fn new(
         key: K,
@@ -108,7 +108,7 @@ where
     fn random_level() -> usize {
         let mut lvl = 1;
 
-        while lvl < MAX_LEVEL && rand::random::<f64>() < P {
+        while lvl < MAX_LEVEL && (fastrand::u32(..) & MASK) < P {
             lvl += 1;
         }
 
@@ -116,6 +116,7 @@ where
     }
 
     /// Поиск предшествующих узлов для каждого уровня.
+    #[inline(always)]
     unsafe fn find_update(
         &self,
         key: &K,
@@ -148,9 +149,9 @@ where
             let mut update = self.find_update(&key);
 
             // Проверяем наличие узла с тем же ключом в уровне 0.
-            if let Some(node_ptr) = (&(*update[0]).forward)[0] {
-                if (*node_ptr.as_ptr()).key == key {
-                    (*node_ptr.as_ptr()).value = value;
+            if let Some(node) = (&(*update[0]).forward)[0] {
+                if (*node.as_ptr()).key == key {
+                    (*node.as_ptr()).value = value;
                     return;
                 }
             }
@@ -161,6 +162,7 @@ where
                 for i in self.level..lvl {
                     update[i] = self.head.as_ptr();
                 }
+
                 self.level = lvl;
             }
 
@@ -175,7 +177,7 @@ where
             (*new_ptr.as_ptr()).backward = NonNull::new(update[0]);
 
             if let Some(next) = (*new_ptr.as_ptr()).forward[0] {
-                (*next.as_ptr()).backward = NonNull::new(update[0]);
+                (*next.as_ptr()).backward = Some(new_ptr);
             }
 
             self.length += 1;
@@ -230,6 +232,7 @@ where
     }
 
     /// Удаляет узел с заданным ключом.
+    #[allow(clippy::needless_range_loop)]
     pub fn remove(
         &mut self,
         key: &K,
@@ -238,18 +241,18 @@ where
             let update = self.find_update(key);
 
             // есть ли на уровне 0 следующий узел?
-            if let Some(node_ptr) = (*update[0]).forward[0] {
-                if (*node_ptr.as_ptr()).key == *key {
+            if let Some(node) = (*update[0]).forward[0] {
+                if (*node.as_ptr()).key == *key {
                     // перепривязываем forward для всех уровней
-                    for (i, &update_node) in update.iter().enumerate().take(self.level) {
-                        if (*update_node).forward[i] == Some(node_ptr) {
-                            (*update_node).forward[i] = (*node_ptr.as_ptr()).forward[i];
+                    for i in 0..self.level {
+                        if (*update[i]).forward[i] == Some(node) {
+                            (*update[i]).forward[i] = (*node.as_ptr()).forward[i];
                         }
                     }
 
                     // фикс backward у следующего узла (если есть)
-                    if let Some(next) = (*node_ptr.as_ptr()).forward[0] {
-                        (*next.as_ptr()).backward = (*node_ptr.as_ptr()).backward;
+                    if let Some(next) = (*node.as_ptr()).forward[0] {
+                        (*next.as_ptr()).backward = (*node.as_ptr()).backward;
                     }
 
                     // понижаем уровень списка если нужно
@@ -261,7 +264,7 @@ where
                     self.length -= 1;
 
                     // забираем владение над узлом и возвращаем value (move)
-                    let boxed = Box::from_raw(node_ptr.as_ptr());
+                    let boxed = Box::from_raw(node.as_ptr());
                     return Some(boxed.value);
                 }
             }
