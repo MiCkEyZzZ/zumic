@@ -9,6 +9,7 @@ use std::{
 };
 
 use super::SkipList;
+use crate::ValidationError;
 
 /// Кол-во shards по умолчанию.
 const DEFAULT_SHARDS: usize = 16;
@@ -141,6 +142,22 @@ where
         self.len() == 0
     }
 
+    pub fn contains(
+        &self,
+        key: &K,
+    ) -> bool {
+        self.search(key).is_some()
+    }
+
+    pub fn clear(&self) {
+        for shard in &self.shards {
+            let mut guard = shard.write().unwrap();
+            guard.clear();
+        }
+
+        self.total_length.store(0, Ordering::Relaxed);
+    }
+
     pub fn first(&self) -> Option<(K, V)> {
         let mut min: Option<(K, V)> = None;
 
@@ -179,6 +196,19 @@ where
         }
 
         max
+    }
+
+    pub fn validate_invariants(&self) -> Result<(), ValidationError> {
+        for (idx, shard) in self.shards.iter().enumerate() {
+            let guard = shard.read().unwrap();
+            guard
+                .validate_invariants()
+                .map_err(|e| ValidationError::SortOrderViolation {
+                    message: format!("Shard {idx}: {e:?}"),
+                })?;
+        }
+
+        Ok(())
     }
 
     pub fn shard_distribution(&self) -> Vec<usize> {
@@ -362,5 +392,37 @@ mod tests {
         }
 
         assert!(!list.is_empty());
+    }
+
+    #[test]
+    fn test_contains_and_clear() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(10, "ten");
+        list.insert(20, "twenty");
+
+        assert!(list.contains(&10));
+        assert!(list.contains(&20));
+        assert!(!list.contains(&30));
+
+        list.clear();
+
+        assert_eq!(list.len(), 0);
+        assert!(!list.contains(&10));
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn test_validate_invariants_on_empty_and_populated() {
+        let list = ShardedSkipList::with_shards(8);
+
+        // пустая - должна пройти
+        assert!(list.validate_invariants().is_ok());
+
+        for i in 0..500 {
+            list.insert(i, i);
+        }
+
+        assert!(list.validate_invariants().is_ok());
     }
 }
