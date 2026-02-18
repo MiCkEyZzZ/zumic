@@ -111,7 +111,3 @@ impl Value {
         }
     }
 }
-
-// NOTE: ВРЕМЕННАЯ ЗАГЛУШКА. ПОСЛЕ РЕАЛИЗАЦИИ SEND + SYNC В SKIPLIST
-unsafe impl Send for Value {}
-unsafe impl Sync for Value {}
