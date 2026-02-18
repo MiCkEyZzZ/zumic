@@ -260,6 +260,11 @@ where
         }
 
         let ideal_per_shard = total as f64 / self.num_shards as f64;
+
+        if ideal_per_shard == 0.0 {
+            return 1.0;
+        }
+
         let variance: f64 = distribution
             .iter()
             .map(|&count| {
@@ -268,13 +273,10 @@ where
             })
             .sum();
 
-        let max_variance = ideal_per_shard * ideal_per_shard * self.num_shards as f64;
+        let stddev = (variance / self.num_shards as f64).sqrt();
+        let score = 1.0 - (stddev / ideal_per_shard);
 
-        if max_variance == 0.0 {
-            1.0
-        } else {
-            1.0 - (variance / max_variance)
-        }
+        score.clamp(0.0, 1.0)
     }
 
     fn shard_index(
@@ -669,5 +671,97 @@ mod tests {
             .sum();
 
         assert!(total_wait > 0);
+    }
+
+    #[test]
+    fn test_shard_metrics_snapshot_consistency() {
+        let list = Arc::new(ShardedSkipList::with_shards(8));
+
+        let mut handles = vec![];
+
+        for i in 0..8 {
+            let list = Arc::clone(&list);
+            handles.push(thread::spawn(move || {
+                for j in 0..1000 {
+                    list.insert(i * 1000 + j, j);
+                    let _ = list.search(&(i * 1000 + j));
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let snapshot = list.shard_metrics();
+
+        let total_inserts: usize = snapshot.iter().map(|s| s.inserts).sum();
+        let total_searches: usize = snapshot.iter().map(|s| s.searches).sum();
+
+        assert_eq!(total_inserts, 8000);
+        assert_eq!(total_searches, 8000);
+    }
+
+    #[test]
+    fn test_shard_metrics_snapshot_is_immutable() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, 1);
+
+        let snapshot1 = list.shard_metrics();
+
+        list.insert(2, 2);
+
+        let snapshot2 = list.shard_metrics();
+
+        let total1: usize = snapshot1.iter().map(|s| s.inserts).sum();
+        let total2: usize = snapshot2.iter().map(|s| s.inserts).sum();
+
+        assert_eq!(total1, 1);
+        assert_eq!(total2, 2);
+    }
+
+    #[test]
+    fn test_clone_shares_state() {
+        let list = ShardedSkipList::with_shards(4);
+
+        list.insert(1, "one");
+
+        let cloned = list.clone();
+
+        cloned.insert(2, "two");
+
+        assert_eq!(list.len(), 2);
+        assert_eq!(cloned.len(), 2);
+
+        assert_eq!(list.search(&2), Some("two"));
+    }
+
+    #[test]
+    fn test_load_balance_score_edge_cases() {
+        let list = ShardedSkipList::<i32, i32>::with_shards(4);
+
+        // empty case
+        assert_eq!(list.load_balance_score(), 1.0);
+
+        // single element
+        list.insert(1, 1);
+
+        let score = list.load_balance_score();
+
+        assert!((0.0..=1.0).contains(&score));
+    }
+
+    #[test]
+    fn test_shard_metrics_format_report() {
+        let list = ShardedSkipList::with_shards(2);
+
+        list.insert(1, 1);
+
+        let snapshot = list.shard_metrics();
+        let reposrt = snapshot[0].format_report();
+
+        assert!(reposrt.contains("Shard"));
+        assert!(reposrt.contains("Inserts"));
     }
 }
