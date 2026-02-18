@@ -27,7 +27,8 @@ use crate::{
     command::{
         pubsub::{PubSubCommand, PublishCommand, SubscribeCommand, UnsubscribeCommand},
         BgSaveCommand, DbSizeCommand, EchoCommand, InfoCommand, PingCommand, SaveCommand,
-        SelectCommand, ShutdownCommand, TimeCommand,
+        SelectCommand, ShutdownCommand, TimeCommand, TsAddCommand, TsCreateCommand, TsDelCommand,
+        TsGetCommand, TsRangeCommand,
     },
     logging::slow_log::SlowQueryTracker,
     StorageEngine, StoreError, Value,
@@ -177,6 +178,11 @@ pub enum Command {
     XTrim(XTrimCommand),
     XGroupCreate(XGroupCreateCommand),
     XAck(XAckCommand),
+    TsCreate(TsCreateCommand),
+    TsAdd(TsAddCommand),
+    TsGet(TsGetCommand),
+    TsRange(TsRangeCommand),
+    TsDel(TsDelCommand),
 }
 
 impl Command {
@@ -281,6 +287,11 @@ impl Command {
             Command::XTrim(_) => "XTRIM",
             Command::XGroupCreate(_) => "XGROUP CREATE",
             Command::XAck(_) => "XACK",
+            Command::TsCreate(_) => "TS.CREATE",
+            Command::TsAdd(_) => "TS.ADD",
+            Command::TsGet(_) => "TS.GET",
+            Command::TsRange(_) => "TS.RANGE",
+            Command::TsDel(_) => "TS.DEL",
         }
     }
 
@@ -385,6 +396,11 @@ impl Command {
             Command::XTrim(cmd) => Some(cmd.key.as_bytes()),
             Command::XGroupCreate(cmd) => Some(cmd.key.as_bytes()),
             Command::XAck(cmd) => Some(cmd.key.as_bytes()),
+            Command::TsCreate(cmd) => Some(cmd.key.as_bytes()),
+            Command::TsAdd(cmd) => Some(cmd.key.as_bytes()),
+            Command::TsGet(cmd) => Some(cmd.key.as_bytes()),
+            Command::TsRange(cmd) => Some(cmd.key.as_bytes()),
+            Command::TsDel(cmd) => Some(cmd.key.as_bytes()),
         }
     }
 }
@@ -505,6 +521,11 @@ impl CommandExecute for Command {
             Command::XTrim(cmd) => cmd.execute(store),
             Command::XGroupCreate(cmd) => cmd.execute(store),
             Command::XAck(cmd) => cmd.execute(store),
+            Command::TsCreate(cmd) => cmd.execute(store),
+            Command::TsAdd(cmd) => cmd.execute(store),
+            Command::TsGet(cmd) => cmd.execute(store),
+            Command::TsRange(cmd) => cmd.execute(store),
+            Command::TsDel(cmd) => cmd.execute(store),
         };
 
         // Добавляем result / error в tracker (используем ссылку, чтобы не перемещать

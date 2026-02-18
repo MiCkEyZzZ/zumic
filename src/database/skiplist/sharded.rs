@@ -33,6 +33,19 @@ struct ShardMetrics {
     wait_time_ns: AtomicU64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ShardMetricsSnapshot {
+    pub shard_index: usize,
+    pub inserts: usize,
+    pub searches: usize,
+    pub removes: usize,
+    pub wait_time_ns: u64,
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
 impl<K, V> ShardedSkipList<K, V>
 where
     K: Ord + Clone + Default + Debug + Hash,
@@ -82,7 +95,9 @@ where
             .fetch_add(1, Ordering::Relaxed);
 
         let old_len = guard.len();
+
         guard.insert(key, value);
+
         let new_len = guard.len();
 
         if new_len > old_len {
@@ -201,6 +216,7 @@ where
     pub fn validate_invariants(&self) -> Result<(), ValidationError> {
         for (idx, shard) in self.shards.iter().enumerate() {
             let guard = shard.read().unwrap();
+
             guard
                 .validate_invariants()
                 .map_err(|e| ValidationError::SortOrderViolation {
@@ -209,6 +225,20 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn shard_metrics(&self) -> Vec<ShardMetricsSnapshot> {
+        self.shard_metrics
+            .iter()
+            .enumerate()
+            .map(|(idx, metrics)| ShardMetricsSnapshot {
+                shard_index: idx,
+                inserts: metrics.inserts.load(Ordering::Relaxed),
+                searches: metrics.searches.load(Ordering::Relaxed),
+                removes: metrics.removes.load(Ordering::Relaxed),
+                wait_time_ns: metrics.wait_time_ns.load(Ordering::Relaxed),
+            })
+            .collect()
     }
 
     pub fn shard_distribution(&self) -> Vec<usize> {
@@ -258,6 +288,43 @@ where
     }
 }
 
+impl ShardMetricsSnapshot {
+    pub fn total_operations(&self) -> usize {
+        self.inserts + self.searches + self.removes
+    }
+
+    pub fn average_wait_time_ns(&self) -> f64 {
+        let total_ops = self.total_operations();
+
+        if total_ops == 0 {
+            0.0
+        } else {
+            self.wait_time_ns as f64 / total_ops as f64
+        }
+    }
+
+    pub fn format_report(&self) -> String {
+        format!(
+            "Shard {}:\n\
+                Inserts: {}\n\
+                Searches: {}\n\
+                Removes: {}\n\
+                Total ops: {}\n\
+                Avg wait: {:.2} ns\n",
+            self.shard_index,
+            self.inserts,
+            self.searches,
+            self.removes,
+            self.total_operations(),
+            self.average_wait_time_ns()
+        )
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Общие реализации трейтов для ShardedSkipList
+////////////////////////////////////////////////////////////////////////////////
+
 impl<K, V> Clone for ShardedSkipList<K, V> {
     fn clone(&self) -> Self {
         ShardedSkipList {
@@ -278,6 +345,10 @@ where
         Self::new()
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

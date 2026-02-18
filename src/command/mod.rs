@@ -35,6 +35,7 @@ pub mod server;
 pub mod set;
 pub mod stream;
 pub mod string;
+pub mod timeseries;
 pub mod zset;
 
 // Publicly re-export all error types and functions from the submodules to
@@ -53,4 +54,5 @@ pub use server::*;
 pub use set::*;
 pub use stream::*;
 pub use string::*;
+pub use timeseries::*;
 pub use zset::*;

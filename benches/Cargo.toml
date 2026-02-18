@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/skiplist_benchmark/skiplist_bench.rs"
+path = "benches/skiplist_benchmark/concurrent_bench.rs"
 harness = false
 
 [lints]
