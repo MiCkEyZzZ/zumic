@@ -85,9 +85,9 @@ zumic
 │   ├── images
 │   ├── raft.md
 │   ├── skiplists.md
-│   ├── МОДЕЛЬ_ДВИЖКА.mdы
-│   ├── СХЕМА_ПРОЕКТА.md
-│   └── ТЕОРИЯ_ЭЛЛИПСОЙДОВ.md
+│   ├── ENGINE_MODEL.mdы
+│   ├── PROJECT_STRUCTURE.md
+│   └── ELLIPSOID_THEORY.md
 ├── fuzz
 │   ├── artifacts
 │   │   └── encode_roundtrip.rs
@@ -140,6 +140,7 @@ zumic
 │   │   ├── set.rs
 │   │   ├── stream.rs
 │   │   ├── string.rs
+│   │   ├── timeseries.rs
 │   │   └── zset.rs
 │   ├── config
 │   │   ├── cluster.toml
