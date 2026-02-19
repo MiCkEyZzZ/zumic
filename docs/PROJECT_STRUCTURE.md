@@ -57,6 +57,7 @@ zumic
 │   │   ├── quicklist_benchmark
 │   │   │   └── quicklist_bench.rs
 │   │   ├── skiplist_benchmark
+│   │   │   ├── concurrent_bench.rs
 │   │   │   └── skiplist_bench.rs
 │   │   ├── smarthash_benchmark
 │   │   │   └── smarthash_bench.rs
@@ -188,6 +189,7 @@ zumic
 │   │   │   ├── concurrent.rs
 │   │   │   ├── mod.rs
 │   │   │   ├── safety.rs
+│   │   │   ├── sharded.rs
 │   │   │   └── skiplist_base.rs
 │   │   ├── smarthash
 │   │   │   ├── mod.rs
@@ -295,6 +297,7 @@ zumic
 │   ├── connection_integration.rs
 │   ├── connection_shutdown_integration.rs
 │   ├── connection_state_test.rs
+│   ├── dict_correctness_tests.rs
 │   ├── generators.rs
 │   ├── geo_distance_integration_tests.rs
 │   ├── geo_integration_tests.rs
@@ -306,6 +309,7 @@ zumic
 │   ├── README.md
 │   ├── skiplist_integration_tests.rs
 │   ├── skiplist_property_tests.rs
+│   ├── skiplist_сoncurrency_tests.rs
 │   ├── zsp_codec.rs
 │   └── zsp_pubsub_integration.rs
 ├── zumic-error
