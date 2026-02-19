@@ -1280,7 +1280,7 @@ mod tests {
         let mut cursor = Cursor::new(data);
         let val = read_value_with_version(&mut cursor, LEGACY, None, 0).unwrap();
         match val {
-            Value::ZSet { mut dict, sorted } => {
+            Value::ZSet { dict, sorted } => {
                 assert_eq!(dict.len(), 2);
                 assert_eq!(dict.get(&Sds::from_vec(key1.to_vec())), Some(&score1));
                 assert_eq!(dict.get(&Sds::from_vec(key2.to_vec())), Some(&score2));
