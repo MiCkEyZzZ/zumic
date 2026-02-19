@@ -308,8 +308,7 @@ where
         }
     }
 
-    /// Рекурсивно обрабатывает цепочку: удаляет первый узел с ключом `key`.
-    /// Возвращает (новая_цепочка, был_удалён).
+    /// Итеративно удаляет первый узел с ключом `key` из цепочки `head`.
     fn remove_from_chain_iter(
         head: &mut Option<Box<Entry<K, V>>>,
         key: &K,
@@ -468,7 +467,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn basic_insert_get() {
+    fn test_basic_insert_get() {
         let mut d = Dict::new();
         assert!(d.insert("a", 1));
         assert!(d.insert("b", 2));
@@ -480,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn insert_updates_existing_key() {
+    fn test_insert_updates_existing_key() {
         let mut d = Dict::new();
         assert!(d.insert("key", 42));
         assert!(!d.insert("key", 100));
@@ -488,7 +487,7 @@ mod tests {
     }
 
     #[test]
-    fn removal() {
+    fn test_removal() {
         let mut d = Dict::new();
         d.insert("x", 100);
         assert_eq!(d.get(&"x"), Some(&100));
@@ -498,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    fn rehash_behavior() {
+    fn test_rehash_behavior() {
         let mut d = Dict::new();
         for i in 0..100 {
             d.insert(i, i * 10);
@@ -510,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn rehash_with_removal() {
+    fn test_rehash_with_removal() {
         let mut d = Dict::new();
         for i in 0..20 {
             d.insert(i, i);
@@ -530,7 +529,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_dict() {
+    fn test_clear_dict() {
         let mut d = Dict::new();
         d.insert("k", "v");
         d.clear();
@@ -539,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_and_reuse() {
+    fn test_clear_and_reuse() {
         let mut d = Dict::new();
         d.insert("a", 1);
         d.clear();
@@ -549,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn iteration_work() {
+    fn test_iteration_work() {
         let mut d = Dict::new();
         d.insert("x", 1);
         d.insert("y", 2);
@@ -565,9 +564,164 @@ mod tests {
     }
 
     #[test]
-    fn empty_iterator() {
+    fn test_empty_iterator() {
         let d: Dict<&str, i32> = Dict::new();
         let mut iter = d.iter();
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn test_get_does_not_require_mut() {
+        let mut d = Dict::new();
+
+        d.insert("a", 1u32);
+        d.insert("b", 2u32);
+
+        // Оба get работают на иммутабельной ссылке
+        let d_ref: &Dict<_, _> = &d;
+        let va = d_ref.get(&"a");
+        let vb = d_ref.get(&"b");
+
+        assert_eq!(va, Some(&1));
+        assert_eq!(vb, Some(&2));
+    }
+
+    #[test]
+    fn test_get_mut_modifies_in_place() {
+        let mut d = Dict::new();
+
+        d.insert("counter", 0u64);
+
+        *d.get_mut(&"counter").unwrap() += 10;
+        *d.get_mut(&"counter").unwrap() += 5;
+
+        assert_eq!(d.get(&"counter"), Some(&15));
+    }
+
+    #[test]
+    fn test_mut_missing_key() {
+        let mut d: Dict<&str, i32> = Dict::new();
+
+        assert!(d.get_mut(&"ghost").is_none());
+    }
+
+    #[test]
+    fn test_first_insert_into_empty_table() {
+        let mut d = Dict::new();
+
+        // Внутренние таблицы изначально пусты.
+        assert!(d.ht[0].is_empty_table());
+        assert!(d.ht[1].is_empty_table());
+        assert!(!d.is_rehashing());
+
+        d.insert("key", 42);
+
+        // После первой вставки ht[0] должен быть инициализирован
+        assert!(!d.ht[0].is_empty_table());
+        assert_eq!(d.ht[0].used, 1);
+        assert_eq!(d.get(&"key"), Some(&42));
+        assert!(!d.is_rehashing());
+    }
+
+    #[test]
+    fn test_insert_then_remove_single() {
+        let mut d = Dict::new();
+
+        assert!(d.insert("only", 99));
+        assert_eq!(d.len(), 1);
+        assert!(d.remove(&"only"));
+        assert_eq!(d.len(), 0);
+        assert!(d.is_empty());
+        assert_eq!(d.get(&"only"), None);
+    }
+
+    #[test]
+    fn test_remove_from_empty_dict() {
+        let mut d: Dict<&str, i32> = Dict::new();
+        assert!(!d.remove(&"missing"));
+    }
+
+    #[test]
+    fn test_long_chain_no_stack_overflow() {
+        let mut d = Dict::new();
+
+        for i in 0..10_000u64 {
+            d.insert(i, i);
+        }
+
+        // удаляем все элементы - итеративный `remove_from_chain_iter`
+        // не должен паниковать из-за стека.
+        for i in 0..10_000u64 {
+            assert!(d.remove(&i));
+        }
+
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn test_repeated_insert_remove_cycles() {
+        let mut d = Dict::new();
+
+        for cycle in 0..10u32 {
+            for i in 0..50u32 {
+                d.insert(i, cycle * 50 + i);
+            }
+
+            for i in 0..50u32 {
+                assert_eq!(d.get(&i), Some(&(cycle * 50 + i)));
+            }
+
+            for i in 0..50u32 {
+                assert!(d.remove(&i));
+            }
+
+            assert!(d.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_on_new_dict() {
+        let d: Dict<u32, u32> = Dict::new();
+
+        assert_eq!(d.get(&0), None);
+        assert_eq!(d.get(&42), None);
+    }
+
+    #[test]
+    fn test_len_during_rehash() {
+        let mut d = Dict::new();
+
+        // Вставляем достаточно элементов для начала рехеширования.
+        for i in 0..8u32 {
+            d.insert(i, i);
+        }
+
+        // Вне зависимости от стадии рехеширования len должен быть точным.
+        assert_eq!(d.len(), 8);
+    }
+
+    #[test]
+    fn test_get_mut_visible_via_get() {
+        let mut d = Dict::new();
+
+        d.insert("score", 100i32);
+
+        if let Some(v) = d.get_mut(&"score") {
+            *v += 50;
+        }
+
+        assert_eq!(d.get(&"score"), Some(&150));
+    }
+
+    #[test]
+    fn test_iter_single_element() {
+        let mut d = Dict::new();
+
+        d.insert("solo", 7u8);
+
+        let pairs: Vec<_> = d.iter().collect();
+
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], (&"solo", &7u8));
     }
 }
