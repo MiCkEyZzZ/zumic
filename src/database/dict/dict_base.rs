@@ -1,9 +1,15 @@
 use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
+    fmt::{self, Debug},
+    hash::{BuildHasher, Hash},
+    marker::PhantomData,
 };
 
-use serde::{Deserialize, Serialize};
+use ahash::RandomState;
+use serde::{
+    de::{SeqAccess, Visitor},
+    ser::SerializeSeq,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 /// Начальный размер таблицы (степень двойки).
 const INITIAL_SIZE: usize = 4;
@@ -12,7 +18,7 @@ const INITIAL_SIZE: usize = 4;
 const REHASH_BATCH: usize = 1;
 
 /// Один элемент в цепочке коллизий.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
 struct Entry<K, V> {
     key: K,
     val: V,
@@ -47,10 +53,10 @@ struct HashTable<K, V> {
 ///
 /// Рехеширование происходит постепенно во время вставки, удаления или
 /// получения изменяемой ссылки на элемент.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct Dict<K, V> {
+pub struct Dict<K, V, S = RandomState> {
     ht: [HashTable<K, V>; 2],
     rehash_idx: isize,
+    hasher_builder: S,
 }
 
 /// Итератор по словарю `Dict` (разделяемая ссылка).
@@ -112,18 +118,56 @@ impl<K, V> HashTable<K, V> {
     }
 }
 
-impl<K, V> Dict<K, V>
+impl<K, V> Dict<K, V, RandomState>
 where
     K: Hash + Eq,
 {
-    /// Создаёт новый пустой словарь.
+    /// Создаёт новый пустой словарь с [`ahash::RandomState`].
     pub fn new() -> Self {
+        Dict::with_hasher(RandomState::new())
+    }
+
+    /// Создаёт словарь с предвыделенной ёмкостью и [`ahash::RandomState`].
+    pub fn with_capacity(cap: usize) -> Self {
+        Dict::with_capacity_and_hasher(cap, RandomState::new())
+    }
+}
+
+impl<K, V, S> Dict<K, V, S>
+where
+    K: Hash + Eq,
+    S: BuildHasher,
+{
+    /// Создаёт пустой словарь с заданным строителем хешеров.
+    pub fn with_hasher(hasher_builder: S) -> Self {
         Dict {
             ht: [HashTable::with_capacity(0), HashTable::with_capacity(0)],
             rehash_idx: -1,
+            hasher_builder,
         }
     }
 
+    /// Создаёт словарь с предвыделенной ёмкостью и заданным строителями
+    /// хешеров.
+    pub fn with_capacity_and_hasher(
+        cap: usize,
+        hasher_builder: S,
+    ) -> Self {
+        let init = HashTable::with_capacity(if cap == 0 { 0 } else { cap });
+
+        Dict {
+            ht: [init, HashTable::with_capacity(0)],
+            rehash_idx: -1,
+            hasher_builder,
+        }
+    }
+}
+
+impl<K, V, S> Dict<K, V, S>
+where
+    K: Hash + Eq,
+    S: BuildHasher,
+{
     /// Вставляет пару `(key, val)`.
     pub fn insert(
         &mut self,
@@ -133,15 +177,19 @@ where
         self.expand_if_needed();
         self.rehash_step();
 
-        let hash = Self::hash_key(&key);
+        let hash = self.make_hash(&key);
 
+        // Поиск существующего ключа (обе таблицы при рехешировании).
         for table_idx in 0..=1 {
             if self.ht[table_idx].is_empty_table() {
+                if !self.is_rehashing() {
+                    break;
+                }
+
                 continue;
             }
 
-            let mask = self.ht[table_idx].size_mask;
-            let slot = (hash as usize) & mask;
+            let slot = (hash as usize) & self.ht[table_idx].size_mask;
             let mut cur = &mut self.ht[table_idx].buckets[slot];
 
             while let Some(ref mut e) = cur {
@@ -158,11 +206,9 @@ where
             }
         }
 
+        // Вставка нового элемента в начало цепочки целевой таблицы.
         let table_idx = if self.is_rehashing() { 1 } else { 0 };
-        let mask = self.ht[table_idx].size_mask;
-        let slot = (hash as usize) & mask;
-
-        // вставка нового элемента в начало цепочки
+        let slot = (hash as usize) & self.ht[table_idx].size_mask;
         let next = self.ht[table_idx].buckets[slot].take();
 
         self.ht[table_idx].buckets[slot] = Some(Entry::new(key, val, next));
@@ -176,10 +222,14 @@ where
         &self,
         key: &K,
     ) -> Option<&V> {
-        let hash = Self::hash_key(key);
+        let hash = self.make_hash(key);
 
         for table_idx in 0..=1 {
             if self.ht[table_idx].is_empty_table() {
+                if !self.is_rehashing() {
+                    break;
+                }
+
                 continue;
             }
 
@@ -194,7 +244,6 @@ where
                 cur = &e.next;
             }
 
-            // Если рехеширование не идёт — ключ может быть только в ht[0].
             if !self.is_rehashing() {
                 break;
             }
@@ -208,39 +257,36 @@ where
         &mut self,
         key: &K,
     ) -> Option<&mut V> {
+        // Выполним шаг рехеша, если нужно.
         if self.is_rehashing() {
             self.rehash_step();
         }
 
-        let hash = Self::hash_key(key);
+        let hash = self.make_hash(key);
 
-        for table_idx in 0..=1 {
-            if self.ht[table_idx].is_empty_table() {
-                continue;
+        // Считаем состояние рехеширования заранее — до того, как мы возьмём
+        // mutable borrows частей `self`.
+        let rehashing = self.is_rehashing();
+
+        // Возьмём mut ссылки на обе таблицы как отдельные непересекающиеся borrows.
+        // split_at_mut(1) даёт [0] и [1] как независимые mutable ссылки.
+        let (left, right) = self.ht.split_at_mut(1);
+        let t0: &mut HashTable<K, V> = &mut left[0];
+        let t1: &mut HashTable<K, V> = &mut right[0];
+
+        // Сначала ищем в ht[0]
+        if !t0.is_empty_table() {
+            let slot = (hash as usize) & t0.size_mask;
+            if let Some(v) = Self::find_val_mut(&mut t0.buckets[slot], key) {
+                return Some(v);
             }
+        }
 
-            let slot = (hash as usize) & self.ht[table_idx].size_mask;
-            let mut cur = &mut self.ht[table_idx].buckets[slot];
-
-            while let Some(ref mut e) = cur {
-                if &e.key == key {
-                    // SAFETY: мы немедленно возвращаем ссылку на val, продлевая
-                    // время жизни. Borrow checker не позволяет вернуть `&mut e.val`
-                    // напрямую из-за промежуточных ссылок, поэтому используем
-                    // указатель для явного управления временем жизни.
-                    //
-                    // Invariant: указатель валиден на всё время жизни `&mut self`,
-                    // никаких других изменений структуры не происходит.
-                    let val_ptr: *mut V = &mut e.val;
-
-                    return Some(unsafe { &mut *val_ptr });
-                }
-
-                cur = &mut e.next;
-            }
-
-            if !self.is_rehashing() {
-                break;
+        // Только если идёт рехеширование — ищем во второй таблице.
+        if rehashing && !t1.is_empty_table() {
+            let slot = (hash as usize) & t1.size_mask;
+            if let Some(v) = Self::find_val_mut(&mut t1.buckets[slot], key) {
+                return Some(v);
             }
         }
 
@@ -256,19 +302,22 @@ where
             self.rehash_step();
         }
 
-        let hash = Self::hash_key(key);
+        let hash = self.make_hash(key);
 
         for table_idx in 0..=1 {
             let table = &mut self.ht[table_idx];
 
             if table.is_empty_table() {
+                if !self.is_rehashing() {
+                    break;
+                }
+
                 continue;
             }
 
             let slot = (hash as usize) & table.size_mask;
-            let removed = Self::remove_from_chain_iter(&mut table.buckets[slot], key);
 
-            if removed {
+            if Self::remove_from_chain_iter(&mut table.buckets[slot], key) {
                 table.used -= 1;
                 return true;
             }
@@ -282,11 +331,13 @@ where
     }
 
     /// Возвращает общее количество элементов во всех таблицах.
+    #[inline]
     pub fn len(&self) -> usize {
         self.ht[0].used + self.ht[1].used
     }
 
     /// Возвращает `true`, если словарь пуст.
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -308,12 +359,36 @@ where
         }
     }
 
+    /// Вычисляет хеш ключа через `self.hasher_builder`.
+    #[inline]
+    fn make_hash(
+        &self,
+        key: &K,
+    ) -> u64 {
+        self.hasher_builder.hash_one(key)
+    }
+
+    /// Безопасный мутабельный поиск по цепочке через match-guard cursor.
+    fn find_val_mut<'a>(
+        mut head: &'a mut Option<Box<Entry<K, V>>>,
+        key: &K,
+    ) -> Option<&'a mut V> {
+        while let Some(ref mut boxed) = head {
+            if &boxed.key == key {
+                return Some(&mut boxed.val);
+            }
+            head = &mut boxed.next;
+        }
+        None
+    }
+
     /// Итеративно удаляет первый узел с ключом `key` из цепочки `head`.
     fn remove_from_chain_iter(
         head: &mut Option<Box<Entry<K, V>>>,
         key: &K,
     ) -> bool {
         let mut cur = head;
+
         loop {
             match cur {
                 None => return false,
@@ -333,19 +408,6 @@ where
     #[inline]
     fn is_rehashing(&self) -> bool {
         self.rehash_idx != -1
-    }
-
-    /// Вычисляет хеш ключа как u64.
-    #[inline]
-    fn hash_key(key: &K) -> u64 {
-        Self::hash_key_raw(key)
-    }
-
-    #[inline]
-    fn hash_key_raw<Q: ?Sized + Hash>(key: &Q) -> u64 {
-        let mut h = DefaultHasher::new();
-        key.hash(&mut h);
-        h.finish()
     }
 
     /// Выполняет `REHASH_BATCH` шагов инкрементного рехеширования.
@@ -370,8 +432,7 @@ where
             while let Some(mut e) = entry_opt {
                 entry_opt = e.next.take();
 
-                let hash = Self::hash_key(&e.key);
-                let slot = (hash as usize) & self.ht[1].size_mask;
+                let slot = (self.make_hash(&e.key) as usize) & self.ht[1].size_mask;
 
                 e.next = self.ht[1].buckets[slot].take();
 
@@ -405,8 +466,151 @@ where
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Общие реализации трейтов для Dict, DictIter
+// Общие реализации трейтов для Dict, DictIter, Entry
 ////////////////////////////////////////////////////////////////////////////////
+
+impl<K: Debug, V: Debug> Debug for Entry<K, V> {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("Entry")
+            .field("key", &self.key)
+            .field("val", &self.val)
+            .finish()
+    }
+}
+
+impl<K, V> Default for Dict<K, V, RandomState>
+where
+    K: Hash + Eq,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K, V, S> Debug for Dict<K, V, S>
+where
+    K: Hash + Eq + Debug,
+    V: Debug,
+    S: BuildHasher,
+{
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
+}
+
+impl<K, V, S> Clone for Dict<K, V, S>
+where
+    K: Hash + Eq + Clone,
+    V: Clone,
+    S: BuildHasher + Clone,
+{
+    fn clone(&self) -> Self {
+        Dict {
+            ht: [self.ht[0].clone(), self.ht[1].clone()],
+            rehash_idx: self.rehash_idx,
+            hasher_builder: self.hasher_builder.clone(),
+        }
+    }
+}
+
+impl<K, V, S> PartialEq for Dict<K, V, S>
+where
+    K: Hash + Eq,
+    V: PartialEq,
+    S: BuildHasher,
+{
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+
+        self.iter().all(|(k, v)| other.get(k) == Some(v))
+    }
+}
+
+impl<K, V, S> Eq for Dict<K, V, S>
+where
+    K: Hash + Eq,
+    V: Eq,
+    S: BuildHasher,
+{
+}
+
+impl<K, V, S> Serialize for Dict<K, V, S>
+where
+    K: Hash + Eq + Serialize,
+    V: Serialize,
+    S: BuildHasher,
+{
+    fn serialize<Ser>(
+        &self,
+        serializer: Ser,
+    ) -> Result<Ser::Ok, Ser::Error>
+    where
+        Ser: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.len()))?;
+        for (k, v) in self.iter() {
+            seq.serialize_element(&(k, v))?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de, K, V, S> Deserialize<'de> for Dict<K, V, S>
+where
+    K: Hash + Eq + Deserialize<'de>,
+    V: Deserialize<'de>,
+    S: BuildHasher + Default,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct DictVisitor<K, V, S>(PhantomData<(K, V, S)>);
+
+        impl<'de, K, V, S> Visitor<'de> for DictVisitor<K, V, S>
+        where
+            K: Hash + Eq + Deserialize<'de>,
+            V: Deserialize<'de>,
+            S: BuildHasher + Default,
+        {
+            type Value = Dict<K, V, S>;
+
+            fn expecting(
+                &self,
+                f: &mut fmt::Formatter,
+            ) -> fmt::Result {
+                write!(f, "sequence of (key, value) pairs")
+            }
+
+            fn visit_seq<A>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut dict = Dict::with_hasher(S::default());
+                while let Some((k, v)) = seq.next_element::<(K, V)>()? {
+                    dict.insert(k, v);
+                }
+                Ok(dict)
+            }
+        }
+
+        deserializer.deserialize_seq(DictVisitor(PhantomData))
+    }
+}
 
 impl<'a, K, V> Iterator for DictIter<'a, K, V> {
     type Item = (&'a K, &'a V);
@@ -437,24 +641,16 @@ impl<'a, K, V> Iterator for DictIter<'a, K, V> {
     }
 }
 
-impl<'a, K, V> IntoIterator for &'a Dict<K, V>
+impl<'a, K, V, S> IntoIterator for &'a Dict<K, V, S>
 where
     K: Hash + Eq,
+    S: BuildHasher,
 {
     type Item = (&'a K, &'a V);
     type IntoIter = DictIter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
-    }
-}
-
-impl<K, V> Default for Dict<K, V>
-where
-    K: Hash + Eq,
-{
-    fn default() -> Self {
-        Self::new()
     }
 }
 
