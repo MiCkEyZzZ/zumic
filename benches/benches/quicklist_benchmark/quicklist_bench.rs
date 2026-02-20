@@ -7,7 +7,6 @@ use zumic::QuickList;
 const SIZES: [usize; 3] = [1_000usize, 10_000usize, 100_000usize];
 const RANDOM_ACCESSES: usize = 1_000;
 
-// Helper: fill containers with sequential integers 0..n-1
 fn fill_vec(n: usize) -> Vec<i32> {
     (0..n as i32).collect()
 }
@@ -27,7 +26,6 @@ fn fill_quicklist(
     q
 }
 
-// Benchmark: bulk push_back
 fn bench_push_back(c: &mut Criterion) {
     let mut g = c.benchmark_group("push_back_bulk");
     g.measurement_time(Duration::from_secs(5));
@@ -66,7 +64,6 @@ fn bench_push_back(c: &mut Criterion) {
     g.finish();
 }
 
-// Benchmark: bulk push_front
 fn bench_push_front(c: &mut Criterion) {
     let mut g = c.benchmark_group("push_front_bulk");
     g.measurement_time(Duration::from_secs(5));
@@ -110,7 +107,6 @@ fn bench_push_front(c: &mut Criterion) {
     g.finish();
 }
 
-// Benchmark: pop_back / pop_front draining
 fn bench_pop_drain(c: &mut Criterion) {
     let mut g = c.benchmark_group("pop_drain");
     g.measurement_time(Duration::from_secs(5));
@@ -191,7 +187,6 @@ fn bench_pop_drain(c: &mut Criterion) {
     g.finish();
 }
 
-// Benchmark: random_get (1000 random reads)
 fn bench_random_get(c: &mut Criterion) {
     let mut g = c.benchmark_group("random_get_1k");
     g.measurement_time(Duration::from_secs(5));
@@ -252,7 +247,6 @@ fn bench_random_get(c: &mut Criterion) {
     g.finish();
 }
 
-// Benchmark: sequential iterator performance
 fn bench_sequential_iter(c: &mut Criterion) {
     let mut g = c.benchmark_group("sequential_iter");
     g.measurement_time(Duration::from_secs(5));
@@ -291,7 +285,6 @@ fn bench_sequential_iter(c: &mut Criterion) {
     g.finish();
 }
 
-// Benchmark: into_vecdeque / flatten
 fn bench_into_vecdeque(c: &mut Criterion) {
     let mut g = c.benchmark_group("into_vecdeque_flatten");
     g.measurement_time(Duration::from_secs(5));

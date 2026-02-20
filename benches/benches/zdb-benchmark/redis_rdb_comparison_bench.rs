@@ -1,11 +1,3 @@
-//! Сравнение производительности ZDB vs Redis RDB парсинга
-//!
-//! Использует rdb-rs для честного сравнения
-//!
-//! Требования:
-//! - Redis должен быть установлен и доступен через redis-cli
-//! - Если Redis недоступен - Redis бенчмарки будут пропущены
-
 use std::{
     fs::File,
     hint::black_box,
@@ -19,10 +11,6 @@ use zumic::{
     engine::{read_dump, write_dump, write_stream, CollectHandler, StreamingParser},
     Sds, SmartHash, Value,
 };
-
-// ============================================================================
-// Helper: создание тестовых данных для ZDB и Redis
-// ============================================================================
 
 fn create_test_dataset(num_entries: usize) -> Vec<(Sds, Value)> {
     let mut items = Vec::with_capacity(num_entries);
@@ -52,10 +40,6 @@ fn create_test_dataset(num_entries: usize) -> Vec<(Sds, Value)> {
     items
 }
 
-// ============================================================================
-// Helper: проверка доступности Redis
-// ============================================================================
-
 fn is_redis_available() -> bool {
     Command::new("redis-cli")
         .arg("PING")
@@ -63,10 +47,6 @@ fn is_redis_available() -> bool {
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
-
-// ============================================================================
-// Helper: записать dataset в Redis и получить dump.rdb
-// ============================================================================
 
 fn make_redis_rdb_dump(dataset: &[(Sds, Value)]) -> Option<Vec<u8>> {
     if !is_redis_available() {
@@ -155,10 +135,6 @@ fn make_redis_rdb_dump(dataset: &[(Sds, Value)]) -> Option<Vec<u8>> {
 
     Some(buf)
 }
-
-// ============================================================================
-// Benchmarks: ZDB vs Redis RDB
-// ============================================================================
 
 fn bench_zdb_vs_redis_parsing(c: &mut Criterion) {
     let mut group = c.benchmark_group("zdb_vs_redis");

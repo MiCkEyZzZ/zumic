@@ -11,7 +11,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use zumic::{database::ShardedSkipList, ConcurrentSkipList};
 
-/// Создаёт набор random ключей для тестирования.
 fn make_keys(
     n: usize,
     seed: u64,
@@ -20,7 +19,6 @@ fn make_keys(
     (0..n).map(|_| rng.gen()).collect()
 }
 
-/// Benchmark: Concurrent inserts с разным количеством threads.
 fn bench_concurrent_inserts(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_inserts");
 
@@ -97,7 +95,6 @@ fn bench_concurrent_inserts(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Concurrent reads (100% read workload).
 fn bench_concurrent_reads(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_reads");
 
@@ -179,7 +176,6 @@ fn bench_concurrent_reads(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Mixed workload (read/write ratios).
 fn bench_mixed_workload(c: &mut Criterion) {
     let mut group = c.benchmark_group("mixed_workload");
 
@@ -291,7 +287,6 @@ fn bench_mixed_workload(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Scalability (fixed work, varying threads).
 fn bench_scalability(c: &mut Criterion) {
     let mut group = c.benchmark_group("scalability");
 
@@ -364,7 +359,6 @@ fn bench_scalability(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark: Lock contention под высокой нагрузкой.
 fn bench_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("lock_contention");
 

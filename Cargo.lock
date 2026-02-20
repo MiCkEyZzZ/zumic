@@ -4447,10 +4447,12 @@ dependencies = [
 name = "zumic-benchmark"
 version = "0.1.0"
 dependencies = [
+ "ahash 0.8.12",
  "criterion",
  "ordered-float 5.1.0",
  "rand 0.8.5",
  "rdb",
+ "rustc-hash",
  "zstd",
  "zumic",
  "zumic-error",

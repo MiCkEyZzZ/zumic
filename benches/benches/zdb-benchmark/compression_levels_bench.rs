@@ -10,11 +10,6 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use zumic::Sds;
 
-// ============================================================================
-// Compression benchmarks with explicit ZSTD levels
-// ============================================================================
-
-/// Создаёт хорошо сжимаемые данные (повторяющиеся паттерны)
 fn create_compressible_data(size: usize) -> Vec<u8> {
     let pattern = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. ";
     let mut data = Vec::with_capacity(size);
@@ -25,14 +20,12 @@ fn create_compressible_data(size: usize) -> Vec<u8> {
     data
 }
 
-/// Создаёт плохо сжимаемые данные (псевдослучайные)
 fn create_random_data(size: usize) -> Vec<u8> {
     (0..size)
         .map(|i| ((i * 6364136223846793005u64 as usize + 1) >> 32) as u8)
         .collect()
 }
 
-/// Сжимает данные с явным уровнем ZSTD
 fn compress_with_level(
     data: &[u8],
     level: i32,
@@ -40,7 +33,6 @@ fn compress_with_level(
     zstd::encode_all(data, level).expect("compression failed")
 }
 
-/// Распаковывает данные
 fn decompress(data: &[u8]) -> Vec<u8> {
     zstd::decode_all(data).expect("decompression failed")
 }

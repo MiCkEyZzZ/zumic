@@ -8,9 +8,6 @@ const N_SPARSE: usize = 100;
 const N_DENSE: usize = 50_000;
 const N_MERGE: usize = 10_000;
 
-// -------------------------------------------------
-// add(): sparse
-// -------------------------------------------------
 fn bench_add_sparse(c: &mut Criterion) {
     c.bench_function("hll/add_sparse", |b| {
         b.iter_batched(
@@ -25,9 +22,6 @@ fn bench_add_sparse(c: &mut Criterion) {
     });
 }
 
-// ------------------------------------------------------------
-// add(): dense
-// ------------------------------------------------------------
 fn bench_add_dense(c: &mut Criterion) {
     c.bench_function("hll/add_dense", |b| {
         b.iter_batched(
@@ -49,9 +43,6 @@ fn bench_add_dense(c: &mut Criterion) {
     });
 }
 
-// ------------------------------------------------------------
-// sparse -> dense conversion cost
-// ------------------------------------------------------------
 fn bench_sparse_to_dense(c: &mut Criterion) {
     c.bench_function("hll/sparse_to_dense", |b| {
         b.iter(|| {
@@ -63,9 +54,6 @@ fn bench_sparse_to_dense(c: &mut Criterion) {
     });
 }
 
-// ------------------------------------------------------------
-// merge(): dense + dense
-// ------------------------------------------------------------
 fn bench_merge_dense_dense(c: &mut Criterion) {
     c.bench_function("hll/merge_dense_dense", |b| {
         b.iter_batched(
@@ -88,9 +76,6 @@ fn bench_merge_dense_dense(c: &mut Criterion) {
     });
 }
 
-// ------------------------------------------------------------
-// estimate_cardinality()
-// ------------------------------------------------------------
 fn bench_estimate(c: &mut Criterion) {
     c.bench_function("hll/estimate", |b| {
         let mut hll = Hll::<14>::with_threshold(10);
@@ -104,9 +89,6 @@ fn bench_estimate(c: &mut Criterion) {
     });
 }
 
-// ------------------------------------------------------------
-// hasher comparison (add only)
-// ------------------------------------------------------------
 fn bench_hashers(c: &mut Criterion) {
     let mut group = c.benchmark_group("hll/add_dense_hashers");
 

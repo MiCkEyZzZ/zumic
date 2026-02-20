@@ -3,7 +3,6 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use zumic::ListPack;
 
-/// Benchmark для удаления первого элемента (должен быть O(1))
 fn bench_remove_first(c: &mut Criterion) {
     let mut group = c.benchmark_group("remove_first_pure");
 
@@ -23,7 +22,6 @@ fn bench_remove_first(c: &mut Criterion) {
     }
 }
 
-/// Benchmark для удаления последнего элемента
 fn bench_remove_last(c: &mut Criterion) {
     let mut group = c.benchmark_group("remove_last");
 
@@ -45,7 +43,6 @@ fn bench_remove_last(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark для удаления из начала списка (left-biased)
 fn bench_remove_near_start(c: &mut Criterion) {
     let mut group = c.benchmark_group("remove_near_start");
 
@@ -68,7 +65,6 @@ fn bench_remove_near_start(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark для удаления из конца списка (right-biased)
 fn bench_remove_near_end(c: &mut Criterion) {
     let mut group = c.benchmark_group("remove_near_end");
 
@@ -91,7 +87,6 @@ fn bench_remove_near_end(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark для удаления из середины списка
 fn bench_remove_middle(c: &mut Criterion) {
     let mut group = c.benchmark_group("remove_middle");
 
@@ -114,7 +109,6 @@ fn bench_remove_middle(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark для множественных последовательных удалений
 fn bench_remove_sequential_pattern(c: &mut Criterion) {
     c.bench_function("remove_sequential_every_5th_1000", |b| {
         b.iter(|| {
@@ -142,7 +136,6 @@ fn bench_remove_sequential_pattern(c: &mut Criterion) {
     });
 }
 
-/// Benchmark для worst-case scenario — удаление всех элементов с начала
 fn bench_remove_all_from_start(c: &mut Criterion) {
     c.bench_function("remove_all_from_start_500", |b| {
         b.iter(|| {
@@ -162,7 +155,6 @@ fn bench_remove_all_from_start(c: &mut Criterion) {
     });
 }
 
-/// Benchmark для best-case scenario — удаление всех элементов с конца
 fn bench_remove_all_from_end(c: &mut Criterion) {
     c.bench_function("remove_all_from_end_500", |b| {
         b.iter(|| {

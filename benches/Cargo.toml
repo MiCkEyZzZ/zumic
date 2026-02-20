@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/skiplist_benchmark/concurrent_bench.rs"
+path = "benches/dict_benchmark/dict_hashers_comparison.rs"
 harness = false
 
 [lints]
@@ -26,5 +26,7 @@ rdb = "0.3.0"
 zstd = { workspace = true }
 
 [dev-dependencies]
+ahash = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
+rustc-hash = { workspace = true }

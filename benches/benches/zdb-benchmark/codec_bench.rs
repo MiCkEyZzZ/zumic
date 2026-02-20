@@ -10,10 +10,6 @@ use zumic::{
     Dict, Hll, Sds, SkipList, SmartHash, Value, DENSE_SIZE,
 };
 
-// ============================================================================
-// Helper functions для создания тестовых данных
-// ============================================================================
-
 fn create_string_value(size: usize) -> Value {
     Value::Str(Sds::from_vec(vec![b'a'; size]))
 }
@@ -88,10 +84,6 @@ fn create_bitmap_value(size: usize) -> Value {
     bm.bytes = vec![0xFF; size];
     Value::Bitmap(bm)
 }
-
-// ============================================================================
-// Benchmarks: Encode/Decode для каждого типа Value
-// ============================================================================
 
 fn bench_encode_decode_primitives(c: &mut Criterion) {
     let mut group = c.benchmark_group("encode_decode/primitives");
@@ -345,10 +337,6 @@ fn bench_encode_decode_complex(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: Compression levels
-// ============================================================================
-
 fn bench_compression_levels(c: &mut Criterion) {
     let mut group = c.benchmark_group("compression");
     group.sample_size(20);
@@ -409,10 +397,6 @@ fn bench_compression_levels(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: Full dump operations
-// ============================================================================
-
 fn bench_dump_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("dump_operations");
     group.sample_size(20);
@@ -460,10 +444,6 @@ fn bench_dump_operations(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: Memory usage (измеряем косвенно через throughput)
-// ============================================================================
-
 fn bench_memory_intensive(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_intensive");
     group.sample_size(10); // Ещё меньше для больших структур
@@ -490,10 +470,6 @@ fn bench_memory_intensive(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ============================================================================
-// Criterion configuration
-// ============================================================================
 
 criterion_group!(
     benches,

@@ -4,10 +4,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use zumic::{GeoEntry, GeoPoint, GeoSet, Geohash, GeohashPrecision, RadiusOptions};
 
-/// -----------------------------
-/// Utils
-/// -----------------------------
-
 fn generate_entries(count: usize) -> Vec<GeoEntry> {
     let mut rng = StdRng::seed_from_u64(42);
 
@@ -46,10 +42,6 @@ fn generate_clustered_points(
         .collect()
 }
 
-/// -----------------------------
-/// Insert benchmarks
-/// -----------------------------
-
 fn bench_insertion(c: &mut Criterion) {
     let mut group = c.benchmark_group("insert");
 
@@ -85,10 +77,6 @@ fn bench_insertion(c: &mut Criterion) {
     group.finish();
 }
 
-/// -----------------------------
-/// Get / Dist
-/// -----------------------------
-
 fn bench_get_and_dist(c: &mut Criterion) {
     let entries = generate_entries(10_000);
     let gs = GeoSet::from_entries(entries.clone());
@@ -104,10 +92,6 @@ fn bench_get_and_dist(c: &mut Criterion) {
         b.iter(|| black_box(gs.dist(black_box(m1), black_box(m2))));
     });
 }
-
-/// -----------------------------
-/// Radius
-/// -----------------------------
 
 fn bench_radius(c: &mut Criterion) {
     let mut group = c.benchmark_group("radius");
@@ -167,10 +151,6 @@ fn bench_radius(c: &mut Criterion) {
     group.finish();
 }
 
-/// -----------------------------
-/// k-NN
-/// -----------------------------
-
 fn bench_knn(c: &mut Criterion) {
     let mut group = c.benchmark_group("knn");
 
@@ -189,10 +169,6 @@ fn bench_knn(c: &mut Criterion) {
     group.finish();
 }
 
-/// -----------------------------
-/// Geohash
-/// -----------------------------
-
 fn bench_geohash(c: &mut Criterion) {
     let point = GeoPoint {
         lon: 13.361389,
@@ -210,10 +186,6 @@ fn bench_geohash(c: &mut Criterion) {
         });
     }
 }
-
-/// -----------------------------
-/// False positive rate (CORRECT)
-/// -----------------------------
 
 fn bench_false_positive(c: &mut Criterion) {
     use std::collections::HashSet;

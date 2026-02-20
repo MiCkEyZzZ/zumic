@@ -9,10 +9,6 @@ use zumic::{
     Sds, SmartHash, Value,
 };
 
-// ============================================================================
-// Helper functions
-// ============================================================================
-
 fn create_test_dataset(num_entries: usize) -> Vec<(Sds, Value)> {
     let mut items = Vec::with_capacity(num_entries);
 
@@ -42,10 +38,6 @@ fn create_test_dataset(num_entries: usize) -> Vec<(Sds, Value)> {
 
     items
 }
-
-// ============================================================================
-// Utility: prepare dump and stream bytes and sanity-check them
-// ============================================================================
 
 fn prepare_dump_and_stream(num_entries: usize) -> (Vec<u8>, Vec<u8>) {
     // Генерируем данные отдельно для dump и для stream — это гарантирует, что
@@ -88,10 +80,6 @@ fn prepare_dump_and_stream(num_entries: usize) -> (Vec<u8>, Vec<u8>) {
 
     (dump_data, stream_data)
 }
-
-// ============================================================================
-// Benchmarks: Streaming vs Buffered parsing
-// ============================================================================
 
 fn bench_streaming_vs_buffered(c: &mut Criterion) {
     let mut group = c.benchmark_group("streaming_vs_buffered");
@@ -191,10 +179,6 @@ fn bench_streaming_vs_buffered(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: StreamReader iterator
-// ============================================================================
-
 fn bench_stream_reader_iterator(c: &mut Criterion) {
     let mut group = c.benchmark_group("stream_reader");
     group.sample_size(20);
@@ -273,10 +257,6 @@ fn bench_stream_reader_iterator(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: Memory pressure scenarios
-// ============================================================================
-
 fn bench_memory_pressure(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_pressure");
     group.sample_size(10);
@@ -325,10 +305,6 @@ fn bench_memory_pressure(c: &mut Criterion) {
     group.finish();
 }
 
-// ============================================================================
-// Benchmarks: Parse overhead (малый дамп)
-// ============================================================================
-
 fn bench_parse_overhead(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_overhead");
     group.sample_size(50);
@@ -368,10 +344,6 @@ fn bench_parse_overhead(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ============================================================================
-// Benchmarks: Different data patterns
-// ============================================================================
 
 fn bench_data_patterns(c: &mut Criterion) {
     let mut group = c.benchmark_group("data_patterns");
@@ -449,10 +421,6 @@ fn bench_data_patterns(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ============================================================================
-// Criterion configuration
-// ============================================================================
 
 criterion_group!(
     benches,

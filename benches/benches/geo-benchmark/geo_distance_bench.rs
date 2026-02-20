@@ -9,7 +9,6 @@ use zumic::{
     haversine_distance, GeoPoint,
 };
 
-/// Тестовые точки для бенчмарков.
 fn test_points() -> Vec<(GeoPoint, GeoPoint, &'static str)> {
     vec![
         // Малое расстояние (~1км)
@@ -48,7 +47,6 @@ fn test_points() -> Vec<(GeoPoint, GeoPoint, &'static str)> {
     ]
 }
 
-/// Бенчмарк для сравнения всех методов.
 fn bench_distance_methods(c: &mut Criterion) {
     let mut group = c.benchmark_group("distance_methods");
 
@@ -114,7 +112,6 @@ fn bench_distance_methods(c: &mut Criterion) {
     group.finish();
 }
 
-/// Бенчмарк для преобразования единиц измерения.
 fn bench_unit_conversions(c: &mut Criterion) {
     let mut group = c.benchmark_group("unit_conversions");
 
@@ -141,7 +138,6 @@ fn bench_unit_conversions(c: &mut Criterion) {
     group.finish();
 }
 
-/// Бенчмарк для унифицированного метода расчета дистанции.
 fn bench_unified_calculation(c: &mut Criterion) {
     let p1 = GeoPoint {
         lon: 13.4,
@@ -173,7 +169,6 @@ fn bench_unified_calculation(c: &mut Criterion) {
     });
 }
 
-/// Бенчмарк для пользовательских эллипсоидов.
 fn bench_custom_ellipsoids(c: &mut Criterion) {
     let p1 = GeoPoint { lon: 0.0, lat: 0.0 };
     let p2 = GeoPoint { lon: 1.0, lat: 0.0 };
@@ -199,7 +194,6 @@ fn bench_custom_ellipsoids(c: &mut Criterion) {
     });
 }
 
-/// Бенчмарк для сравнения методов с эталонными значениями.
 fn bench_accuracy_analysis(c: &mut Criterion) {
     // Лондон — Париж: известное расстояние ~343,5 км.
     let london = GeoPoint {
@@ -229,7 +223,6 @@ fn bench_accuracy_analysis(c: &mut Criterion) {
     });
 }
 
-/// Тест масштабирования производительности: как методы масштабируются.
 fn bench_method_scaling(c: &mut Criterion) {
     let mut group = c.benchmark_group("scaling");
 
