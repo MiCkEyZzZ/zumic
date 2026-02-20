@@ -1,27 +1,3 @@
-//! Хеш-таблица (Dict) с инкрементным рехешированием.
-//!
-//! Реализация словаря (ассоциативного массива), основанного на хеш-таблице с
-//! цепочками, двумя таблицами и плавным рехешированием без пауз.
-//!
-//! ## Инварианты
-//!
-//! - Если `rehash_idx == -1`:
-//!     - вторая таблица (`ht[1]`) пуста;
-//!     - все элементы находятся в первой таблице (`ht[0]`).
-//!
-//! - Если `rehash_idx >= 0`:
-//!     - рехеширование в процессе;
-//!     - элементы распределены между `ht[0]` и `ht[1]`.
-//!
-//! - Общее количество элементов: `ht[0].used + ht[1].used`.
-//!
-//! ## Хешер
-//!
-//! По умолчанию используется [`ahash::RandomState`] — рандомизированный
-//! при старте процесса, устойчивый к HashDoS-атакам.
-//! Хешер можно заменить через [`Dict::with_hasher`] или
-//! [`Dict::with_capacity_and_hasher`].
-
 use std::{
     fmt::{self, Debug},
     hash::{BuildHasher, Hash},
@@ -38,8 +14,14 @@ use serde::{
 /// Начальный размер таблицы (степень двойки).
 const INITIAL_SIZE: usize = 4;
 
-/// Количество бакетов, переносимых за один шаг рехеширования.
-const REHASH_BATCH: usize = 1;
+/// Минимальное число элементов, которое нужно перенести за один шаг рехеша.
+const REHASH_MIN_ENTRIES: usize = 8;
+
+/// Максимальное число пустых бакетов, которое можно пропустить за один шаг.
+const REHASH_MAX_EMPTY_VISITS: usize = 64;
+
+/// Load factor, ниже которого запускается автоматический shrink.
+const SHRINK_RATIO: f64 = 0.25;
 
 /// Один элемент в цепочке коллизий.
 #[derive(PartialEq, Eq, Clone)]
@@ -122,6 +104,12 @@ impl<K, V> HashTable<K, V> {
     fn is_empty_table(&self) -> bool {
         self.buckets.is_empty()
     }
+
+    /// Возвращает ёмкость (кол-во бакетов).
+    #[inline]
+    fn capacity(&self) -> usize {
+        self.buckets.len()
+    }
 }
 
 impl<K, V> Dict<K, V, RandomState>
@@ -153,8 +141,7 @@ where
         }
     }
 
-    /// Создаёт словарь с предвыделенной ёмкостью и заданным строителями
-    /// хешеров.
+    /// Создаёт словарь с предвыделенной ёмкостью и заданным строителем хешеров.
     pub fn with_capacity_and_hasher(
         cap: usize,
         hasher_builder: S,
@@ -185,7 +172,6 @@ where
 
         let hash = self.make_hash(&key);
 
-        // Поиск существующего ключа (обе таблицы при рехешировании).
         for table_idx in 0..=1 {
             if self.ht[table_idx].is_empty_table() {
                 if !self.is_rehashing() {
@@ -212,7 +198,6 @@ where
             }
         }
 
-        // Вставка нового элемента в начало цепочки целевой таблицы.
         let table_idx = if self.is_rehashing() { 1 } else { 0 };
         let slot = (hash as usize) & self.ht[table_idx].size_mask;
         let next = self.ht[table_idx].buckets[slot].take();
@@ -263,34 +248,27 @@ where
         &mut self,
         key: &K,
     ) -> Option<&mut V> {
-        // Выполним шаг рехеша, если нужно.
         if self.is_rehashing() {
             self.rehash_step();
         }
 
         let hash = self.make_hash(key);
-
-        // Считаем состояние рехеширования заранее — до того, как мы возьмём
-        // mutable borrows частей `self`.
         let rehashing = self.is_rehashing();
-
-        // Возьмём mut ссылки на обе таблицы как отдельные непересекающиеся borrows.
-        // split_at_mut(1) даёт [0] и [1] как независимые mutable ссылки.
         let (left, right) = self.ht.split_at_mut(1);
         let t0: &mut HashTable<K, V> = &mut left[0];
         let t1: &mut HashTable<K, V> = &mut right[0];
 
-        // Сначала ищем в ht[0]
         if !t0.is_empty_table() {
             let slot = (hash as usize) & t0.size_mask;
+
             if let Some(v) = Self::find_val_mut(&mut t0.buckets[slot], key) {
                 return Some(v);
             }
         }
 
-        // Только если идёт рехеширование — ищем во второй таблице.
         if rehashing && !t1.is_empty_table() {
             let slot = (hash as usize) & t1.size_mask;
+
             if let Some(v) = Self::find_val_mut(&mut t1.buckets[slot], key) {
                 return Some(v);
             }
@@ -325,6 +303,13 @@ where
 
             if Self::remove_from_chain_iter(&mut table.buckets[slot], key) {
                 table.used -= 1;
+
+                // Проверяем shrink только после реального удаления из ht[0],
+                // ВАЖНО! не из ht[1], который временный при рехешировании.
+                if table_idx == 0 {
+                    self.shrink_if_needed();
+                }
+
                 return true;
             }
 
@@ -348,11 +333,52 @@ where
         self.len() == 0
     }
 
+    /// Возвращает текущую ёмкость (число бакетов) основной таблицы.
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.ht[0].capacity()
+    }
+
     /// Очищает словарь и сбрасывает рехешинг.
     pub fn clear(&mut self) {
         self.ht[0].clear();
         self.ht[1].clear();
         self.rehash_idx = -1;
+    }
+
+    /// Предвыделяет память для `additional` дополнительных элементов.
+    pub fn reserve(
+        &mut self,
+        additional: usize,
+    ) {
+        let needed = self.len() + additional;
+        let current_cap = self.ht[0].capacity();
+
+        // Если уже достаточно места с учётом load factor <= 1 - ничего не делаем
+        if current_cap >= needed {
+            return;
+        }
+
+        // Форсируем полное рехеширование в таблицу нужного размера.
+        self.force_rehash_to(needed);
+    }
+
+    /// Уменьшаем выделенную память до минимально необходимой.
+    pub fn shrink_to_fit(&mut self) {
+        let used = self.len();
+
+        let target = if used == 0 {
+            0
+        } else {
+            used.next_power_of_two().max(INITIAL_SIZE)
+        };
+
+        // Уже оптимально
+        if self.ht[0].capacity() <= target && !self.is_rehashing() {
+            return;
+        }
+
+        self.force_rehash_to(target);
     }
 
     /// Возвращает итератор по парам `(&K, &V)`.
@@ -383,12 +409,15 @@ where
             if &boxed.key == key {
                 return Some(&mut boxed.val);
             }
+
             head = &mut boxed.next;
         }
+
         None
     }
 
-    /// Итеративно удаляет первый узел с ключом `key` из цепочки `head`.
+    /// Итеративно удаляет первый узел с ключом `key` из цепочки `head` без
+    /// рекурсии.
     fn remove_from_chain_iter(
         head: &mut Option<Box<Entry<K, V>>>,
         key: &K,
@@ -401,6 +430,7 @@ where
                 Some(node) if &node.key == key => {
                     // Изымаем текущий узел, подставляя вместо него его хвост.
                     *cur = node.next.take();
+
                     return true;
                 }
                 Some(node) => {
@@ -416,23 +446,160 @@ where
         self.rehash_idx != -1
     }
 
-    /// Выполняет `REHASH_BATCH` шагов инкрементного рехеширования.
+    /// Адаптивный шаг инкрементного рехеширования.
     fn rehash_step(&mut self) {
         if !self.is_rehashing() {
             return;
         }
 
-        for _ in 0..REHASH_BATCH {
+        let mut entries_moved = 0;
+        let mut empty_visits = 0;
+
+        while entries_moved < REHASH_MIN_ENTRIES || empty_visits < REHASH_MAX_EMPTY_VISITS {
             let idx = self.rehash_idx as usize;
 
-            if idx >= self.ht[0].buckets.len() {
-                // Все бакеты перенесены - финализируем рехеширование.
+            // FIX: >= instead of >
+            if idx >= self.ht[0].capacity() {
                 self.ht[0] = std::mem::replace(&mut self.ht[1], HashTable::with_capacity(0));
                 self.rehash_idx = -1;
                 return;
             }
 
-            // Переносим всю цепочку баета idx из ht[0] в ht[1]
+            if self.ht[0].buckets[idx].is_none() {
+                empty_visits += 1;
+                self.rehash_idx += 1;
+
+                if empty_visits >= REHASH_MAX_EMPTY_VISITS && entries_moved > 0 {
+                    return;
+                }
+
+                continue;
+            }
+
+            let mut entry_opt = self.ht[0].buckets[idx].take();
+
+            while let Some(mut e) = entry_opt {
+                entry_opt = e.next.take();
+
+                let slot = (self.make_hash(&e.key) as usize) & self.ht[1].size_mask;
+
+                e.next = self.ht[1].buckets[slot].take();
+                self.ht[1].buckets[slot] = Some(e);
+
+                self.ht[0].used -= 1; // also important
+                self.ht[1].used += 1;
+
+                entries_moved += 1;
+            }
+
+            self.rehash_idx += 1;
+            empty_visits = 0;
+        }
+    }
+
+    /// Инициирует рехеширование в увеличенную таблицу, если load factor ≥ 1.
+    fn expand_if_needed(&mut self) {
+        if self.is_rehashing() {
+            return;
+        }
+
+        let size = self.ht[0].capacity();
+        let used = self.ht[0].used;
+
+        if size == 0 {
+            // Первая вставка: инициализируем ht[0] вместо запуска рехеширования.
+            self.ht[0] = HashTable::with_capacity(INITIAL_SIZE);
+        } else if used >= size {
+            // Load factor ≥ 1: начинаем рехеширование в таблицу вдвое большего размера.
+            self.ht[1] = HashTable::with_capacity(size * 2);
+            self.rehash_idx = 0;
+        }
+    }
+
+    /// Автоматически уменьшает таблицу если load factor ниже [`SHRINK_RATIO`].
+    fn shrink_if_needed(&mut self) {
+        if self.is_rehashing() {
+            return;
+        }
+
+        let size = self.ht[0].capacity();
+        let used = self.ht[0].used;
+
+        // Защита от слишком маленьких таблиц
+        if size <= INITIAL_SIZE {
+            return;
+        }
+
+        let shrink_threshold = (size as f64 * SHRINK_RATIO) as usize;
+
+        if used < shrink_threshold {
+            let new_size = (size / 2).max(INITIAL_SIZE);
+
+            self.ht[1] = HashTable::with_capacity(new_size);
+            self.rehash_idx = 0;
+        }
+    }
+
+    /// Форсирует полное (неинкрементное) рехеширование в таблицу с ёмкостью
+    /// `target_cap`.
+    fn force_rehash_to(
+        &mut self,
+        target_cap: usize,
+    ) {
+        // Сначала завершим текущее рехеширование если оно идёт.
+        if self.is_rehashing() {
+            self.finish_rehash();
+        }
+
+        let new_cap = if target_cap == 0 {
+            0
+        } else {
+            target_cap.next_power_of_two().max(INITIAL_SIZE)
+        };
+
+        // Если цель совпадает с текущей — ничего не делаем.
+        if self.ht[0].capacity() == new_cap {
+            return;
+        }
+
+        let mut new_table = HashTable::with_capacity(new_cap);
+        let hasher = &self.hasher_builder;
+
+        // Переносим все элементы напрямую — без инкрементности.
+        for bucket in &mut self.ht[0].buckets {
+            let mut entry_opt = bucket.take();
+
+            while let Some(mut e) = entry_opt {
+                entry_opt = e.next.take();
+
+                if new_cap == 0 {
+                    // target_cap == 0: просто дропаем элементы (shrink_to_fit на пустом).
+                    continue;
+                }
+
+                let hash = hasher.hash_one(&e.key);
+                let slot = (hash as usize) & new_table.size_mask;
+                e.next = new_table.buckets[slot].take();
+                new_table.buckets[slot] = Some(e);
+                new_table.used += 1;
+            }
+        }
+
+        self.ht[0] = new_table;
+        self.ht[1].clear();
+        self.rehash_idx = -1;
+    }
+
+    /// Форсированно завершает текущее рехеширование, перенося все оставшиеся
+    /// элементы из `ht[0]` в `ht[1]` и финализируя.
+    fn finish_rehash(&mut self) {
+        if !self.is_rehashing() {
+            return;
+        }
+
+        let len = self.ht[0].capacity();
+
+        for idx in (self.rehash_idx as usize)..len {
             let mut entry_opt = self.ht[0].buckets[idx].take();
 
             while let Some(mut e) = entry_opt {
@@ -446,28 +613,10 @@ where
                 self.ht[0].used -= 1;
                 self.ht[1].used += 1;
             }
-
-            self.rehash_idx += 1;
-        }
-    }
-
-    /// Инициирует рехеширование в увеличенную таблицу, если load factor ≥ 1.
-    fn expand_if_needed(&mut self) {
-        if self.is_rehashing() {
-            return;
         }
 
-        let size = self.ht[0].buckets.len();
-        let used = self.ht[0].used;
-
-        if size == 0 {
-            // Первая вставка: инициализируем ht[0] вместо запуска рехеширования.
-            self.ht[0] = HashTable::with_capacity(INITIAL_SIZE);
-        } else if used >= size {
-            // Load factor ≥ 1: начинаем рехеширование в таблицу вдвое большего размера.
-            self.ht[1] = HashTable::with_capacity(size * 2);
-            self.rehash_idx = 0;
-        }
+        self.ht[0] = std::mem::replace(&mut self.ht[1], HashTable::with_capacity(0));
+        self.rehash_idx = -1;
     }
 }
 
