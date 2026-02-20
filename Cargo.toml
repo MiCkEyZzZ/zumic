@@ -141,6 +141,7 @@ zumic-error = { workspace = true }
 murmur3 = "0.5.2"
 xxhash-rust = { version = "0.8", features = ["xxh64"] }
 ahash = "0.8.12"
+rustc-hash = "2.1.1"
 
 [dependencies.wasmtime]
 version = "36.0.3"

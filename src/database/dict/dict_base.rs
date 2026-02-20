@@ -18,7 +18,7 @@ const INITIAL_SIZE: usize = 4;
 const REHASH_BATCH: usize = 1;
 
 /// Один элемент в цепочке коллизий.
-#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone)]
 struct Entry<K, V> {
     key: K,
     val: V,
@@ -27,7 +27,7 @@ struct Entry<K, V> {
 
 /// Одна хеш-таблица: вектор бакетов, маска размера и количество занятых
 /// элементов.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct HashTable<K, V> {
     buckets: Vec<Option<Box<Entry<K, V>>>>,
     size_mask: usize,
@@ -350,7 +350,7 @@ where
     }
 
     /// Возвращает итератор по парам `(&K, &V)`.
-    pub fn iter<'a>(&'a self) -> DictIter<'a, K, V> {
+    pub fn iter(&self) -> DictIter<'_, K, V> {
         DictIter {
             tables: [&self.ht[0], &self.ht[1]],
             table_idx: 0,
@@ -660,6 +660,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use rustc_hash::FxBuildHasher;
+
     use super::*;
 
     #[test]
@@ -855,6 +857,66 @@ mod tests {
     }
 
     #[test]
+    fn test_with_capacity_preallocates() {
+        let mut d: Dict<u32, u32> = Dict::with_capacity(128);
+        assert!(!d.is_rehashing());
+        for i in 0..64u32 {
+            d.insert(i, i);
+        }
+        for i in 0..64u32 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_with_hasher_fxhash() {
+        let mut d: Dict<u64, u64, FxBuildHasher> = Dict::with_hasher(FxBuildHasher);
+        for i in 0..100u64 {
+            d.insert(i, i * 3);
+        }
+        for i in 0..100u64 {
+            assert_eq!(d.get(&i), Some(&(i * 3)));
+        }
+        assert_eq!(d.len(), 100);
+    }
+
+    #[test]
+    fn test_new_uses_ahash_by_default() {
+        let mut d: Dict<u32, u32> = Dict::new();
+        for i in 0..50 {
+            d.insert(i, i * 2);
+        }
+        for i in 0..50 {
+            assert_eq!(d.get(&i), Some(&(i * 2)));
+        }
+    }
+
+    #[test]
+    fn test_with_capacity_and_hasher_fxhash() {
+        let mut d: Dict<&str, i32, FxBuildHasher> =
+            Dict::with_capacity_and_hasher(64, FxBuildHasher);
+        d.insert("one", 1);
+        d.insert("two", 2);
+        assert_eq!(d.get(&"one"), Some(&1));
+        assert_eq!(d.get(&"two"), Some(&2));
+        assert_eq!(d.len(), 2);
+    }
+
+    #[test]
+    fn test_two_instances_independent() {
+        let mut d1: Dict<u32, u32> = Dict::new();
+        let mut d2: Dict<u32, u32> = Dict::new();
+        for i in 0..20 {
+            d1.insert(i, i);
+            d2.insert(i, i * 2);
+        }
+        for i in 0..20 {
+            assert_eq!(d1.get(&i), Some(&i));
+            assert_eq!(d2.get(&i), Some(&(i * 2)));
+        }
+    }
+
+    #[test]
     fn test_repeated_insert_remove_cycles() {
         let mut d = Dict::new();
 
@@ -872,6 +934,31 @@ mod tests {
             }
 
             assert!(d.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_no_degradation_ahash() {
+        let mut d: Dict<u64, u64> = Dict::new();
+        const N: u64 = 10_000;
+        for i in 0..N {
+            d.insert(i, i);
+        }
+        assert_eq!(d.len() as u64, N);
+        for i in 0..N {
+            assert_eq!(d.get(&i), Some(&i), "ключ {i} не найден");
+        }
+    }
+
+    #[test]
+    fn test_no_degradation_fxhash() {
+        let mut d: Dict<u64, u64, FxBuildHasher> = Dict::with_hasher(FxBuildHasher);
+        const N: u64 = 10_000;
+        for i in 0..N {
+            d.insert(i, i);
+        }
+        for i in 0..N {
+            assert_eq!(d.get(&i), Some(&i));
         }
     }
 
@@ -919,5 +1006,139 @@ mod tests {
 
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0], (&"solo", &7u8));
+    }
+
+    #[test]
+    fn test_serde_roundtrip_ahash() {
+        let mut original: Dict<String, i32> = Dict::new();
+
+        for i in 0..50i32 {
+            original.insert(format!("key_{i}"), i * 10);
+        }
+
+        let json = serde_json::to_string(&original).expect("serialize failed");
+        let restored: Dict<String, i32> = serde_json::from_str(&json).expect("deserialize failed");
+
+        assert_eq!(original.len(), restored.len());
+
+        for i in 0..50i32 {
+            let k = format!("key_{i}");
+            assert_eq!(original.get(&k), restored.get(&k));
+        }
+    }
+
+    #[test]
+    fn test_serde_empty_dict() {
+        let empty: Dict<u32, u32> = Dict::new();
+        let json = serde_json::to_string(&empty).unwrap();
+
+        assert_eq!(json, "[]");
+
+        let restored: Dict<u32, u32> = serde_json::from_str(&json).unwrap();
+
+        assert!(restored.is_empty());
+    }
+
+    #[test]
+    fn test_serde_deserialized_dict_is_functional() {
+        let mut d: Dict<u32, u32> = Dict::new();
+
+        d.insert(1, 10);
+        d.insert(2, 20);
+
+        let json = serde_json::to_string(&d).unwrap();
+        let mut restored: Dict<u32, u32> = serde_json::from_str(&json).unwrap();
+
+        restored.insert(3, 30);
+
+        assert_eq!(restored.get(&1), Some(&10));
+        assert_eq!(restored.get(&2), Some(&20));
+        assert_eq!(restored.get(&3), Some(&30));
+    }
+
+    #[test]
+    fn test_serde_roundtrip_fxhash() {
+        let mut original: Dict<String, u64, FxBuildHasher> = Dict::with_hasher(FxBuildHasher);
+
+        original.insert("alpha".into(), 1);
+        original.insert("beta".into(), 2);
+        original.insert("gamma".into(), 3);
+
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Dict<String, u64, FxBuildHasher> = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.len(), 3);
+        assert_eq!(restored.get(&"alpha".into()), Some(&1));
+        assert_eq!(restored.get(&"beta".into()), Some(&2));
+        assert_eq!(restored.get(&"gamma".into()), Some(&3));
+    }
+
+    #[test]
+    fn test_partial_eq_same_content() {
+        let mut d1: Dict<u32, u32> = Dict::new();
+        let mut d2: Dict<u32, u32> = Dict::new();
+
+        for i in 0..10 {
+            d1.insert(i, i);
+            d2.insert(i, i);
+        }
+
+        assert_eq!(d1, d2);
+    }
+
+    #[test]
+    fn test_partial_eq_different_content() {
+        let mut d1: Dict<u32, u32> = Dict::new();
+        let mut d2: Dict<u32, u32> = Dict::new();
+
+        d1.insert(1, 10);
+        d2.insert(1, 99);
+
+        assert_ne!(d1, d2);
+    }
+
+    #[test]
+    fn test_clone_produces_independent_copy() {
+        let mut original: Dict<u32, u32> = Dict::new();
+
+        for i in 0..20 {
+            original.insert(i, i);
+        }
+
+        let mut cloned = original.clone();
+
+        cloned.insert(0, 999);
+
+        assert_eq!(original.get(&0), Some(&0));
+        assert_eq!(cloned.get(&0), Some(&999));
+    }
+
+    #[test]
+    fn test_debug_format() {
+        let mut d: Dict<&str, i32> = Dict::new();
+
+        d.insert("x", 42);
+
+        let s = format!("{d:?}");
+
+        assert!(s.contains("x") && s.contains("42"));
+    }
+
+    #[test]
+    fn test_iter_during_rehash() {
+        let mut d = Dict::new();
+
+        for i in 0..100 {
+            d.insert(i, i);
+        }
+
+        let mut seen = std::collections::HashSet::new();
+
+        for (k, v) in d.iter() {
+            assert_eq!(*k, *v);
+            seen.insert(*k);
+        }
+
+        assert_eq!(seen.len(), 100);
     }
 }

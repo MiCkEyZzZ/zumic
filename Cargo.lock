@@ -4419,6 +4419,7 @@ dependencies = [
  "rmp-serde",
  "rstest",
  "rust_decimal",
+ "rustc-hash",
  "rustyline",
  "serde",
  "serde-big-array",
