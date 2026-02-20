@@ -53,6 +53,8 @@ strum_macros = "0.27.2"
 thiserror = "2.0.12"
 tokio = { version = "1.45.1", features = ["full", "test-util"] }
 zstd = "0.13.3"
+ahash = "0.8.12"
+rustc-hash = "2.1.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

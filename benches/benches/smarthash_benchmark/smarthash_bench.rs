@@ -6,9 +6,6 @@ use zumic::{
     StorageEngine, Value,
 };
 
-// ==============================================================================
-// Вспомогательные функции: создать store с начальным количеством счетчиков.
-// ==============================================================================
 fn init_store_int() -> StorageEngine {
     let mut store = StorageEngine::Memory(InMemoryStore::new());
     HSetCommand {
@@ -31,9 +28,6 @@ fn init_store_float() -> StorageEngine {
     store
 }
 
-// ==============================================================================
-// Сравнительный тест: HINCRBY атомарный против ручного режима
-// ==============================================================================
 fn benchmark_hincrby_atomic(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash_increment_int");
 
@@ -85,9 +79,6 @@ fn benchmark_hincrby_atomic(c: &mut Criterion) {
     group.finish();
 }
 
-// ==============================================================================
-// Сравнительный тест: HINCRBYFLOAT атомарный против ручного
-// ==============================================================================
 fn benchmark_hincrbyfloat_atomic(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash_increment_float");
 

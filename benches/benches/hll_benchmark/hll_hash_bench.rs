@@ -4,8 +4,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use zumic::database::{HllHasher, MurmurHasher, SipHasher, XxHasher};
 
-/// Генерирует тестовую полезную нагрузку заданного размера с детерминированными
-/// псевдослучайными данными.
 fn make_payload(
     size: usize,
     seed: u64,
@@ -14,7 +12,6 @@ fn make_payload(
     (0..size).map(|_| rng.gen::<u8>()).collect()
 }
 
-/// Микробенчмарк: вызов хеш-функции для одной полезной нагрузки
 fn bench_single_hash<H: HllHasher + 'static + Send + Sync>(
     c: &mut Criterion,
     name: &str,
@@ -34,8 +31,6 @@ fn bench_single_hash<H: HllHasher + 'static + Send + Sync>(
     group.finish();
 }
 
-/// Тестирование производительности в пакетном режиме: множество хешей в плотном
-/// цикле (моделирует «горячий путь»)
 fn bench_batch_hash<H: HllHasher + 'static + Send + Sync>(
     c: &mut Criterion,
     name: &str,
