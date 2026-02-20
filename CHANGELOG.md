@@ -7,6 +7,20 @@
 ### Добавлено
 
 - **database/dict**
+  - Поддержка выбора хешера для защиты от HashDoS:
+    - Интегрирован `ahash` как быстрый и DoS‑resistant хешер.
+    - `Dict<K, V, S: BuildHasher = AHasher>` теперь параметризован по хешеру.
+    - Добавлены конструкторы:
+      - `Dict::with_hasher(hasher: S)`
+      - `Dict::with_capacity_and_hasher(cap: usize, hasher: S)`
+
+  - Benchmarks для сравнения `ahash`, `DefaultHasher` и `FxHash` для различных типов ключей.
+  - Тесты на коллизии:
+    - намеренно коллизионные ключи не деградируют до O(n) операций.
+
+  - Документация поясняет выбор хешера в security-critical сценариях.
+
+* **database/dict**
   - Добавлен метод `get_mut(&mut self, key: &K) -> Option<&mut V>` для безопасного изменяемого доступа к значениям.
   - Добавлена поддержка инкрементального рехеширования во всех мутационных операциях:
     - `insert`
@@ -21,7 +35,7 @@
     - повторное использование словаря после очистки.
   - Добавлена документация invariants и внутренних гарантий безопасности для `Dict` и `HashTable`.
 
-- **database/skiplist**
+* **database/skiplist**
   - Добавлена потокобезопасная реализация SkipList:
     - `ConcurrentSkipList<K, V>` — thread-safe обёртка на основе `Arc<RwLock<SkipList<K,V>>>` для безопасного concurrent access.
     - `ShardedSkipList<K, V>` — масштабируемая реализация с lock striping (16–256 shard'ов) для снижения lock contention и увеличения throughput.
@@ -44,28 +58,28 @@
     - снижены накладные расходы на операции вставки, поиска и удаления;
     - улучшена общая производительность и throughput.
 
-- **.github/workflows**
+* **.github/workflows**
   - Добавлена поддержка property tests для HLL в файле `property-tests.yml`
 
-- **HLL module (`hll_base`)**
+* **HLL module (`hll_base`)**
   - Интегрированы `HllSparse` и `HllDense` в общий модуль.
   - Добавлена структура **`HllStats`** для хранения статистики.
   - Добавлены новые функции:
     - `with_threshold`, `merge`, `stats`, `convert_to_dense`, `is_sparse`.
   - Покрыта базовыми тестами логика работы HLL.
 
-- **tests**
+* **tests**
   - добавлены property tests для HLL `hll_property_tests.rs`
   - добавлены интеграционные тесты `hll_integration_tests.rs`
 
-- **Engine (`engine/zdb`)**
+* **Engine (`engine/zdb`)**
   - В `decode` и `encode` обновлена логика обработки HLL для поддержки новых вариантов (sparse/dense).
-- **Network / Protocol (`network/protocol/serializer.rs`)**
+* **Network / Protocol (`network/protocol/serializer.rs`)**
   - Обновлена сериализация HLL (`serialize_response`), чтобы корректно обрабатывать новые варианты HLL.
-- **Tests / Generators (`tests/generators.rs`)**
+* **Tests / Generators (`tests/generators.rs`)**
   - Исправлена тестовая функция `hll_strategy` для корректной генерации HLL с учётом новых полей (`encoding`, `version`) и форматов.
 
-- **benches/geo-benchmark**
+* **benches/geo-benchmark**
   - Бенчмарки производительности GeoSet:
     - Вставка (sequential vs bulk load)
     - Поиск точек по имени и вычисление расстояний
@@ -74,7 +88,7 @@
     - Geohash кодирование на разных уровнях точности
     - Проверка ложных срабатываний (false positive rate)
 
-- **tests**
+* **tests**
   - Интеграционный тест сценария поиска ресторанов в Кунгуре, Россия (`test_restaurant_search_scenario`).
   - Интеграционный тест покрытия соседних geohash-ячееек с опцией `include_neighbors` (`test_geohash_neighbor_coverage`).
   - Интеграционный тест точности geohash на разных уровнях точности (`test_geohash_accuracy_by_precision`).
@@ -85,7 +99,7 @@
   - Тест граничных координат для Пермского края, Россия (северо-запад, северо-восток, юго-запад, юго-восток и центр) (`test_edge_coordinates`).
   - Интеграционный тест поиска по префиксу geohash в районе Кунгура, проверка, что удалённые точки не имеют общий префикс (`test_geohash_prefix_search`).
 
-- **geo**
+* **geo**
   - добавлен новый модуль `geohash` (`geo/geo_hash.rs`), реализующий:
     - кодирование и декодирование координат в геохеши с различной точностью (`GeohashPrecision`);
     - вычисление ограничивающих прямоугольников (`BoundingBox`);
@@ -95,20 +109,20 @@
     - вспомогательные функции работы с префиксами и проверкой префикса (`has_prefix`, `prefix`);
   - добавлены тесты для проверки корректности кодирования, соседей, родительских/дочерних ячеек и диапазонов.
 
-- **auth/session**
+* **auth/session**
   - В `cleanup` добавлена функция `spawn_cleanup_task`, отвечающая за фоновую очистку сессий. Добавлены базовые тесты для проверки её работы.
   - Добавлен `config` для управления настройками сессий.
   - Добавлен `manager`, который управляет созданием, валидацией, истечением и очисткой сессий.
   - добавлена реализация токена в `token.rs`.
-- **engine**
+* **engine**
   - Добавлена интеграция с `memory`. Реализованы методы для работы с сессиями и дополнительные тесты для проверки работы методов `SessionStorage` на `InMemoryStore`.
   - Добавлен трейт `SessionStorage` в `storage`:
     - `insert_session`, `get_session`, `remove_session`, `get_user_sessions`, `remove_user_sessions`, `cleanup_expired`, `len_session`, `is_empty`.
-- **zumic-error**
+* **zumic-error**
   - Дополнен тип ошиьки для auth. Добавлена обраотка ошибок для сессией `SessionError` и реализованы доп. тесты для проверки обработки ошибок сессии.
-- **pubsub**
+* **pubsub**
   - Исправил в `subsciber.rs` две ф-ии `with_payload_type_filter` и `with_string_pattern_filter`. Clippy онаружил неэффективный код.
-- **database/intset**
+* **database/intset**
   - Реализован zero-copy итератор для `IntSet` с оптимальной производительностью (Issue **#INTSET-1**):
     - `IntSetIter<'a>` — zero-copy итератор по всем элементам без аллокации памяти.
     - `IntSetRangeIter<'a>` — zero-copy итератор по диапазону `[start, end]` с binary search для O(log n) setup.
@@ -166,7 +180,7 @@
     - Добавлены тесты:
       - `tests/connection_state_test.rs` — покрытие логики состояний соединения.
 
-- **benches/intset_bench.rs**
+* **benches/intset_bench.rs**
   - Добавлен полный набор Criterion benchmarks для `IntSet` итераторов:
     - `iter_next` — латентность одного `next()` вызова для i16/i32/i64 encoding.
     - `iter_full_scan` — полный проход по коллекциям размером 100, 1K, 10K, 100K элементов.
@@ -179,17 +193,17 @@
     - Edge cases: empty set, single element, empty range results.
   - HTML отчёты с графиками через Criterion (доступны в `target/criterion/report/`).
 
-- **zdb**
+* **zdb**
   - Добавлен `varint` (модуль `varint.rs`) и поддержка varint-encoding для формата V3.
   - Добавил fazz тесты `encode_roundtrip.rs`
 
-- **ZDB / Streaming Parser**
+* **ZDB / Streaming Parser**
   - Добавлен SAX-style потоковый парсер `StreamingParser<R: Read>` — парсинг дампов без загрузки всего файла в память.
   - Введён trait `ParseHandler` (event-driven): события `Header`, `Entry`, `End`, `Error`.
   - Реализованы стандартные handler'ы: `CollectHandler`, `FilterHandler`, `CountHandler`, `CallbackHandler`, `TransformHandler`.
   - Добавлен `Crc32Read` — reader-обёртка для вычисления CRC32 «на лету».
 
-- **Инфраструктура проекта**
+* **Инфраструктура проекта**
   - Создан файл `.github/CODEOWNERS` для автоматического назначения ревьюеров:
     - Основной код (`src/`, `engine/`, `database/`, `network/`, `auth/`, `logging/`, `modules/`) под контролем @MiCkEyZzZ.
     - Модуль ошибок `zumic-error/`, тесты (`tests/`, `fuzz/`, `benches/`), CI/CD (`.github/workflows/`, `.github/actions/`) — также назначен @MiCkEyZzZ.
@@ -200,16 +214,16 @@
     - Добавлен пункт `- [ ] Changelog updated if applicable`.
   - Теперь PR без обновлённого Changelog нельзя считать полностью завершённым.
 
-- **benchmarks**
+* **benchmarks**
   - Обновлённый набор bench'ей для QuickList: добавлены сценарии index lookup vs previous approach и измерения random/sequential access, push/pop и flatten/into_vecdeque.
 
-- **listpack**
+* **listpack**
   - Добавил док-комментарии для тестовых ф-й в `listpack`.
 
-- **benches/listpack**
+* **benches/listpack**
   - Добавил бенчмарки для проверки производительности `listpack`.
 
-- **database/listpack**
+* **database/listpack**
   - Реализованы операции `pop_front()` и `pop_back()` для удаления элементов с концов списка (Issue **#L1**):
     - `pop_front()` выполняется за O(1) благодаря сдвигу указателя `head` без копирования данных.
     - `pop_back()` временно работает за O(n) из-за forward scan для поиска последнего элемента.
@@ -237,7 +251,7 @@
     - `resize(new_len, fill)` — изменение размера списка с автоматическим расширением (через `push_back`) или сокращением (через `truncate`).
   - Реализовано повторное использование внутреннего буфера без realloc после `clear()`.
 
-- **tests / database/listpack**
+* **tests / database/listpack**
   - Добавлен полный набор unit-тестов для `clear`, `truncate` и `resize`:
     - очистка пустого и непустого списка;
     - проверка сохранения инвариантов (`head`, `tail`, `num_entries`, sentinel `0xFF`);
