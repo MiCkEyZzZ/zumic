@@ -1296,4 +1296,196 @@ mod tests {
 
         assert_eq!(seen.len(), 100);
     }
+
+    #[test]
+    fn test_shrink_reduces_capacity_and_preserves_data() {
+        let mut d = Dict::with_capacity(1024);
+
+        for i in 0..512 {
+            d.insert(i, i);
+        }
+
+        let cap_before = d.capacity();
+
+        for i in 0..400 {
+            assert!(d.remove(&i));
+        }
+
+        // должен запуститься shrink
+        d.rehash_step();
+        d.rehash_step();
+        d.rehash_step();
+
+        let cap_after = d.capacity();
+
+        assert!(cap_after < cap_before, "capacity did not shrink");
+
+        for i in 400..512 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_reserve_increases_capacity() {
+        let mut d = Dict::new();
+
+        d.reserve(1000);
+
+        assert!(d.capacity() >= 1000);
+
+        for i in 0..1000 {
+            d.insert(i, i);
+        }
+
+        for i in 0..1000 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_shrink_to_fit_exact() {
+        let mut d = Dict::with_capacity(1024);
+
+        for i in 0..10 {
+            d.insert(i, i);
+        }
+
+        d.shrink_to_fit();
+
+        assert!(d.capacity() <= 16);
+
+        for i in 0..10 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_force_rehash_preserves_all_keys() {
+        let mut d = Dict::new();
+
+        for i in 0..500 {
+            d.insert(i, i * 10);
+        }
+
+        d.force_rehash_to(2048);
+
+        for i in 0..500 {
+            assert_eq!(d.get(&i), Some(&(i * 10)));
+        }
+
+        assert_eq!(d.len(), 500);
+    }
+
+    #[test]
+    fn test_insert_while_rehashing() {
+        let mut d = Dict::new();
+
+        for i in 0..100 {
+            d.insert(i, i);
+        }
+
+        // вставка во время продолжающегося rehash
+        for i in 100..200 {
+            d.insert(i, i);
+        }
+
+        for i in 0..200 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_remove_while_rehashing() {
+        let mut d = Dict::new();
+
+        for i in 0..200 {
+            d.insert(i, i);
+        }
+
+        for i in 0..100 {
+            assert!(d.remove(&i));
+        }
+
+        for i in 0..100 {
+            assert_eq!(d.get(&i), None);
+        }
+
+        for i in 100..200 {
+            assert_eq!(d.get(&i), Some(&i));
+        }
+    }
+
+    #[test]
+    fn test_massive_random_operations() {
+        let mut d = Dict::new();
+        let mut reference = std::collections::HashMap::new();
+
+        for i in 0..10_000 {
+            d.insert(i, i);
+            reference.insert(i, i);
+        }
+
+        for i in 0..5000 {
+            d.remove(&i);
+            reference.remove(&i);
+        }
+
+        for (k, v) in reference {
+            assert_eq!(d.get(&k), Some(&v));
+        }
+
+        assert_eq!(d.len(), 5000);
+    }
+
+    #[test]
+    fn test_capacity_is_power_of_two() {
+        let mut d = Dict::new();
+
+        for i in 0..500 {
+            d.insert(i, i);
+        }
+
+        let cap = d.capacity();
+
+        assert!(cap.is_power_of_two());
+    }
+
+    #[test]
+    fn test_shrink_to_fit_empty() {
+        let mut d = Dict::new();
+
+        for i in 0..100 {
+            d.insert(i, i);
+        }
+
+        for i in 0..100 {
+            d.remove(&i);
+        }
+
+        d.shrink_to_fit();
+
+        assert_eq!(d.len(), 0);
+    }
+
+    #[test]
+    fn test_iter_after_shrink() {
+        let mut d = Dict::new();
+
+        for i in 0..100 {
+            d.insert(i, i);
+        }
+
+        for i in 0..50 {
+            d.remove(&i);
+        }
+
+        let mut count = 0;
+
+        for (k, v) in d.iter() {
+            assert_eq!(k, v);
+            count += 1;
+        }
+
+        assert_eq!(count, 50);
+    }
 }
