@@ -25,17 +25,17 @@ const SHRINK_RATIO: f64 = 0.25;
 
 /// Один элемент в цепочке коллизий.
 #[derive(PartialEq, Eq, Clone)]
-struct Entry<K, V> {
-    key: K,
-    val: V,
-    next: Option<Box<Entry<K, V>>>,
+pub struct DictNode<K, V> {
+    pub(crate) key: K,
+    pub(crate) val: V,
+    pub(crate) next: Option<Box<DictNode<K, V>>>,
 }
 
 /// Одна хеш-таблица: вектор бакетов, маска размера и количество занятых
 /// элементов.
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct HashTable<K, V> {
-    buckets: Vec<Option<Box<Entry<K, V>>>>,
+    buckets: Vec<Option<Box<DictNode<K, V>>>>,
     size_mask: usize,
     used: usize,
 }
@@ -52,21 +52,22 @@ pub struct DictIter<'a, K, V> {
     tables: [&'a HashTable<K, V>; 2],
     table_idx: usize,
     bucket_idx: usize,
-    current_entry: Option<&'a Entry<K, V>>,
+    current_entry: Option<&'a DictNode<K, V>>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Собственные методы
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<K, V> Entry<K, V> {
+impl<K, V> DictNode<K, V> {
     /// Создаёт новый элемент цепочки.
+    #[inline]
     fn new(
         key: K,
         val: V,
-        next: Option<Box<Entry<K, V>>>,
+        next: Option<Box<DictNode<K, V>>>,
     ) -> Box<Self> {
-        Box::new(Entry { key, val, next })
+        Box::new(DictNode { key, val, next })
     }
 }
 
@@ -202,7 +203,7 @@ where
         let slot = (hash as usize) & self.ht[table_idx].size_mask;
         let next = self.ht[table_idx].buckets[slot].take();
 
-        self.ht[table_idx].buckets[slot] = Some(Entry::new(key, val, next));
+        self.ht[table_idx].buckets[slot] = Some(DictNode::new(key, val, next));
         self.ht[table_idx].used += 1;
 
         true
@@ -402,7 +403,7 @@ where
 
     /// Безопасный мутабельный поиск по цепочке через match-guard cursor.
     fn find_val_mut<'a>(
-        mut head: &'a mut Option<Box<Entry<K, V>>>,
+        mut head: &'a mut Option<Box<DictNode<K, V>>>,
         key: &K,
     ) -> Option<&'a mut V> {
         while let Some(ref mut boxed) = head {
@@ -419,7 +420,7 @@ where
     /// Итеративно удаляет первый узел с ключом `key` из цепочки `head` без
     /// рекурсии.
     fn remove_from_chain_iter(
-        head: &mut Option<Box<Entry<K, V>>>,
+        head: &mut Option<Box<DictNode<K, V>>>,
         key: &K,
     ) -> bool {
         let mut cur = head;
@@ -621,15 +622,15 @@ where
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Общие реализации трейтов для Dict, DictIter, Entry
+// Общие реализации трейтов для Dict, DictIter, DictNode
 ////////////////////////////////////////////////////////////////////////////////
 
-impl<K: Debug, V: Debug> Debug for Entry<K, V> {
+impl<K: Debug, V: Debug> Debug for DictNode<K, V> {
     fn fmt(
         &self,
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
-        f.debug_struct("Entry")
+        f.debug_struct("DictNode")
             .field("key", &self.key)
             .field("val", &self.val)
             .finish()
