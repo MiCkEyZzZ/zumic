@@ -11,6 +11,8 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
+use crate::database::entry::{Entry, OccupiedEntry, VacantEntry};
+
 /// Начальный размер таблицы (степень двойки).
 const INITIAL_SIZE: usize = 4;
 
@@ -322,6 +324,67 @@ where
         false
     }
 
+    pub fn entry(
+        &mut self,
+        key: K,
+    ) -> Entry<'_, K, V, S> {
+        self.expand_if_needed();
+        self.rehash_step();
+
+        let hash = self.make_hash(&key);
+        let rehashing = self.is_rehashing();
+
+        let ht_ptr = self.ht.as_mut_ptr();
+
+        unsafe {
+            // ht[0]
+            let t0 = &mut *ht_ptr.add(0);
+
+            if !t0.is_empty_table() {
+                let slot_idx = (hash as usize) & t0.size_mask;
+
+                if let Some(slot) = Self::find_entry_slot(&mut t0.buckets[slot_idx], &key) {
+                    return Entry::Occupied(OccupiedEntry {
+                        slot,
+                        used: &mut t0.used,
+                    });
+                }
+            }
+
+            // ht[1]
+            if rehashing {
+                let t1 = &mut *ht_ptr.add(1);
+
+                if !t1.is_empty_table() {
+                    let slot_idx = (hash as usize) & t1.size_mask;
+
+                    if let Some(slot) = Self::find_entry_slot(&mut t1.buckets[slot_idx], &key) {
+                        return Entry::Occupied(OccupiedEntry {
+                            slot,
+                            used: &mut t1.used,
+                        });
+                    }
+                }
+            }
+
+            // insert target
+            let target = if rehashing {
+                &mut *ht_ptr.add(1)
+            } else {
+                &mut *ht_ptr.add(0)
+            };
+
+            let slot_idx = (hash as usize) & target.size_mask;
+
+            Entry::Vacant(VacantEntry {
+                key,
+                slot: &mut target.buckets[slot_idx],
+                used: &mut target.used,
+                _marker: PhantomData,
+            })
+        }
+    }
+
     /// Возвращает общее количество элементов во всех таблицах.
     #[inline]
     pub fn len(&self) -> usize {
@@ -417,6 +480,27 @@ where
         None
     }
 
+    fn find_entry_slot<'a>(
+        head: &'a mut Option<Box<DictNode<K, V>>>,
+        key: &K,
+    ) -> Option<&'a mut Option<Box<DictNode<K, V>>>> {
+        let mut cur = head;
+
+        loop {
+            let found = cur.as_ref().is_some_and(|n| &n.key == key);
+
+            if found {
+                return Some(cur);
+            }
+
+            if cur.is_none() {
+                return None;
+            }
+
+            cur = &mut cur.as_mut().unwrap().next;
+        }
+    }
+
     /// Итеративно удаляет первый узел с ключом `key` из цепочки `head` без
     /// рекурсии.
     fn remove_from_chain_iter(
@@ -459,7 +543,6 @@ where
         while entries_moved < REHASH_MIN_ENTRIES || empty_visits < REHASH_MAX_EMPTY_VISITS {
             let idx = self.rehash_idx as usize;
 
-            // FIX: >= instead of >
             if idx >= self.ht[0].capacity() {
                 self.ht[0] = std::mem::replace(&mut self.ht[1], HashTable::with_capacity(0));
                 self.rehash_idx = -1;
@@ -487,7 +570,7 @@ where
                 e.next = self.ht[1].buckets[slot].take();
                 self.ht[1].buckets[slot] = Some(e);
 
-                self.ht[0].used -= 1; // also important
+                self.ht[0].used -= 1;
                 self.ht[1].used += 1;
 
                 entries_moved += 1;
