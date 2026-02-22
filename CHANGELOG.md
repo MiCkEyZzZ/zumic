@@ -7,6 +7,44 @@
 ### Добавлено
 
 - **database/dict**
+  - Добавлены benchmark-тесты для Entry API (`benches/benches/dict_benchmark/dict_entry_bench.rs`):
+    - `or_insert_hit` – измерение производительности доступа к существующим ключам.
+    - `or_insert_miss` – измерение производительности вставки новых ключей.
+    - `counter_pattern` – сравнение подходов `and_modify().or_insert()` и `get_mut().or_insert()` с повторяющимися ключами.
+    - `counter_pattern_collisions` – тест с искусственными коллизиями.
+    - `remove_via_entry` – измерение производительности удаления через `Entry::Occupied` и напрямую через `Dict::remove`.
+    - `or_default` – сравнение `or_default()` и `or_insert(Default::default())`.
+    - `mixed_hit_miss` – нагрузочный тест с 70% существующих и 30% новых ключей.
+    - Тесты используют Criterion и измеряют throughput, warm-up и sample_size для репрезентативных результатов.
+    - Сравнение с `std::collections::HashMap` для базовой метрики.
+
+- **database/dict**
+  - Добавлены интеграционные тесты Entry API (`tests/dict_entry_tests.rs`):
+    - Проверена корректность `or_insert`, включая вставку нового значения и сохранение существующего.
+    - Подтверждено, что `or_insert_with` вызывается только для vacant entry и ровно один раз.
+    - Проверена корректная работа `or_insert_with_key`, включая вычисление значения на основе ключа.
+    - Проверена корректность `or_default` для vacant и occupied entry.
+    - Проверена корректная работа `and_modify`, включая chained pattern (`and_modify().or_insert()`).
+    - Проверены все методы `OccupiedEntry`:
+      - `key`, `get`, `get_mut`, `into_mut`
+      - `insert` с возвратом старого значения
+      - `remove`, включая удаление:
+        - головы цепочки
+        - элемента внутри цепочки
+    - Проверены методы `VacantEntry`:
+      - `key`
+      - `into_key`
+      - `insert` с последующей мутацией значения
+    - Проверена корректность работы Entry API во время активного rehash.
+    - Подтверждено отсутствие дубликатов ключей при повторных вызовах Entry API.
+    - Проверена корректность удаления и повторной вставки через Entry API.
+    - Добавлены large-scale тесты корректности (тысячи ключей).
+    - Подтверждены гарантии:
+      - корректность ссылок и lifetimes
+      - отсутствие двойного поиска
+      - корректность работы во всех состояниях таблицы (rehash, collision chains, mutation).
+
+- **database/dict**
   - Добавлены comprehensive unit-тесты для Entry API (`tests/dict/entry.rs`):
     - Проверка `or_insert` для vacant и occupied случаев.
     - Проверка, что `or_insert_with` вызывается ровно один раз.
