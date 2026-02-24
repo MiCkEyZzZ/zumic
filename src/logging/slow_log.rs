@@ -385,7 +385,7 @@ mod tests {
 
         // Установка: создаём конфиг сразу с нужным threshold
         let config = SlowLogConfig {
-            threshold: Duration::from_millis(10),
+            threshold: Duration::from_millis(1),
             ..Default::default()
         };
         update_config(config);
@@ -397,7 +397,7 @@ mod tests {
 
         // Медленный запрос (должен регистрироваться в журнале)
         let tracker = SlowQueryTracker::new("SLOW_GET");
-        thread::sleep(Duration::from_millis(15));
+        thread::sleep(Duration::from_millis(30));
         tracker.finish();
 
         let stats = get_metrics();

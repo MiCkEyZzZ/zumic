@@ -157,6 +157,7 @@ zumic
 │   │   │   └── mod.rs
 │   │   ├── dict
 │   │   │   ├── dict_base.rs
+│   │   │   ├── entry.rs
 │   │   │   └── mod.rs
 │   │   ├── expire
 │   │   │   ├── expire_base.rs
@@ -186,6 +187,9 @@ zumic
 │   │   ├── sds
 │   │   │   ├── mod.rs
 │   │   │   └── sds_base.rs
+│   │   ├── set
+│   │   │   ├── mod.rs
+│   │   │   └── set_base.rs
 │   │   ├── skiplist
 │   │   │   ├── concurrent.rs
 │   │   │   ├── mod.rs
@@ -198,6 +202,9 @@ zumic
 │   │   ├── stream
 │   │   │   ├── mod.rs
 │   │   │   └── stream_base.rs
+│   │   ├── zset
+│   │   │   ├── mod.rs
+│   │   │   └── zset_base.rs
 │   │   ├── mod.rs
 │   │   └── types.rs
 │   ├── engine
