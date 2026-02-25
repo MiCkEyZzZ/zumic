@@ -11,7 +11,7 @@ publish = false
 
 [[bench]]
 name = "zumic-benchmark"
-path = "benches/dict_benchmark/dict_rehash_bench.rs"
+path = "benches/sds_benchmark/compare_sds_string_vec_bench.rs"
 harness = false
 
 [lints]
