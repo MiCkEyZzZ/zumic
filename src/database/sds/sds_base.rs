@@ -27,7 +27,7 @@ impl Sds {
 
     /// Создаёт `Sds` из вектора байт, выбирая `inline` или `heap` в зависимости
     /// от длины.
-    #[inline]
+    #[inline(always)]
     pub fn from_vec(vec: Vec<u8>) -> Self {
         let len = vec.len();
 
@@ -73,8 +73,32 @@ impl Sds {
         Self::from_bytes(s.as_bytes())
     }
 
+    /// Возвращает сырой указатель на начало буфера.
+    ///
+    /// Это low-level API для FFI и высокопроизводительных операций.
+    ///
+    /// Гарантии:
+    /// - указатель валиден пока существует данный `Sds`
+    /// - указатель становится недействительным после любых операций realloc
+    /// - указатель может использоваться только для чтения
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *const u8 {
+        self.as_slice().as_ptr()
+    }
+
+    /// Возвращает изменяемый сырой указатель на начало буфера.
+    ///
+    /// Безопасно изменять только диапазон `[0, len())`.
+    /// Изменение capacity или выход за границы вызывает UB.
+    ///
+    /// Это low-level API.
+    #[inline(always)]
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.as_mut_slice().as_mut_ptr()
+    }
+
     /// Возвращает содержимое строки как срез байт.
-    #[inline]
+    #[inline(always)]
     pub fn as_slice(&self) -> &[u8] {
         match &self.0 {
             Repr::Inline { len, buf } => &buf[..*len as usize],
@@ -89,7 +113,7 @@ impl Sds {
     }
 
     /// Возвращает изменяемый срез текущего содержимого строки.
-    #[inline]
+    #[inline(always)]
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
         match &mut self.0 {
             Repr::Inline { len, buf } => &mut buf[..*len as usize],
@@ -135,14 +159,13 @@ impl Sds {
         match &mut self.0 {
             Repr::Inline { len, buf } => {
                 let cur_len = *len as usize;
+                let required = cur_len + additional;
 
-                if cur_len + additional <= Self::INLINE_CAP {
+                if required <= Self::INLINE_CAP {
                     return;
                 }
 
-                let new_cap = (cur_len + additional).next_power_of_two();
-                let mut vec = Vec::with_capacity(new_cap);
-
+                let mut vec = Vec::with_capacity(required);
                 vec.extend_from_slice(&buf[..cur_len]);
 
                 self.0 = Repr::Heap { buf: vec };
@@ -160,6 +183,7 @@ impl Sds {
     }
 
     /// Добавляет один байт в конец строки.
+    #[inline(always)]
     pub fn push(
         &mut self,
         byte: u8,
@@ -172,8 +196,7 @@ impl Sds {
                     buf[cur_len] = byte;
                     *len += 1;
                 } else {
-                    let new_cap = (cur_len + 1).next_power_of_two();
-                    let mut vec = Vec::with_capacity(new_cap);
+                    let mut vec = Vec::with_capacity(cur_len + 1);
 
                     vec.extend_from_slice(&buf[..cur_len]);
                     vec.push(byte);
@@ -186,6 +209,7 @@ impl Sds {
     }
 
     /// Добавляет байтовую строку в конец текущей строки.
+    #[inline(always)]
     pub fn append(
         &mut self,
         other: &[u8],
@@ -199,7 +223,7 @@ impl Sds {
                     buf[cur_len..total].copy_from_slice(other);
                     *len = total as u8;
                 } else {
-                    let mut vec = Vec::with_capacity(total.next_power_of_two());
+                    let mut vec = Vec::with_capacity(total);
 
                     vec.extend_from_slice(&buf[..cur_len]);
                     vec.extend_from_slice(other);
@@ -207,7 +231,12 @@ impl Sds {
                     self.0 = Repr::Heap { buf: vec };
                 }
             }
-            Repr::Heap { buf } => buf.extend_from_slice(other),
+            Repr::Heap { buf } => {
+                if buf.capacity() - buf.len() < other.len() {
+                    buf.reserve(other.len());
+                }
+                buf.extend_from_slice(other);
+            }
         }
     }
 
@@ -245,6 +274,17 @@ impl Sds {
         );
 
         Self::from_bytes(&self.as_slice()[start..end])
+    }
+
+    #[inline]
+    pub fn from_string(s: String) -> Self {
+        let vec = s.into_bytes();
+
+        if vec.len() <= Self::INLINE_CAP {
+            Self::from_vec(vec)
+        } else {
+            Sds(Repr::Heap { buf: vec })
+        }
     }
 
     /// Преобразует heap-строку обратно в inline, если длина позволяет.
@@ -402,12 +442,6 @@ impl From<&[u8]> for Sds {
     }
 }
 
-impl From<String> for Sds {
-    fn from(s: String) -> Self {
-        Sds::from_vec(s.into_bytes())
-    }
-}
-
 impl From<Vec<u8>> for Sds {
     fn from(v: Vec<u8>) -> Self {
         Sds::from_vec(v)
@@ -450,6 +484,13 @@ impl std::str::FromStr for Sds {
 impl From<&str> for Sds {
     fn from(s: &str) -> Self {
         Sds::from_str(s)
+    }
+}
+
+impl From<String> for Sds {
+    #[inline]
+    fn from(s: String) -> Self {
+        Sds::from_string(s)
     }
 }
 

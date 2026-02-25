@@ -42,10 +42,15 @@ impl WasmPlugin {
     ) -> Result<Self, String> {
         let module =
             WasmModule::from_file(engine, path).map_err(|e| format!("WASM load error: {e}"))?;
+
         let mut store = Store::new(engine, ());
-        store.set_epoch_deadline(1); // прерывание при первой проверке
+
+        store.set_epoch_deadline(1);
+        store.epoch_deadline_trap();
+
         let instance = Instance::new(&mut store, &module, &[])
             .map_err(|e| format!("WASM instantiate error: {e}"))?;
+
         Ok(Self {
             instance,
             store,
