@@ -380,4 +380,222 @@ mod tests {
             assert!(s.is_inline(), "from_u64({n}) must be inline");
         }
     }
+
+    #[test]
+    fn from_u64_roundtrip() {
+        for n in [0u64, 1, 42, 255, 65535, u64::MAX] {
+            let s = Sds::from_u64(n);
+            let back = s
+                .to_u64()
+                .unwrap_or_else(|e| panic!("roundtrip failed for {n}: {e}"));
+            assert_eq!(n, back);
+        }
+    }
+
+    #[test]
+    fn from_f64_zero() {
+        assert_eq!(Sds::from_f64(0.0).as_str().unwrap(), "0");
+        assert_eq!(Sds::from_f64(-0.0).as_str().unwrap(), "-0");
+    }
+
+    #[test]
+    fn from_f64_whole_numbers() {
+        assert_eq!(Sds::from_f64(1.0).as_str().unwrap(), "1");
+        assert_eq!(Sds::from_f64(-1.0).as_str().unwrap(), "-1");
+        assert_eq!(Sds::from_f64(100.0).as_str().unwrap(), "100");
+    }
+
+    #[allow(clippy::approx_constant)]
+    #[test]
+    fn from_f64_fractions() {
+        assert_eq!(Sds::from_f64(3.14).as_str().unwrap(), "3.14");
+        assert_eq!(Sds::from_f64(-0.5).as_str().unwrap(), "-0.5");
+    }
+
+    #[test]
+    fn from_f64_special_values() {
+        assert_eq!(Sds::from_f64(f64::INFINITY).as_str().unwrap(), "inf");
+        assert_eq!(Sds::from_f64(f64::NEG_INFINITY).as_str().unwrap(), "-inf");
+        assert_eq!(Sds::from_f64(f64::NAN).as_str().unwrap(), "NaN");
+    }
+
+    #[test]
+    fn to_i64_basic() {
+        assert_eq!(Sds::from_str("0").to_i64(), Ok(0));
+        assert_eq!(Sds::from_str("1").to_i64(), Ok(1));
+        assert_eq!(Sds::from_str("-1").to_i64(), Ok(-1));
+        assert_eq!(Sds::from_str("42").to_i64(), Ok(42));
+        assert_eq!(Sds::from_str("-42").to_i64(), Ok(-42));
+    }
+
+    #[test]
+    fn to_i64_max_min_boundaries() {
+        assert_eq!(Sds::from_str("9223372036854775807").to_i64(), Ok(i64::MAX));
+        assert_eq!(Sds::from_str("-9223372036854775808").to_i64(), Ok(i64::MIN));
+    }
+
+    #[test]
+    fn to_i64_overflow_pos() {
+        // i64::MAX + 1
+        assert_eq!(
+            Sds::from_str("9223372036854775808").to_i64(),
+            Err(SdsNumericError::Overflow)
+        );
+    }
+
+    #[test]
+    fn to_i64_overflow_neg() {
+        // i64::MIN - 1
+        assert_eq!(
+            Sds::from_str("-9223372036854775809").to_i64(),
+            Err(SdsNumericError::Overflow)
+        );
+    }
+
+    #[test]
+    fn to_i64_overflow_large() {
+        assert_eq!(
+            Sds::from_str("99999999999999999999").to_i64(),
+            Err(SdsNumericError::Overflow)
+        );
+    }
+
+    #[test]
+    fn to_i64_invalid_formats() {
+        let invalid = [
+            "abc", "1.5", "1e10", " 1", "1 ", "-", "+", "1-2", "1_000", "0x1F",
+        ];
+        for input in &invalid {
+            let result = Sds::from_str(input).to_i64();
+            assert!(
+                matches!(result, Err(SdsNumericError::InvalidInteger)),
+                "expected InvalidInteger for {input:?}, got {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn to_i64_empty() {
+        assert_eq!(Sds::default().to_i64(), Err(SdsNumericError::Empty));
+    }
+
+    #[test]
+    fn to_i64_invalid_utf8() {
+        let s = Sds::from_vec(vec![0xFF, 0xFE]);
+        assert_eq!(s.to_i64(), Err(SdsNumericError::InvalidUtf8));
+    }
+
+    #[test]
+    fn to_u64_basic() {
+        assert_eq!(Sds::from_str("0").to_u64(), Ok(0));
+        assert_eq!(Sds::from_str("42").to_u64(), Ok(42));
+        assert_eq!(Sds::from_str("255").to_u64(), Ok(255));
+    }
+
+    #[test]
+    fn to_u64_max() {
+        assert_eq!(Sds::from_str("18446744073709551615").to_u64(), Ok(u64::MAX));
+    }
+
+    #[test]
+    fn to_u64_overflow() {
+        assert_eq!(
+            Sds::from_str("18446744073709551616").to_u64(),
+            Err(SdsNumericError::Overflow)
+        );
+    }
+
+    #[test]
+    fn to_u64_negative_rejected() {
+        assert_eq!(
+            Sds::from_str("-1").to_u64(),
+            Err(SdsNumericError::InvalidInteger)
+        );
+    }
+
+    #[test]
+    fn to_u64_empty() {
+        assert_eq!(Sds::default().to_u64(), Err(SdsNumericError::Empty));
+    }
+
+    #[test]
+    fn to_f64_integers() {
+        assert_eq!(Sds::from_str("0").to_f64(), Ok(0.0));
+        assert_eq!(Sds::from_str("1").to_f64(), Ok(1.0));
+        assert_eq!(Sds::from_str("-1").to_f64(), Ok(-1.0));
+    }
+
+    #[allow(clippy::approx_constant)]
+    #[test]
+    fn to_f64_fractions() {
+        let v = Sds::from_str("3.14").to_f64().unwrap();
+        assert!((v - 3.14f64).abs() < 1e-10);
+    }
+
+    #[test]
+    fn to_f64_scientific() {
+        assert_eq!(Sds::from_str("1e10").to_f64(), Ok(1e10f64));
+        assert_eq!(Sds::from_str("-1e-5").to_f64(), Ok(-1e-5f64));
+    }
+
+    #[test]
+    fn to_f64_special_values() {
+        assert!(Sds::from_str("inf").to_f64().unwrap().is_infinite());
+        assert!(Sds::from_str("-inf").to_f64().unwrap().is_sign_negative());
+        assert!(Sds::from_str("NaN").to_f64().unwrap().is_nan());
+    }
+
+    #[test]
+    fn to_f64_invalid() {
+        assert_eq!(
+            Sds::from_str("abc").to_f64(),
+            Err(SdsNumericError::InvalidInteger)
+        );
+    }
+
+    #[test]
+    fn to_f64_empty() {
+        assert_eq!(Sds::default().to_f64(), Err(SdsNumericError::Empty));
+    }
+
+    #[test]
+    fn is_integer_valid() {
+        for s in &[
+            "0",
+            "1",
+            "-1",
+            "+1",
+            "42",
+            "-42",
+            "007",
+            "9223372036854775807",
+        ] {
+            assert!(Sds::from_str(s).is_integer(), "expected true for {s:?}");
+        }
+    }
+
+    #[test]
+    fn is_integer_invalid() {
+        let invalid = ["", "-", "+", "1.5", "1e10", " 1", "1 ", "abc", "1-2"];
+        for s in &invalid {
+            assert!(!Sds::from_str(s).is_integer(), "expected false for {s:?}");
+        }
+    }
+
+    #[test]
+    fn is_integer_on_heap_string() {
+        // Проверяем что is_integer работает и на heap-строках.
+        let long_num = "9".repeat(Sds::INLINE_CAP + 1);
+        let s = Sds::from_str(&long_num);
+        assert!(!s.is_inline(), "there must be a heap for this test");
+        assert!(s.is_integer());
+    }
+
+    #[test]
+    fn is_integer_on_heap_invalid() {
+        let long_str = "a".repeat(Sds::INLINE_CAP + 1);
+        let s = Sds::from_str(&long_str);
+        assert!(!s.is_inline());
+        assert!(!s.is_integer());
+    }
 }
