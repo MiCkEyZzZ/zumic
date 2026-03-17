@@ -3,6 +3,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use base64::{engine::general_purpose, Engine as _};
 use dashmap::DashMap;
 use hmac::{digest::KeyInit, Hmac};
 use jwt::{SignWithKey, VerifyWithKey};
@@ -78,7 +79,7 @@ impl TokenConfig {
 
         let mut rng = rand::thread_rng();
         let bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        base64::encode(&bytes)
+        general_purpose::STANDARD.encode(&bytes)
     }
 }
 
