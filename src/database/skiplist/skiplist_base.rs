@@ -19,6 +19,10 @@ const MASK: u32 = 0xFFFF;
 type Link<K, V> = Option<NonNull<Node<K, V>>>;
 
 /// Узел пропускного списка.
+// Сейчас Node огромный
+// на 64-бита Option<NonNull<T>> = 8 байта ≈ forward = 16 * 8 = 128 байт
+// key/value/backward ≈ 32–48 байта Node ≈ 160–200 байта
+// это жестко для cache line = 64 байта, каждый узел = 3 cache line
 #[derive(Debug)]
 pub struct Node<K, V> {
     key: K,

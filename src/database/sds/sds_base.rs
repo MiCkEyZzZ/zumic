@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     cmp::Ordering,
     convert::TryFrom,
     fmt::{self, Display},
@@ -23,6 +24,7 @@ pub struct Sds(Repr);
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Sds {
+    /// Максимальная длина строки для inline-хранения.
     pub const INLINE_CAP: usize = std::mem::size_of::<usize>() * 3 - 1;
 
     /// Создаёт `Sds` из вектора байт, выбирая `inline` или `heap` в зависимости
@@ -66,11 +68,109 @@ impl Sds {
         }
     }
 
-    /// Создаёт `Sds` из `&str`, автоматически выбирая представление.
+    /// Создаёт `Sds` из `&str`.
     #[allow(clippy::should_implement_trait)]
     #[inline]
     pub fn from_str(s: &str) -> Self {
         Self::from_bytes(s.as_bytes())
+    }
+
+    #[inline]
+    pub fn from_string(s: String) -> Self {
+        let vec = s.into_bytes();
+
+        if vec.len() <= Self::INLINE_CAP {
+            Self::from_vec(vec)
+        } else {
+            Sds(Repr::Heap { buf: vec })
+        }
+    }
+
+    /// Создаёт пустую `Sds` с предвыделенной ёмкостью.
+    ///
+    /// * `cap <= INLINE_CAP` → пустая inline-строка, аллокации нет.
+    /// * `cap > INLINE_CAP`  → выделяет heap-буфер ёмкостью `cap`.
+    ///
+    /// Полезно для сценариев с известным максимальным размером строки,
+    /// когда нужно избежать повторных реаллокаций.
+    ///
+    /// # Примеры
+    ///
+    /// ```rust
+    /// use zumic::Sds;
+    ///
+    /// let mut s = Sds::with_capacity(128);
+    /// assert!(s.is_empty());
+    /// assert!(s.capacity() >= 128);
+    ///
+    /// s.append(b"hello");
+    /// assert_eq!(s.as_slice(), b"hello");
+    /// ```
+    pub fn with_capacity(cap: usize) -> Self {
+        if cap <= Self::INLINE_CAP {
+            Self::default()
+        } else {
+            Sds(Repr::Heap {
+                buf: Vec::with_capacity(cap),
+            })
+        }
+    }
+
+    /// Создаёт строку из `n` копий байта `byte`.
+    ///
+    /// * `n == 0` → пустая inline-строка.
+    /// * `n <= INLINE_CAP` → inline без аллокации.
+    /// * `n > INLINE_CAP`  → heap.
+    ///
+    /// # Примеры
+    ///
+    /// ```rust
+    /// use zumic::Sds;
+    ///
+    /// assert_eq!(Sds::repeat(b'0', 5).as_slice(), b"00000");
+    /// assert!(Sds::repeat(b'x', 0).is_empty());
+    /// ```
+    pub fn repeat(
+        byte: u8,
+        n: usize,
+    ) -> Self {
+        if n == 0 {
+            return Self::default();
+        }
+
+        if n <= Self::INLINE_CAP {
+            let mut buf = [0u8; Self::INLINE_CAP];
+
+            buf[..n].fill(byte);
+
+            Sds(Repr::Inline { len: n as u8, buf })
+        } else {
+            Sds(Repr::Heap { buf: vec![byte; n] })
+        }
+    }
+
+    /// Создаёт `Sds` из байтового среза, заменяя невалидные UTF-8
+    /// последовательности символом замены `U+FFFD` (`\u{FFFD}`).
+    ///
+    /// Аналог [`String::from_utf8_lossy`].
+    /// Результирующая строка гарантированно является валидным UTF-8.
+    ///
+    /// # Примеры
+    ///
+    /// ```rust
+    /// use zumic::Sds;
+    ///
+    /// let s = Sds::from_utf8_lossy(b"hello\xff");
+    /// assert!(s.as_str().is_ok());
+    /// assert!(s.as_str().unwrap().contains('\u{FFFD}'));
+    /// ```
+    pub fn from_utf8_lossy(bytes: &[u8]) -> Self {
+        // `from_utf8_lossy` возвращает `Cow<str>`:
+        // - `Borrowed` если весь ввод валидный UTF-8 (zero-copy путь)
+        // - `Owned`    если были замены (одна аллокация)
+        let cow = String::from_utf8_lossy(bytes);
+
+        Self::from_bytes(cow.as_bytes())
     }
 
     /// Возвращает сырой указатель на начало буфера.
@@ -276,15 +376,11 @@ impl Sds {
         Self::from_bytes(&self.as_slice()[start..end])
     }
 
+    /// Преобразует байтовое представление строки в `&str`, если она валидна
+    /// как UTF-8.
     #[inline]
-    pub fn from_string(s: String) -> Self {
-        let vec = s.into_bytes();
-
-        if vec.len() <= Self::INLINE_CAP {
-            Self::from_vec(vec)
-        } else {
-            Sds(Repr::Heap { buf: vec })
-        }
+    pub fn as_str(&self) -> Result<&str, Utf8Error> {
+        from_utf8(self.as_slice())
     }
 
     /// Преобразует heap-строку обратно в inline, если длина позволяет.
@@ -302,13 +398,6 @@ impl Sds {
                 }
             }
         }
-    }
-
-    /// Преобразует байтовое представление строки в `&str`, если она валидна
-    /// как UTF-8.
-    #[inline]
-    pub fn as_str(&self) -> Result<&str, Utf8Error> {
-        from_utf8(self.as_slice())
     }
 
     /// Проверяет внутренние иварианты структуры.
@@ -378,6 +467,43 @@ impl DerefMut for Sds {
     }
 }
 
+impl AsRef<[u8]> for Sds {
+    /// Позволяет передавать `&Sds` везде, где ожидается `&[u8]`.
+    ///
+    /// `AsRef<str>` намеренно не реализован: `Sds` может содержать невалидный
+    /// UTF-8. Используйте [`Sds::as_str()`] для явной проверки.
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl Borrow<[u8]> for Sds {
+    /// Позволяет использовать `Sds` как ключ в `HashMap<Sds, V>` и выполнять
+    /// поиск по `&[u8]` без создания нового `Sds`
+    ///
+    /// Контракт `Borrow` гарантирован: `Hash` и `Eq` для `Sds` и `[u8]`
+    /// дают одинаковый результат, потому что оба основаны на `as_slice()`.
+    ///
+    /// # Пример
+    ///
+    /// ```rust
+    /// use std::collections::HashMap;
+    ///
+    /// use zumic::Sds;
+    ///
+    /// let mut map: HashMap<Sds, u32> = HashMap::new();
+    /// map.insert("key".into(), 42);
+    ///
+    /// // Поиск по &[u8] — аллокаций нет:
+    /// assert_eq!(map.get(b"key".as_ref()), Some(&42));
+    /// ```
+    #[inline]
+    fn borrow(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
 impl Display for Sds {
     fn fmt(
         &self,
@@ -437,22 +563,73 @@ impl TryFrom<Sds> for String {
 }
 
 impl From<&[u8]> for Sds {
+    #[inline]
     fn from(slice: &[u8]) -> Self {
         Sds::from_bytes(slice)
     }
 }
 
+impl From<&str> for Sds {
+    #[inline]
+    fn from(s: &str) -> Self {
+        Sds::from_str(s)
+    }
+}
+
+impl From<String> for Sds {
+    #[inline]
+    fn from(s: String) -> Self {
+        Sds::from_string(s)
+    }
+}
+
 impl From<Vec<u8>> for Sds {
+    #[inline]
     fn from(v: Vec<u8>) -> Self {
         Sds::from_vec(v)
     }
 }
 
 impl From<Sds> for Vec<u8> {
+    #[inline]
     fn from(s: Sds) -> Self {
         match s.0 {
             Repr::Inline { len, buf } => buf[..len as usize].to_vec(),
             Repr::Heap { buf } => buf,
+        }
+    }
+}
+
+impl FromIterator<u8> for Sds {
+    fn from_iter<T: IntoIterator<Item = u8>>(iter: T) -> Self {
+        let mut s = Sds::default();
+
+        for byte in iter {
+            s.push(byte);
+        }
+
+        s
+    }
+}
+
+impl Extend<u8> for Sds {
+    fn extend<T: IntoIterator<Item = u8>>(
+        &mut self,
+        iter: T,
+    ) {
+        for byte in iter {
+            self.push(byte);
+        }
+    }
+}
+
+impl<'a> Extend<&'a u8> for Sds {
+    fn extend<T: IntoIterator<Item = &'a u8>>(
+        &mut self,
+        iter: T,
+    ) {
+        for &byte in iter {
+            self.push(byte);
         }
     }
 }
@@ -481,28 +658,26 @@ impl std::str::FromStr for Sds {
     }
 }
 
-impl From<&str> for Sds {
-    fn from(s: &str) -> Self {
-        Sds::from_str(s)
-    }
-}
-
-impl From<String> for Sds {
-    #[inline]
-    fn from(s: String) -> Self {
-        Sds::from_string(s)
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Тесты
 ////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
-    use std::hash::DefaultHasher;
+    use std::{
+        collections::{HashMap, HashSet},
+        hash::DefaultHasher,
+    };
 
     use super::*;
+
+    fn inline_max() -> String {
+        "x".repeat(Sds::INLINE_CAP)
+    }
+
+    fn heap_min() -> String {
+        "x".repeat(Sds::INLINE_CAP + 1)
+    }
 
     #[test]
     fn test_inline_creation_from_str() {
@@ -964,5 +1139,307 @@ mod tests {
             expected,
             "INLINE_CAP must be equal to size_of::<usize>() * 3 - 1 = {expected}"
         );
+    }
+
+    #[test]
+    fn test_with_capacity_zero_is_empty_inline() {
+        let s = Sds::with_capacity(0);
+
+        assert!(s.is_inline());
+        assert!(s.is_empty());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_with_capacity_inline_range_stays_inline() {
+        let s = Sds::with_capacity(Sds::INLINE_CAP);
+
+        assert!(s.is_inline());
+        assert!(s.is_empty());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_with_capacity_over_inline_allocates_heap() {
+        let s = Sds::with_capacity(Sds::INLINE_CAP + 1);
+
+        assert!(!s.is_inline(), "cap > INLINE_CAP should yield heap");
+        assert!(s.is_empty());
+        assert!(s.capacity() > Sds::INLINE_CAP);
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_with_capacity_large() {
+        let s = Sds::with_capacity(1024);
+
+        assert!(!s.is_inline());
+        assert!(s.capacity() >= 1024);
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_with_capacity_no_realloc_within_limit() {
+        // Если данные вписываются в зарезервированный capacity, append не должен
+        // вызывать реаллокацию.
+        let cap = 64;
+        let mut s = Sds::with_capacity(cap);
+        let cap_initial = s.capacity();
+
+        s.append(&vec![b'a'; cap / 2]);
+
+        assert_eq!(s.capacity(), cap_initial);
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_zero_is_empty_inline() {
+        let s = Sds::repeat(b'x', 0);
+
+        assert!(s.is_empty());
+        assert!(s.is_inline());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_one_byte() {
+        let s = Sds::repeat(b'Z', 1);
+
+        assert_eq!(s.as_slice(), b"Z");
+        assert!(s.is_inline());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_inline_cap() {
+        let s = Sds::repeat(b'0', Sds::INLINE_CAP);
+
+        assert!(s.is_inline());
+        assert_eq!(s.len(), Sds::INLINE_CAP);
+        assert!(s.as_slice().iter().all(|&b| b == b'0'));
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_over_inline_cap_is_heap() {
+        let n = Sds::INLINE_CAP + 1;
+        let s = Sds::repeat(b'1', n);
+
+        assert!(!s.is_inline());
+        assert_eq!(s.len(), n);
+        assert!(s.as_slice().iter().all(|&b| b == b'1'));
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_large() {
+        let s = Sds::repeat(b'\xff', 1000);
+
+        assert_eq!(s.len(), 1000);
+        assert!(s.as_slice().iter().all(|&b| b == 0xff));
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_null_byte() {
+        let s = Sds::repeat(b'\0', 5);
+
+        assert_eq!(s.as_slice(), b"\0\0\0\0\0");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_valid_ascii_unchanged() {
+        let s = Sds::from_utf8_lossy(b"hello world");
+
+        assert_eq!(s.as_slice(), b"hello world");
+        assert!(s.as_str().is_ok());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_empty() {
+        let s = Sds::from_utf8_lossy(b"");
+
+        assert!(s.is_empty());
+        assert!(s.is_inline());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_single_invalid_byte_becomes_replacement() {
+        let s = Sds::from_utf8_lossy(b"\xff");
+        let text = s.as_str().expect("must be valid UTF-8");
+
+        assert_eq!(text, "\u{FFFD}");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_mixed_replaces_only_invalid() {
+        let s = Sds::from_utf8_lossy(b"ok\xff\xfe!");
+        let text = s.as_str().expect("must be valid UTF-8");
+
+        assert!(text.starts_with("ok"));
+        assert!(text.ends_with('!'));
+        assert!(text.contains('\u{FFFD}'));
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_all_invalid() {
+        let s = Sds::from_utf8_lossy(&[0x80u8; 3]);
+        let text = s.as_str().expect("must be valid UTF-8");
+
+        assert!(text.chars().all(|c| c == '\u{FFFD}'));
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_valid_multibyte_unchanged() {
+        let input = "Hello, world!".as_bytes();
+        let s = Sds::from_utf8_lossy(input);
+
+        assert_eq!(s.as_str().unwrap(), "Hello, world!");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_as_ref_equals_as_slice() {
+        let s = Sds::from_str("hello");
+        let via_as_ref: &[u8] = s.as_ref();
+
+        assert_eq!(via_as_ref, s.as_slice());
+    }
+
+    #[test]
+    fn test_as_ref_works_in_generic_function() {
+        fn byte_len(b: impl AsRef<[u8]>) -> usize {
+            b.as_ref().len()
+        }
+
+        assert_eq!(byte_len(Sds::from_str("hi")), 2);
+        assert_eq!(byte_len(Sds::from_str(&heap_min())), Sds::INLINE_CAP + 1);
+    }
+
+    #[test]
+    fn test_as_ref_usable_for_binary_search() {
+        let s = Sds::from_bytes(b"abcde");
+        let r: &[u8] = s.as_ref();
+
+        assert_eq!(r.binary_search(&b'c'), Ok(2));
+    }
+
+    #[test]
+    fn test_borrow_enables_hashmap_lookup_by_slice() {
+        let mut map: HashMap<Sds, u32> = HashMap::new();
+
+        map.insert("alpha".into(), 1);
+        map.insert("beta".into(), 2);
+
+        // Поиск по &[u8] - без создания Sds
+        assert_eq!(map.get(b"alpha".as_ref()), Some(&1));
+        assert_eq!(map.get(b"beta".as_ref()), Some(&2));
+        assert_eq!(map.get(b"gamma".as_ref()), None);
+    }
+
+    #[test]
+    fn borrow_enables_hashset_contains_by_slice() {
+        let mut set: HashSet<Sds> = HashSet::new();
+
+        set.insert("one".into());
+        set.insert("two".into());
+
+        assert!(set.contains(b"one".as_ref()));
+        assert!(!set.contains(b"three".as_ref()));
+    }
+
+    #[test]
+    fn test_borrow_hash_equals_slice_hash() {
+        // Контракт Borrow: hash(Sds) == hash(&[u8]) для одних данных.
+        let s = Sds::from_str("test");
+        let mut h1 = DefaultHasher::new();
+
+        s.hash(&mut h1);
+
+        let mut h2 = DefaultHasher::new();
+        let borrowed: &[u8] = s.borrow();
+
+        borrowed.hash(&mut h2);
+
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[test]
+    fn test_borrow_eq_consistent_with_slice() {
+        let s = Sds::from_str("hello");
+        let borrowed: &[u8] = s.borrow();
+
+        assert_eq!(borrowed, b"hello");
+    }
+
+    #[test]
+    fn test_borrow_works_for_heap_string() {
+        let mut map: HashMap<Sds, &str> = HashMap::new();
+
+        map.insert(heap_min().into(), "large");
+
+        let key = "x".repeat(Sds::INLINE_CAP + 1);
+
+        assert_eq!(map.get(key.as_bytes()), Some(&"large"));
+    }
+
+    #[test]
+    fn test_roundtrip_binary_data_preserved() {
+        // Всего 256 байт значений должны пройти без изменений.
+        let orig: Vec<u8> = (0u8..=255).collect();
+        let s = Sds::from_bytes(&orig);
+        let back: Vec<u8> = s.into();
+
+        assert_eq!(orig, back);
+    }
+
+    #[test]
+    fn test_roundtrip_at_online_heap_boundary() {
+        // Строка длиной ровно INLINE_CAP - должна быть inline после roundtrip.
+        let orig = "y".repeat(Sds::INLINE_CAP);
+        let s: Sds = orig.as_str().into();
+
+        assert!(s.is_inline());
+
+        let back: Vec<u8> = s.into();
+
+        assert_eq!(back, orig.as_bytes());
+    }
+
+    #[test]
+    fn test_extend_promotes_inline_to_heap() {
+        let mut s = Sds::from_str(&inline_max());
+
+        assert!(s.is_inline());
+
+        s.extend(b"XYZ".iter().copied());
+
+        assert!(!s.is_inline());
+        assert_eq!(s.len(), Sds::INLINE_CAP + 3);
+
+        s.debug_assert_invariants();
     }
 }
