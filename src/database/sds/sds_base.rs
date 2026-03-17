@@ -1407,6 +1407,50 @@ mod tests {
     }
 
     #[test]
+    fn test_roundtrip_string_sds_string_short() {
+        let orig = String::from("hello");
+        let s: Sds = orig.clone().into();
+        let back: String = s.try_into().unwrap();
+
+        assert_eq!(orig, back);
+    }
+
+    #[test]
+    fn test_roundtrip_string_sds_string_long() {
+        let orig = "a".repeat(Sds::INLINE_CAP + 50);
+        let s: Sds = orig.clone().into();
+        let back: String = s.try_into().unwrap();
+
+        assert_eq!(orig, back);
+    }
+
+    #[test]
+    fn test_roundtrip_vec_sds_vec_short() {
+        let orig = b"hello world".to_vec();
+        let s: Sds = orig.clone().into();
+        let back: Vec<u8> = s.into();
+
+        assert_eq!(orig, back);
+    }
+
+    #[test]
+    fn test_roundtrip_vec_sds_vec_long() {
+        let orig: Vec<u8> = (0u8..=255).cycle().take(500).collect();
+        let s: Sds = orig.clone().into();
+        let back: Vec<u8> = s.into();
+
+        assert_eq!(orig, back);
+    }
+
+    #[test]
+    fn test_roundtrip_str_to_sds_to_str() {
+        let orig = "Zumic SDS";
+        let s: Sds = orig.into();
+
+        assert_eq!(s.as_str().unwrap(), orig);
+    }
+
+    #[test]
     fn test_roundtrip_binary_data_preserved() {
         // Всего 256 байт значений должны пройти без изменений.
         let orig: Vec<u8> = (0u8..=255).collect();
@@ -1417,8 +1461,8 @@ mod tests {
     }
 
     #[test]
-    fn test_roundtrip_at_online_heap_boundary() {
-        // Строка длиной ровно INLINE_CAP - должна быть inline после roundtrip.
+    fn test_roundtrip_at_inline_heap_boundary() {
+        // Строка длиной ровно INLINE_CAP - должна быть inline после roundtrim.
         let orig = "y".repeat(Sds::INLINE_CAP);
         let s: Sds = orig.as_str().into();
 
@@ -1427,6 +1471,59 @@ mod tests {
         let back: Vec<u8> = s.into();
 
         assert_eq!(back, orig.as_bytes());
+    }
+
+    #[test]
+    fn test_collect_from_bytes_inline() {
+        let s: Sds = b"hello".iter().copied().collect();
+
+        assert!(s.is_inline());
+        assert_eq!(s.as_slice(), b"hello");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_collect_from_bytes_heap() {
+        let data: Vec<u8> = (0u8..100).collect();
+        let s: Sds = data.iter().copied().collect();
+
+        assert!(!s.is_inline());
+        assert_eq!(s.as_slice(), data.as_slice());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_collect_empty_iterator() {
+        let s: Sds = std::iter::empty::<u8>().collect();
+
+        assert!(s.is_empty());
+        assert!(s.is_inline());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn extend_u8_iterator() {
+        let mut s = Sds::from_str("abc");
+
+        s.extend(b"def".iter().copied());
+
+        assert_eq!(s.as_slice(), b"abcdef");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn extend_ref_u8_iterator() {
+        let mut s = Sds::from_str("hello");
+
+        s.extend(b" world".iter()); // &u8
+
+        assert_eq!(s.as_str().unwrap(), "hello world");
+
+        s.debug_assert_invariants();
     }
 
     #[test]
@@ -1441,5 +1538,40 @@ mod tests {
         assert_eq!(s.len(), Sds::INLINE_CAP + 3);
 
         s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_with_capacity_then_extend_no_realloc() {
+        let cap = 128;
+        let mut s = Sds::with_capacity(cap);
+        let initial_cap = s.capacity();
+
+        s.extend(b"hello world".iter().copied());
+
+        assert_eq!(s.capacity(), initial_cap);
+        assert_eq!(s.as_str().unwrap(), "hello world");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_repeat_then_append() {
+        let mut s = Sds::repeat(b'a', 3);
+
+        s.append(b"bbb");
+
+        assert_eq!(s.as_slice(), b"aaabbb");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_utf8_lossy_result_usable_in_hashmap() {
+        let mut map: HashMap<Sds, u32> = HashMap::new();
+        let key = Sds::from_utf8_lossy(b"valid_key");
+
+        map.insert(key, 99);
+
+        assert_eq!(map.get(b"valid_key".as_ref()), Some(&99));
     }
 }
