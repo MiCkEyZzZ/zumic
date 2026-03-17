@@ -558,7 +558,13 @@ impl TryFrom<Sds> for String {
     type Error = Utf8Error;
 
     fn try_from(value: Sds) -> Result<Self, Self::Error> {
-        value.as_str().map(|s| s.to_string())
+        match value.0 {
+            Repr::Heap { buf } => String::from_utf8(buf).map_err(|e| e.utf8_error()),
+            Repr::Inline { len, buf } => {
+                let slice = &buf[..len as usize];
+                std::str::from_utf8(slice).map(|s| s.to_string())
+            }
+        }
     }
 }
 
