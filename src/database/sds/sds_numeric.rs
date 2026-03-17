@@ -16,6 +16,10 @@ struct StackFmtBuf<const N: usize> {
     len: usize,
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Собственные методы
+////////////////////////////////////////////////////////////////////////////////
+
 impl<const N: usize> StackFmtBuf<N> {
     #[inline]
     fn new() -> Self {
@@ -146,6 +150,10 @@ impl Sds {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Внутренние функции
+////////////////////////////////////////////////////////////////////////////////
+
 /// Записывает десятичное представление `n` (i64) в `buf[..20]` начиная
 /// с индекса 0. Возвращает количество записанных байт.
 #[inline]
@@ -273,3 +281,103 @@ impl fmt::Display for SdsNumericError {
 }
 
 impl std::error::Error for SdsNumericError {}
+
+////////////////////////////////////////////////////////////////////////////////
+// Тесты
+////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_i64_zero() {
+        let s = Sds::from_i64(0);
+
+        assert_eq!(s.as_str().unwrap(), "0");
+        assert!(s.is_inline());
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_i64_positive() {
+        assert_eq!(Sds::from_i64(1).as_str().unwrap(), "1");
+        assert_eq!(Sds::from_i64(42).as_str().unwrap(), "42");
+        assert_eq!(Sds::from_i64(9999).as_str().unwrap(), "9999");
+        assert_eq!(Sds::from_i64(1_000_000).as_str().unwrap(), "1000000");
+    }
+
+    #[test]
+    fn test_from_i64_negative() {
+        assert_eq!(Sds::from_i64(-1).as_str().unwrap(), "-1");
+        assert_eq!(Sds::from_i64(-42).as_str().unwrap(), "-42");
+        assert_eq!(Sds::from_i64(-9999).as_str().unwrap(), "-9999");
+    }
+
+    #[test]
+    fn test_from_i64_max() {
+        let s = Sds::from_i64(i64::MAX);
+
+        assert_eq!(s.as_str().unwrap(), "9223372036854775807");
+        assert!(s.is_inline(), "i64::MAX (19 chars) must be inline");
+    }
+
+    #[test]
+    fn test_from_i64_min() {
+        let s = Sds::from_i64(i64::MIN);
+
+        assert_eq!(s.as_str().unwrap(), "-9223372036854775808");
+        assert!(s.is_inline(), "i64::MIN (20 chars) must be inline");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_i64_always_inline() {
+        for n in [0i64, 1, -1, 100, -100, i64::MAX, i64::MIN] {
+            let s = Sds::from_i64(n);
+
+            assert!(s.is_inline(), "from_i64({n}) must be inline");
+        }
+    }
+
+    #[test]
+    fn test_from_i64_roundtrip() {
+        for n in [0i64, 1, -1, 42, -42, 1000, -1000, i64::MAX, i64::MIN] {
+            let s = Sds::from_i64(n);
+            let back = s
+                .to_i64()
+                .unwrap_or_else(|e| panic!("roundtrip failed for {n}: {e}"));
+
+            assert_eq!(n, back);
+        }
+    }
+
+    #[test]
+    fn test_u64_zero() {
+        let s = Sds::from_u64(0);
+
+        assert_eq!(s.as_str().unwrap(), "0");
+        assert!(s.is_inline());
+    }
+
+    #[test]
+    fn test_from_u64_max() {
+        let s = Sds::from_u64(u64::MAX);
+
+        assert_eq!(s.as_str().unwrap(), "18446744073709551615");
+        assert!(s.is_inline(), "u64::MAX (20 chars) must be inline");
+
+        s.debug_assert_invariants();
+    }
+
+    #[test]
+    fn test_from_u64_always_inline() {
+        for n in [0u64, 1, 42, 255, 65535, u64::MAX] {
+            let s = Sds::from_u64(n);
+
+            assert!(s.is_inline(), "from_u64({n}) must be inline");
+        }
+    }
+}
