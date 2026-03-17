@@ -109,14 +109,17 @@ impl Storage for InMemoryStore {
     ///
     /// # Возвращает:
     /// - вектор `Option<Value>`, соответствующий порядку переданных ключей
+    #[inline]
     fn mget(
         &self,
         keys: &[&Sds],
     ) -> StoreResult<Vec<Option<Value>>> {
-        let result = keys
-            .iter()
-            .map(|key| self.data.get(key).map(|entry| entry.value().clone()))
-            .collect();
+        let mut result = Vec::with_capacity(keys.len());
+
+        for &key in keys {
+            result.push(self.data.get(key).map(|e| e.value().clone()));
+        }
+
         Ok(result)
     }
 
