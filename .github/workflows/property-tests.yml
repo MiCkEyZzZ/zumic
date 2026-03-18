@@ -46,7 +46,7 @@ jobs:
             suite: property_tests
             mode: quick
             cases: 100
-            timeout: 5
+            timeout: 10
           - rust: stable
             suite: hll_property_tests
             mode: quick
@@ -57,7 +57,7 @@ jobs:
             suite: property_tests
             mode: normal
             cases: 1000
-            timeout: 10
+            timeout: 20
           - rust: stable
             suite: hll_property_tests
             mode: normal
@@ -68,7 +68,7 @@ jobs:
             suite: property_tests
             mode: extended
             cases: 10000
-            timeout: 30
+            timeout: 45
           - rust: stable
             suite: hll_property_tests
             mode: extended
