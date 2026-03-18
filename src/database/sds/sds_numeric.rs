@@ -6,13 +6,14 @@ use crate::Sds;
 pub enum SdsNumericError {
     Empty,
     InvalidInteger,
+    InvalidFloat,
     Overflow,
     InvalidUtf8,
 }
 
 /// Стековый буфер дляформатирования `f64` без heap-аллокации.
 struct StackFmtBuf<const N: usize> {
-    buf: [u8; 32],
+    buf: [u8; N],
     len: usize,
 }
 
@@ -24,7 +25,7 @@ impl<const N: usize> StackFmtBuf<N> {
     #[inline]
     fn new() -> Self {
         Self {
-            buf: [0u8; 32],
+            buf: [0u8; N],
             len: 0,
         }
     }
@@ -59,17 +60,17 @@ impl Sds {
     /// Создаёт `Sds` из `i64` без использования `format!` и без heap-аллокации.
     pub fn from_i64(n: i64) -> Self {
         let mut buf = [0u8; 20];
-        let len = write_i64(n, &mut buf);
+        let slice = write_i64(n, &mut buf);
 
-        Self::from_bytes(&buf[..len])
+        Self::from_bytes(slice)
     }
 
     /// Создаёт `Sds` из `u64` без использования `format!` и без heap-аллокации.
     pub fn from_u64(n: u64) -> Self {
         let mut buf = [0u8; 20];
-        let len = write_u64(n, &mut buf);
+        let slice = write_u64(n, &mut buf);
 
-        Self::from_bytes(&buf[..len])
+        Self::from_bytes(slice)
     }
 
     /// Создаёт `Sds` из `f64` без heap-аллокации.
@@ -77,7 +78,8 @@ impl Sds {
         use std::fmt::Write as FmtWrite;
 
         let mut buf = StackFmtBuf::<32>::new();
-        let _ = write!(buf, "{n}");
+
+        write!(buf, "{n}").expect("StackFmtBuf overflow");
 
         Self::from_bytes(buf.as_bytes())
     }
@@ -127,8 +129,7 @@ impl Sds {
 
         let s = std::str::from_utf8(bytes).map_err(|_| SdsNumericError::InvalidUtf8)?;
 
-        s.parse::<f64>()
-            .map_err(|_| SdsNumericError::InvalidInteger)
+        s.parse::<f64>().map_err(|_| SdsNumericError::InvalidFloat)
     }
 
     /// Проверяет, является ли строка валидным целым числом.
@@ -160,10 +161,10 @@ impl Sds {
 fn write_i64(
     n: i64,
     buf: &mut [u8; 20],
-) -> usize {
+) -> &[u8] {
     if n == 0 {
         buf[0] = b'0';
-        return 1;
+        return &buf[..1];
     }
 
     let negative = n < 0;
@@ -181,11 +182,7 @@ fn write_i64(
         buf[pos] = b'-';
     }
 
-    let len = 20 - pos;
-
-    buf.copy_within(pos..20, 0);
-
-    len
+    &buf[pos..20]
 }
 
 /// Записывает десятичное представление `n` (u64) в `buf[..20]`.
@@ -194,10 +191,10 @@ fn write_i64(
 fn write_u64(
     mut n: u64,
     buf: &mut [u8; 20],
-) -> usize {
+) -> &[u8] {
     if n == 0 {
         buf[0] = b'0';
-        return 1;
+        return &buf[..1];
     }
 
     let mut pos = 20usize;
@@ -208,11 +205,7 @@ fn write_u64(
         n /= 10;
     }
 
-    let len = 20 - pos;
-
-    buf.copy_within(pos..20, 0);
-
-    len
+    &buf[pos..20]
 }
 
 /// Парсит байты как `i64` без промежуточного `String`.
@@ -274,6 +267,7 @@ impl fmt::Display for SdsNumericError {
             Self::InvalidInteger => {
                 write!(f, "ERR value is not an integer or out of range")
             }
+            Self::InvalidFloat => write!(f, "ERR value is not an float or out of range"),
             Self::Overflow => write!(f, "ERR value is out of range"),
             Self::InvalidUtf8 => write!(f, "ERR value contains invalid bytes"),
         }
@@ -549,7 +543,7 @@ mod tests {
     fn to_f64_invalid() {
         assert_eq!(
             Sds::from_str("abc").to_f64(),
-            Err(SdsNumericError::InvalidInteger)
+            Err(SdsNumericError::InvalidFloat)
         );
     }
 
