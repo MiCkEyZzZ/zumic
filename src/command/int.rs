@@ -293,6 +293,81 @@ mod tests {
     }
 
     #[test]
+    fn test_incrby_overflow_does_not_modify_value() {
+        let mut store = mem_store();
+
+        store
+            .set(&Sds::from_str("c"), Value::Int(i64::MAX))
+            .unwrap();
+
+        let _ = IncrByCommand {
+            key: "c".into(),
+            increment: 1,
+        }
+        .execute(&mut store);
+
+        assert_eq!(
+            store.get(&Sds::from_str("c")).unwrap(),
+            Some(Value::Int(i64::MAX))
+        );
+    }
+
+    #[test]
+    fn test_incrby_string_overflow_error() {
+        let mut store = mem_store();
+
+        store
+            .set(
+                &Sds::from_str("c"),
+                Value::Str("9223372036854775807".into()),
+            )
+            .unwrap();
+
+        assert!(IncrByCommand {
+            key: "c".into(),
+            increment: 1,
+        }
+        .execute(&mut store)
+        .is_err());
+    }
+
+    #[test]
+    fn test_incrby_zero_increment() {
+        let mut store = mem_store();
+
+        store.set(&Sds::from_str("c"), Value::Int(10)).unwrap();
+
+        assert_eq!(
+            IncrByCommand {
+                key: "c".into(),
+                increment: 0,
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(10)
+        );
+    }
+
+    #[test]
+    fn test_incrby_from_i64_min() {
+        let mut store = mem_store();
+
+        store
+            .set(&Sds::from_str("c"), Value::Int(i64::MIN))
+            .unwrap();
+
+        assert_eq!(
+            IncrByCommand {
+                key: "c".into(),
+                increment: 1,
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(i64::MIN + 1)
+        );
+    }
+
+    #[test]
     fn test_incrby_negative_acts_like_decr() {
         let mut store = mem_store();
 
@@ -329,6 +404,27 @@ mod tests {
     }
 
     #[test]
+    fn test_incrby_decrby_cancel_out() {
+        let mut store = mem_store();
+
+        IncrByCommand {
+            key: "c".into(),
+            increment: 50,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        DecrByCommand {
+            key: "c".into(),
+            decrement: 50,
+        }
+        .execute(&mut store)
+        .unwrap();
+
+        assert_eq!(store.get(&Sds::from_str("c")).unwrap(), Some(Value::Int(0)));
+    }
+
+    #[test]
     fn test_incrby_overflow_returns_error() {
         let mut store = mem_store();
 
@@ -342,6 +438,29 @@ mod tests {
         }
         .execute(&mut store)
         .is_err(),);
+    }
+
+    #[test]
+    fn test_incrby_string_overflow_does_not_modify() {
+        let mut store = mem_store();
+
+        store
+            .set(
+                &Sds::from_str("c"),
+                Value::Str("9223372036854775807".into()),
+            )
+            .unwrap();
+
+        let _ = IncrByCommand {
+            key: "c".into(),
+            increment: 1,
+        }
+        .execute(&mut store);
+
+        assert_eq!(
+            store.get(&Sds::from_str("c")).unwrap(),
+            Some(Value::Str("9223372036854775807".into()))
+        );
     }
 
     #[test]
@@ -403,6 +522,38 @@ mod tests {
             .execute(&mut store)
             .unwrap(),
             Value::Int(-3)
+        );
+    }
+
+    #[test]
+    fn test_decrby_negative_acts_like_incr() {
+        let mut store = mem_store();
+
+        store.set(&Sds::from_str("c"), Value::Int(10)).unwrap();
+
+        assert_eq!(
+            DecrByCommand {
+                key: "c".into(),
+                decrement: -5,
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(15)
+        );
+    }
+
+    #[test]
+    fn test_decrby_large_decrement_from_zero() {
+        let mut store = mem_store();
+
+        assert_eq!(
+            DecrByCommand {
+                key: "c".into(),
+                decrement: i64::MAX,
+            }
+            .execute(&mut store)
+            .unwrap(),
+            Value::Int(-i64::MAX)
         );
     }
 
@@ -511,6 +662,22 @@ mod tests {
     }
 
     #[test]
+    fn test_decr_overflow_does_not_modify_value() {
+        let mut store = mem_store();
+
+        store
+            .set(&Sds::from_str("c"), Value::Int(i64::MIN))
+            .unwrap();
+
+        let _ = DecrCommand { key: "c".into() }.execute(&mut store);
+
+        assert_eq!(
+            store.get(&Sds::from_str("c")).unwrap(),
+            Some(Value::Int(i64::MIN))
+        );
+    }
+
+    #[test]
     fn test_decrby_command() {
         let mut store = mem_store();
         let cmd = DecrByCommand {
@@ -519,6 +686,26 @@ mod tests {
         };
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(-3));
         assert_eq!(cmd.execute(&mut store).unwrap(), Value::Int(-6));
+    }
+
+    #[test]
+    fn test_decrby_overflow_does_not_modify_value() {
+        let mut store = mem_store();
+
+        store
+            .set(&Sds::from_str("c"), Value::Int(i64::MIN))
+            .unwrap();
+
+        let _ = DecrByCommand {
+            key: "c".into(),
+            decrement: 1,
+        }
+        .execute(&mut store);
+
+        assert_eq!(
+            store.get(&Sds::from_str("c")).unwrap(),
+            Some(Value::Int(i64::MIN))
+        );
     }
 
     #[test]
@@ -551,5 +738,17 @@ mod tests {
         }
         .execute(&mut store)
         .is_err());
+    }
+
+    #[test]
+    fn test_incr_and_decr_cancel_out() {
+        let mut store = mem_store();
+
+        let key = Sds::from_str("c");
+
+        IncrCommand { key: "c".into() }.execute(&mut store).unwrap();
+        DecrCommand { key: "c".into() }.execute(&mut store).unwrap();
+
+        assert_eq!(store.get(&key).unwrap(), Some(Value::Int(0)));
     }
 }
