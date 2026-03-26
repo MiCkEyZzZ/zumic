@@ -5,8 +5,10 @@ use std::{
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
-    str::{from_utf8, Utf8Error},
+    str::from_utf8,
 };
+
+use zumic_error::SdsError;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -340,6 +342,74 @@ impl Sds {
         }
     }
 
+    /// Fallible version of [`push`](Self::push) that enforces a maximum length.
+    ///
+    /// Returns `Err(SdsError::ValueTooLarge)` if adding the byte would exceed
+    /// `max_len`.
+    pub fn try_push(
+        &mut self,
+        byte: u8,
+        max_len: Option<usize>,
+    ) -> Result<(), SdsError> {
+        if let Some(max) = max_len {
+            let new_len = self.len() + 1;
+            if new_len > max {
+                return Err(SdsError::ValueTooLarge {
+                    max,
+                    actual: new_len,
+                });
+            }
+        }
+        self.push(byte);
+        Ok(())
+    }
+
+    /// Fallible version of [`append`](Self::append) that enforces a maximum
+    /// length.
+    ///
+    /// Returns `Err(SdsError::ValueTooLarge)` if appending would exceed
+    /// `max_len`.
+    pub fn try_append(
+        &mut self,
+        other: &[u8],
+        max_len: Option<usize>,
+    ) -> Result<(), SdsError> {
+        if let Some(max) = max_len {
+            let new_len = self.len() + other.len();
+            if new_len > max {
+                return Err(SdsError::ValueTooLarge {
+                    max,
+                    actual: new_len,
+                });
+            }
+        }
+        self.append(other);
+        Ok(())
+    }
+
+    /// Fallible version of [`reserve`](Self::reserve) that enforces a maximum
+    /// length.
+    ///
+    /// Returns `Err(SdsError::ValueTooLarge)` if the total capacity after
+    /// reserving would exceed `max_len`.
+    pub fn try_reserve(
+        &mut self,
+        additional: usize,
+        max_len: Option<usize>,
+    ) -> Result<(), SdsError> {
+        if let Some(max) = max_len {
+            let required = self.len() + additional;
+            if required > max {
+                return Err(SdsError::ValueTooLarge {
+                    max,
+                    actual: required,
+                });
+            }
+        }
+        self.reserve(additional);
+        Ok(())
+    }
+
     /// Обрезает строку до `new_len` байт.
     pub fn truncate(
         &mut self,
@@ -379,8 +449,8 @@ impl Sds {
     /// Преобразует байтовое представление строки в `&str`, если она валидна
     /// как UTF-8.
     #[inline]
-    pub fn as_str(&self) -> Result<&str, Utf8Error> {
-        from_utf8(self.as_slice())
+    pub fn as_str(&self) -> Result<&str, SdsError> {
+        from_utf8(self.as_slice()).map_err(SdsError::from)
     }
 
     /// Преобразует heap-строку обратно в inline, если длина позволяет.
@@ -555,14 +625,18 @@ impl Ord for Sds {
 }
 
 impl TryFrom<Sds> for String {
-    type Error = Utf8Error;
+    type Error = SdsError;
 
     fn try_from(value: Sds) -> Result<Self, Self::Error> {
         match value.0 {
-            Repr::Heap { buf } => String::from_utf8(buf).map_err(|e| e.utf8_error()),
+            Repr::Heap { buf } => {
+                String::from_utf8(buf).map_err(|e| SdsError::InvalidUtf8(e.utf8_error()))
+            }
             Repr::Inline { len, buf } => {
                 let slice = &buf[..len as usize];
-                std::str::from_utf8(slice).map(|s| s.to_string())
+                std::str::from_utf8(slice)
+                    .map(|s| s.to_string())
+                    .map_err(SdsError::from)
             }
         }
     }

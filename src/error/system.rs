@@ -1,6 +1,7 @@
 use std::io;
 
 use thiserror::Error;
+use zumic_error::SdsError;
 
 pub type StoreResult<T> = Result<T, StoreError>;
 
@@ -12,6 +13,9 @@ pub enum StoreError {
 
     #[error("UTF-8 decoding failed: {0}")]
     Utf8(#[from] std::str::Utf8Error),
+
+    #[error("SDS error: {0}")]
+    Sds(#[from] SdsError),
 
     #[error("Serialization error: {0}")]
     Serde(#[from] serde_json::Error),
